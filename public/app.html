@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>TOJ Campaign Builder</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <!-- AUTH VIEW -->
+  <div id="authView" class="auth-wrap hidden">
+    <div class="auth-card">
+      <div class="brand">
+        <span class="brand-mark">TOJ</span>
+        <span class="brand-sub">Campaign Builder</span>
+      </div>
+      <div class="tabs">
+        <button class="tab active" data-tab="login">Log in</button>
+        <button class="tab" data-tab="register">Register</button>
+      </div>
+
+      <form id="loginForm" class="auth-form">
+        <label>Email<input type="email" id="loginEmail" required /></label>
+        <label>Password<input type="password" id="loginPassword" required /></label>
+        <button type="submit" class="primary">Log in</button>
+        <div class="err" id="loginErr"></div>
+      </form>
+
+      <form id="registerForm" class="auth-form hidden">
+        <label>Email<input type="email" id="regEmail" required /></label>
+        <label>Password (min 6)<input type="password" id="regPassword" minlength="6" required /></label>
+        <button type="submit" class="primary">Create account</button>
+        <div class="err" id="regErr"></div>
+      </form>
+    </div>
+  </div>
+
+  <!-- APP VIEW -->
+  <div id="appView" class="hidden">
+    <header class="topbar">
+      <div class="brand small">
+        <span class="brand-mark">TOJ</span>
+        <span class="brand-sub">Campaign Builder</span>
+      </div>
+      <nav class="tabs main">
+        <button class="tab active" data-view="utm">UTM + QR</button>
+        <button class="tab" data-view="contacts">Contacts</button>
+        <button class="tab" data-view="templates">Templates</button>
+      </nav>
+      <div class="user">
+        <span id="userEmail"></span>
+        <button id="logoutBtn" class="ghost">Log out</button>
+      </div>
+    </header>
+
+    <main class="container">
+
+      <!-- UTM + QR VIEW -->
+      <section id="utmView" class="view">
+        <h2>Build a tracked link</h2>
+        <p class="muted">Generate UTM-tagged URLs, preview a QR code, and push rows into your campaign CSV.</p>
+
+        <div class="grid-2">
+          <div class="card">
+            <label>Destination URL
+              <input type="url" id="baseUrl" placeholder="https://subjectmedia.xpandsports.com/" />
+            </label>
+            <div class="row-2">
+              <label>utm_source
+                <input type="text" id="utmSource" placeholder="instagram" />
+              </label>
+              <label>utm_medium
+                <input type="text" id="utmMedium" placeholder="social" />
+              </label>
+            </div>
+            <label>utm_campaign
+              <input type="text" id="utmCampaign" placeholder="toj_launch_2026" />
+            </label>
+            <div class="row-2">
+              <label>utm_content <span class="opt">(optional)</span>
+                <input type="text" id="utmContent" placeholder="bio_link" />
+              </label>
+              <label>utm_term <span class="opt">(optional)</span>
+                <input type="text" id="utmTerm" placeholder="" />
+              </label>
+            </div>
+            <label>Campaign name <span class="opt">(for CSV row)</span>
+              <input type="text" id="campaignName" placeholder="TOJ Launch - Instagram Bio" />
+            </label>
+            <div class="actions">
+              <button id="buildUtmBtn" class="primary">Build link</button>
+              <button id="addRowBtn" class="ghost" disabled>Add to contacts CSV</button>
+            </div>
+            <div class="err" id="utmErr"></div>
+          </div>
+
+          <div class="card">
+            <div class="result-block">
+              <div class="label">Full tracked URL</div>
+              <div id="fullUrl" class="result-url">—</div>
+              <button id="copyUrlBtn" class="ghost small" disabled>Copy</button>
+            </div>
+            <div class="result-block">
+              <div class="label">QR code</div>
+              <div id="qrWrap" class="qr-wrap">
+                <span class="muted">QR will appear here</span>
+              </div>
+              <button id="downloadQrBtn" class="ghost small" disabled>Download PNG</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- CONTACTS VIEW -->
+      <section id="contactsView" class="view hidden">
+        <h2>Contact list + tracked links</h2>
+        <p class="muted">Add rows manually, paste/upload a CSV, or pull in rows from the UTM builder. Download when ready.</p>
+
+        <div class="card">
+          <div class="row-auto">
+            <label>Name<input type="text" id="cName" /></label>
+            <label>Email<input type="email" id="cEmail" /></label>
+            <label>Phone<input type="text" id="cPhone" /></label>
+            <button id="addContactBtn" class="primary">Add row</button>
+          </div>
+
+          <div class="actions wrap">
+            <button id="uploadCsvBtn" class="ghost">Upload CSV</button>
+            <input type="file" id="csvFileInput" accept=".csv" hidden />
+            <button id="pasteCsvBtn" class="ghost">Paste CSV</button>
+            <button id="loadTemplateBtn" class="ghost">Apply template</button>
+            <button id="saveSetBtn" class="ghost">Save set…</button>
+            <button id="loadSetBtn" class="ghost">Load set…</button>
+            <button id="clearRowsBtn" class="ghost danger">Clear</button>
+            <button id="downloadCsvBtn" class="primary">Download CSV</button>
+          </div>
+
+          <div class="table-wrap">
+            <table id="rowsTable">
+              <thead><tr><th>(empty — add a row to start)</th></tr></thead>
+              <tbody></tbody>
+            </table>
+          </div>
+          <div class="muted small" id="rowCount">0 rows</div>
+        </div>
+      </section>
+
+      <!-- TEMPLATES VIEW -->
+      <section id="templatesView" class="view hidden">
+        <h2>Column templates</h2>
+        <p class="muted">Save column schemas (e.g., "TOJ Campaign Contact" with Name, Email, Phone, UTM URL, QR) so you don't re-type them every time.</p>
+
+        <div class="card">
+          <label>Template name<input type="text" id="tplName" placeholder="TOJ Campaign Contact" /></label>
+          <label>Columns (comma-separated)
+            <input type="text" id="tplColumns" placeholder="campaign_name, name, email, phone, utm_source, utm_medium, utm_campaign, full_tracked_url, qr_code_url" />
+          </label>
+          <div class="actions">
+            <button id="saveTemplateBtn" class="primary">Save template</button>
+          </div>
+        </div>
+
+        <div class="card">
+          <h3>Saved templates</h3>
+          <div id="templateList" class="tpl-list"><span class="muted">No templates yet.</span></div>
+        </div>
+      </section>
+
+    </main>
+  </div>
+
+  <!-- PASTE CSV MODAL -->
+  <div id="pasteModal" class="modal hidden">
+    <div class="modal-card">
+      <h3>Paste CSV</h3>
+      <textarea id="pasteArea" rows="10" placeholder="Name,Email,Phone&#10;Kyron,kyron@example.com,555-1234"></textarea>
+      <div class="actions">
+        <button id="pasteCancelBtn" class="ghost">Cancel</button>
+        <button id="pasteImportBtn" class="primary">Import</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- SAVE/LOAD SET MODAL -->
+  <div id="setModal" class="modal hidden">
+    <div class="modal-card">
+      <h3 id="setModalTitle">Save contact set</h3>
+      <div id="setSaveBlock">
+        <label>Set name<input type="text" id="setName" /></label>
+      </div>
+      <div id="setLoadBlock" class="hidden">
+        <div id="setList" class="tpl-list"></div>
+      </div>
+      <div class="actions">
+        <button id="setCancelBtn" class="ghost">Cancel</button>
+        <button id="setConfirmBtn" class="primary">Save</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast" class="toast hidden"></div>
+
+  <script src="app.js"></script>
+</body>
+</html>

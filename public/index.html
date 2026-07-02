@@ -3,203 +3,762 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>TOJ Campaign Builder</title>
-  <link rel="stylesheet" href="styles.css" />
+  <title>TOJ Campaign — One Standard. Four Avenues.</title>
+  <meta name="description" content="Trail of Joy Campaign. Every client — athlete, small operator, established business, or individual building a brand — gets the same Operational Transcript, graded on the same five pillars. Four avenues, one standard." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&display=swap" rel="stylesheet" />
+  <style>
+    /* ---------- RESET ---------- */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; }
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: #F5F1EA;
+      color: #1A1613;
+      line-height: 1.5;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+    }
+
+    /* ---------- TOKENS ---------- */
+    :root {
+      --parchment: #F5F1EA;
+      --parchment-2: #EBE4D6;
+      --ink: #1A1613;
+      --ink-soft: #3B3530;
+      --ink-mute: #6E655C;
+      --rule: rgba(26, 22, 19, 0.12);
+      --rule-strong: rgba(26, 22, 19, 0.35);
+
+      /* Locked avenue colors — per architecture doc */
+      --sports:   #1E3A5F; /* Navy */
+      --smallbiz: #A85F26; /* Trail orange */
+      --bigbiz:   #2F5D4E; /* Pine green */
+      --advisory: #B8843B; /* Amber gold */
+    }
+
+    /* ---------- TYPOGRAPHY ---------- */
+    .serif { font-family: 'Fraunces', 'Georgia', serif; letter-spacing: -0.01em; }
+    h1, h2, h3, h4 { font-family: 'Fraunces', 'Georgia', serif; font-weight: 600; letter-spacing: -0.015em; color: var(--ink); }
+    h1 { font-size: clamp(2.4rem, 5.2vw, 4.4rem); line-height: 1.02; }
+    h2 { font-size: clamp(1.8rem, 3.4vw, 2.8rem); line-height: 1.1; }
+    h3 { font-size: 1.3rem; line-height: 1.25; }
+    p  { color: var(--ink-soft); }
+    .eyebrow {
+      font-family: 'Inter', sans-serif;
+      font-size: 0.72rem;
+      font-weight: 600;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: var(--ink-mute);
+    }
+    .lede { font-size: clamp(1.05rem, 1.6vw, 1.2rem); color: var(--ink-soft); max-width: 46rem; }
+
+    /* ---------- LAYOUT ---------- */
+    .container { width: 100%; max-width: 1180px; margin: 0 auto; padding: 0 clamp(1.25rem, 3vw, 2.25rem); }
+    section { padding: clamp(4.5rem, 8vw, 7rem) 0; border-top: 1px solid var(--rule); }
+    section:first-of-type { border-top: 0; }
+
+    /* ---------- HEADER ---------- */
+    header.top {
+      position: sticky; top: 0; z-index: 40;
+      background: rgba(245, 241, 234, 0.88);
+      backdrop-filter: saturate(140%) blur(10px);
+      -webkit-backdrop-filter: saturate(140%) blur(10px);
+      border-bottom: 1px solid var(--rule);
+    }
+    .top-inner {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 1rem clamp(1.25rem, 3vw, 2.25rem);
+      max-width: 1180px; margin: 0 auto;
+    }
+    .brand {
+      font-family: 'Fraunces', serif;
+      font-weight: 600;
+      font-size: 1.1rem;
+      color: var(--ink);
+      letter-spacing: -0.01em;
+      text-decoration: none;
+    }
+    .brand span { color: var(--ink-mute); font-weight: 400; }
+    nav.primary { display: flex; gap: 1.75rem; align-items: center; }
+    nav.primary a {
+      color: var(--ink-soft);
+      text-decoration: none;
+      font-size: 0.88rem;
+      font-weight: 500;
+      transition: color 0.15s ease;
+    }
+    nav.primary a:hover { color: var(--ink); }
+    @media (max-width: 720px) { nav.primary { display: none; } }
+
+    /* ---------- HERO ---------- */
+    .hero { padding: clamp(5rem, 10vw, 8.5rem) 0 clamp(3.5rem, 7vw, 5.5rem); }
+    .hero .eyebrow { margin-bottom: 1.5rem; }
+    .hero h1 { max-width: 22ch; margin-bottom: 1.5rem; }
+    .hero h1 em { font-style: italic; font-weight: 500; color: var(--ink-mute); }
+    .hero .lede { margin-bottom: 2.5rem; }
+    .hero-cta { display: flex; gap: 1rem; flex-wrap: wrap; }
+    .btn {
+      display: inline-flex; align-items: center; gap: 0.5rem;
+      padding: 0.85rem 1.4rem;
+      border-radius: 999px;
+      font-size: 0.92rem;
+      font-weight: 500;
+      text-decoration: none;
+      transition: all 0.18s ease;
+      border: 1px solid transparent;
+      cursor: pointer;
+      font-family: inherit;
+    }
+    .btn.primary { background: var(--ink); color: var(--parchment); }
+    .btn.primary:hover { background: var(--ink-soft); }
+    .btn.ghost { background: transparent; color: var(--ink); border-color: var(--rule-strong); }
+    .btn.ghost:hover { background: rgba(26,22,19,0.05); }
+    .btn .arrow { transition: transform 0.18s ease; }
+    .btn:hover .arrow { transform: translateX(3px); }
+
+    /* ---------- PRINCIPLE / DIAGRAM ---------- */
+    .principle-grid { display: grid; grid-template-columns: 1fr 1.2fr; gap: clamp(2rem, 5vw, 4.5rem); align-items: start; }
+    @media (max-width: 860px) { .principle-grid { grid-template-columns: 1fr; } }
+    .principle-copy .eyebrow { margin-bottom: 1rem; }
+    .principle-copy h2 { margin-bottom: 1.25rem; }
+    .principle-copy p { margin-bottom: 1rem; max-width: 34rem; }
+
+    .arch-diagram {
+      background: var(--parchment-2);
+      border: 1px solid var(--rule);
+      border-radius: 14px;
+      padding: clamp(1.5rem, 3vw, 2.5rem);
+      font-family: 'Inter', monospace;
+    }
+    .arch-node {
+      display: flex; flex-direction: column; align-items: center; gap: 0.35rem;
+      padding: 0.9rem 1rem;
+      background: var(--parchment);
+      border: 1px solid var(--rule);
+      border-radius: 8px;
+    }
+    .arch-node .label { font-size: 0.68rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.14em; color: var(--ink-mute); }
+    .arch-node .value { font-family: 'Fraunces', serif; font-weight: 600; font-size: 1rem; color: var(--ink); text-align: center; }
+    .arch-connector { width: 1px; height: 22px; background: var(--rule-strong); margin: 0.5rem auto; }
+    .arch-fanout {
+      display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.6rem; margin-top: 0.5rem;
+    }
+    @media (max-width: 520px) { .arch-fanout { grid-template-columns: repeat(2, 1fr); } }
+    .arch-leaf {
+      padding: 0.7rem 0.5rem;
+      border-radius: 6px;
+      text-align: center;
+      color: #fff;
+      font-size: 0.78rem;
+      font-weight: 600;
+      line-height: 1.15;
+    }
+    .arch-leaf .tier { display: block; font-weight: 400; opacity: 0.85; font-size: 0.68rem; margin-top: 0.15rem; }
+    .leaf-sports   { background: var(--sports); }
+    .leaf-smallbiz { background: var(--smallbiz); }
+    .leaf-bigbiz   { background: var(--bigbiz); }
+    .leaf-advisory { background: var(--advisory); }
+
+    /* ---------- LANE SPLIT (the trail branches here) ---------- */
+    .lanes-head { text-align: center; max-width: 44rem; margin: 0 auto clamp(2.5rem, 5vw, 3.5rem); }
+    .lanes-head .eyebrow { margin-bottom: 1rem; }
+    .lanes-head h2 { margin-bottom: 1rem; }
+    .lanes-head p { margin: 0 auto; }
+
+    .lanes { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1.15rem; }
+    @media (max-width: 1020px) { .lanes { grid-template-columns: repeat(2, 1fr); } }
+    @media (max-width: 560px)  { .lanes { grid-template-columns: 1fr; } }
+
+    .lane {
+      display: flex; flex-direction: column;
+      padding: 1.75rem 1.5rem 1.5rem;
+      border-radius: 14px;
+      color: #fff;
+      min-height: 380px;
+      text-decoration: none;
+      transition: transform 0.22s ease, box-shadow 0.22s ease;
+      position: relative;
+      overflow: hidden;
+    }
+    .lane:hover { transform: translateY(-4px); box-shadow: 0 20px 40px -20px rgba(0,0,0,0.35); }
+    .lane .lane-num {
+      font-family: 'Fraunces', serif;
+      font-weight: 400;
+      font-size: 0.8rem;
+      opacity: 0.7;
+      margin-bottom: 0.5rem;
+    }
+    .lane h3 {
+      color: #fff;
+      font-size: 1.55rem;
+      line-height: 1.1;
+      margin-bottom: 0.4rem;
+    }
+    .lane .lane-domain {
+      font-family: 'Inter', monospace;
+      font-size: 0.72rem;
+      opacity: 0.7;
+      letter-spacing: 0.02em;
+      margin-bottom: 1.5rem;
+    }
+    .lane .lane-for {
+      font-size: 0.88rem;
+      line-height: 1.5;
+      opacity: 0.92;
+      margin-bottom: 1.25rem;
+      flex: 1;
+    }
+    .lane .lane-tier {
+      font-size: 0.7rem;
+      font-weight: 600;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      opacity: 0.7;
+      padding-top: 1rem;
+      border-top: 1px solid rgba(255,255,255,0.22);
+      margin-bottom: 0.85rem;
+    }
+    .lane .lane-cta {
+      display: inline-flex; align-items: center; gap: 0.4rem;
+      font-size: 0.88rem;
+      font-weight: 500;
+    }
+    .lane .lane-cta .arrow { transition: transform 0.2s ease; }
+    .lane:hover .lane-cta .arrow { transform: translateX(4px); }
+    .lane-sports   { background: var(--sports);   }
+    .lane-smallbiz { background: var(--smallbiz); }
+    .lane-bigbiz   { background: var(--bigbiz);   }
+    .lane-advisory { background: var(--advisory); }
+
+    /* ---------- STANDARD (5 pillars) ---------- */
+    .standard-head { max-width: 46rem; margin-bottom: 3rem; }
+    .standard-head .eyebrow { margin-bottom: 1rem; }
+    .standard-head h2 { margin-bottom: 1.25rem; }
+    .pillars { display: grid; grid-template-columns: repeat(5, 1fr); gap: 1rem; }
+    @media (max-width: 980px) { .pillars { grid-template-columns: repeat(2, 1fr); } }
+    @media (max-width: 520px) { .pillars { grid-template-columns: 1fr; } }
+    .pillar {
+      padding: 1.5rem 1.25rem;
+      background: var(--parchment);
+      border: 1px solid var(--rule);
+      border-radius: 12px;
+      min-height: 180px;
+      display: flex; flex-direction: column;
+    }
+    .pillar .num {
+      font-family: 'Fraunces', serif;
+      font-size: 0.78rem;
+      color: var(--ink-mute);
+      margin-bottom: 0.4rem;
+    }
+    .pillar h4 {
+      font-family: 'Fraunces', serif;
+      font-weight: 600;
+      font-size: 1.05rem;
+      color: var(--ink);
+      margin-bottom: 0.5rem;
+      line-height: 1.2;
+    }
+    .pillar p {
+      font-size: 0.86rem;
+      color: var(--ink-mute);
+      line-height: 1.5;
+    }
+    .pillar-note {
+      margin-top: 2rem;
+      padding: 0.85rem 1.1rem;
+      background: var(--parchment-2);
+      border-left: 3px solid var(--advisory);
+      border-radius: 4px;
+      font-size: 0.8rem;
+      color: var(--ink-mute);
+      max-width: 46rem;
+    }
+
+    /* ---------- TRANSCRIPT ---------- */
+    .transcript-grid { display: grid; grid-template-columns: 1.1fr 1fr; gap: clamp(2rem, 5vw, 4.5rem); align-items: start; }
+    @media (max-width: 860px) { .transcript-grid { grid-template-columns: 1fr; } }
+    .transcript-copy .eyebrow { margin-bottom: 1rem; }
+    .transcript-copy h2 { margin-bottom: 1.25rem; }
+    .transcript-copy p { margin-bottom: 1rem; max-width: 34rem; }
+
+    .transcript-structure {
+      background: var(--ink);
+      color: var(--parchment);
+      border-radius: 14px;
+      padding: 2rem 1.75rem;
+    }
+    .transcript-structure .eyebrow { color: rgba(245,241,234,0.55); margin-bottom: 1.25rem; }
+    .transcript-structure .flow {
+      display: flex; flex-direction: column; gap: 0;
+      counter-reset: step;
+    }
+    .flow-step {
+      display: flex; align-items: baseline; gap: 1rem;
+      padding: 0.9rem 0;
+      border-bottom: 1px solid rgba(245,241,234,0.14);
+      counter-increment: step;
+    }
+    .flow-step:last-child { border-bottom: 0; }
+    .flow-step::before {
+      content: counter(step, decimal-leading-zero);
+      font-family: 'Fraunces', serif;
+      font-size: 0.85rem;
+      color: rgba(245,241,234,0.5);
+      min-width: 2.2rem;
+    }
+    .flow-step .label {
+      font-family: 'Fraunces', serif;
+      font-weight: 500;
+      color: var(--parchment);
+      font-size: 1rem;
+    }
+
+    /* ---------- CLASSIFIER TABLE ---------- */
+    .classifier-head { max-width: 44rem; margin: 0 auto clamp(2rem, 5vw, 3rem); text-align: center; }
+    .classifier-head .eyebrow { margin-bottom: 1rem; }
+    .classifier-head h2 { margin-bottom: 1rem; }
+    .classifier { max-width: 900px; margin: 0 auto; }
+    .classifier-row {
+      display: grid; grid-template-columns: 1fr auto;
+      gap: 1.5rem;
+      padding: 1.4rem 1.25rem;
+      border-bottom: 1px solid var(--rule);
+      align-items: center;
+    }
+    .classifier-row:first-child { border-top: 1px solid var(--rule); }
+    .classifier-q {
+      font-family: 'Fraunces', serif;
+      font-size: 1.05rem;
+      color: var(--ink);
+      line-height: 1.35;
+    }
+    .classifier-a {
+      display: inline-flex; align-items: center; gap: 0.6rem;
+      padding: 0.5rem 0.9rem;
+      border-radius: 999px;
+      font-size: 0.8rem;
+      font-weight: 600;
+      color: #fff;
+      white-space: nowrap;
+    }
+    .cls-sports   { background: var(--sports); }
+    .cls-smallbiz { background: var(--smallbiz); }
+    .cls-bigbiz   { background: var(--bigbiz); }
+    .cls-advisory { background: var(--advisory); }
+    @media (max-width: 640px) {
+      .classifier-row { grid-template-columns: 1fr; gap: 0.85rem; }
+      .classifier-a { justify-self: start; }
+    }
+
+    /* ---------- CONNECTIONS ---------- */
+    .connect-head { text-align: center; max-width: 42rem; margin: 0 auto clamp(2.5rem, 5vw, 3.5rem); }
+    .connect-head .eyebrow { margin-bottom: 1rem; }
+    .connect-head h2 { margin-bottom: 1rem; }
+    .connect-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1.25rem; }
+    @media (max-width: 860px) { .connect-grid { grid-template-columns: 1fr; } }
+    .connect-card {
+      padding: 1.75rem 1.5rem;
+      background: var(--parchment);
+      border: 1px solid var(--rule);
+      border-radius: 12px;
+    }
+    .connect-card .eyebrow { color: var(--ink-mute); margin-bottom: 0.85rem; }
+    .connect-card h3 { font-size: 1.15rem; margin-bottom: 0.75rem; }
+    .connect-card p { font-size: 0.9rem; line-height: 1.55; color: var(--ink-mute); }
+
+    /* ---------- FOOTER ---------- */
+    footer {
+      background: var(--ink);
+      color: rgba(245,241,234,0.75);
+      padding: 3.5rem 0 2.25rem;
+      border-top: 1px solid var(--ink);
+    }
+    .footer-inner { max-width: 1180px; margin: 0 auto; padding: 0 clamp(1.25rem, 3vw, 2.25rem); }
+    .footer-grid {
+      display: grid;
+      grid-template-columns: 1.4fr 1fr 1fr 1fr;
+      gap: 2rem;
+      margin-bottom: 2.5rem;
+    }
+    @media (max-width: 780px) { .footer-grid { grid-template-columns: 1fr 1fr; } }
+    @media (max-width: 480px) { .footer-grid { grid-template-columns: 1fr; } }
+    .footer-brand .fbrand {
+      font-family: 'Fraunces', serif;
+      font-size: 1.25rem;
+      color: var(--parchment);
+      margin-bottom: 0.6rem;
+    }
+    .footer-brand p { color: rgba(245,241,234,0.55); font-size: 0.85rem; max-width: 28ch; line-height: 1.55; }
+    .footer-col h5 {
+      font-family: 'Inter', sans-serif;
+      font-weight: 600;
+      font-size: 0.72rem;
+      color: rgba(245,241,234,0.55);
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      margin-bottom: 1rem;
+    }
+    .footer-col ul { list-style: none; display: flex; flex-direction: column; gap: 0.55rem; }
+    .footer-col a {
+      color: rgba(245,241,234,0.8);
+      text-decoration: none;
+      font-size: 0.9rem;
+      transition: color 0.15s ease;
+    }
+    .footer-col a:hover { color: var(--parchment); }
+    .footer-bar {
+      padding-top: 1.75rem;
+      border-top: 1px solid rgba(245,241,234,0.12);
+      display: flex; justify-content: space-between; align-items: center;
+      font-size: 0.78rem;
+      color: rgba(245,241,234,0.45);
+      flex-wrap: wrap; gap: 1rem;
+    }
+    .footer-bar a { color: rgba(245,241,234,0.6); text-decoration: none; }
+    .footer-bar a:hover { color: var(--parchment); }
+  </style>
 </head>
 <body>
-  <!-- AUTH VIEW -->
-  <div id="authView" class="auth-wrap hidden">
-    <div class="auth-card">
-      <div class="brand">
-        <span class="brand-mark">TOJ</span>
-        <span class="brand-sub">Campaign Builder</span>
-      </div>
-      <div class="tabs">
-        <button class="tab active" data-tab="login">Log in</button>
-        <button class="tab" data-tab="register">Register</button>
-      </div>
 
-      <form id="loginForm" class="auth-form">
-        <label>Email<input type="email" id="loginEmail" required /></label>
-        <label>Password<input type="password" id="loginPassword" required /></label>
-        <button type="submit" class="primary">Log in</button>
-        <div class="err" id="loginErr"></div>
-      </form>
-
-      <form id="registerForm" class="auth-form hidden">
-        <label>Email<input type="email" id="regEmail" required /></label>
-        <label>Password (min 6)<input type="password" id="regPassword" minlength="6" required /></label>
-        <button type="submit" class="primary">Create account</button>
-        <div class="err" id="regErr"></div>
-      </form>
-    </div>
-  </div>
-
-  <!-- APP VIEW -->
-  <div id="appView" class="hidden">
-    <header class="topbar">
-      <div class="brand small">
-        <span class="brand-mark">TOJ</span>
-        <span class="brand-sub">Campaign Builder</span>
-      </div>
-      <nav class="tabs main">
-        <button class="tab active" data-view="utm">UTM + QR</button>
-        <button class="tab" data-view="contacts">Contacts</button>
-        <button class="tab" data-view="templates">Templates</button>
+  <!-- ============ HEADER ============ -->
+  <header class="top">
+    <div class="top-inner">
+      <a href="/" class="brand">TOJ Campaign <span>— Trail of Joy</span></a>
+      <nav class="primary">
+        <a href="#lanes">Avenues</a>
+        <a href="#standard">The Standard</a>
+        <a href="#transcript">Transcript</a>
+        <a href="#classifier">Find your lane</a>
       </nav>
-      <div class="user">
-        <span id="userEmail"></span>
-        <button id="logoutBtn" class="ghost">Log out</button>
-      </div>
-    </header>
+    </div>
+  </header>
 
-    <main class="container">
-
-      <!-- UTM + QR VIEW -->
-      <section id="utmView" class="view">
-        <h2>Build a tracked link</h2>
-        <p class="muted">Generate UTM-tagged URLs, preview a QR code, and push rows into your campaign CSV.</p>
-
-        <div class="grid-2">
-          <div class="card">
-            <label>Destination URL
-              <input type="url" id="baseUrl" placeholder="https://subjectmedia.xpandsports.com/" />
-            </label>
-            <div class="row-2">
-              <label>utm_source
-                <input type="text" id="utmSource" placeholder="instagram" />
-              </label>
-              <label>utm_medium
-                <input type="text" id="utmMedium" placeholder="social" />
-              </label>
-            </div>
-            <label>utm_campaign
-              <input type="text" id="utmCampaign" placeholder="toj_launch_2026" />
-            </label>
-            <div class="row-2">
-              <label>utm_content <span class="opt">(optional)</span>
-                <input type="text" id="utmContent" placeholder="bio_link" />
-              </label>
-              <label>utm_term <span class="opt">(optional)</span>
-                <input type="text" id="utmTerm" placeholder="" />
-              </label>
-            </div>
-            <label>Campaign name <span class="opt">(for CSV row)</span>
-              <input type="text" id="campaignName" placeholder="TOJ Launch - Instagram Bio" />
-            </label>
-            <div class="actions">
-              <button id="buildUtmBtn" class="primary">Build link</button>
-              <button id="addRowBtn" class="ghost" disabled>Add to contacts CSV</button>
-            </div>
-            <div class="err" id="utmErr"></div>
-          </div>
-
-          <div class="card">
-            <div class="result-block">
-              <div class="label">Full tracked URL</div>
-              <div id="fullUrl" class="result-url">—</div>
-              <button id="copyUrlBtn" class="ghost small" disabled>Copy</button>
-            </div>
-            <div class="result-block">
-              <div class="label">QR code</div>
-              <div id="qrWrap" class="qr-wrap">
-                <span class="muted">QR will appear here</span>
-              </div>
-              <button id="downloadQrBtn" class="ghost small" disabled>Download PNG</button>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <!-- CONTACTS VIEW -->
-      <section id="contactsView" class="view hidden">
-        <h2>Contact list + tracked links</h2>
-        <p class="muted">Add rows manually, paste/upload a CSV, or pull in rows from the UTM builder. Download when ready.</p>
-
-        <div class="card">
-          <div class="row-auto">
-            <label>Name<input type="text" id="cName" /></label>
-            <label>Email<input type="email" id="cEmail" /></label>
-            <label>Phone<input type="text" id="cPhone" /></label>
-            <button id="addContactBtn" class="primary">Add row</button>
-          </div>
-
-          <div class="actions wrap">
-            <button id="uploadCsvBtn" class="ghost">Upload CSV</button>
-            <input type="file" id="csvFileInput" accept=".csv" hidden />
-            <button id="pasteCsvBtn" class="ghost">Paste CSV</button>
-            <button id="loadTemplateBtn" class="ghost">Apply template</button>
-            <button id="saveSetBtn" class="ghost">Save set…</button>
-            <button id="loadSetBtn" class="ghost">Load set…</button>
-            <button id="clearRowsBtn" class="ghost danger">Clear</button>
-            <button id="downloadCsvBtn" class="primary">Download CSV</button>
-          </div>
-
-          <div class="table-wrap">
-            <table id="rowsTable">
-              <thead><tr><th>(empty — add a row to start)</th></tr></thead>
-              <tbody></tbody>
-            </table>
-          </div>
-          <div class="muted small" id="rowCount">0 rows</div>
-        </div>
-      </section>
-
-      <!-- TEMPLATES VIEW -->
-      <section id="templatesView" class="view hidden">
-        <h2>Column templates</h2>
-        <p class="muted">Save column schemas (e.g., "TOJ Campaign Contact" with Name, Email, Phone, UTM URL, QR) so you don't re-type them every time.</p>
-
-        <div class="card">
-          <label>Template name<input type="text" id="tplName" placeholder="TOJ Campaign Contact" /></label>
-          <label>Columns (comma-separated)
-            <input type="text" id="tplColumns" placeholder="campaign_name, name, email, phone, utm_source, utm_medium, utm_campaign, full_tracked_url, qr_code_url" />
-          </label>
-          <div class="actions">
-            <button id="saveTemplateBtn" class="primary">Save template</button>
-          </div>
-        </div>
-
-        <div class="card">
-          <h3>Saved templates</h3>
-          <div id="templateList" class="tpl-list"><span class="muted">No templates yet.</span></div>
-        </div>
-      </section>
-
-    </main>
-  </div>
-
-  <!-- PASTE CSV MODAL -->
-  <div id="pasteModal" class="modal hidden">
-    <div class="modal-card">
-      <h3>Paste CSV</h3>
-      <textarea id="pasteArea" rows="10" placeholder="Name,Email,Phone&#10;Kyron,kyron@example.com,555-1234"></textarea>
-      <div class="actions">
-        <button id="pasteCancelBtn" class="ghost">Cancel</button>
-        <button id="pasteImportBtn" class="primary">Import</button>
+  <!-- ============ HERO ============ -->
+  <section class="hero">
+    <div class="container">
+      <div class="eyebrow">Trail of Joy · Locked 2026-06-28</div>
+      <h1>One Standard.<br/>Four Avenues.<br/><em>The Operational Transcript™.</em></h1>
+      <p class="lede">
+        Every TOJ client — athlete, small operator, established business, or individual building
+        their own brand — gets the same artifact, graded on the same five pillars.
+        The four avenues are front doors, not different products.
+      </p>
+      <div class="hero-cta">
+        <a href="#lanes" class="btn primary">Find your lane <span class="arrow">→</span></a>
+        <a href="#standard" class="btn ghost">The Standard</a>
       </div>
     </div>
-  </div>
+  </section>
 
-  <!-- SAVE/LOAD SET MODAL -->
-  <div id="setModal" class="modal hidden">
-    <div class="modal-card">
-      <h3 id="setModalTitle">Save contact set</h3>
-      <div id="setSaveBlock">
-        <label>Set name<input type="text" id="setName" /></label>
-      </div>
-      <div id="setLoadBlock" class="hidden">
-        <div id="setList" class="tpl-list"></div>
-      </div>
-      <div class="actions">
-        <button id="setCancelBtn" class="ghost">Cancel</button>
-        <button id="setConfirmBtn" class="primary">Save</button>
+  <!-- ============ PRINCIPLE ============ -->
+  <section id="principle">
+    <div class="container">
+      <div class="principle-grid">
+        <div class="principle-copy">
+          <div class="eyebrow">The principle</div>
+          <h2>One product. Four front doors.</h2>
+          <p>
+            Underneath every avenue, the same shared infrastructure — the Standard, the transcript
+            template, the intake system — serves every client. Avenues route to different downstream
+            products and tiers; they don't represent different brands.
+          </p>
+          <p>
+            The Operational Transcript™ is the universal artifact. Every client, every avenue,
+            same structure, same rigor. The color of the side tab changes. The terminology adapts
+            to your lane. Everything else is identical.
+          </p>
+        </div>
+
+        <div class="arch-diagram" aria-hidden="true">
+          <div class="arch-node">
+            <span class="label">Parent Brand</span>
+            <span class="value">Trail of Joy</span>
+          </div>
+          <div class="arch-connector"></div>
+          <div class="arch-node">
+            <span class="label">Universal Artifact</span>
+            <span class="value">TOJ Operational Transcript™</span>
+          </div>
+          <div class="arch-connector"></div>
+          <div class="arch-fanout">
+            <div class="arch-leaf leaf-sports">Sports<span class="tier">Premium</span></div>
+            <div class="arch-leaf leaf-smallbiz">Small Biz<span class="tier">Basic</span></div>
+            <div class="arch-leaf leaf-bigbiz">Big Biz<span class="tier">Basic / Premium</span></div>
+            <div class="arch-leaf leaf-advisory">Advisory<span class="tier">Advisory tier</span></div>
+          </div>
+        </div>
       </div>
     </div>
-  </div>
+  </section>
 
-  <div id="toast" class="toast hidden"></div>
+  <!-- ============ LANE SPLIT — "the trail branches here" ============ -->
+  <section id="lanes">
+    <div class="container">
+      <div class="lanes-head">
+        <div class="eyebrow">The trail branches here</div>
+        <h2>Four avenues. Choose the front door built for your work.</h2>
+        <p class="lede" style="margin-inline:auto;">
+          Each avenue routes to different downstream products and tiers, but every client
+          ends up with the same Operational Transcript at the end.
+        </p>
+      </div>
 
-  <script src="app.js"></script>
+      <div class="lanes">
+
+        <!-- Avenue 1 — TOJ Sports -->
+        <a href="https://sports.tojcampaign.com" class="lane lane-sports">
+          <span class="lane-num">Avenue 01</span>
+          <h3>TOJ Sports</h3>
+          <span class="lane-domain">sports.tojcampaign.com</span>
+          <p class="lane-for">
+            Anyone whose business is sport. Athletes, trainers, sports media creators,
+            organizations adjacent to sport.
+          </p>
+          <span class="lane-tier">Premium tier</span>
+          <span class="lane-cta">Enter TOJ Sports <span class="arrow">→</span></span>
+        </a>
+
+        <!-- Avenue 2 — TOJ Small Business -->
+        <a href="https://smallbusiness.tojcampaign.com" class="lane lane-smallbiz">
+          <span class="lane-num">Avenue 02</span>
+          <h3>TOJ Small Business</h3>
+          <span class="lane-domain">smallbusiness.tojcampaign.com</span>
+          <p class="lane-for">
+            Relationship-built operators. Solo coaches, neighborhood shops, local trades,
+            programs — where the brand is genuinely the person running it.
+          </p>
+          <span class="lane-tier">Basic tier</span>
+          <span class="lane-cta">Enter TOJ Small Business <span class="arrow">→</span></span>
+        </a>
+
+        <!-- Avenue 3 — TOJ Big Business -->
+        <a href="https://bigbusiness.tojcampaign.com" class="lane lane-bigbiz">
+          <span class="lane-num">Avenue 03</span>
+          <h3>TOJ Big Business</h3>
+          <span class="lane-domain">bigbusiness.tojcampaign.com</span>
+          <p class="lane-for">
+            Established multi-location operators, regional service companies, multi-division
+            businesses where one operating standard needs to cross divisions.
+          </p>
+          <span class="lane-tier">Basic or Premium</span>
+          <span class="lane-cta">Enter TOJ Big Business <span class="arrow">→</span></span>
+        </a>
+
+        <!-- Avenue 4 — TOJ Advisory -->
+        <a href="https://advisory.tojcampaign.com" class="lane lane-advisory">
+          <span class="lane-num">Avenue 04</span>
+          <h3>TOJ Advisory</h3>
+          <span class="lane-domain">advisory.tojcampaign.com</span>
+          <p class="lane-for">
+            Individuals building their own brand who need a coach, not full operations —
+            young sports creators and athletes building personal brands.
+          </p>
+          <span class="lane-tier">Advisory tier</span>
+          <span class="lane-cta">Enter TOJ Advisory <span class="arrow">→</span></span>
+        </a>
+
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ THE STANDARD — 5 pillars ============ -->
+  <section id="standard">
+    <div class="container">
+      <div class="standard-head">
+        <div class="eyebrow">The Standard</div>
+        <h2>Five pillars. Taught once. Applied everywhere.</h2>
+        <p class="lede">
+          The Standard is the same on every avenue. What changes downstream is the terminology
+          and the tier — never the rigor, never the structure, never the pillars themselves.
+        </p>
+      </div>
+
+      <div class="pillars">
+        <div class="pillar">
+          <span class="num">Pillar 01</span>
+          <h4>[Pillar Name]</h4>
+          <p>Short description of what this pillar measures and how it's graded.</p>
+        </div>
+        <div class="pillar">
+          <span class="num">Pillar 02</span>
+          <h4>[Pillar Name]</h4>
+          <p>Short description of what this pillar measures and how it's graded.</p>
+        </div>
+        <div class="pillar">
+          <span class="num">Pillar 03</span>
+          <h4>[Pillar Name]</h4>
+          <p>Short description of what this pillar measures and how it's graded.</p>
+        </div>
+        <div class="pillar">
+          <span class="num">Pillar 04</span>
+          <h4>[Pillar Name]</h4>
+          <p>Short description of what this pillar measures and how it's graded.</p>
+        </div>
+        <div class="pillar">
+          <span class="num">Pillar 05</span>
+          <h4>[Pillar Name]</h4>
+          <p>Short description of what this pillar measures and how it's graded.</p>
+        </div>
+      </div>
+
+      <div class="pillar-note">
+        <strong>Placeholder note for Kyron:</strong> the five pillars are referenced across the
+        architecture doc but never enumerated in the source material. Fill in the pillar names
+        and descriptions during the adjustment pass.
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ TRANSCRIPT ============ -->
+  <section id="transcript">
+    <div class="container">
+      <div class="transcript-grid">
+        <div class="transcript-copy">
+          <div class="eyebrow">The universal artifact</div>
+          <h2>The Operational Transcript™.</h2>
+          <p>
+            Same template across all four avenues. The structure does not differ.
+            Every transcript follows the same sequence, whether it's for an apex trainer,
+            a neighborhood pizza shop, a multi-location HVAC operator, or a young creator
+            building their own brand.
+          </p>
+          <p>
+            The lane treatment differs — the color of the side tab, the terminology in the text
+            (e.g., "service line" for Small Business, "athlete brand" for Sports). The structure
+            is identical.
+          </p>
+        </div>
+
+        <div class="transcript-structure">
+          <div class="eyebrow">Transcript structure</div>
+          <div class="flow">
+            <div class="flow-step"><span class="label">Executive summary</span></div>
+            <div class="flow-step"><span class="label">Five-pillar radar</span></div>
+            <div class="flow-step"><span class="label">Service-line health</span></div>
+            <div class="flow-step"><span class="label">Revenue recovery opportunities</span></div>
+            <div class="flow-step"><span class="label">Roster / portfolio</span></div>
+            <div class="flow-step"><span class="label">Path forward</span></div>
+            <div class="flow-step"><span class="label">Ranked action plan</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ CLASSIFIER ============ -->
+  <section id="classifier">
+    <div class="container">
+      <div class="classifier-head">
+        <div class="eyebrow">Which lane are you?</div>
+        <h2>Four questions. One answer.</h2>
+        <p>
+          If a new product or service surfaces, the test for which avenue it belongs in
+          is the same test you can run on yourself right now.
+        </p>
+      </div>
+
+      <div class="classifier">
+        <div class="classifier-row">
+          <div class="classifier-q">Is the customer's business primarily sport?</div>
+          <a href="https://sports.tojcampaign.com" class="classifier-a cls-sports">TOJ Sports →</a>
+        </div>
+        <div class="classifier-row">
+          <div class="classifier-q">Is the customer a small, relationship-built operator?</div>
+          <a href="https://smallbusiness.tojcampaign.com" class="classifier-a cls-smallbiz">TOJ Small Business →</a>
+        </div>
+        <div class="classifier-row">
+          <div class="classifier-q">Is the customer a multi-location or multi-employee established business?</div>
+          <a href="https://bigbusiness.tojcampaign.com" class="classifier-a cls-bigbiz">TOJ Big Business →</a>
+        </div>
+        <div class="classifier-row">
+          <div class="classifier-q">Is the customer an individual building their own brand who needs coaching, not full operations?</div>
+          <a href="https://advisory.tojcampaign.com" class="classifier-a cls-advisory">TOJ Advisory →</a>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ HOW THE AVENUES CONNECT ============ -->
+  <section id="connect">
+    <div class="container">
+      <div class="connect-head">
+        <div class="eyebrow">How the four connect</div>
+        <h2>Four front doors. One nervous system underneath.</h2>
+      </div>
+
+      <div class="connect-grid">
+        <div class="connect-card">
+          <div class="eyebrow">Brand level</div>
+          <h3>Equal visual weight.</h3>
+          <p>
+            All four avenues are visible on this homepage with equal visual weight.
+            The Standard is taught once, on the hub — not re-explained on every spoke.
+          </p>
+        </div>
+        <div class="connect-card">
+          <div class="eyebrow">Intake level</div>
+          <h3>One master intake.</h3>
+          <p>
+            One master account (TOJ Campaign — Master Intake) receives inbound from all four
+            avenues. Lane tags route contacts into the right downstream pipeline.
+          </p>
+        </div>
+        <div class="connect-card">
+          <div class="eyebrow">Product level</div>
+          <h3>Same transcript. Every time.</h3>
+          <p>
+            Same template across all four avenues. Lane color and terminology adapt.
+            The structure — every section, every pillar, every action plan — stays identical.
+          </p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ FOOTER ============ -->
+  <footer>
+    <div class="footer-inner">
+      <div class="footer-grid">
+        <div class="footer-brand">
+          <div class="fbrand">TOJ Campaign</div>
+          <p>Trail of Joy Player Management Group, LLC. One Standard. Four Avenues. The Operational Transcript.</p>
+        </div>
+        <div class="footer-col">
+          <h5>Avenues</h5>
+          <ul>
+            <li><a href="https://sports.tojcampaign.com">TOJ Sports</a></li>
+            <li><a href="https://smallbusiness.tojcampaign.com">TOJ Small Business</a></li>
+            <li><a href="https://bigbusiness.tojcampaign.com">TOJ Big Business</a></li>
+            <li><a href="https://advisory.tojcampaign.com">TOJ Advisory</a></li>
+          </ul>
+        </div>
+        <div class="footer-col">
+          <h5>The System</h5>
+          <ul>
+            <li><a href="#principle">The principle</a></li>
+            <li><a href="#standard">The Standard</a></li>
+            <li><a href="#transcript">The Transcript</a></li>
+            <li><a href="#classifier">Find your lane</a></li>
+          </ul>
+        </div>
+        <div class="footer-col">
+          <h5>Internal</h5>
+          <ul>
+            <li><a href="/app.html">Campaign Builder</a></li>
+            <li><a href="mailto:hello@tojcampaign.com">Contact</a></li>
+          </ul>
+        </div>
+      </div>
+      <div class="footer-bar">
+        <div>© 2026 Trail of Joy Player Management Group, LLC. All rights reserved.</div>
+        <div>Architecture locked 2026-06-28.</div>
+      </div>
+    </div>
+  </footer>
+
 </body>
 </html>
