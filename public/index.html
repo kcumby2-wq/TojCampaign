@@ -177,7 +177,7 @@
       padding: 1.75rem 1.5rem 1.5rem;
       border-radius: 14px;
       color: #fff;
-      min-height: 380px;
+      min-height: 460px;
       text-decoration: none;
       transition: transform 0.22s ease, box-shadow 0.22s ease;
       position: relative;
@@ -208,8 +208,39 @@
       font-size: 0.88rem;
       line-height: 1.5;
       opacity: 0.92;
+      margin-bottom: 1rem;
+    }
+    .lane .lane-inside-label {
+      font-size: 0.62rem;
+      font-weight: 600;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      opacity: 0.6;
+      margin-bottom: 0.5rem;
+    }
+    .lane .lane-inside {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 0.28rem;
       margin-bottom: 1.25rem;
       flex: 1;
+    }
+    .lane .lane-inside li {
+      font-size: 0.8rem;
+      line-height: 1.35;
+      opacity: 0.9;
+      padding-left: 0.85rem;
+      position: relative;
+    }
+    .lane .lane-inside li::before {
+      content: '';
+      position: absolute;
+      left: 0;
+      top: 0.5em;
+      width: 5px;
+      height: 1px;
+      background: rgba(255,255,255,0.55);
     }
     .lane .lane-tier {
       font-size: 0.7rem;
@@ -354,12 +385,86 @@
       .classifier-a { justify-self: start; }
     }
 
+    /* ---------- REFERENCE BUILDS ---------- */
+    .ref-head { max-width: 46rem; margin: 0 auto clamp(2.5rem, 5vw, 3.5rem); text-align: center; }
+    .ref-head .eyebrow { margin-bottom: 1rem; }
+    .ref-head h2 { margin-bottom: 1rem; }
+    .ref-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1.25rem; }
+    @media (max-width: 860px) { .ref-grid { grid-template-columns: 1fr; } }
+    .ref-card {
+      padding: 0;
+      background: var(--parchment);
+      border: 1px solid var(--rule);
+      border-radius: 12px;
+      overflow: hidden;
+      display: flex; flex-direction: column;
+    }
+    .ref-stripe { height: 6px; }
+    .ref-stripe.sports   { background: var(--sports); }
+    .ref-stripe.smallbiz { background: var(--smallbiz); }
+    .ref-stripe.bigbiz   { background: var(--bigbiz); }
+    .ref-stripe.advisory { background: var(--advisory); }
+    .ref-body { padding: 1.6rem 1.5rem 1.5rem; display: flex; flex-direction: column; flex: 1; }
+    .ref-body .ref-lane {
+      font-size: 0.66rem;
+      font-weight: 600;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      margin-bottom: 0.75rem;
+    }
+    .ref-body .ref-lane.sports   { color: var(--sports); }
+    .ref-body .ref-lane.smallbiz { color: var(--smallbiz); }
+    .ref-body .ref-lane.bigbiz   { color: var(--bigbiz); }
+    .ref-body .ref-lane.advisory { color: var(--advisory); }
+    .ref-body h3 { font-size: 1.2rem; margin-bottom: 0.25rem; }
+    .ref-body .ref-composite {
+      font-size: 0.78rem;
+      color: var(--ink-mute);
+      font-style: italic;
+      margin-bottom: 1rem;
+    }
+    .ref-body p { font-size: 0.87rem; color: var(--ink-mute); line-height: 1.55; margin-bottom: 1.15rem; flex: 1; }
+    .ref-body .ref-status {
+      font-family: 'Inter', monospace;
+      font-size: 0.7rem;
+      letter-spacing: 0.06em;
+      color: var(--ink-mute);
+      padding-top: 0.9rem;
+      border-top: 1px solid var(--rule);
+    }
+    .ref-body .ref-status.tbd { color: var(--advisory); }
+
+    /* ---------- AVENUES vs TIERS ---------- */
+    .distinction-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1.25rem; }
+    @media (max-width: 720px) { .distinction-grid { grid-template-columns: 1fr; } }
+    .distinction-card {
+      padding: 1.75rem 1.5rem;
+      background: var(--parchment);
+      border: 1px solid var(--rule);
+      border-radius: 12px;
+    }
+    .distinction-card .eyebrow { margin-bottom: 0.6rem; }
+    .distinction-card h3 { font-size: 1.15rem; margin-bottom: 0.6rem; }
+    .distinction-card p { font-size: 0.88rem; line-height: 1.55; color: var(--ink-mute); }
+    .distinction-warn {
+      margin-top: 1.5rem;
+      padding: 1rem 1.15rem;
+      background: rgba(184, 132, 59, 0.08);
+      border-left: 3px solid var(--advisory);
+      border-radius: 4px;
+      font-size: 0.85rem;
+      color: var(--ink-soft);
+      line-height: 1.55;
+    }
+    .distinction-warn strong { color: var(--ink); font-weight: 600; }
+
     /* ---------- CONNECTIONS ---------- */
     .connect-head { text-align: center; max-width: 42rem; margin: 0 auto clamp(2.5rem, 5vw, 3.5rem); }
     .connect-head .eyebrow { margin-bottom: 1rem; }
     .connect-head h2 { margin-bottom: 1rem; }
-    .connect-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1.25rem; }
-    @media (max-width: 860px) { .connect-grid { grid-template-columns: 1fr; } }
+    .connect-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1.15rem; }
+    @media (max-width: 980px) { .connect-grid { grid-template-columns: repeat(2, 1fr); } }
+    @media (max-width: 520px) { .connect-grid { grid-template-columns: 1fr; } }
     .connect-card {
       padding: 1.75rem 1.5rem;
       background: var(--parchment);
@@ -369,6 +474,15 @@
     .connect-card .eyebrow { color: var(--ink-mute); margin-bottom: 0.85rem; }
     .connect-card h3 { font-size: 1.15rem; margin-bottom: 0.75rem; }
     .connect-card p { font-size: 0.9rem; line-height: 1.55; color: var(--ink-mute); }
+    .connect-card code {
+      font-family: 'Courier New', monospace;
+      font-size: 0.78rem;
+      background: var(--parchment-2);
+      padding: 0.08rem 0.35rem;
+      border-radius: 3px;
+      color: var(--ink-soft);
+      white-space: nowrap;
+    }
 
     /* ---------- FOOTER ---------- */
     footer {
@@ -518,7 +632,14 @@
             Anyone whose business is sport. Athletes, trainers, sports media creators,
             organizations adjacent to sport.
           </p>
-          <span class="lane-tier">Premium tier</span>
+          <span class="lane-inside-label">Inside</span>
+          <ul class="lane-inside">
+            <li>Athletes Certified roster</li>
+            <li>Subject Report (TOJ × Optimum Grading)</li>
+            <li>Subject Medias booking</li>
+            <li>Apex trainer operating brains</li>
+          </ul>
+          <span class="lane-tier">Premium · Own GHL sub-account</span>
           <span class="lane-cta">Enter TOJ Sports <span class="arrow">→</span></span>
         </a>
 
@@ -528,10 +649,17 @@
           <h3>TOJ Small Business</h3>
           <span class="lane-domain">smallbusiness.tojcampaign.com</span>
           <p class="lane-for">
-            Relationship-built operators. Solo coaches, neighborhood shops, local trades,
-            programs — where the brand is genuinely the person running it.
+            Relationship-built operators. Solo or small-team businesses where the brand is
+            genuinely the person running it.
           </p>
-          <span class="lane-tier">Basic tier</span>
+          <span class="lane-inside-label">Who it serves</span>
+          <ul class="lane-inside">
+            <li>Solo coaches &amp; instructors</li>
+            <li>Neighborhood shops &amp; local trades</li>
+            <li>Programs, 7v7, school athletics</li>
+            <li>Non-sports creators (small audience)</li>
+          </ul>
+          <span class="lane-tier">Basic · Creator Intake System app</span>
           <span class="lane-cta">Enter TOJ Small Business <span class="arrow">→</span></span>
         </a>
 
@@ -542,9 +670,16 @@
           <span class="lane-domain">bigbusiness.tojcampaign.com</span>
           <p class="lane-for">
             Established multi-location operators, regional service companies, multi-division
-            businesses where one operating standard needs to cross divisions.
+            businesses where one standard needs to cross divisions.
           </p>
-          <span class="lane-tier">Basic or Premium</span>
+          <span class="lane-inside-label">Who it serves</span>
+          <ul class="lane-inside">
+            <li>Multi-location HVAC, plumbing, contracting</li>
+            <li>Multi-studio fitness / music / dance</li>
+            <li>Regional service companies (10+ staff)</li>
+            <li>B2B providers with team structure</li>
+          </ul>
+          <span class="lane-tier">Basic or Premium · per-engagement</span>
           <span class="lane-cta">Enter TOJ Big Business <span class="arrow">→</span></span>
         </a>
 
@@ -557,10 +692,76 @@
             Individuals building their own brand who need a coach, not full operations —
             young sports creators and athletes building personal brands.
           </p>
-          <span class="lane-tier">Advisory tier</span>
+          <span class="lane-inside-label">What you get</span>
+          <ul class="lane-inside">
+            <li>SubjectSkillz mentorship curriculum</li>
+            <li>1:1 advisory cadence</li>
+            <li>Brand framework + quarterly Transcript</li>
+            <li>Curated peer cohort</li>
+          </ul>
+          <span class="lane-tier">Advisory · No sub-account per mentee</span>
           <span class="lane-cta">Enter TOJ Advisory <span class="arrow">→</span></span>
         </a>
 
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ REFERENCE BUILDS ============ -->
+  <section id="reference-builds">
+    <div class="container">
+      <div class="ref-head">
+        <div class="eyebrow">Reference builds</div>
+        <h2>Three demo transcripts. Real structure, composite subjects.</h2>
+        <p class="lede" style="margin-inline:auto;">
+          Each avenue has (or will have) a reference build — a demo Operational Transcript on a
+          composite subject that shows the exact structure any real client's transcript will follow.
+        </p>
+      </div>
+
+      <div class="ref-grid">
+        <div class="ref-card">
+          <div class="ref-stripe smallbiz"></div>
+          <div class="ref-body">
+            <div class="ref-lane smallbiz">TOJ Small Business</div>
+            <h3>Sarah Reyes</h3>
+            <div class="ref-composite">Yoga &amp; breathwork · Growing-lane composite</div>
+            <p>
+              Solo practitioner running two service lines, one venue, one part-time contractor.
+              The demo shows how the Transcript grades a relationship-built operator whose brand
+              is the person.
+            </p>
+            <div class="ref-status">Available for public display</div>
+          </div>
+        </div>
+
+        <div class="ref-card">
+          <div class="ref-stripe bigbiz"></div>
+          <div class="ref-body">
+            <div class="ref-lane bigbiz">TOJ Big Business</div>
+            <h3>Meridian HVAC</h3>
+            <div class="ref-composite">Plano, TX · Established-lane composite</div>
+            <p>
+              Multi-location residential + light commercial HVAC operator with dispatch, install,
+              and maintenance service lines. The demo shows how one standard reads across divisions.
+            </p>
+            <div class="ref-status">Available for public display</div>
+          </div>
+        </div>
+
+        <div class="ref-card">
+          <div class="ref-stripe advisory"></div>
+          <div class="ref-body">
+            <div class="ref-lane advisory">TOJ Advisory</div>
+            <h3>CMC Visuals</h3>
+            <div class="ref-composite">Young sports creator · SubjectSkillz composite</div>
+            <p>
+              Camera operator building a personal brand around courtside/sideline sports content.
+              The demo shows how an Advisory Transcript grades an individual's own brand, not an operation.
+            </p>
+            <div class="ref-status tbd">To produce — evolves from source material</div>
+          </div>
+        </div>
       </div>
     </div>
   </section>
@@ -649,6 +850,46 @@
     </div>
   </section>
 
+  <!-- ============ AVENUES vs TIERS ============ -->
+  <section id="distinction">
+    <div class="container">
+      <div class="standard-head">
+        <div class="eyebrow">Avenues aren't tiers</div>
+        <h2>Front doors and infrastructure are two different questions.</h2>
+        <p class="lede">
+          One of the easiest architectural mistakes is to confuse avenues with tiers. They're
+          orthogonal — a single avenue can route into either tier, and a single tier serves
+          multiple avenues.
+        </p>
+      </div>
+
+      <div class="distinction-grid">
+        <div class="distinction-card">
+          <div class="eyebrow">Avenue</div>
+          <h3>Who the customer is.</h3>
+          <p>
+            The market segment. Sports, Small Business, Big Business, Advisory — these are
+            front doors that answer <em>who</em> the client is and <em>how</em> they self-identify.
+          </p>
+        </div>
+        <div class="distinction-card">
+          <div class="eyebrow">Tier</div>
+          <h3>How their account is hosted.</h3>
+          <p>
+            The engineering choice. Basic = Creator Intake System app (React + Node + Postgres +
+            Stripe Connect, multi-tenant). Premium = own GHL sub-account with dedicated stack.
+          </p>
+        </div>
+      </div>
+
+      <div class="distinction-warn">
+        <strong>Example:</strong> TOJ Big Business (one avenue) routes into either Basic
+        or Premium depending on engagement complexity. TOJ Small Business and TOJ Big Business
+        (two different avenues) both frequently run on the Basic tier. Don't conflate them.
+      </div>
+    </div>
+  </section>
+
   <!-- ============ CLASSIFIER ============ -->
   <section id="classifier">
     <div class="container">
@@ -679,6 +920,13 @@
           <a href="https://advisory.tojcampaign.com" class="classifier-a cls-advisory">TOJ Advisory →</a>
         </div>
       </div>
+
+      <div class="distinction-warn" style="margin-top: 2rem;">
+        <strong>If a new product doesn't fit any of the four:</strong> that's a signal it's either
+        (a) a fifth avenue — which is an architectural change requiring Kyron sign-off, or
+        (b) actually fits one of the four but the product is mis-scoped. Default to (b);
+        avoid premature avenue expansion.
+      </div>
     </div>
   </section>
 
@@ -695,7 +943,7 @@
           <div class="eyebrow">Brand level</div>
           <h3>Equal visual weight.</h3>
           <p>
-            All four avenues are visible on this homepage with equal visual weight.
+            All four avenues are visible on this homepage with equal weight.
             The Standard is taught once, on the hub — not re-explained on every spoke.
           </p>
         </div>
@@ -703,8 +951,9 @@
           <div class="eyebrow">Intake level</div>
           <h3>One master intake.</h3>
           <p>
-            One master account (TOJ Campaign — Master Intake) receives inbound from all four
-            avenues. Lane tags route contacts into the right downstream pipeline.
+            One master GHL sub-account (TOJ Campaign — Master Intake) receives inbound from
+            all four avenues. Lane tags (<code>lane:sports</code>, <code>lane:small_business</code>,
+            <code>lane:large_business</code>, <code>lane:advisory</code>) route contacts downstream.
           </p>
         </div>
         <div class="connect-card">
@@ -713,6 +962,15 @@
           <p>
             Same template across all four avenues. Lane color and terminology adapt.
             The structure — every section, every pillar, every action plan — stays identical.
+          </p>
+        </div>
+        <div class="connect-card">
+          <div class="eyebrow">Credibility level</div>
+          <h3>Gated public roster.</h3>
+          <p>
+            TOJ Sports maintains a public Athletes Certified roster (after consent). Small Biz
+            and Big Biz reference real businesses by permission only; Advisory references mentees
+            by permission only.
           </p>
         </div>
       </div>
@@ -740,8 +998,10 @@
           <h5>The System</h5>
           <ul>
             <li><a href="#principle">The principle</a></li>
+            <li><a href="#reference-builds">Reference builds</a></li>
             <li><a href="#standard">The Standard</a></li>
             <li><a href="#transcript">The Transcript</a></li>
+            <li><a href="#distinction">Avenues vs Tiers</a></li>
             <li><a href="#classifier">Find your lane</a></li>
           </ul>
         </div>
