@@ -1,0 +1,1173 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>TOJ Sports — Trail of Joy Campaign</title>
+  <meta name="description" content="TOJ Sports. The operating standard for athletes, apex trainers, sports media creators, and sports-adjacent organizations. Lead generation, sales, recruiting, media, visibility, community, brand, authority — under one operating brain." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&display=swap" rel="stylesheet" />
+  <style>
+    /* ---------- RESET ---------- */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; }
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: #F5F1EA;
+      color: #1A1613;
+      line-height: 1.5;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+    }
+
+    /* ---------- TOKENS (shared with hub) ---------- */
+    :root {
+      --parchment: #F5F1EA;
+      --parchment-2: #EBE4D6;
+      --ink: #1A1613;
+      --ink-soft: #3B3530;
+      --ink-mute: #6E655C;
+      --rule: rgba(26, 22, 19, 0.12);
+      --rule-strong: rgba(26, 22, 19, 0.35);
+
+      /* Locked avenue colors */
+      --sports:      #1E3A5F;
+      --sports-2:    #2C4E7A;   /* lighter navy for gradients / hover */
+      --sports-tint: rgba(30, 58, 95, 0.08);
+      --smallbiz: #A85F26;
+      --bigbiz:   #2F5D4E;
+      --advisory: #B8843B;
+
+      /* This page's accent — Navy */
+      --accent: var(--sports);
+      --accent-2: var(--sports-2);
+      --accent-tint: var(--sports-tint);
+    }
+
+    /* ---------- TYPOGRAPHY ---------- */
+    .serif { font-family: 'Fraunces', 'Georgia', serif; letter-spacing: -0.01em; }
+    h1, h2, h3, h4 { font-family: 'Fraunces', 'Georgia', serif; font-weight: 600; letter-spacing: -0.015em; color: var(--ink); }
+    h1 { font-size: clamp(2.4rem, 5.2vw, 4.4rem); line-height: 1.02; }
+    h2 { font-size: clamp(1.8rem, 3.4vw, 2.8rem); line-height: 1.1; }
+    h3 { font-size: 1.3rem; line-height: 1.25; }
+    p  { color: var(--ink-soft); }
+    .eyebrow {
+      font-family: 'Inter', sans-serif;
+      font-size: 0.72rem;
+      font-weight: 600;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: var(--ink-mute);
+    }
+    .eyebrow.navy { color: var(--accent); }
+    .lede { font-size: clamp(1.05rem, 1.6vw, 1.2rem); color: var(--ink-soft); max-width: 46rem; }
+
+    /* ---------- LAYOUT ---------- */
+    .container { width: 100%; max-width: 1180px; margin: 0 auto; padding: 0 clamp(1.25rem, 3vw, 2.25rem); }
+    section { padding: clamp(4.5rem, 8vw, 7rem) 0; border-top: 1px solid var(--rule); }
+    section:first-of-type { border-top: 0; }
+
+    /* ---------- HEADER ---------- */
+    header.top {
+      position: sticky; top: 0; z-index: 40;
+      background: rgba(245, 241, 234, 0.88);
+      backdrop-filter: saturate(140%) blur(10px);
+      -webkit-backdrop-filter: saturate(140%) blur(10px);
+      border-bottom: 1px solid var(--rule);
+    }
+    .top-inner {
+      display: flex; align-items: center; justify-content: space-between;
+      gap: 1.5rem;
+      padding: 0.85rem clamp(1.25rem, 3vw, 2.25rem);
+      max-width: 1180px; margin: 0 auto;
+    }
+    .top-left { display: flex; align-items: center; gap: 1rem; flex: 1; min-width: 0; }
+    .back-link {
+      display: inline-flex; align-items: center; gap: 0.4rem;
+      color: var(--ink-mute);
+      text-decoration: none;
+      font-size: 0.82rem;
+      font-weight: 500;
+      transition: color 0.15s ease;
+    }
+    .back-link:hover { color: var(--ink); }
+    .back-link .caret { font-size: 0.9em; }
+    .lane-badge {
+      display: inline-flex; align-items: center; gap: 0.5rem;
+      padding: 0.35rem 0.75rem;
+      background: var(--accent);
+      color: #fff;
+      border-radius: 999px;
+      font-size: 0.72rem;
+      font-weight: 600;
+      letter-spacing: 0.06em;
+    }
+    .lane-badge .dot { width: 6px; height: 6px; border-radius: 999px; background: rgba(255,255,255,0.7); }
+    nav.primary { display: flex; gap: 1.5rem; align-items: center; }
+    nav.primary a {
+      color: var(--ink-soft);
+      text-decoration: none;
+      font-size: 0.85rem;
+      font-weight: 500;
+      transition: color 0.15s ease;
+    }
+    nav.primary a:hover { color: var(--accent); }
+    @media (max-width: 860px) { nav.primary { display: none; } }
+
+    /* ---------- BUTTONS ---------- */
+    .btn {
+      display: inline-flex; align-items: center; gap: 0.5rem;
+      padding: 0.85rem 1.4rem;
+      border-radius: 999px;
+      font-size: 0.92rem;
+      font-weight: 500;
+      text-decoration: none;
+      transition: all 0.18s ease;
+      border: 1px solid transparent;
+      cursor: pointer;
+      font-family: inherit;
+    }
+    .btn.primary { background: var(--accent); color: #fff; }
+    .btn.primary:hover { background: var(--accent-2); }
+    .btn.ghost { background: transparent; color: var(--ink); border-color: var(--rule-strong); }
+    .btn.ghost:hover { background: rgba(26,22,19,0.04); border-color: var(--accent); color: var(--accent); }
+    .btn .arrow { transition: transform 0.18s ease; }
+    .btn:hover .arrow { transform: translateX(3px); }
+
+    /* ---------- HERO ---------- */
+    .hero {
+      padding: clamp(4.5rem, 9vw, 7.5rem) 0 clamp(3.5rem, 7vw, 5.5rem);
+      position: relative;
+      overflow: hidden;
+    }
+    .hero-grid { display: grid; grid-template-columns: 1.15fr 1fr; gap: clamp(2rem, 5vw, 5rem); align-items: end; }
+    @media (max-width: 880px) { .hero-grid { grid-template-columns: 1fr; } }
+    .hero .eyebrow { margin-bottom: 1.25rem; }
+    .hero h1 { max-width: 18ch; margin-bottom: 1.5rem; }
+    .hero h1 em { font-style: italic; font-weight: 500; color: var(--accent); }
+    .hero .lede { margin-bottom: 2.25rem; }
+    .hero-cta { display: flex; gap: 0.9rem; flex-wrap: wrap; }
+
+    /* Hero right — accent card */
+    .hero-card {
+      background: var(--accent);
+      color: #fff;
+      border-radius: 16px;
+      padding: 2rem 1.75rem 1.85rem;
+      position: relative;
+      overflow: hidden;
+    }
+    .hero-card::before {
+      content: '';
+      position: absolute;
+      top: -40%; right: -30%;
+      width: 90%; height: 180%;
+      background: radial-gradient(ellipse at center, rgba(255,255,255,0.15), transparent 65%);
+      pointer-events: none;
+    }
+    .hero-card .h-eyebrow {
+      font-size: 0.68rem;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: rgba(255,255,255,0.55);
+      font-weight: 600;
+      margin-bottom: 1rem;
+    }
+    .hero-card h4 {
+      font-family: 'Fraunces', serif;
+      font-weight: 500;
+      font-size: 1.35rem;
+      color: #fff;
+      line-height: 1.2;
+      margin-bottom: 1.5rem;
+    }
+    .flow-cycle {
+      display: flex; flex-direction: column; gap: 0.55rem;
+      position: relative;
+    }
+    .flow-cycle .step {
+      display: flex; align-items: baseline; gap: 0.75rem;
+      padding: 0.72rem 0;
+      border-bottom: 1px solid rgba(255,255,255,0.16);
+    }
+    .flow-cycle .step:last-child { border-bottom: 0; }
+    .flow-cycle .step .idx {
+      font-family: 'Fraunces', serif;
+      font-size: 0.82rem;
+      color: rgba(255,255,255,0.45);
+      min-width: 1.75rem;
+    }
+    .flow-cycle .step .name {
+      font-family: 'Fraunces', serif;
+      font-size: 1.05rem;
+      font-weight: 500;
+      color: #fff;
+    }
+    .flow-cycle .step .arrow-down {
+      color: rgba(255,255,255,0.4);
+      font-size: 0.9rem;
+    }
+    .flow-cycle .footnote {
+      margin-top: 0.9rem;
+      font-size: 0.78rem;
+      color: rgba(255,255,255,0.65);
+      font-style: italic;
+      line-height: 1.4;
+    }
+
+    /* ---------- THESIS / CYCLE ---------- */
+    .thesis-grid { display: grid; grid-template-columns: 1fr 1.2fr; gap: clamp(2rem, 5vw, 4rem); align-items: start; }
+    @media (max-width: 860px) { .thesis-grid { grid-template-columns: 1fr; } }
+    .thesis-copy .eyebrow { margin-bottom: 1rem; }
+    .thesis-copy h2 { margin-bottom: 1.25rem; }
+    .thesis-copy p { margin-bottom: 1rem; max-width: 32rem; }
+    .thesis-copy p strong { color: var(--ink); font-weight: 600; }
+
+    .cycle-diagram {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0;
+      background: var(--parchment-2);
+      border-radius: 14px;
+      overflow: hidden;
+      border: 1px solid var(--rule);
+    }
+    .cycle-cell {
+      padding: 1.5rem 1.4rem;
+      border-right: 1px solid var(--rule);
+      border-bottom: 1px solid var(--rule);
+      position: relative;
+    }
+    .cycle-cell:nth-child(2n) { border-right: 0; }
+    .cycle-cell:nth-last-child(-n+2) { border-bottom: 0; }
+    .cycle-cell .step-num {
+      font-family: 'Fraunces', serif;
+      font-size: 0.75rem;
+      color: var(--accent);
+      margin-bottom: 0.35rem;
+      letter-spacing: 0.06em;
+    }
+    .cycle-cell h4 {
+      font-family: 'Fraunces', serif;
+      font-size: 1.15rem;
+      color: var(--ink);
+      margin-bottom: 0.4rem;
+    }
+    .cycle-cell p {
+      font-size: 0.83rem;
+      color: var(--ink-mute);
+      line-height: 1.5;
+    }
+    .cycle-arrow {
+      position: absolute;
+      color: var(--accent);
+      font-family: 'Fraunces', serif;
+      font-weight: 500;
+      opacity: 0.7;
+      pointer-events: none;
+    }
+    .cycle-arrow.right { right: -0.6em; top: 50%; transform: translateY(-50%); }
+    .cycle-arrow.down  { bottom: -0.6em; right: 50%; transform: translateX(50%); }
+    @media (max-width: 640px) {
+      .cycle-arrow { display: none; }
+    }
+
+    /* ---------- HIERARCHY / LADDER ---------- */
+    .ladder-head { max-width: 46rem; margin-bottom: 3rem; }
+    .ladder-head .eyebrow { margin-bottom: 1rem; }
+    .ladder-head h2 { margin-bottom: 1.25rem; }
+
+    .ladder {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 0;
+      border-top: 1px solid var(--rule);
+    }
+    @media (max-width: 720px) { .ladder { grid-template-columns: 1fr; } }
+    .rung {
+      display: grid;
+      grid-template-columns: 5rem 1fr;
+      gap: 1.25rem;
+      padding: 1.5rem 1.4rem;
+      border-bottom: 1px solid var(--rule);
+      border-right: 1px solid var(--rule);
+      position: relative;
+      transition: background 0.18s ease;
+    }
+    .rung:nth-child(2n) { border-right: 0; }
+    @media (max-width: 720px) { .rung { border-right: 0; } }
+    .rung:hover { background: var(--accent-tint); }
+    .rung .rung-num {
+      font-family: 'Fraunces', serif;
+      font-size: 2.1rem;
+      font-weight: 500;
+      color: var(--accent);
+      line-height: 1;
+      letter-spacing: -0.02em;
+    }
+    .rung .rung-body h4 {
+      font-family: 'Fraunces', serif;
+      font-size: 1.1rem;
+      color: var(--ink);
+      margin-bottom: 0.4rem;
+      line-height: 1.15;
+    }
+    .rung .rung-body p {
+      font-size: 0.85rem;
+      color: var(--ink-mute);
+      line-height: 1.5;
+    }
+    .ladder-note {
+      margin-top: 2rem;
+      font-size: 0.85rem;
+      color: var(--ink-mute);
+      font-style: italic;
+      max-width: 46rem;
+    }
+
+    /* ---------- PRODUCTS ---------- */
+    .products-head { max-width: 46rem; margin-bottom: 3rem; }
+    .products-head .eyebrow { margin-bottom: 1rem; }
+    .products-head h2 { margin-bottom: 1.25rem; }
+    .products-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 1.15rem; }
+    @media (max-width: 780px) { .products-grid { grid-template-columns: 1fr; } }
+    .product-card {
+      display: flex; flex-direction: column;
+      padding: 2rem 1.75rem 1.75rem;
+      background: var(--parchment);
+      border: 1px solid var(--rule);
+      border-radius: 14px;
+      position: relative;
+      overflow: hidden;
+      min-height: 260px;
+    }
+    .product-card::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0;
+      width: 4px; height: 100%;
+      background: var(--accent);
+    }
+    .product-card .p-eyebrow {
+      display: inline-flex; align-items: center; gap: 0.4rem;
+      font-family: 'Inter', sans-serif;
+      font-size: 0.66rem;
+      font-weight: 600;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: var(--accent);
+      margin-bottom: 0.85rem;
+    }
+    .product-card h3 {
+      font-family: 'Fraunces', serif;
+      font-size: 1.5rem;
+      color: var(--ink);
+      margin-bottom: 0.6rem;
+    }
+    .product-card p {
+      font-size: 0.92rem;
+      color: var(--ink-soft);
+      line-height: 1.55;
+      margin-bottom: 1.25rem;
+    }
+    .product-card .p-detail {
+      margin-top: auto;
+      padding-top: 1rem;
+      border-top: 1px solid var(--rule);
+      font-family: 'Inter', monospace;
+      font-size: 0.75rem;
+      color: var(--ink-mute);
+      letter-spacing: 0.02em;
+    }
+    .product-card .p-detail strong { color: var(--accent); font-weight: 600; letter-spacing: 0.04em; }
+
+    /* ---------- WHO IT'S FOR ---------- */
+    .who-head { max-width: 46rem; margin-bottom: 3rem; }
+    .who-head .eyebrow { margin-bottom: 1rem; }
+    .who-head h2 { margin-bottom: 1.25rem; }
+    .who-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem; }
+    @media (max-width: 980px) { .who-grid { grid-template-columns: repeat(2, 1fr); } }
+    @media (max-width: 520px) { .who-grid { grid-template-columns: 1fr; } }
+    .who-card {
+      padding: 1.5rem 1.35rem;
+      background: var(--parchment);
+      border: 1px solid var(--rule);
+      border-radius: 12px;
+      display: flex;
+      flex-direction: column;
+    }
+    .who-card .w-eyebrow {
+      font-size: 0.66rem;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: var(--accent);
+      font-weight: 600;
+      margin-bottom: 0.7rem;
+    }
+    .who-card h4 {
+      font-family: 'Fraunces', serif;
+      font-size: 1.15rem;
+      color: var(--ink);
+      margin-bottom: 0.6rem;
+      line-height: 1.15;
+    }
+    .who-card p {
+      font-size: 0.83rem;
+      color: var(--ink-mute);
+      line-height: 1.5;
+    }
+
+    /* ---------- APEX LADDER ---------- */
+    .apex-wrap {
+      background: var(--ink);
+      color: var(--parchment);
+      border-radius: 20px;
+      padding: clamp(2.25rem, 4vw, 3rem);
+    }
+    .apex-head { max-width: 46rem; margin-bottom: 2.5rem; }
+    .apex-head .eyebrow { color: rgba(245,241,234,0.55); margin-bottom: 1rem; }
+    .apex-head h2 { color: var(--parchment); margin-bottom: 1rem; }
+    .apex-head p { color: rgba(245,241,234,0.7); max-width: 42rem; }
+    .apex-list { display: grid; grid-template-columns: repeat(2, 1fr); gap: 1rem; }
+    @media (max-width: 780px) { .apex-list { grid-template-columns: 1fr; } }
+    .apex-row {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 1.25rem;
+      align-items: baseline;
+      padding: 1.15rem 1.2rem;
+      background: rgba(245,241,234,0.05);
+      border: 1px solid rgba(245,241,234,0.1);
+      border-radius: 10px;
+    }
+    .apex-row.available { border-color: rgba(30, 58, 95, 0.6); background: rgba(30, 58, 95, 0.15); }
+    .apex-row .apex-name {
+      font-family: 'Fraunces', serif;
+      font-size: 1.02rem;
+      color: var(--parchment);
+      font-weight: 500;
+      line-height: 1.2;
+    }
+    .apex-row .apex-owner {
+      font-size: 0.75rem;
+      color: rgba(245,241,234,0.55);
+      margin-top: 0.2rem;
+      font-family: 'Inter', sans-serif;
+    }
+    .apex-row .apex-price {
+      font-family: 'Inter', monospace;
+      font-size: 0.8rem;
+      color: rgba(245,241,234,0.75);
+      white-space: nowrap;
+      letter-spacing: 0.02em;
+    }
+    .apex-row.forthcoming .apex-price { color: rgba(184,132,59,0.9); }
+
+    /* ---------- TIER / INFRASTRUCTURE ---------- */
+    .tier-grid { display: grid; grid-template-columns: 1fr 1.3fr; gap: clamp(2rem, 5vw, 4rem); align-items: start; }
+    @media (max-width: 860px) { .tier-grid { grid-template-columns: 1fr; } }
+    .tier-copy .eyebrow { margin-bottom: 1rem; }
+    .tier-copy h2 { margin-bottom: 1.25rem; }
+    .tier-copy p { margin-bottom: 1rem; max-width: 32rem; }
+    .tier-stack {
+      background: var(--parchment-2);
+      border-radius: 14px;
+      padding: 1.75rem 1.5rem;
+      border: 1px solid var(--rule);
+    }
+    .tier-stack .stack-eyebrow {
+      font-size: 0.66rem;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      color: var(--accent);
+      font-weight: 600;
+      margin-bottom: 1rem;
+    }
+    .tier-stack ul { list-style: none; display: flex; flex-direction: column; gap: 0.5rem; }
+    .tier-stack li {
+      padding: 0.8rem 1rem;
+      background: var(--parchment);
+      border: 1px solid var(--rule);
+      border-radius: 8px;
+      font-family: 'Inter', monospace;
+      font-size: 0.83rem;
+      color: var(--ink-soft);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 1rem;
+    }
+    .tier-stack li .tag {
+      font-family: 'Inter', sans-serif;
+      font-size: 0.68rem;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--accent);
+      font-weight: 600;
+    }
+
+    /* ---------- TRANSCRIPT-SPORTS ---------- */
+    .translate-grid { display: grid; grid-template-columns: 1fr 1fr; gap: clamp(2rem, 5vw, 4rem); align-items: start; }
+    @media (max-width: 860px) { .translate-grid { grid-template-columns: 1fr; } }
+    .translate-copy .eyebrow { margin-bottom: 1rem; }
+    .translate-copy h2 { margin-bottom: 1.25rem; }
+    .translate-copy p { margin-bottom: 1rem; max-width: 32rem; }
+    .translate-table {
+      background: var(--parchment);
+      border: 1px solid var(--rule);
+      border-radius: 12px;
+      overflow: hidden;
+    }
+    .translate-table .th-row,
+    .translate-table .tr-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0;
+    }
+    .translate-table .th-row {
+      background: var(--parchment-2);
+      border-bottom: 1px solid var(--rule);
+    }
+    .translate-table .th-row div {
+      padding: 0.8rem 1rem;
+      font-size: 0.68rem;
+      font-weight: 600;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: var(--ink-mute);
+    }
+    .translate-table .th-row div:first-child { border-right: 1px solid var(--rule); }
+    .translate-table .tr-row {
+      border-bottom: 1px solid var(--rule);
+    }
+    .translate-table .tr-row:last-child { border-bottom: 0; }
+    .translate-table .tr-row div {
+      padding: 0.9rem 1rem;
+      font-size: 0.88rem;
+      color: var(--ink-soft);
+      line-height: 1.35;
+    }
+    .translate-table .tr-row div:first-child {
+      border-right: 1px solid var(--rule);
+      font-family: 'Fraunces', serif;
+      font-weight: 500;
+      color: var(--ink);
+    }
+    .translate-table .tr-row div:last-child {
+      color: var(--accent);
+      font-weight: 500;
+    }
+
+    /* ---------- CTA / INTAKE ---------- */
+    .cta-wrap {
+      background: var(--accent);
+      color: #fff;
+      border-radius: 20px;
+      padding: clamp(2.5rem, 5vw, 3.5rem);
+      display: grid;
+      grid-template-columns: 1.4fr 1fr;
+      gap: clamp(2rem, 5vw, 4rem);
+      align-items: center;
+      position: relative;
+      overflow: hidden;
+    }
+    @media (max-width: 780px) { .cta-wrap { grid-template-columns: 1fr; } }
+    .cta-wrap::before {
+      content: '';
+      position: absolute;
+      top: -50%; left: -20%;
+      width: 60%; height: 200%;
+      background: radial-gradient(ellipse at center, rgba(255,255,255,0.1), transparent 65%);
+      pointer-events: none;
+    }
+    .cta-wrap .cta-eyebrow {
+      font-size: 0.68rem;
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      color: rgba(255,255,255,0.65);
+      font-weight: 600;
+      margin-bottom: 1rem;
+    }
+    .cta-wrap h2 { color: #fff; margin-bottom: 1rem; max-width: 20ch; }
+    .cta-wrap p { color: rgba(255,255,255,0.85); font-size: 1rem; line-height: 1.55; max-width: 38ch; }
+    .cta-actions { display: flex; flex-direction: column; gap: 0.85rem; align-items: flex-start; position: relative; z-index: 1; }
+    .cta-actions .btn-white {
+      display: inline-flex; align-items: center; gap: 0.6rem;
+      background: var(--parchment);
+      color: var(--accent);
+      padding: 1rem 1.6rem;
+      border-radius: 999px;
+      font-weight: 600;
+      font-size: 0.95rem;
+      text-decoration: none;
+      transition: transform 0.18s ease, background 0.18s ease;
+    }
+    .cta-actions .btn-white:hover { background: #fff; transform: translateY(-2px); }
+    .cta-actions .btn-outline {
+      display: inline-flex; align-items: center; gap: 0.5rem;
+      background: transparent;
+      color: #fff;
+      padding: 0.85rem 1.4rem;
+      border-radius: 999px;
+      font-weight: 500;
+      font-size: 0.9rem;
+      text-decoration: none;
+      border: 1px solid rgba(255,255,255,0.3);
+      transition: all 0.18s ease;
+    }
+    .cta-actions .btn-outline:hover { border-color: #fff; background: rgba(255,255,255,0.08); }
+
+    /* ---------- FOOTER ---------- */
+    footer {
+      background: var(--ink);
+      color: rgba(245,241,234,0.75);
+      padding: 3.5rem 0 2.25rem;
+    }
+    .footer-inner { max-width: 1180px; margin: 0 auto; padding: 0 clamp(1.25rem, 3vw, 2.25rem); }
+    .footer-grid {
+      display: grid;
+      grid-template-columns: 1.4fr 1fr 1fr 1fr;
+      gap: 2rem;
+      margin-bottom: 2.5rem;
+    }
+    @media (max-width: 780px) { .footer-grid { grid-template-columns: 1fr 1fr; } }
+    @media (max-width: 480px) { .footer-grid { grid-template-columns: 1fr; } }
+    .footer-brand .fbrand {
+      font-family: 'Fraunces', serif;
+      font-size: 1.25rem;
+      color: var(--parchment);
+      margin-bottom: 0.6rem;
+    }
+    .footer-brand .fbrand span { color: var(--accent-2); font-weight: 400; }
+    .footer-brand p { color: rgba(245,241,234,0.55); font-size: 0.85rem; max-width: 28ch; line-height: 1.55; }
+    .footer-col h5 {
+      font-family: 'Inter', sans-serif;
+      font-weight: 600;
+      font-size: 0.72rem;
+      color: rgba(245,241,234,0.55);
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      margin-bottom: 1rem;
+    }
+    .footer-col ul { list-style: none; display: flex; flex-direction: column; gap: 0.55rem; }
+    .footer-col a {
+      color: rgba(245,241,234,0.8);
+      text-decoration: none;
+      font-size: 0.9rem;
+      transition: color 0.15s ease;
+    }
+    .footer-col a:hover { color: var(--parchment); }
+    .footer-bar {
+      padding-top: 1.75rem;
+      border-top: 1px solid rgba(245,241,234,0.12);
+      display: flex; justify-content: space-between; align-items: center;
+      font-size: 0.78rem;
+      color: rgba(245,241,234,0.45);
+      flex-wrap: wrap; gap: 1rem;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- ============ HEADER ============ -->
+  <header class="top">
+    <div class="top-inner">
+      <div class="top-left">
+        <a href="/" class="back-link"><span class="caret">←</span> TOJ Campaign</a>
+        <span class="lane-badge"><span class="dot"></span> Avenue 01 · Sports</span>
+      </div>
+      <nav class="primary">
+        <a href="#thesis">The flow</a>
+        <a href="#hierarchy">Value ladder</a>
+        <a href="#products">Inside</a>
+        <a href="#apex">Apex</a>
+        <a href="#intake">Start intake</a>
+      </nav>
+    </div>
+  </header>
+
+  <!-- ============ HERO ============ -->
+  <section class="hero">
+    <div class="container">
+      <div class="hero-grid">
+        <div>
+          <div class="eyebrow navy">TOJ Sports · sports.tojcampaign.com</div>
+          <h1>Where sport meets <em>structure</em>.</h1>
+          <p class="lede">
+            The operating standard for athletes, apex trainers, sports media creators,
+            and sports-adjacent organizations. Every rung — lead generation, sales, recruiting,
+            media, visibility, community, brand, authority — runs under one operating brain.
+          </p>
+          <div class="hero-cta">
+            <a href="#intake" class="btn primary">Start intake <span class="arrow">→</span></a>
+            <a href="#hierarchy" class="btn ghost">See the value ladder</a>
+          </div>
+        </div>
+
+        <aside class="hero-card">
+          <div class="h-eyebrow">The deeper truth</div>
+          <h4>The whole business is one closed loop.</h4>
+          <div class="flow-cycle" aria-label="Relationships → Opportunities → Revenue → Media, cycled">
+            <div class="step">
+              <span class="idx">01</span>
+              <span class="name">Relationships</span>
+            </div>
+            <div class="step">
+              <span class="idx">02</span>
+              <span class="name">Opportunities</span>
+            </div>
+            <div class="step">
+              <span class="idx">03</span>
+              <span class="name">Revenue</span>
+            </div>
+            <div class="step">
+              <span class="idx">04</span>
+              <span class="name">Media</span>
+            </div>
+            <p class="footnote">Media multiplies relationships. The loop closes and compounds.</p>
+          </div>
+        </aside>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ THESIS / CYCLE ============ -->
+  <section id="thesis">
+    <div class="container">
+      <div class="thesis-grid">
+        <div class="thesis-copy">
+          <div class="eyebrow navy">The flow</div>
+          <h2>Relationships → Opportunities → Revenue → Media.</h2>
+          <p>
+            The eight things below the line — lead gen, sales, recruiting, media, visibility,
+            community, brand, authority — are the <strong>services</strong>. The four things at the
+            center are the <strong>engine</strong>.
+          </p>
+          <p>
+            Every deal on the roster starts with a real relationship. Every relationship, when the
+            standard is right, becomes an opportunity — an evaluation, a booked shoot, a
+            recruiting placement, a signed athlete. Opportunities produce revenue. Revenue funds
+            better media. And better media multiplies the next round of relationships.
+          </p>
+          <p>
+            TOJ Sports operates every stage — not just one. That's what makes it Premium.
+          </p>
+        </div>
+
+        <div class="cycle-diagram" aria-hidden="true">
+          <div class="cycle-cell">
+            <div class="step-num">01</div>
+            <h4>Relationships</h4>
+            <p>Signed athletes, apex trainers, program leads, media partners. Real ties, tracked in one master intake.</p>
+            <span class="cycle-arrow right">→</span>
+          </div>
+          <div class="cycle-cell">
+            <div class="step-num">02</div>
+            <h4>Opportunities</h4>
+            <p>Evaluations, camp placements, film sessions, sponsor conversations, roster invites — what a relationship becomes.</p>
+            <span class="cycle-arrow down">↓</span>
+          </div>
+          <div class="cycle-cell">
+            <div class="step-num">04</div>
+            <h4>Media</h4>
+            <p>Subject Report drops, athlete edits, trainer content — the visible evidence that feeds new relationships.</p>
+            <span class="cycle-arrow right">↑</span>
+          </div>
+          <div class="cycle-cell">
+            <div class="step-num">03</div>
+            <h4>Revenue</h4>
+            <p>Roster fees, Subject Report bookings, trainer engagements, blueprint sales. What funds the next round of media.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ HIERARCHY / LADDER ============ -->
+  <section id="hierarchy">
+    <div class="container">
+      <div class="ladder-head">
+        <div class="eyebrow navy">The value ladder</div>
+        <h2>Eight rungs. From lead gen to authority.</h2>
+        <p class="lede">
+          Every service TOJ Sports delivers stacks on the one below it. Lead generation is the
+          foundation. Authority is the peak. Each rung is a job the standard actually performs —
+          not a marketing promise.
+        </p>
+      </div>
+
+      <div class="ladder">
+        <div class="rung">
+          <div class="rung-num">01</div>
+          <div class="rung-body">
+            <h4>Lead Generation</h4>
+            <p>Bringing new athletes, trainers, sponsors, media partners, and program contacts into the pipeline through intake forms, tracked outreach, and content that earns replies.</p>
+          </div>
+        </div>
+        <div class="rung">
+          <div class="rung-num">02</div>
+          <div class="rung-body">
+            <h4>Sales</h4>
+            <p>Converting interest into signed rosters, booked evaluations, paid media engagements, and trainer blueprint purchases. Structured pitch, structured close, structured onboarding.</p>
+          </div>
+        </div>
+        <div class="rung">
+          <div class="rung-num">03</div>
+          <div class="rung-body">
+            <h4>Recruiting Opportunities / Athlete Development</h4>
+            <p>Placing athletes into camps, college looks, pro exposures, and structured development plans. Not a highlight reel — a career pipeline.</p>
+          </div>
+        </div>
+        <div class="rung">
+          <div class="rung-num">04</div>
+          <div class="rung-body">
+            <h4>Recruiting Media</h4>
+            <p>The film, the edits, the Subject Report evaluations — the media that actually carries recruiting weight because it's produced against a verified standard.</p>
+          </div>
+        </div>
+        <div class="rung">
+          <div class="rung-num">05</div>
+          <div class="rung-body">
+            <h4>Visibility</h4>
+            <p>Getting real audiences — coaches, recruiters, sponsors, peers — to see the athlete, the trainer, the results. Not just reach; the right eyes.</p>
+          </div>
+        </div>
+        <div class="rung">
+          <div class="rung-num">06</div>
+          <div class="rung-body">
+            <h4>Community</h4>
+            <p>The peer roster: athletes, trainers, and creators who lift each other. The Athletes Certified ecosystem is not a list — it's a network that generates its own opportunities.</p>
+          </div>
+        </div>
+        <div class="rung">
+          <div class="rung-num">07</div>
+          <div class="rung-body">
+            <h4>Brand</h4>
+            <p>Positioning each participant with a durable identity — not just a nickname or a highlight reel. What people say when the athlete or trainer isn't in the room.</p>
+          </div>
+        </div>
+        <div class="rung">
+          <div class="rung-num">08</div>
+          <div class="rung-body">
+            <h4>Authority</h4>
+            <p>The apex rung. Becoming the room others check before deciding — the trainer other trainers cite, the athlete other athletes name-drop, the report scouts trust by default.</p>
+          </div>
+        </div>
+      </div>
+
+      <p class="ladder-note">
+        Every apex trainer operating on TOJ Sports has all eight rungs running underneath — even
+        when the client only asks for one.
+      </p>
+    </div>
+  </section>
+
+  <!-- ============ PRODUCTS INSIDE ============ -->
+  <section id="products">
+    <div class="container">
+      <div class="products-head">
+        <div class="eyebrow navy">Inside TOJ Sports</div>
+        <h2>Four products. One infrastructure.</h2>
+        <p class="lede">
+          Each product sits inside the Premium tier — its own GHL sub-account, its own
+          operating brain repo, its own configured stack. All four connect back through the
+          master intake and share the same Operational Transcript.
+        </p>
+      </div>
+
+      <div class="products-grid">
+        <div class="product-card">
+          <div class="p-eyebrow">Roster · Community · Brand</div>
+          <h3>Athletes Certified</h3>
+          <p>
+            The verified-athlete roster product. Public-facing brand visibility for signed
+            athletes, gated on consent. The community engine that connects peers, coaches,
+            recruiters, and sponsors around a single credible list.
+          </p>
+          <div class="p-detail"><strong>Delivers</strong> — Community · Visibility · Brand</div>
+        </div>
+
+        <div class="product-card">
+          <div class="p-eyebrow">Evaluation · Recruiting media</div>
+          <h3>Subject Report</h3>
+          <p>
+            Prospect Edge evaluation under the TOJ × Optimum Grading affiliate. The
+            "verified by film" credibility infrastructure — an evaluation with structure,
+            not opinion, that recruiters, coaches, and sponsors can actually rely on.
+          </p>
+          <div class="p-detail"><strong>Delivers</strong> — Recruiting Media · Authority</div>
+        </div>
+
+        <div class="product-card">
+          <div class="p-eyebrow">Media booking · Production</div>
+          <h3>Subject Medias</h3>
+          <p>
+            Media booking system for the SubjectSkillz creator team to shoot signed athletes,
+            trainers, and events. Turns the loop's final step (Media) into a scheduled,
+            repeatable operation — not one-off shoots.
+          </p>
+          <div class="p-detail"><strong>Delivers</strong> — Recruiting Media · Visibility</div>
+        </div>
+
+        <div class="product-card">
+          <div class="p-eyebrow">Full operating brain</div>
+          <h3>Trainer Operating Brains</h3>
+          <p>
+            Full stacks for apex and high-audience trainers —
+            <code style="font-family:'Courier New',monospace;font-size:0.82em;color:var(--accent);">hooks-os</code> (Margin),
+            <code style="font-family:'Courier New',monospace;font-size:0.82em;color:var(--accent);">patterson-os</code> (Max),
+            <code style="font-family:'Courier New',monospace;font-size:0.82em;color:var(--accent);">youngblood-os</code> (Joshua),
+            and future apex trainers. Each brain runs the full GHL stack, content cadence,
+            athlete pipeline, and advocacy log for one trainer's business.
+          </p>
+          <div class="p-detail"><strong>Delivers</strong> — All eight rungs, per trainer</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ WHO IT'S FOR ============ -->
+  <section id="who">
+    <div class="container">
+      <div class="who-head">
+        <div class="eyebrow navy">Who TOJ Sports serves</div>
+        <h2>Four archetypes. One standard.</h2>
+        <p class="lede">
+          If your business is sport, TOJ Sports is your front door. What differs is which
+          product configuration you enter through — not the standard, and not the transcript.
+        </p>
+      </div>
+
+      <div class="who-grid">
+        <div class="who-card">
+          <div class="w-eyebrow">Archetype 01</div>
+          <h4>Signed Athletes</h4>
+          <p>Athletes accepted onto the Athletes Certified roster. Individual brand infrastructure, Subject Report on record, roster visibility.</p>
+        </div>
+        <div class="who-card">
+          <div class="w-eyebrow">Archetype 02</div>
+          <h4>Apex Trainers</h4>
+          <p>High-authority trainers running verified pipelines. Own operating brain repo, own GHL sub-account, own content and athlete cadence.</p>
+        </div>
+        <div class="who-card">
+          <div class="w-eyebrow">Archetype 03</div>
+          <h4>Sports Media Creators</h4>
+          <p>SubjectSkillz-aligned camera operators and editors producing recruiting-grade media across the roster. Booked through Subject Medias.</p>
+        </div>
+        <div class="who-card">
+          <div class="w-eyebrow">Archetype 04</div>
+          <h4>Sports-Adjacent Orgs</h4>
+          <p>Programs, teams, camps, sponsors, evaluation partners — organizations whose business runs on sport but isn't training or media itself.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ APEX LADDER ============ -->
+  <section id="apex">
+    <div class="container">
+      <div class="apex-wrap">
+        <div class="apex-head">
+          <div class="eyebrow">The apex layer</div>
+          <h2>Apex products live inside the avenue.</h2>
+          <p>
+            Beyond the four infrastructure products, TOJ Sports houses the sold-through
+            apex products — the certified-lineage offers each apex trainer brings to market.
+            These are premium, priced, and structured against the same standard.
+          </p>
+        </div>
+
+        <div class="apex-list">
+          <div class="apex-row available">
+            <div>
+              <div class="apex-name">Margin's Trainer Blueprint</div>
+              <div class="apex-owner">Certified-lineage product · sold to other trainers</div>
+            </div>
+            <div class="apex-price">$3,500 – $5,000</div>
+          </div>
+
+          <div class="apex-row available">
+            <div>
+              <div class="apex-name">Athletes Certified — Signed Roster</div>
+              <div class="apex-owner">The verified public list · roster membership</div>
+            </div>
+            <div class="apex-price">By application</div>
+          </div>
+
+          <div class="apex-row available">
+            <div>
+              <div class="apex-name">Coached by Hooks</div>
+              <div class="apex-owner">Margin's personal apex coaching brand</div>
+            </div>
+            <div class="apex-price">Waitlist</div>
+          </div>
+
+          <div class="apex-row forthcoming">
+            <div>
+              <div class="apex-name">Premier Athletes Blueprint</div>
+              <div class="apex-owner">Sly Johnson · forthcoming</div>
+            </div>
+            <div class="apex-price">In build</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ TIER / INFRASTRUCTURE ============ -->
+  <section id="tier">
+    <div class="container">
+      <div class="tier-grid">
+        <div class="tier-copy">
+          <div class="eyebrow navy">The tier</div>
+          <h2>TOJ Sports is Premium.</h2>
+          <p>
+            Every trainer client on TOJ Sports gets a dedicated Premium stack — not a
+            multi-tenant slot inside a shared app. That's what makes running all eight rungs
+            possible.
+          </p>
+          <p>
+            The reason is structural: an apex trainer's business is complex enough that
+            one shared dashboard can't hold it. Their content cadence, athlete pipeline,
+            advocacy log, and monetization stack each need their own space.
+          </p>
+        </div>
+
+        <div class="tier-stack">
+          <div class="stack-eyebrow">Per apex trainer, on Premium</div>
+          <ul>
+            <li><span>Dedicated GHL sub-account</span><span class="tag">Own tenant</span></li>
+            <li><span>Own operating brain repo</span><span class="tag">Own SOPs</span></li>
+            <li><span>Configured content cadence</span><span class="tag">Own calendar</span></li>
+            <li><span>Athlete pipeline + advocacy log</span><span class="tag">Own data</span></li>
+            <li><span>Monetization + apex product stack</span><span class="tag">Own offers</span></li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ TRANSCRIPT IN SPORTS TERMS ============ -->
+  <section id="transcript-sports">
+    <div class="container">
+      <div class="translate-grid">
+        <div class="translate-copy">
+          <div class="eyebrow navy">The universal artifact</div>
+          <h2>Read in the language of sport.</h2>
+          <p>
+            The Operational Transcript is the same document across every TOJ avenue —
+            same structure, same seven sections. But on TOJ Sports, the terminology reads
+            the way athletes and trainers actually talk.
+          </p>
+          <p>
+            Same rigor everywhere. Different words, different context, same standard.
+          </p>
+          <a href="/#transcript" class="btn ghost">See the shared structure</a>
+        </div>
+
+        <div class="translate-table">
+          <div class="th-row">
+            <div>Transcript section</div>
+            <div>Reads on Sports as</div>
+          </div>
+          <div class="tr-row">
+            <div>Executive summary</div>
+            <div>Standing of the athlete brand</div>
+          </div>
+          <div class="tr-row">
+            <div>Five-pillar radar</div>
+            <div>Athlete/trainer scorecard</div>
+          </div>
+          <div class="tr-row">
+            <div>Service-line health</div>
+            <div>Training tracks &amp; media production</div>
+          </div>
+          <div class="tr-row">
+            <div>Revenue recovery</div>
+            <div>Roster + engagement monetization</div>
+          </div>
+          <div class="tr-row">
+            <div>Roster / portfolio</div>
+            <div>Signed athletes &amp; apex trainers</div>
+          </div>
+          <div class="tr-row">
+            <div>Path forward</div>
+            <div>Next season's build order</div>
+          </div>
+          <div class="tr-row">
+            <div>Ranked action plan</div>
+            <div>This month's shot list</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ CTA / INTAKE ============ -->
+  <section id="intake">
+    <div class="container">
+      <div class="cta-wrap">
+        <div>
+          <div class="cta-eyebrow">Ready to enter the roster</div>
+          <h2>Start the TOJ Sports intake.</h2>
+          <p>
+            Whether you're an athlete looking to be evaluated, a trainer ready to run
+            the full stack, a media creator joining the Subject Medias team, or an
+            organization exploring a partnership — the intake is the same door.
+          </p>
+        </div>
+        <div class="cta-actions">
+          <a href="#intake-form" class="btn-white">Begin intake <span class="arrow">→</span></a>
+          <a href="/" class="btn-outline">Back to TOJ Campaign</a>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ FOOTER ============ -->
+  <footer>
+    <div class="footer-inner">
+      <div class="footer-grid">
+        <div class="footer-brand">
+          <div class="fbrand">TOJ <span>Sports</span></div>
+          <p>Avenue 01 of the Trail of Joy Campaign. The operating standard for anyone whose business is sport.</p>
+        </div>
+        <div class="footer-col">
+          <h5>This avenue</h5>
+          <ul>
+            <li><a href="#thesis">The flow</a></li>
+            <li><a href="#hierarchy">Value ladder</a></li>
+            <li><a href="#products">Inside TOJ Sports</a></li>
+            <li><a href="#apex">Apex layer</a></li>
+            <li><a href="#tier">The tier</a></li>
+            <li><a href="#intake">Start intake</a></li>
+          </ul>
+        </div>
+        <div class="footer-col">
+          <h5>Sibling avenues</h5>
+          <ul>
+            <li><a href="https://smallbusiness.tojcampaign.com">TOJ Small Business</a></li>
+            <li><a href="https://bigbusiness.tojcampaign.com">TOJ Big Business</a></li>
+            <li><a href="https://advisory.tojcampaign.com">TOJ Advisory</a></li>
+          </ul>
+        </div>
+        <div class="footer-col">
+          <h5>The hub</h5>
+          <ul>
+            <li><a href="/">TOJ Campaign home</a></li>
+            <li><a href="/#standard">The Standard</a></li>
+            <li><a href="/#transcript">The Transcript</a></li>
+            <li><a href="mailto:hello@tojcampaign.com">Contact</a></li>
+          </ul>
+        </div>
+      </div>
+      <div class="footer-bar">
+        <div>© 2026 Trail of Joy Player Management Group, LLC. All rights reserved.</div>
+        <div>Avenue 01 · Navy · Locked 2026-06-28.</div>
+      </div>
+    </div>
+  </footer>
+
+</body>
+</html>
