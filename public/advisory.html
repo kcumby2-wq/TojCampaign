@@ -3,8 +3,8 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>TOJ Advisory — Trail of Joy Campaign</title>
-  <meta name="description" content="TOJ Advisory. Personal brand-building for individuals — young sports creators, athletes building their own name, emerging figures who need a coach, not full operations. Structured mentorship, curated peer cohort, quarterly Transcript." />
+  <title>TOJ Advisory — The Full-Circle NIL Wealth Pipeline</title>
+  <meta name="description" content="TOJ Advisory — the Full-Circle NIL Wealth Pipeline. SubjectSkillz education (501c3), TOJ platform bridge, SubjectMedia production. 6-week cohorts, live LMS, financial literacy, brand-building, and a compliant path to NIL representation. The athlete is not the product — they are the subject." />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&display=swap" rel="stylesheet" />
@@ -1179,6 +1179,201 @@
       color: rgba(245,241,234,0.45);
       flex-wrap: wrap; gap: 1rem;
     }
+
+    /* ---------- ECOSYSTEM (three entities) ---------- */
+    .ecosystem-head { max-width: 46rem; margin-bottom: 3rem; }
+    .ecosystem-head .eyebrow { margin-bottom: 1rem; }
+    .ecosystem-head h2 { margin-bottom: 1.25rem; }
+    .ecosystem-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; }
+    @media (max-width: 900px) { .ecosystem-grid { grid-template-columns: 1fr; } }
+    .eco-card {
+      display: flex; flex-direction: column;
+      padding: 2rem 1.65rem 1.75rem;
+      background: var(--parchment);
+      border: 1px solid var(--rule);
+      border-radius: 14px;
+      position: relative;
+      overflow: hidden;
+    }
+    .eco-card::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0;
+      width: 100%; height: 4px;
+      background: var(--accent);
+    }
+    .eco-card .eco-tag {
+      display: inline-block;
+      font-family: 'Inter', monospace;
+      font-size: 0.65rem;
+      font-weight: 700;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: var(--accent);
+      padding: 0.28rem 0.6rem;
+      background: var(--accent-tint);
+      border-radius: 4px;
+      margin-bottom: 1rem;
+      align-self: flex-start;
+    }
+    .eco-card h3 {
+      font-family: 'Fraunces', serif;
+      font-size: 1.35rem;
+      color: var(--ink);
+      margin-bottom: 0.35rem;
+      line-height: 1.15;
+    }
+    .eco-card .eco-role {
+      font-size: 0.82rem;
+      color: var(--ink-mute);
+      font-style: italic;
+      margin-bottom: 1rem;
+    }
+    .eco-card p {
+      font-size: 0.88rem;
+      color: var(--ink-soft);
+      line-height: 1.55;
+      margin-bottom: 1.15rem;
+      flex: 1;
+    }
+    .eco-fund {
+      padding-top: 1rem;
+      border-top: 1px solid var(--rule);
+      font-family: 'Inter', monospace;
+      font-size: 0.72rem;
+      letter-spacing: 0.02em;
+      color: var(--ink-mute);
+    }
+    .eco-fund strong { color: var(--accent); font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; font-size: 0.68rem; }
+    .eco-pipeline {
+      display: flex; align-items: center; justify-content: center;
+      gap: 0.85rem; flex-wrap: wrap;
+      margin-top: 2rem;
+      padding: 1.15rem 1.5rem;
+      background: var(--parchment-2);
+      border-radius: 10px;
+      border: 1px solid var(--rule);
+      font-family: 'Fraunces', serif;
+      font-size: 0.98rem;
+      color: var(--ink);
+      font-weight: 500;
+    }
+    .eco-pipeline .arrow { color: var(--accent); font-weight: 600; }
+    .eco-pipeline .node { color: var(--accent); }
+
+    /* ---------- 6-WEEK PROGRAM ---------- */
+    .program-head { max-width: 46rem; margin-bottom: 3rem; }
+    .program-head .eyebrow { margin-bottom: 1rem; }
+    .program-head h2 { margin-bottom: 1.25rem; }
+    .program-wrap {
+      background: var(--ink);
+      color: var(--parchment);
+      border-radius: 20px;
+      padding: clamp(2.25rem, 4vw, 3rem);
+    }
+    .program-wrap .program-head-inner { max-width: 46rem; margin-bottom: 2.5rem; }
+    .program-wrap .program-head-inner .eyebrow { color: rgba(245,241,234,0.55); margin-bottom: 1rem; }
+    .program-wrap .program-head-inner h2 { color: var(--parchment); margin-bottom: 1rem; }
+    .program-wrap .program-head-inner p { color: rgba(245,241,234,0.7); max-width: 44rem; }
+    .modules-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 1rem;
+      margin-bottom: 2rem;
+    }
+    @media (max-width: 900px) { .modules-grid { grid-template-columns: 1fr; } }
+    .module {
+      padding: 1.75rem 1.5rem 1.5rem;
+      background: rgba(245,241,234,0.04);
+      border: 1px solid rgba(245,241,234,0.12);
+      border-radius: 12px;
+      position: relative;
+    }
+    .module::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0;
+      width: 100%; height: 3px;
+      background: var(--accent);
+      border-radius: 12px 12px 0 0;
+    }
+    .module .weeks-badge {
+      display: inline-block;
+      font-family: 'Fraunces', serif;
+      font-size: 0.78rem;
+      color: var(--advisory-2);
+      padding: 0.2rem 0.55rem;
+      background: rgba(184,132,59,0.15);
+      border-radius: 4px;
+      margin-bottom: 0.85rem;
+      letter-spacing: 0.02em;
+    }
+    .module h4 {
+      font-family: 'Fraunces', serif;
+      font-size: 1.2rem;
+      color: var(--parchment);
+      margin-bottom: 0.6rem;
+      line-height: 1.2;
+    }
+    .module .led-by {
+      font-size: 0.75rem;
+      color: rgba(245,241,234,0.55);
+      margin-bottom: 1rem;
+      font-style: italic;
+    }
+    .module ul {
+      list-style: none;
+      display: flex; flex-direction: column;
+      gap: 0.45rem;
+      padding-top: 0.85rem;
+      border-top: 1px solid rgba(245,241,234,0.12);
+    }
+    .module ul li {
+      font-size: 0.78rem;
+      color: rgba(245,241,234,0.82);
+      padding-left: 1rem;
+      position: relative;
+      line-height: 1.4;
+    }
+    .module ul li::before {
+      content: '';
+      position: absolute;
+      left: 0; top: 0.5em;
+      width: 5px; height: 1px;
+      background: rgba(245,241,234,0.5);
+    }
+    .program-platforms {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0.85rem;
+      margin-top: 1.5rem;
+    }
+    @media (max-width: 640px) { .program-platforms { grid-template-columns: 1fr; } }
+    .platform-pill {
+      padding: 0.9rem 1.15rem;
+      background: rgba(245,241,234,0.04);
+      border: 1px solid rgba(245,241,234,0.12);
+      border-radius: 8px;
+      display: flex; flex-direction: column; gap: 0.15rem;
+    }
+    .platform-pill .platform-label {
+      font-size: 0.65rem;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: rgba(245,241,234,0.5);
+      font-weight: 600;
+    }
+    .platform-pill .platform-name {
+      font-family: 'Fraunces', serif;
+      font-size: 1.02rem;
+      color: var(--parchment);
+    }
+    .platform-pill .platform-role {
+      font-size: 0.75rem;
+      color: rgba(245,241,234,0.65);
+      margin-top: 0.15rem;
+    }
+
   </style>
 </head>
 <body>
@@ -1191,11 +1386,12 @@
         <span class="lane-badge"><span class="dot"></span> Avenue 04 · Advisory</span>
       </div>
       <nav class="primary">
-        <a href="#thesis">The flow</a>
-        <a href="#hierarchy">Value ladder</a>
-        <a href="#products">Inside</a>
+        <a href="#ecosystem">Ecosystem</a>
+        <a href="#program">6-week program</a>
+        <a href="#instructors">Instructors</a>
+        <a href="#products">Funnel</a>
         <a href="#tiers">Tiers</a>
-        <a href="#intake">Start intake</a>
+        <a href="#intake">Join</a>
       </nav>
     </div>
   </header>
@@ -1205,17 +1401,20 @@
     <div class="container">
       <div class="hero-grid">
         <div>
-          <div class="eyebrow navy">TOJ Advisory · advisory.tojcampaign.com</div>
-          <h1>Where identity meets <em>structure</em>.</h1>
+          <div class="eyebrow navy">TOJ Advisory · SubjectSkillz · SubjectMedia</div>
+          <h1>The Full-Circle <em>NIL Wealth Pipeline</em>.</h1>
           <p class="lede">
-            The coaching standard for individuals building their own brand — young sports
-            creators, athletes with a story to tell, emerging figures who need guidance more
-            than they need operations. Framework, cadence, community — under one intelligence
-            layer, delivered as personal help.
+            A structured, legally compliant pathway that moves student-athletes and creators
+            from education → NIL readiness → financial literacy → representation. Free
+            starter class, a 6-week cohort on the SubjectReport LMS, and a path to becoming
+            fundable — not just followable.
+          </p>
+          <p class="lede" style="font-family: 'Fraunces', serif; font-style: italic; color: var(--accent); font-size: 1.05rem; margin-top: 1rem; max-width: 42rem;">
+            &ldquo;The athlete is not the product. They are the subject.&rdquo;
           </p>
           <div class="hero-cta">
-            <a href="#intake" class="btn primary">Start intake <span class="arrow">→</span></a>
-            <a href="#hierarchy" class="btn ghost">See the value ladder</a>
+            <a href="#program" class="btn primary">See the 6-week program <span class="arrow">→</span></a>
+            <a href="#ecosystem" class="btn ghost">How the ecosystem works</a>
           </div>
         </div>
 
@@ -1246,6 +1445,139 @@
     </div>
   </section>
 
+  <!-- ============ THE THREE-ENTITY ECOSYSTEM ============ -->
+  <section id="ecosystem">
+    <div class="container">
+      <div class="ecosystem-head">
+        <div class="eyebrow navy">The ecosystem</div>
+        <h2>Three entities. Three funding models. One mission.</h2>
+        <p class="lede">
+          TOJ Advisory doesn&rsquo;t sit alone. It runs at the intersection of three linked entities
+          — each doing something different, each funded differently. That distinction is what
+          keeps the education compliant, the production professional, and the pipeline honest.
+        </p>
+      </div>
+
+      <div class="ecosystem-grid">
+        <div class="eco-card">
+          <span class="eco-tag">501(c)(3) · Education</span>
+          <h3>SubjectSkillz</h3>
+          <div class="eco-role">The education &amp; development arm</div>
+          <p>
+            Youth training, mentorship, NIL education, financial literacy, life skills. Legally
+            distinct nonprofit that qualifies for grants, corporate sponsorships, and
+            tax-deductible donations — never a booster, never a paycheck for athletes.
+          </p>
+          <div class="eco-fund"><strong>Funded by</strong> — Donations · Grants · Educational sponsors</div>
+        </div>
+
+        <div class="eco-card">
+          <span class="eco-tag">Platform · Bridge</span>
+          <h3>TOJ</h3>
+          <div class="eco-role">The physical + digital bridge</div>
+          <p>
+            The operating platform in the middle — partnerships, campaign dashboard,
+            performance tracking, weekly &amp; monthly ROI reports. Connects athletes, NIL
+            groups, media agencies, wealth managers, sponsors, and event companies.
+          </p>
+          <div class="eco-fund"><strong>Funded by</strong> — Partnership &amp; sponsorship revenue</div>
+        </div>
+
+        <div class="eco-card">
+          <span class="eco-tag">For-Profit · Production</span>
+          <h3>SubjectMedia</h3>
+          <div class="eco-role">The professional production company</div>
+          <p>
+            Where trained youth actually execute paid, professional work. Client media
+            production, athlete content, event coverage. Ensures creators get fair
+            compensation for real deliverables — not subsidized by donations.
+          </p>
+          <div class="eco-fund"><strong>Funded by</strong> — Project invoices · Retainers</div>
+        </div>
+      </div>
+
+      <div class="eco-pipeline">
+        <span class="node">SubjectSkillz develops the youth</span>
+        <span class="arrow">→</span>
+        <span class="node">TOJ connects them to opportunities</span>
+        <span class="arrow">→</span>
+        <span class="node">SubjectMedia is where they execute</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ THE 6-WEEK PROGRAM ============ -->
+  <section id="program">
+    <div class="container">
+      <div class="program-wrap">
+        <div class="program-head-inner">
+          <div class="eyebrow">The 6-week program</div>
+          <h2>Three modules. One live cohort. Real certificate.</h2>
+          <p>
+            The core paid offering — six weeks, three modules of two weeks each, live cohort
+            with mentor-led sessions, weekly assessments, and a certificate on completion.
+            Delivered through the SubjectReport LMS with cohort management on the Subject
+            Course Platform.
+          </p>
+        </div>
+
+        <div class="modules-grid">
+          <div class="module">
+            <span class="weeks-badge">Weeks 1–2</span>
+            <h4>NIL Foundations &amp; Compliance</h4>
+            <div class="led-by">Led by Kyron + TrackBaby001</div>
+            <ul>
+              <li>What NIL actually means · rule map</li>
+              <li>High school vs. college NIL</li>
+              <li>Film discipline · what coaches accept</li>
+              <li>Player Transcript · first coach email</li>
+              <li>Building a target list · follow-up protocol</li>
+            </ul>
+          </div>
+
+          <div class="module">
+            <span class="weeks-badge">Weeks 3–4</span>
+            <h4>Personal Branding &amp; Marketing</h4>
+            <div class="led-by">Led by Kyron + TrackBaby001</div>
+            <ul>
+              <li>NIL contracts · key terms · what to sign</li>
+              <li>Collectives, schools, visits</li>
+              <li>Brand positioning · social audit</li>
+              <li>Content execution · social safety</li>
+              <li>Mock brand deals · negotiation</li>
+            </ul>
+          </div>
+
+          <div class="module">
+            <span class="weeks-badge">Weeks 5–6</span>
+            <h4>Financial Literacy &amp; NIL Money</h4>
+            <div class="led-by">Led by Nicole Bradley</div>
+            <ul>
+              <li>NIL income is taxable · the 25–30% rule</li>
+              <li>Quarterly estimated taxes</li>
+              <li>Contracts &amp; payment records</li>
+              <li>Budgeting · saving · red-flag awareness</li>
+              <li>Signing day · what you&rsquo;re agreeing to</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="program-platforms">
+          <div class="platform-pill">
+            <span class="platform-label">Student experience</span>
+            <span class="platform-name">SubjectReport LMS</span>
+            <span class="platform-role">Weekly lessons · assessments · certificate</span>
+          </div>
+          <div class="platform-pill">
+            <span class="platform-label">Cohort management</span>
+            <span class="platform-name">Subject Course Platform</span>
+            <span class="platform-role">Multi-tenant · roster · live activity feed</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
   <!-- ============ THESIS / CYCLE ============ -->
   <section id="thesis">
     <div class="container">
@@ -1255,18 +1587,19 @@
           <h2>Relationships → Opportunities → Revenue → Media.</h2>
           <p>
             The eight things below the line — foundation, framework, practice, documentation,
-            visibility, community, brand, authority — are the <strong>growth path</strong>. The
-            four things at the center are the <strong>engine</strong>.
+            visibility, community, brand, authority — are the <strong>growth path</strong>.
+            The four things at the center are the <strong>engine</strong>.
           </p>
           <p>
-            Every chapter starts with a real relationship. Every relationship, when the standard
-            is right, becomes an opportunity — a booking, a feature, a cohort placement.
-            Opportunities produce revenue. Revenue funds better media. And better media
-            multiplies the next round of relationships.
+            Every athlete's NIL journey starts with a real relationship — mentor, coach, parent,
+            teacher. Every relationship, when the standard is right, becomes an opportunity — a
+            free class booking, a cohort seat, a Player Transcript, a first legit NIL deal.
+            Opportunities produce revenue. Revenue funds better media and better mentorship.
+            And better media multiplies the next round of relationships.
           </p>
           <p>
-            TOJ Advisory coaches you through every stage — you run the business, we structure
-            the way you build.
+            TOJ Advisory teaches the full circle — SubjectSkillz educates, TOJ tracks and
+            connects, SubjectMedia produces. You keep the upside.
           </p>
         </div>
 
@@ -1307,8 +1640,8 @@
         <h2>Eight rungs. From lead gen to authority.</h2>
         <p class="lede">
           Every service TOJ Advisory delivers stacks on the one below it. Foundation is at the
-          bottom. Authority is the peak. Each rung is a job the standard actually performs —
-          not a marketing promise.
+          bottom. NIL representation-readiness is the peak. Each rung is a job the SubjectSkillz
+          curriculum actually performs — not a marketing promise.
         </p>
       </div>
 
@@ -1317,63 +1650,63 @@
           <div class="rung-num">01</div>
           <div class="rung-body">
             <h4>Foundation</h4>
-            <p>Who you are, what you do, what you stand for. The identity work that has to be in place before the rest of the ladder means anything.</p>
+            <p>Identity, position, and NIL literacy at a starter level. Who you are as an athlete and creator, and what &quot;valid business purpose&quot; actually means under 2026 rules.</p>
           </div>
         </div>
         <div class="rung">
           <div class="rung-num">02</div>
           <div class="rung-body">
             <h4>Framework</h4>
-            <p>The structure you work inside — positioning, brand system, editorial voice, session cadence. What turns effort into repeatable output.</p>
+            <p>NIL rules, contract literacy, brand system, compliance guardrails — the working structure that separates the athletes who get paid from the athletes who get burned.</p>
           </div>
         </div>
         <div class="rung">
           <div class="rung-num">03</div>
           <div class="rung-body">
             <h4>Practice Reps</h4>
-            <p>The actual work — bookings, shoots, features, published pieces. Not talent claims — a record of shipped output against the standard.</p>
+            <p>Live sessions, mentor calls, mock brand deals, contract walkthroughs, social audits. The actual work of getting ready — logged on the SubjectReport LMS.</p>
           </div>
         </div>
         <div class="rung">
           <div class="rung-num">04</div>
           <div class="rung-body">
             <h4>Documentation</h4>
-            <p>Portfolio, credential log, quarterly Transcript. The proof-of-work trail that turns "I do this" into "here's the receipt."</p>
+            <p>Player Transcript, Prospect Edge record, coursework certificate, financial-literacy attestation. The proof-of-work trail recruiters and sponsors can actually verify.</p>
           </div>
         </div>
         <div class="rung">
           <div class="rung-num">05</div>
           <div class="rung-body">
             <h4>Visibility</h4>
-            <p>Getting real audiences — coaches, recruiters, sponsors, peers — to see the athlete, the trainer, the results. Not just reach; the right eyes.</p>
+            <p>SubjectMedia-produced content, promo-code campaigns, dashboard-tracked exposure. Getting real audiences — coaches, recruiters, sponsors, peers — to see verified work, not curated hype.</p>
           </div>
         </div>
         <div class="rung">
           <div class="rung-num">06</div>
           <div class="rung-body">
             <h4>Community</h4>
-            <p>The peer roster: athletes, trainers, and creators who lift each other. The Athletes Certified ecosystem is not a list — it's a network that generates its own opportunities.</p>
+            <p>Curated cohort — athletes moving through the 6-week program together, referring, comparing notes, backing each other. The room that becomes a network for the rest of your career.</p>
           </div>
         </div>
         <div class="rung">
           <div class="rung-num">07</div>
           <div class="rung-body">
             <h4>Brand</h4>
-            <p>Positioning each participant with a durable identity — not just a nickname or a highlight reel. What people say when the athlete or trainer isn't in the room.</p>
+            <p>A distinct identity — voice, story, position, financial hygiene — coached by the three brand voices behind SubjectSkillz. What people say when the athlete isn&rsquo;t in the room.</p>
           </div>
         </div>
         <div class="rung">
           <div class="rung-num">08</div>
           <div class="rung-body">
             <h4>Authority</h4>
-            <p>The apex rung. Becoming the room others check before deciding — the trainer other trainers cite, the athlete other athletes name-drop, the report scouts trust by default.</p>
+            <p>Ready for real NIL representation. The room that scouts, agents, and brands check before deciding — because the transcript, the coursework, and the financial hygiene are already on record.</p>
           </div>
         </div>
       </div>
 
       <p class="ladder-note">
-        Every mentee on TOJ Advisory has all eight rungs running underneath — even
-        when the client only asks for one.
+        Every athlete on TOJ Advisory has all eight rungs running underneath — even when
+        the family only enrolls for one module.
       </p>
     </div>
   </section>
@@ -1382,59 +1715,59 @@
   <section id="products">
     <div class="container">
       <div class="products-head">
-        <div class="eyebrow navy">Inside TOJ Advisory</div>
-        <h2>Four products. One shared standard behind them.</h2>
+        <div class="eyebrow navy">The funnel</div>
+        <h2>Four stages. From free class to full representation.</h2>
         <p class="lede">
-          These are the products that sit inside TOJ Advisory itself. Mentees engage with them
-          through the curriculum and the cadence. The TOJ Network holds the standard behind
-          each one, so what a mentor delivers this month reads the same as what a different
-          mentor delivers next quarter.
+          The advisory funnel is deliberate. Start free. Earn the cohort seat. Graduate with a
+          Business Diagnostic. Step into representation when the work is on record — not before.
+          Every stage runs against the same standard behind SubjectSkillz, TOJ, and SubjectMedia.
         </p>
       </div>
 
       <div class="products-grid">
         <div class="product-card">
-          <div class="p-eyebrow">Curriculum · Structured path</div>
-          <h3>SubjectSkillz Curriculum</h3>
+          <div class="p-eyebrow">Top of funnel · Free tier</div>
+          <h3>NIL Wealth Starter Class</h3>
           <p>
-            The structured learning path for young sports creators — camera work, storytelling,
-            editing, distribution, monetization. Sequenced, paced, and reviewed against the
-            standard so what you produce actually holds up outside the classroom.
+            The free entry point — a self-paced starter class covering NIL basics, red flags,
+            and what compliant deals actually look like. Delivered through the SubjectReport
+            LMS. No cost, no commitment — the door into the system.
           </p>
-          <div class="p-detail"><strong>Delivers</strong> — Foundation · Practice Reps</div>
+          <div class="p-detail"><strong>Delivers</strong> — Foundation · Framework</div>
         </div>
 
         <div class="product-card">
-          <div class="p-eyebrow">1:1 cadence · Regular calls</div>
-          <h3>Advisory Cadence</h3>
+          <div class="p-eyebrow">Mid funnel · Cohort program</div>
+          <h3>The 6-Week Cohort</h3>
           <p>
-            Structured 1:1 mentorship on a regular cadence. Not open-ended coaching — a scheduled
-            conversation with a working agenda, a session plan, and a takeaway list. The engine
-            behind steady progress.
+            The core paid program. Six weeks, three modules, live cohort — NIL foundations &amp;
+            compliance, personal branding, financial literacy. Runs on the SubjectReport LMS
+            with the Subject Course Platform tracking assessments, certificates, and cohort
+            progress.
           </p>
-          <div class="p-detail"><strong>Delivers</strong> — Framework · Documentation</div>
+          <div class="p-detail"><strong>Delivers</strong> — Practice Reps · Documentation · Community</div>
         </div>
 
         <div class="product-card">
-          <div class="p-eyebrow">Positioning · Brand framework</div>
-          <h3>Brand Framework</h3>
+          <div class="p-eyebrow">Bottom of funnel · Diagnostic</div>
+          <h3>NIL Business Diagnostic</h3>
           <p>
-            The positioning work that turns "I make sports content" into a distinct identity
-            with a story, a signature, and a stated point of view. Delivered as a working
-            document you actually reference — not a slide deck you file away.
+            The graduation deliverable — a personalized report covering Personal Brand Income
+            Potential, Risk Exposure (taxes, contracts, brand misalignment, reputation),
+            and a business diagnostic that turns the cohort work into a plan you can execute.
           </p>
           <div class="p-detail"><strong>Delivers</strong> — Brand · Authority</div>
         </div>
 
         <div class="product-card">
-          <div class="p-eyebrow">Cohort · Peer network</div>
-          <h3>Curated Peer Cohort</h3>
+          <div class="p-eyebrow">Full circle · Representation pathway</div>
+          <h3>NIL Representation Pathway</h3>
           <p>
-            A carefully-composed group at your stage — other individuals building their own
-            brand — where feedback, referral, and shared momentum live. Curated so the room
-            actually pushes you forward.
+            The commercial arm — where trained, compliant, documented athletes step into real
+            representation. Deal brokerage, brand partnerships, piggyback deals, and the
+            full-circle wealth-pipeline monetization. Optional. Earned.
           </p>
-          <div class="p-detail"><strong>Delivers</strong> — Community · Visibility</div>
+          <div class="p-detail"><strong>Delivers</strong> — Authority · Revenue</div>
         </div>
       </div>
     </div>
@@ -1445,34 +1778,34 @@
     <div class="container">
       <div class="who-head">
         <div class="eyebrow navy">Who TOJ Advisory serves</div>
-        <h2>Four archetypes. One standard.</h2>
+        <h2>Four archetypes. One curriculum.</h2>
         <p class="lede">
-          If you're building your own brand — as an individual, not an operation — TOJ Advisory
-          is your front door. What differs is which product configuration you enter through —
-          not the standard, and not the transcript.
+          If you&rsquo;re a student-athlete, a parent, a school program, or a young sports creator,
+          TOJ Advisory is the front door. What differs is which stage of the funnel you enter
+          through — not the standard, and not the curriculum.
         </p>
       </div>
 
       <div class="who-grid">
         <div class="who-card">
           <div class="w-eyebrow">Archetype 01</div>
-          <h4>Young Sports Creators</h4>
-          <p>Camera operators, editors, on-field storytellers building a personal brand around sports media. The formal SubjectSkillz path.</p>
+          <h4>Student-Athletes</h4>
+          <p>High school and college athletes navigating NIL — before the mistakes get made. NIL fundamentals, contracts, taxes, and the film discipline that turns highlights into recruiting weight.</p>
         </div>
         <div class="who-card">
           <div class="w-eyebrow">Archetype 02</div>
-          <h4>Athletes Building Their Own Brand</h4>
-          <p>Athletes with a story, a following, or an ambition beyond the roster — who need brand coaching, not full-operations management.</p>
+          <h4>Parents &amp; Guardians</h4>
+          <p>The people making the call alongside the athlete. Donation-eligible support of SubjectSkillz, tax-deductible under the 501(c)(3) structure, plus a clear seat at the education table.</p>
         </div>
         <div class="who-card">
           <div class="w-eyebrow">Archetype 03</div>
-          <h4>Emerging Media Figures</h4>
-          <p>Podcasters, analysts, personality-led creators in and around sport. Personal brand at the center; TOJ Advisory as the framework behind the growth.</p>
+          <h4>Coaches &amp; School Programs</h4>
+          <p>Athletic directors, high school programs, 7v7 clubs deploying the 6-week NIL Readiness Certification as a schoolwide or teamwide offering — with annual contracts and per-athlete pricing.</p>
         </div>
         <div class="who-card">
           <div class="w-eyebrow">Archetype 04</div>
-          <h4>Personal Brand Builders</h4>
-          <p>Individuals whose brand is themselves — figures who need structure, cadence, and honest feedback more than they need a full ops team.</p>
+          <h4>Young Sports Creators</h4>
+          <p>Camera operators, editors, on-field storytellers on the SubjectSkillz-to-SubjectMedia path — where curriculum becomes paid production work with real deliverables.</p>
         </div>
       </div>
     </div>
@@ -1502,48 +1835,48 @@
         </div>
 
         <div class="tiers-grid">
-          <!-- Tier 01 — Audience / Public (B2C) -->
+          <!-- Tier 01 — Athlete / Youth (B2C endpoint) -->
           <div class="tier-card">
             <div class="tier-num">Tier 01</div>
             <div class="tier-role b2c">B2C · The endpoint</div>
-            <h4>Audience / Public</h4>
-            <div class="tier-tag">The people who follow, book, and refer. Where the personal brand shows up as recognized work.</div>
+            <h4>Athlete / Youth / Family</h4>
+            <div class="tier-tag">The end recipient. Where the education shows up as recruiting weight, financial hygiene, and real opportunity.</div>
             <ul>
-              <li>Clear positioning · a distinct point of view</li>
-              <li>Portfolio and credential trail</li>
-              <li>Steady media output on cadence</li>
-              <li>Real relationships with the right rooms</li>
-              <li>The individual stays fully themselves</li>
+              <li>Free NIL Wealth Starter Class access</li>
+              <li>SubjectReport LMS · course + assessments</li>
+              <li>Cohort seat &amp; peer network</li>
+              <li>Player Transcript &amp; Prospect Edge record</li>
+              <li>Path to NIL representation earned, not sold</li>
             </ul>
           </div>
 
-          <!-- Tier 02 — Mentee (Bridge) -->
+          <!-- Tier 02 — Cohort / School (Bridge) -->
           <div class="tier-card mid">
             <div class="tier-num">Tier 02</div>
             <div class="tier-role bridge">B2B → B2C · The bridge</div>
-            <h4>Mentee / Individual</h4>
-            <div class="tier-tag">The individual is the brand. TOJ Advisory coaches them; they run their own work.</div>
+            <h4>Cohort / School / Program</h4>
+            <div class="tier-tag">The buyer of the curriculum. Schools, 7v7 programs, athletic departments deploying SubjectSkillz to their athletes.</div>
             <ul>
-              <li>SubjectSkillz curriculum · structured path</li>
-              <li>Regular 1:1 advisory cadence</li>
-              <li>Brand framework · working document</li>
-              <li>Curated peer cohort · at your stage</li>
-              <li>Quarterly Operational Transcript</li>
+              <li>Subject Course Platform · admin + roster tools</li>
+              <li>6-Week NIL Readiness Certification</li>
+              <li>Live cohort management &amp; assessments</li>
+              <li>Team-wide certification pricing</li>
+              <li>Parent partnership conversation kit</li>
             </ul>
           </div>
 
-          <!-- Tier 03 — Network / Federation (B2B Core) -->
+          <!-- Tier 03 — TOJ + SubjectSkillz Federation (B2B Core) -->
           <div class="tier-card top">
             <div class="tier-num">Tier 03</div>
-            <div class="tier-role b2b">B2B core · The intelligence</div>
-            <h4>The TOJ Network</h4>
-            <div class="tier-tag">The connective tissue that turns N trainers into a federation smarter than any single brand.</div>
+            <div class="tier-role b2b">B2B core · The infrastructure</div>
+            <h4>TOJ + SubjectSkillz Federation</h4>
+            <div class="tier-tag">The full-circle pipeline. TOJ platform, SubjectSkillz education (501c3), SubjectMedia production. Owned by the mission.</div>
             <ul>
-              <li>Universal standards (role-model, evaluation, rate card)</li>
-              <li>Master onboarding · sign-to-shipping in ~14 days</li>
-              <li>Cross-network intelligence log · updated every week</li>
-              <li>Prospect Edge · Optimum Grading affiliate</li>
-              <li>Legal + rights framework · pre-decided</li>
+              <li>SubjectSkillz curriculum · 501(c)(3) education</li>
+              <li>SubjectReport LMS + Subject Course Platform</li>
+              <li>TOJ Platform · dashboard, tracking, attribution</li>
+              <li>SubjectMedia · production &amp; paid youth work</li>
+              <li>Compliant funding: grants, sponsors, sliding scale</li>
             </ul>
           </div>
         </div>
@@ -1552,53 +1885,55 @@
   </section>
 
   <!-- ============ TRAINERS ON THE NETWORK (the federation, made real) ============ -->
-  <section id="operating-systems">
+  <section id="instructors">
     <div class="container">
       <div class="os-head">
-        <div class="eyebrow navy">The cohort, made real</div>
-        <h2>Mentees currently in cohort.</h2>
+        <div class="eyebrow navy">Three voices, one curriculum</div>
+        <h2>The instructors behind SubjectSkillz.</h2>
         <p class="lede">
-          Each mentee is building under their own name, their own voice, their own storyline —
-          and moves through the same curriculum, the same cadence, the same standard. The
-          cohort tightens peer by peer, and gets sharper every quarter.
+          Three distinct brand voices form the front end of the SubjectSkillz funnel — each
+          serves a distinct audience segment and drives coordinated content toward the education
+          pipeline. One voice speaks to parents. One speaks to athletes. One speaks to the
+          strategic and compliance backbone.
         </p>
       </div>
 
       <div class="os-grid">
         <div class="os-card">
-          <div class="os-status scaffolded">◐ Reference build · demo transcript</div>
-          <h4>CMC Visuals</h4>
-          <div class="os-founder">Young sports creator composite</div>
+          <div class="os-status active">● Financial Literacy Anchor</div>
+          <h4>Nicole Bradley</h4>
+          <div class="os-founder">The Money Coach Behind the Athletes</div>
           <div class="os-meta">
-            <div class="m"><span class="m-label">Path</span><span class="m-value">SubjectSkillz composite</span></div>
-            <div class="m"><span class="m-label">Stage</span><span class="m-value">Growing brand</span></div>
+            <div class="m"><span class="m-label">Leads</span><span class="m-value">Weeks 5–6 · Financial Literacy + NIL Money</span></div>
+            <div class="m"><span class="m-label">Focus</span><span class="m-value">Taxes · budgeting · red-flag awareness</span></div>
           </div>
         </div>
 
         <div class="os-card">
-          <div class="os-status pre">○ Slot open · cohort ready</div>
-          <h4>Your name here</h4>
-          <div class="os-founder">Young sports creator</div>
+          <div class="os-status active">● NIL Gameplan Architect</div>
+          <h4>Kyron Cumby</h4>
+          <div class="os-founder">The strategic + compliance backbone</div>
           <div class="os-meta">
-            <div class="m"><span class="m-label">Path</span><span class="m-value">SubjectSkillz</span></div>
-            <div class="m"><span class="m-label">Stage</span><span class="m-value">Beginning</span></div>
+            <div class="m"><span class="m-label">Leads</span><span class="m-value">Weeks 1–4 · Foundations · Branding</span></div>
+            <div class="m"><span class="m-label">Focus</span><span class="m-value">Contracts · compliance · brand positioning</span></div>
           </div>
         </div>
 
         <div class="os-card">
-          <div class="os-status pre">○ Slot open · cohort ready</div>
-          <h4>Your name here</h4>
-          <div class="os-founder">Athlete · media figure · builder</div>
+          <div class="os-status active">● The Athlete&rsquo;s Athlete</div>
+          <h4>TrackBaby001</h4>
+          <div class="os-founder">Peer voice · aspirational entry point</div>
           <div class="os-meta">
-            <div class="m"><span class="m-label">Path</span><span class="m-value">Personal brand</span></div>
-            <div class="m"><span class="m-label">Stage</span><span class="m-value">Emerging</span></div>
+            <div class="m"><span class="m-label">Co-leads</span><span class="m-value">Weeks 1–4 · Foundations · Branding</span></div>
+            <div class="m"><span class="m-label">Focus</span><span class="m-value">Content execution · social safety · brand growth</span></div>
           </div>
         </div>
       </div>
 
       <p class="os-note">
-        Every trainer on the network is peer — no apex, no hierarchy. Standards flow across
-        brands; patterns flow back into the network's intelligence every week.
+        Three voices, one curriculum, one standard. Each instructor owns their lane; the
+        SubjectSkillz curriculum stitches them into one coordinated funnel from awareness
+        through NIL readiness.
       </p>
     </div>
   </section>
@@ -1609,27 +1944,28 @@
       <div class="tier-grid">
         <div class="tier-copy">
           <div class="eyebrow navy">Tier 02 · in practice</div>
-          <h2>Every mentee builds their own name — under a shared framework.</h2>
+          <h2>Every cohort ships against one curriculum — with room for every athlete&rsquo;s arc.</h2>
           <p>
-            When a mentee joins the cohort, they enter their own arc: their own storyline,
-            their own voice, their own portfolio, their own stage. Nothing generic — every
-            call, every framework, every review is scoped to their specific work.
+            When a school, program, or 7v7 organization deploys the 6-week NIL Readiness
+            Certification, every athlete on the roster gets the same curriculum, the same
+            assessments, the same certificate at the end. Peer cohort effects compound
+            underneath.
           </p>
           <p>
-            Underneath, the standard keeps the work honest — same curriculum, same cadence,
-            same quarterly Transcript. On top, the mentee stays fully themselves. It's why
-            each brand can compound its own reputation while the cohort tightens around it.
+            On top, each athlete&rsquo;s Player Transcript, Prospect Edge record, and social
+            audit stays personal — their story, their voice, their trajectory. The standard
+            keeps the work honest; the individual work stays fully theirs.
           </p>
         </div>
 
         <div class="tier-stack">
           <div class="stack-eyebrow">What Tier 02 looks like in practice</div>
           <ul>
-            <li><span>SubjectSkillz curriculum access</span><span class="tag">Structured</span></li>
-            <li><span>Regular 1:1 advisory calls</span><span class="tag">On cadence</span></li>
-            <li><span>Brand framework · working doc</span><span class="tag">Referenced</span></li>
-            <li><span>Curated peer cohort</span><span class="tag">Peer</span></li>
-            <li><span>Quarterly Operational Transcript</span><span class="tag">On record</span></li>
+            <li><span>Subject Course Platform · admin console</span><span class="tag">Multi-tenant</span></li>
+            <li><span>SubjectReport LMS · student portal</span><span class="tag">Per-athlete</span></li>
+            <li><span>Live cohort · Weeks 1–6</span><span class="tag">On cadence</span></li>
+            <li><span>Weekly assessments &amp; certificate</span><span class="tag">Certified</span></li>
+            <li><span>Parent partnership conversation kit</span><span class="tag">Included</span></li>
           </ul>
         </div>
       </div>
@@ -1642,12 +1978,12 @@
       <div class="translate-grid">
         <div class="translate-copy">
           <div class="eyebrow navy">The universal artifact</div>
-          <h2>Read in the language of your own brand.</h2>
+          <h2>Read in the language of NIL readiness.</h2>
           <p>
             The Operational Transcript is the same document across every TOJ avenue —
-            same structure, same seven sections. But on TOJ Advisory, the terminology reads
-            the way an individual building their own brand actually thinks — chapter,
-            positioning, cadence, portfolio.
+            same structure, same seven sections. On TOJ Advisory it reads as an athlete&rsquo;s
+            NIL Readiness Report: what modules were completed, what documents are on record,
+            what income potential looks like, what the next quarter looks like.
           </p>
           <p>
             Same rigor everywhere. Different words, different context, same standard.
@@ -1662,31 +1998,31 @@
           </div>
           <div class="tr-row">
             <div>Executive summary</div>
-            <div>Standing of the personal brand</div>
+            <div>NIL Readiness snapshot</div>
           </div>
           <div class="tr-row">
             <div>Five-pillar radar</div>
-            <div>Individual scorecard</div>
+            <div>Student-athlete scorecard</div>
           </div>
           <div class="tr-row">
             <div>Service-line health</div>
-            <div>Your work tracks (media, bookings, cohorts)</div>
+            <div>Modules completed · certificate status</div>
           </div>
           <div class="tr-row">
             <div>Revenue recovery</div>
-            <div>Monetization opportunities in your current work</div>
+            <div>NIL income potential · deal readiness</div>
           </div>
           <div class="tr-row">
             <div>Roster / portfolio</div>
-            <div>Portfolio, credential log, published pieces</div>
+            <div>Player Transcript · Prospect Edge · financial hygiene</div>
           </div>
           <div class="tr-row">
             <div>Path forward</div>
-            <div>Next quarter's storyline</div>
+            <div>Next season&rsquo;s recruitment + NIL build</div>
           </div>
           <div class="tr-row">
             <div>Ranked action plan</div>
-            <div>This month's shot list</div>
+            <div>This month&rsquo;s priorities</div>
           </div>
         </div>
       </div>
@@ -1698,17 +2034,18 @@
     <div class="container">
       <div class="cta-wrap">
         <div>
-          <div class="cta-eyebrow">Ready to build your name under a real framework</div>
-          <h2>Start the TOJ Advisory intake.</h2>
+          <div class="cta-eyebrow">Enter the pipeline at the stage that fits you</div>
+          <h2>Free class. Cohort. Diagnostic. Representation.</h2>
           <p>
-            Whether you're a young sports creator on the SubjectSkillz path, an athlete
-            building your own personal brand, an emerging media figure, or someone whose
-            work is themselves — the intake is the same door.
+            The path is progressive on purpose. Start with the free NIL Wealth Starter Class
+            to see if it&rsquo;s for you. Apply for the 6-week cohort when you&rsquo;re ready
+            for real reps. Come out with a Business Diagnostic. Step into representation
+            when the work is on record.
           </p>
         </div>
         <div class="cta-actions">
-          <a href="#intake-form" class="btn-white">Begin intake <span class="arrow">→</span></a>
-          <a href="/" class="btn-outline">Back to TOJ Campaign</a>
+          <a href="#starter-class" class="btn-white">Free NIL Wealth Starter <span class="arrow">→</span></a>
+          <a href="#cohort-apply" class="btn-outline">Apply · 6-Week Cohort</a>
         </div>
       </div>
     </div>
@@ -1727,11 +2064,13 @@
           <ul>
             <li><a href="#thesis">The flow</a></li>
             <li><a href="#hierarchy">Value ladder</a></li>
-            <li><a href="#products">Inside TOJ Advisory</a></li>
+            <li><a href="#ecosystem">The ecosystem</a></li>
+            <li><a href="#program">The 6-week program</a></li>
+            <li><a href="#instructors">Instructors</a></li>
+            <li><a href="#products">The funnel</a></li>
             <li><a href="#tiers">Three tiers</a></li>
-            <li><a href="#operating-systems">Mentees in cohort</a></li>
             <li><a href="#tier">Tier infrastructure</a></li>
-            <li><a href="#intake">Start intake</a></li>
+            <li><a href="#intake">Join</a></li>
           </ul>
         </div>
         <div class="footer-col">
