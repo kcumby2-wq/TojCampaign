@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>TOJ Small Business — TOJ Campaign</title>
+<meta name="description" content="TOJ Small Business — the avenue for relationship-built operators. Solo coaches, neighborhood shops, small programs, non-sports creators. Basic tier via the Creator Intake System."/>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet"/>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth}
+body{font-family:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#F5F1EA;color:#1A1613;line-height:1.5;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
+:root{--parchment:#F5F1EA;--parchment-2:#EBE4D6;--ink:#1A1613;--ink-soft:#3B3530;--ink-mute:#6E655C;--rule:rgba(26,22,19,0.12);--rule-strong:rgba(26,22,19,0.35);--accent:#A85F26}
+.serif{font-family:'Fraunces','Georgia',serif;letter-spacing:-0.01em}
+h1,h2,h3{font-family:'Fraunces','Georgia',serif;font-weight:600;letter-spacing:-0.015em;color:var(--ink)}
+h1{font-size:clamp(2.4rem,5vw,4rem);line-height:1.02}
+h2{font-size:clamp(1.6rem,3vw,2.4rem);line-height:1.1}
+p{color:var(--ink-soft)}
+a{color:var(--accent)}
+.eyebrow{font-family:'Inter',sans-serif;font-size:0.72rem;font-weight:600;letter-spacing:0.18em;text-transform:uppercase;color:var(--ink-mute)}
+.container{width:100%;max-width:1100px;margin:0 auto;padding:0 clamp(1.25rem,3vw,2.25rem)}
+header.top{position:sticky;top:0;z-index:40;background:rgba(245,241,234,0.88);backdrop-filter:saturate(140%) blur(10px);border-bottom:1px solid var(--rule)}
+.top-inner{display:flex;align-items:center;justify-content:space-between;padding:1rem clamp(1.25rem,3vw,2.25rem);max-width:1100px;margin:0 auto}
+.brand{font-family:'Fraunces',serif;font-weight:600;font-size:1.05rem;color:var(--ink);letter-spacing:-0.01em;text-decoration:none}
+.brand span{color:var(--ink-mute);font-weight:400}
+.back{font-size:0.86rem;color:var(--ink-soft);text-decoration:none}
+.back:hover{color:var(--ink)}
+.hero-strip{height:6px;background:var(--accent)}
+.hero{padding:clamp(4rem,9vw,7rem) 0 clamp(2.5rem,5vw,4rem)}
+.hero .eyebrow{margin-bottom:1.25rem;color:var(--accent)}
+.hero h1{max-width:22ch;margin-bottom:1.5rem}
+.hero .lede{font-size:clamp(1.05rem,1.6vw,1.2rem);color:var(--ink-soft);max-width:46rem;margin-bottom:2rem}
+.hero-domain{display:inline-block;font-family:'JetBrains Mono',monospace;font-size:0.78rem;color:var(--ink-mute);padding:0.35rem 0.7rem;background:var(--parchment-2);border-radius:6px;letter-spacing:0.02em}
+.section{padding:clamp(3rem,6vw,5rem) 0;border-top:1px solid var(--rule)}
+.split{display:grid;grid-template-columns:1fr 1.15fr;gap:clamp(2rem,5vw,4rem)}
+@media(max-width:820px){.split{grid-template-columns:1fr}}
+.inside{background:#fff;border:1px solid var(--rule);border-radius:14px;padding:clamp(1.5rem,3vw,2.25rem)}
+.inside h2{font-size:1.2rem;margin-bottom:1.25rem;padding-bottom:0.9rem;border-bottom:2px solid var(--accent);display:inline-block}
+.inside ul{list-style:none;display:flex;flex-direction:column;gap:0.75rem}
+.inside li{padding-left:1.4rem;position:relative;color:var(--ink-soft);font-size:0.98rem;line-height:1.5}
+.inside li::before{content:'';position:absolute;left:0;top:0.55em;width:12px;height:1px;background:var(--accent)}
+.side-copy .eyebrow{margin-bottom:0.9rem}
+.side-copy h2{margin-bottom:1rem;max-width:20ch}
+.side-copy p{margin-bottom:1rem;max-width:34rem}
+.tier{display:inline-flex;align-items:center;gap:0.5rem;margin-top:0.5rem;padding:0.5rem 0.9rem;background:var(--parchment-2);border-radius:999px;font-size:0.78rem;font-weight:500;color:var(--ink-soft);letter-spacing:0.02em}
+.tier::before{content:'';width:7px;height:7px;background:var(--accent);border-radius:50%}
+.cta-wrap{padding:clamp(4rem,7vw,6rem) 0;text-align:center}
+.cta-wrap h2{margin-bottom:1rem;max-width:24ch;margin-inline:auto}
+.cta-wrap p{margin-bottom:2rem;max-width:36rem;margin-inline:auto}
+.btn{display:inline-flex;align-items:center;gap:0.5rem;padding:0.9rem 1.5rem;border-radius:999px;font-size:0.94rem;font-weight:500;text-decoration:none;border:1px solid transparent;transition:all 0.18s ease}
+.btn.primary{background:var(--accent);color:#fff}
+.btn.primary:hover{filter:brightness(0.92);transform:translateY(-1px)}
+.btn.ghost{background:transparent;color:var(--ink);border-color:var(--rule-strong);margin-left:0.75rem}
+.btn.ghost:hover{background:rgba(26,22,19,0.05)}
+.btn .arrow{transition:transform 0.18s ease}
+.btn:hover .arrow{transform:translateX(3px)}
+footer{border-top:1px solid var(--rule);padding:2.5rem 0;background:var(--parchment-2)}
+.foot-inner{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:1rem;padding:0 clamp(1.25rem,3vw,2.25rem);max-width:1100px;margin:0 auto;font-size:0.82rem;color:var(--ink-mute)}
+.foot-inner a{color:var(--ink-soft);text-decoration:none}
+.foot-inner a:hover{color:var(--ink)}
+.status-note{margin-top:2rem;padding:0.85rem 1.1rem;background:var(--parchment-2);border-left:3px solid var(--accent);border-radius:0 4px 4px 0;font-size:0.82rem;color:var(--ink-mute);max-width:46rem}
+</style>
+</head>
+<body>
+<div class="hero-strip"></div>
+
+<header class="top">
+  <div class="top-inner">
+    <a href="https://tojcampaign.com" class="brand">TOJ Campaign <span>— TOJ Small Business</span></a>
+    <a href="https://tojcampaign.com" class="back">← Return to trailhead</a>
+  </div>
+</header>
+
+<section class="hero">
+  <div class="container">
+    <div class="eyebrow">Avenue 02 · Trail of Joy</div>
+    <h1>TOJ Small Business</h1>
+    <p class="lede">Relationship-built operators. Solo or small-team businesses where the brand is genuinely the person running it.</p>
+    <span class="hero-domain">smallbusiness.tojcampaign.com</span>
+  </div>
+</section>
+
+<section class="section">
+  <div class="container split">
+    <div class="side-copy">
+      <div class="eyebrow">Who this avenue is for</div>
+      <h2>For operators whose brand IS the person running it.</h2>
+      <p>TOJ Small Business is the front door for solo coaches, neighborhood shops, small athletic programs, and non-sports creators — one standard, one intake, delivered through the Creator Intake System app.</p>
+      <span class="tier">Basic · Creator Intake System app</span>
+    </div>
+    <div class="inside">
+      <h2>Who it serves</h2>
+      <ul><li>Solo coaches & instructors</li><li>Neighborhood shops & local trades</li><li>Programs, 7v7, school athletics</li><li>Non-sports creators (small audience)</li></ul>
+    </div>
+  </div>
+</section>
+
+<section class="cta-wrap">
+  <div class="container">
+    <div class="eyebrow" style="margin-bottom:1rem;color:var(--accent)">Get on the trail</div>
+    <h2>Ready to see if this avenue is your lane?</h2>
+    <p>Send a note. Every intake starts with a conversation, not a form.</p>
+    <a href="mailto:hello@tojcampaign.com?subject=TOJ Small Business — intake inquiry" class="btn primary">Start the conversation <span class="arrow">→</span></a>
+    <a href="https://tojcampaign.com#classifier" class="btn ghost">Not sure yet? Find your lane</a>
+    <div class="status-note" style="margin:2.5rem auto 0;">This front door is live. Downstream product surfaces are rolling out as each cohort onboards — expect content here to deepen over the coming weeks.</div>
+  </div>
+</section>
+
+<footer>
+  <div class="foot-inner">
+    <div>© TOJ Campaign · One standard. Four avenues.</div>
+    <div>
+      <a href="https://tojcampaign.com">Main site</a> ·
+      <a href="mailto:hello@tojcampaign.com">hello@tojcampaign.com</a>
+    </div>
+  </div>
+</footer>
+</body>
+</html>

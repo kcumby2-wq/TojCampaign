@@ -141,12 +141,19 @@ app.use("/api/analytics", require("./routes/analytics"));
 app.use("/api/email", require("./routes/email"));
 app.use("/api", require("./routes/phase1"));
 
-// Per-subdomain lane routing (must run before static so `/` on a subdomain
-// hits the lane page instead of falling through to public/index.html).
+// Host-aware root routing (must run before static so `/` picks the right file):
+// * app.tojcampaign.com  -> the login-gated Campaign Builder (app.html)
+// * <lane>.tojcampaign.com -> per-avenue lane page rendered from lane.html
+// * anything else -> fall through to static (public/index.html = marketing)
 app.use((req, res, next) => {
   const host = (req.hostname || "").toLowerCase();
+  if (req.path !== "/" && req.path !== "/index.html") return next();
+
+  if (host === "app.tojcampaign.com") {
+    return res.sendFile(path.join(__dirname, "public", "app.html"));
+  }
   const lane = LANES[host];
-  if (lane && (req.path === "/" || req.path === "/index.html")) {
+  if (lane) {
     try {
       return res.type("html").send(renderLane(lane));
     } catch (e) {
