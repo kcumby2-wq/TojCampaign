@@ -1,0 +1,16 @@
+# Vercel serves ONLY the static marketing site from /public.
+# Keep everything else out of the build so Vercel's framework autodetection
+# can't try to bundle server.js as a serverless function — the Express app
+# lives on Render at app.tojcampaign.com.
+
+server.js
+Dockerfile
+.dockerignore
+render.yaml
+routes/
+utils/
+db/
+backend-phase1/
+docs/
+.github/
+README.md

@@ -1,5 +1,7 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": null,
+  "installCommand": "echo skipping-install-static-site",
   "buildCommand": "node scripts/build-lanes.js",
   "outputDirectory": "public",
   "cleanUrls": true,
