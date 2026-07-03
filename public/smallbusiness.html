@@ -1179,6 +1179,306 @@
       color: rgba(245,241,234,0.45);
       flex-wrap: wrap; gap: 1rem;
     }
+
+    /* ---------- THE TRAIL (narrative gravity center) ---------- */
+    .trail-wrap {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: clamp(2rem, 5vw, 4.5rem);
+      align-items: start;
+    }
+    @media (max-width: 900px) { .trail-wrap { grid-template-columns: 1fr; } }
+    .trail-copy .eyebrow { margin-bottom: 1rem; }
+    .trail-copy h2 { margin-bottom: 1.5rem; }
+    .trail-copy p {
+      font-size: 1.05rem;
+      color: var(--ink-soft);
+      line-height: 1.65;
+      margin-bottom: 1.1rem;
+      max-width: 34rem;
+    }
+    .trail-copy p:first-of-type::first-letter {
+      font-family: 'Fraunces', serif;
+      font-size: 3.4rem;
+      font-weight: 600;
+      color: var(--accent);
+      float: left;
+      line-height: 0.85;
+      padding-right: 0.6rem;
+      padding-top: 0.35rem;
+    }
+    .trail-quote {
+      background: var(--parchment-2);
+      border-radius: 14px;
+      padding: 2rem 1.85rem;
+      border-left: 4px solid var(--accent);
+      position: relative;
+    }
+    .trail-quote::before {
+      content: '&#8220;';
+      position: absolute;
+      top: -0.3rem;
+      left: 1.1rem;
+      font-family: 'Fraunces', serif;
+      font-size: 4rem;
+      color: var(--accent);
+      opacity: 0.35;
+      line-height: 1;
+    }
+    .trail-quote blockquote {
+      font-family: 'Fraunces', serif;
+      font-size: 1.35rem;
+      line-height: 1.35;
+      color: var(--ink);
+      margin-bottom: 1.25rem;
+      font-style: italic;
+      font-weight: 500;
+      max-width: 22rem;
+    }
+    .trail-quote cite {
+      font-style: normal;
+      display: flex; align-items: center; gap: 0.6rem;
+      font-family: 'Inter', sans-serif;
+      font-size: 0.82rem;
+      color: var(--ink-mute);
+    }
+    .trail-quote cite strong { color: var(--ink); font-weight: 600; }
+    .trail-quote cite .dot { width: 5px; height: 5px; border-radius: 999px; background: var(--accent); }
+    .trail-facts {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 0;
+      margin-top: 1.5rem;
+      background: var(--parchment);
+      border: 1px solid var(--rule);
+      border-radius: 10px;
+      overflow: hidden;
+    }
+    @media (max-width: 540px) { .trail-facts { grid-template-columns: 1fr; } }
+    .trail-facts .fact {
+      padding: 1.1rem 1.15rem;
+      border-right: 1px solid var(--rule);
+    }
+    .trail-facts .fact:last-child { border-right: 0; }
+    @media (max-width: 540px) {
+      .trail-facts .fact { border-right: 0; border-bottom: 1px solid var(--rule); }
+      .trail-facts .fact:last-child { border-bottom: 0; }
+    }
+    .trail-facts .fact-num {
+      font-family: 'Fraunces', serif;
+      font-size: 1.9rem;
+      font-weight: 600;
+      color: var(--accent);
+      line-height: 1;
+      margin-bottom: 0.35rem;
+      letter-spacing: -0.02em;
+    }
+    .trail-facts .fact-label {
+      font-size: 0.72rem;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: var(--ink-mute);
+      font-weight: 600;
+    }
+
+    /* ---------- MONTHLY RHYTHM ---------- */
+    .rhythm-head { max-width: 46rem; margin-bottom: 3rem; }
+    .rhythm-head .eyebrow { margin-bottom: 1rem; }
+    .rhythm-head h2 { margin-bottom: 1.25rem; }
+    .rhythm-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 0.9rem;
+    }
+    @media (max-width: 900px) { .rhythm-grid { grid-template-columns: repeat(2, 1fr); } }
+    @media (max-width: 520px) { .rhythm-grid { grid-template-columns: 1fr; } }
+    .rhythm-week {
+      display: flex; flex-direction: column;
+      padding: 1.65rem 1.4rem 1.5rem;
+      background: var(--parchment);
+      border: 1px solid var(--rule);
+      border-radius: 12px;
+      min-height: 240px;
+      position: relative;
+      transition: transform 0.2s ease, box-shadow 0.2s ease;
+    }
+    .rhythm-week:hover {
+      transform: translateY(-3px);
+      box-shadow: 0 20px 40px -25px rgba(168, 95, 38, 0.35);
+    }
+    .rhythm-week .week-num {
+      font-family: 'Fraunces', serif;
+      font-size: 0.82rem;
+      color: var(--ink-mute);
+      letter-spacing: 0.02em;
+      margin-bottom: 0.35rem;
+    }
+    .rhythm-week h4 {
+      font-family: 'Fraunces', serif;
+      font-size: 1.1rem;
+      color: var(--ink);
+      line-height: 1.2;
+      margin-bottom: 0.85rem;
+    }
+    .rhythm-week ul {
+      list-style: none;
+      display: flex; flex-direction: column;
+      gap: 0.4rem;
+      flex: 1;
+    }
+    .rhythm-week ul li {
+      font-size: 0.82rem;
+      color: var(--ink-mute);
+      padding-left: 1rem;
+      position: relative;
+      line-height: 1.4;
+    }
+    .rhythm-week ul li::before {
+      content: '';
+      position: absolute;
+      left: 0; top: 0.5em;
+      width: 5px; height: 5px;
+      background: var(--accent);
+      border-radius: 999px;
+    }
+    .rhythm-week .ship-tag {
+      margin-top: 0.85rem;
+      padding-top: 0.85rem;
+      border-top: 1px solid var(--rule);
+      font-family: 'Inter', monospace;
+      font-size: 0.68rem;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--accent);
+      font-weight: 600;
+    }
+    .rhythm-note {
+      margin-top: 2.5rem;
+      padding: 1.2rem 1.5rem;
+      background: var(--parchment-2);
+      border-radius: 10px;
+      display: flex; align-items: center; justify-content: space-between;
+      flex-wrap: wrap; gap: 0.75rem;
+      font-family: 'Fraunces', serif;
+      font-size: 1rem;
+      color: var(--ink);
+      max-width: 46rem;
+      font-style: italic;
+    }
+    .rhythm-note::before {
+      content: '\1F550';
+      font-family: sans-serif;
+      font-style: normal;
+      margin-right: 0.4rem;
+    }
+
+    /* ---------- WAVES / COHORT ---------- */
+    .waves-wrap {
+      background: var(--ink);
+      color: var(--parchment);
+      border-radius: 20px;
+      padding: clamp(2.25rem, 4vw, 3rem);
+    }
+    .waves-head { max-width: 46rem; margin-bottom: 2rem; }
+    .waves-head .eyebrow { color: rgba(245,241,234,0.55); margin-bottom: 1rem; }
+    .waves-head h2 { color: var(--parchment); margin-bottom: 1rem; }
+    .waves-head p { color: rgba(245,241,234,0.72); max-width: 44rem; }
+    .waves-list {
+      display: flex; flex-direction: column;
+      gap: 0.75rem;
+      margin-bottom: 2rem;
+    }
+    .wave-row {
+      display: grid;
+      grid-template-columns: auto 1fr auto auto;
+      gap: 1.25rem;
+      align-items: center;
+      padding: 1.15rem 1.25rem;
+      background: rgba(245,241,234,0.04);
+      border: 1px solid rgba(245,241,234,0.12);
+      border-radius: 10px;
+    }
+    @media (max-width: 720px) { .wave-row { grid-template-columns: auto 1fr; grid-template-rows: auto auto; } }
+    .wave-row.live { border-color: rgba(168,95,38,0.65); background: rgba(168,95,38,0.14); }
+    .wave-row.open { border-color: rgba(245,241,234,0.32); }
+    .wave-row .wave-status {
+      font-family: 'Fraunces', serif;
+      font-size: 0.85rem;
+      color: rgba(245,241,234,0.55);
+      min-width: 1.4rem;
+    }
+    .wave-row.live .wave-status { color: var(--advisory); }
+    .wave-row.open .wave-status { color: #E8C48A; }
+    .wave-row .wave-body {
+      display: flex; flex-direction: column;
+    }
+    .wave-row .wave-name {
+      font-family: 'Fraunces', serif;
+      font-size: 1.02rem;
+      color: var(--parchment);
+      font-weight: 500;
+      margin-bottom: 0.15rem;
+    }
+    .wave-row .wave-meta {
+      font-size: 0.75rem;
+      color: rgba(245,241,234,0.55);
+      font-family: 'Inter', sans-serif;
+    }
+    .wave-row .wave-timing {
+      font-family: 'Inter', monospace;
+      font-size: 0.78rem;
+      color: rgba(245,241,234,0.75);
+      letter-spacing: 0.02em;
+    }
+    @media (max-width: 720px) {
+      .wave-row .wave-timing { grid-column: 2; }
+    }
+    .wave-row .wave-tag {
+      font-family: 'Inter', sans-serif;
+      font-size: 0.66rem;
+      font-weight: 700;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      padding: 0.3rem 0.65rem;
+      border-radius: 4px;
+      white-space: nowrap;
+    }
+    .wave-row.full .wave-tag { background: rgba(245,241,234,0.1); color: rgba(245,241,234,0.55); }
+    .wave-row.live .wave-tag { background: rgba(184,132,59,0.35); color: #E8C48A; }
+    .wave-row.open .wave-tag { background: rgba(168,95,38,0.9); color: #FFF; }
+    @media (max-width: 720px) {
+      .wave-row .wave-tag { grid-column: 2; justify-self: start; }
+    }
+    .waves-cta {
+      display: flex; align-items: center; justify-content: space-between; gap: 1rem;
+      padding: 1.4rem 1.5rem;
+      background: rgba(245,241,234,0.06);
+      border: 1px solid rgba(245,241,234,0.15);
+      border-radius: 12px;
+      flex-wrap: wrap;
+    }
+    .waves-cta .cta-msg {
+      font-family: 'Fraunces', serif;
+      color: var(--parchment);
+      font-size: 1.02rem;
+      font-style: italic;
+      max-width: 30rem;
+    }
+    .waves-cta a {
+      display: inline-flex; align-items: center; gap: 0.4rem;
+      padding: 0.75rem 1.35rem;
+      background: var(--accent);
+      color: #fff;
+      border-radius: 999px;
+      font-family: 'Inter', sans-serif;
+      font-weight: 600;
+      font-size: 0.88rem;
+      text-decoration: none;
+      transition: background 0.15s ease;
+      white-space: nowrap;
+    }
+    .waves-cta a:hover { background: var(--accent-2); }
+
   </style>
 </head>
 <body>
@@ -1191,11 +1491,11 @@
         <span class="lane-badge"><span class="dot"></span> Avenue 02 · Small Business</span>
       </div>
       <nav class="primary">
-        <a href="#thesis">The flow</a>
-        <a href="#hierarchy">Value ladder</a>
+        <a href="#trail">The trail</a>
+        <a href="#rhythm">Monthly rhythm</a>
         <a href="#products">Inside</a>
-        <a href="#tiers">Tiers</a>
-        <a href="#intake">Start intake</a>
+        <a href="#waves">Waves</a>
+        <a href="#intake">Join</a>
       </nav>
     </div>
   </header>
@@ -1206,16 +1506,18 @@
       <div class="hero-grid">
         <div>
           <div class="eyebrow navy">TOJ Small Business · smallbusiness.tojcampaign.com</div>
-          <h1>Where craft meets <em>structure</em>.</h1>
+          <h1>You built the craft.<br/>We build the <em>trail</em> behind it.</h1>
           <p class="lede">
-            The operating standard for solo operators, neighborhood shops, local trades,
-            programs, and small-audience creators. Every rung — lead generation, sales,
-            delivery, care, visibility, community, brand, authority — runs under one
-            intelligence layer, and shows up on the other side as personal.
+            Every neighborhood shop, every solo coach, every local trade that runs on
+            relationships — the trail is what turns your reputation into a rhythm. Ship on
+            cadence. Stay yourself. Compound month over month.
+          </p>
+          <p class="lede" style="font-family: 'Fraunces', serif; font-style: italic; color: var(--accent); font-size: 1rem; margin-top: 0.85rem; max-width: 42rem;">
+            You don&rsquo;t join a platform. You join a trail — with operators already on it.
           </p>
           <div class="hero-cta">
-            <a href="#intake" class="btn primary">Start intake <span class="arrow">→</span></a>
-            <a href="#hierarchy" class="btn ghost">See the value ladder</a>
+            <a href="#waves" class="btn primary">Walk the trail with us <span class="arrow">→</span></a>
+            <a href="#rhythm" class="btn ghost">See the monthly rhythm</a>
           </div>
         </div>
 
@@ -1246,6 +1548,63 @@
     </div>
   </section>
 
+  <!-- ============ THE TRAIL (narrative gravity) ============ -->
+  <section id="trail">
+    <div class="container">
+      <div class="trail-wrap">
+        <div class="trail-copy">
+          <div class="eyebrow navy">What the trail actually is</div>
+          <h2>You don&rsquo;t join a platform. You join a trail.</h2>
+          <p>
+            There are operators already on the trail. Sarah Reyes runs her yoga studio out of
+            a converted warehouse in a town nobody&rsquo;s heard of, and every regular she
+            has is on autopilot follow-up because the standard runs while she teaches. That&rsquo;s
+            what the trail does.
+          </p>
+          <p>
+            The trail isn&rsquo;t a login page. It&rsquo;s a set of operators who show up for
+            their customers with the same rigor, week after week — because the intelligence
+            underneath them makes rigor cheap. You bring the craft. The trail brings the reps.
+          </p>
+          <p>
+            When you&rsquo;re on the trail, your customers get the same clean experience they&rsquo;d
+            get from a chain. But they still come for <em>you</em>. That&rsquo;s the trick:
+            the standard shows up as personal because the human still does the moments that
+            matter. The system does the moments that don&rsquo;t.
+          </p>
+        </div>
+
+        <div>
+          <div class="trail-quote">
+            <blockquote>
+              &ldquo;My regulars think I&rsquo;m more organized than I am. What they don&rsquo;t
+              see is that I&rsquo;m not the one running the follow-up.&rdquo;
+            </blockquote>
+            <cite>
+              <span class="dot"></span>
+              <span><strong>Sarah Reyes</strong> · Yoga &amp; breathwork · Growing lane composite</span>
+            </cite>
+          </div>
+
+          <div class="trail-facts">
+            <div class="fact">
+              <div class="fact-num">1</div>
+              <div class="fact-label">Standard applied<br/>everywhere</div>
+            </div>
+            <div class="fact">
+              <div class="fact-num">4</div>
+              <div class="fact-label">Jobs the platform<br/>runs for you</div>
+            </div>
+            <div class="fact">
+              <div class="fact-num">90/10</div>
+              <div class="fact-label">Automated /<br/>human on purpose</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
   <!-- ============ THESIS / CYCLE ============ -->
   <section id="thesis">
     <div class="container">
@@ -1265,8 +1624,8 @@
             proof multiplies the next round of relationships.
           </p>
           <p>
-            TOJ Small Business operates every stage — not just one. That's what turns a
-            relationship-built operation into a network-scale one, without losing the person.
+            The trail runs every stage — so the whole loop closes on your behalf, in the
+            background, on days you&rsquo;re teaching, cutting hair, on the truck, or off.
           </p>
         </div>
 
@@ -1372,8 +1731,9 @@
       </div>
 
       <p class="ladder-note">
-        Every operator on TOJ Small Business has all eight rungs running underneath — even
-        when the client only asks for one.
+        Every operator on the trail has all eight rungs running underneath — even when the
+        conversation started at one. That&rsquo;s why the reputation compounds instead of
+        plateaus.
       </p>
     </div>
   </section>
@@ -1383,12 +1743,11 @@
     <div class="container">
       <div class="products-head">
         <div class="eyebrow navy">Inside TOJ Small Business</div>
-        <h2>Four products. One shared standard behind them.</h2>
+        <h2>One platform. Four jobs. Your name on the front.</h2>
         <p class="lede">
-          These are the products that sit inside TOJ Small Business itself. Customers engage
-          with them through your storefront and your storyline. You run them from your own
-          branded environment. The TOJ Network holds the standard behind each one, so what
-          a first-timer, a regular, or a referrer receives feels consistent every single time.
+          It&rsquo;s not four separate tools. It&rsquo;s one platform that runs your presence,
+          your bookings, your content, and your community loops — all under your brand,
+          all against the standard. You&rsquo;d never see the seams unless we told you.
         </p>
       </div>
 
@@ -1437,6 +1796,72 @@
           <div class="p-detail"><strong>Delivers</strong> — Customer Care · Community</div>
         </div>
       </div>
+    </div>
+  </section>
+
+
+  <!-- ============ MONTHLY RHYTHM ============ -->
+  <section id="rhythm">
+    <div class="container">
+      <div class="rhythm-head">
+        <div class="eyebrow navy">The monthly rhythm</div>
+        <h2>What a month on the trail actually ships.</h2>
+        <p class="lede">
+          You&rsquo;re not staring at a dashboard hoping it works. The trail moves in a
+          repeating four-week rhythm — same shape every month, adjusted for your business.
+          Things ship on your behalf even when you don&rsquo;t log in.
+        </p>
+      </div>
+
+      <div class="rhythm-grid">
+        <div class="rhythm-week">
+          <div class="week-num">Week 01</div>
+          <h4>New in · welcomed</h4>
+          <ul>
+            <li>New customers greeted &amp; onboarded</li>
+            <li>Confirmations, deposits, welcome sequence</li>
+            <li>Past customers checked in on</li>
+          </ul>
+          <div class="ship-tag">Ships automatically</div>
+        </div>
+
+        <div class="rhythm-week">
+          <div class="week-num">Week 02</div>
+          <h4>Content · out the door</h4>
+          <ul>
+            <li>Weekly social ships on cadence</li>
+            <li>Newsletter drops to your list</li>
+            <li>Review capture requests fire</li>
+          </ul>
+          <div class="ship-tag">Ships automatically</div>
+        </div>
+
+        <div class="rhythm-week">
+          <div class="week-num">Week 03</div>
+          <h4>Referrals · surfaced</h4>
+          <ul>
+            <li>Referral prompts to happy customers</li>
+            <li>Upsell &amp; membership offers surface</li>
+            <li>Booking gaps flagged for outreach</li>
+          </ul>
+          <div class="ship-tag">Ships automatically</div>
+        </div>
+
+        <div class="rhythm-week">
+          <div class="week-num">Week 04</div>
+          <h4>Report · direction locked</h4>
+          <ul>
+            <li>Monthly report drops in your inbox</li>
+            <li>Standing reviewed, wins captured</li>
+            <li>Next month&rsquo;s priorities set</li>
+          </ul>
+          <div class="ship-tag">You + the trail, together</div>
+        </div>
+      </div>
+
+      <p class="rhythm-note">
+         Once the rhythm is running, it doesn&rsquo;t stop for slow weeks. That&rsquo;s the retention math.
+      </p>
     </div>
   </section>
 
@@ -1552,6 +1977,68 @@
   </section>
 
   <!-- ============ TRAINERS ON THE NETWORK (the federation, made real) ============ -->
+
+  <!-- ============ WAVES / COHORT ============ -->
+  <section id="waves">
+    <div class="container">
+      <div class="waves-wrap">
+        <div class="waves-head">
+          <div class="eyebrow">Cohort waves</div>
+          <h2>You don&rsquo;t drift onto the trail. You get on with a wave.</h2>
+          <p>
+            Cohorts open in waves. Each wave is a small group of operators onboarding together —
+            same rhythm, same peer chat, same standard. The waves stay small on purpose so
+            the peer effect actually compounds. Some waves fill before they open publicly.
+          </p>
+        </div>
+
+        <div class="waves-list">
+          <div class="wave-row full">
+            <span class="wave-status">&#10003;</span>
+            <div class="wave-body">
+              <div class="wave-name">Wave 04</div>
+              <div class="wave-meta">Founding operators · shipped Q1 2026</div>
+            </div>
+            <div class="wave-timing">Q1 &rsquo;26</div>
+            <span class="wave-tag">Full</span>
+          </div>
+          <div class="wave-row full">
+            <span class="wave-status">&#10003;</span>
+            <div class="wave-body">
+              <div class="wave-name">Wave 05</div>
+              <div class="wave-meta">Solo coaches + neighborhood shops · shipped Q2 2026</div>
+            </div>
+            <div class="wave-timing">Q2 &rsquo;26</div>
+            <span class="wave-tag">Full</span>
+          </div>
+          <div class="wave-row live">
+            <span class="wave-status">&#9679;</span>
+            <div class="wave-body">
+              <div class="wave-name">Wave 06</div>
+              <div class="wave-meta">Currently onboarding · live cohort chat</div>
+            </div>
+            <div class="wave-timing">Q3 &rsquo;26</div>
+            <span class="wave-tag">Live now</span>
+          </div>
+          <div class="wave-row open">
+            <span class="wave-status">&#9675;</span>
+            <div class="wave-body">
+              <div class="wave-name">Wave 07</div>
+              <div class="wave-meta">Programs, small trades, growing creators · opens next</div>
+            </div>
+            <div class="wave-timing">Opens Q4 &rsquo;26</div>
+            <span class="wave-tag">4 seats left</span>
+          </div>
+        </div>
+
+        <div class="waves-cta">
+          <div class="cta-msg">Wave 07 is the last cohort of 2026. Application closes when the seats do.</div>
+          <a href="#wave-apply">Apply for Wave 07 &rarr;</a>
+        </div>
+      </div>
+    </div>
+  </section>
+
   <section id="operating-systems">
     <div class="container">
       <div class="os-head">
@@ -1698,17 +2185,18 @@
     <div class="container">
       <div class="cta-wrap">
         <div>
-          <div class="cta-eyebrow">Ready to build the standard behind your work</div>
-          <h2>Start the TOJ Small Business intake.</h2>
+          <div class="cta-eyebrow">The trail is already moving</div>
+          <h2>You&rsquo;ve been ready. Get on the trail.</h2>
           <p>
-            Whether you're a solo coach, a neighborhood shop, a local trade, a program lead,
-            or a growing creator — the intake is the same door. We learn your business the
-            way you actually run it, then run the reps underneath.
+            The next wave opens with a fixed number of seats. Whether you&rsquo;re a solo
+            coach, a neighborhood shop, a local trade, a program, or a growing creator —
+            the door is the same. What&rsquo;s on the other side is a group of operators
+            shipping alongside you, and a system that keeps running when you can&rsquo;t.
           </p>
         </div>
         <div class="cta-actions">
-          <a href="#intake-form" class="btn-white">Begin intake <span class="arrow">→</span></a>
-          <a href="/" class="btn-outline">Back to TOJ Campaign</a>
+          <a href="#wave-apply" class="btn-white">Apply for the next wave <span class="arrow">→</span></a>
+          <a href="#discovery" class="btn-outline">Book a discovery call</a>
         </div>
       </div>
     </div>
@@ -1727,11 +2215,13 @@
           <ul>
             <li><a href="#thesis">The flow</a></li>
             <li><a href="#hierarchy">Value ladder</a></li>
+            <li><a href="#trail">The trail</a></li>
+            <li><a href="#rhythm">Monthly rhythm</a></li>
             <li><a href="#products">Inside TOJ Small Business</a></li>
+            <li><a href="#waves">Waves &amp; cohorts</a></li>
             <li><a href="#tiers">Three tiers</a></li>
             <li><a href="#operating-systems">Operators on the network</a></li>
-            <li><a href="#tier">Tier infrastructure</a></li>
-            <li><a href="#intake">Start intake</a></li>
+            <li><a href="#intake">Join</a></li>
           </ul>
         </div>
         <div class="footer-col">
