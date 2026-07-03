@@ -1,0 +1,1764 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>TOJ Big Business — Trail of Joy Campaign</title>
+  <meta name="description" content="TOJ Big Business. The operating standard for multi-location trades, multi-studio operators, regional service companies, and B2B providers. Lead generation, sales, delivery, reporting, visibility, brand, authority — under one intelligence layer." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&display=swap" rel="stylesheet" />
+  <style>
+    /* ---------- RESET ---------- */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; }
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: #F5F1EA;
+      color: #1A1613;
+      line-height: 1.5;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+    }
+
+    /* ---------- TOKENS (shared with hub) ---------- */
+    :root {
+      --parchment: #F5F1EA;
+      --parchment-2: #EBE4D6;
+      --ink: #1A1613;
+      --ink-soft: #3B3530;
+      --ink-mute: #6E655C;
+      --rule: rgba(26, 22, 19, 0.12);
+      --rule-strong: rgba(26, 22, 19, 0.35);
+
+      /* Locked avenue colors */
+      --sports:      #1E3A5F;
+      --smallbiz:    #A85F26;
+      --bigbiz:      #2F5D4E;
+      --bigbiz-2:    #4A7D6D;   /* lighter pine for gradients / hover */
+      --bigbiz-tint: rgba(47, 93, 78, 0.08);
+      --advisory:    #B8843B;
+
+      /* This page's accent — Pine Green */
+      --accent: var(--bigbiz);
+      --accent-2: var(--bigbiz-2);
+      --accent-tint: var(--bigbiz-tint);
+    }
+
+    /* ---------- TYPOGRAPHY ---------- */
+    .serif { font-family: 'Fraunces', 'Georgia', serif; letter-spacing: -0.01em; }
+    h1, h2, h3, h4 { font-family: 'Fraunces', 'Georgia', serif; font-weight: 600; letter-spacing: -0.015em; color: var(--ink); }
+    h1 { font-size: clamp(2.4rem, 5.2vw, 4.4rem); line-height: 1.02; }
+    h2 { font-size: clamp(1.8rem, 3.4vw, 2.8rem); line-height: 1.1; }
+    h3 { font-size: 1.3rem; line-height: 1.25; }
+    p  { color: var(--ink-soft); }
+    .eyebrow {
+      font-family: 'Inter', sans-serif;
+      font-size: 0.72rem;
+      font-weight: 600;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: var(--ink-mute);
+    }
+    .eyebrow.navy { color: var(--accent); }
+    .lede { font-size: clamp(1.05rem, 1.6vw, 1.2rem); color: var(--ink-soft); max-width: 46rem; }
+
+    /* ---------- LAYOUT ---------- */
+    .container { width: 100%; max-width: 1180px; margin: 0 auto; padding: 0 clamp(1.25rem, 3vw, 2.25rem); }
+    section { padding: clamp(4.5rem, 8vw, 7rem) 0; border-top: 1px solid var(--rule); }
+    section:first-of-type { border-top: 0; }
+
+    /* ---------- HEADER ---------- */
+    header.top {
+      position: sticky; top: 0; z-index: 40;
+      background: rgba(245, 241, 234, 0.88);
+      backdrop-filter: saturate(140%) blur(10px);
+      -webkit-backdrop-filter: saturate(140%) blur(10px);
+      border-bottom: 1px solid var(--rule);
+    }
+    .top-inner {
+      display: flex; align-items: center; justify-content: space-between;
+      gap: 1.5rem;
+      padding: 0.85rem clamp(1.25rem, 3vw, 2.25rem);
+      max-width: 1180px; margin: 0 auto;
+    }
+    .top-left { display: flex; align-items: center; gap: 1rem; flex: 1; min-width: 0; }
+    .back-link {
+      display: inline-flex; align-items: center; gap: 0.4rem;
+      color: var(--ink-mute);
+      text-decoration: none;
+      font-size: 0.82rem;
+      font-weight: 500;
+      transition: color 0.15s ease;
+    }
+    .back-link:hover { color: var(--ink); }
+    .back-link .caret { font-size: 0.9em; }
+    .lane-badge {
+      display: inline-flex; align-items: center; gap: 0.5rem;
+      padding: 0.35rem 0.75rem;
+      background: var(--accent);
+      color: #fff;
+      border-radius: 999px;
+      font-size: 0.72rem;
+      font-weight: 600;
+      letter-spacing: 0.06em;
+    }
+    .lane-badge .dot { width: 6px; height: 6px; border-radius: 999px; background: rgba(255,255,255,0.7); }
+    nav.primary { display: flex; gap: 1.5rem; align-items: center; }
+    nav.primary a {
+      color: var(--ink-soft);
+      text-decoration: none;
+      font-size: 0.85rem;
+      font-weight: 500;
+      transition: color 0.15s ease;
+    }
+    nav.primary a:hover { color: var(--accent); }
+    @media (max-width: 860px) { nav.primary { display: none; } }
+
+    /* ---------- BUTTONS ---------- */
+    .btn {
+      display: inline-flex; align-items: center; gap: 0.5rem;
+      padding: 0.85rem 1.4rem;
+      border-radius: 999px;
+      font-size: 0.92rem;
+      font-weight: 500;
+      text-decoration: none;
+      transition: all 0.18s ease;
+      border: 1px solid transparent;
+      cursor: pointer;
+      font-family: inherit;
+    }
+    .btn.primary { background: var(--accent); color: #fff; }
+    .btn.primary:hover { background: var(--accent-2); }
+    .btn.ghost { background: transparent; color: var(--ink); border-color: var(--rule-strong); }
+    .btn.ghost:hover { background: rgba(26,22,19,0.04); border-color: var(--accent); color: var(--accent); }
+    .btn .arrow { transition: transform 0.18s ease; }
+    .btn:hover .arrow { transform: translateX(3px); }
+
+    /* ---------- HERO ---------- */
+    .hero {
+      padding: clamp(4.5rem, 9vw, 7.5rem) 0 clamp(3.5rem, 7vw, 5.5rem);
+      position: relative;
+      overflow: hidden;
+    }
+    .hero-grid { display: grid; grid-template-columns: 1.15fr 1fr; gap: clamp(2rem, 5vw, 5rem); align-items: end; }
+    @media (max-width: 880px) { .hero-grid { grid-template-columns: 1fr; } }
+    .hero .eyebrow { margin-bottom: 1.25rem; }
+    .hero h1 { max-width: 18ch; margin-bottom: 1.5rem; }
+    .hero h1 em { font-style: italic; font-weight: 500; color: var(--accent); }
+    .hero .lede { margin-bottom: 2.25rem; }
+    .hero-cta { display: flex; gap: 0.9rem; flex-wrap: wrap; }
+
+    /* Hero right — accent card */
+    .hero-card {
+      background: var(--accent);
+      color: #fff;
+      border-radius: 16px;
+      padding: 2rem 1.75rem 1.85rem;
+      position: relative;
+      overflow: hidden;
+    }
+    .hero-card::before {
+      content: '';
+      position: absolute;
+      top: -40%; right: -30%;
+      width: 90%; height: 180%;
+      background: radial-gradient(ellipse at center, rgba(255,255,255,0.15), transparent 65%);
+      pointer-events: none;
+    }
+    .hero-card .h-eyebrow {
+      font-size: 0.68rem;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: rgba(255,255,255,0.55);
+      font-weight: 600;
+      margin-bottom: 1rem;
+    }
+    .hero-card h4 {
+      font-family: 'Fraunces', serif;
+      font-weight: 500;
+      font-size: 1.35rem;
+      color: #fff;
+      line-height: 1.2;
+      margin-bottom: 1.5rem;
+    }
+    .flow-cycle {
+      display: flex; flex-direction: column; gap: 0.55rem;
+      position: relative;
+    }
+    .flow-cycle .step {
+      display: flex; align-items: baseline; gap: 0.75rem;
+      padding: 0.72rem 0;
+      border-bottom: 1px solid rgba(255,255,255,0.16);
+    }
+    .flow-cycle .step:last-child { border-bottom: 0; }
+    .flow-cycle .step .idx {
+      font-family: 'Fraunces', serif;
+      font-size: 0.82rem;
+      color: rgba(255,255,255,0.45);
+      min-width: 1.75rem;
+    }
+    .flow-cycle .step .name {
+      font-family: 'Fraunces', serif;
+      font-size: 1.05rem;
+      font-weight: 500;
+      color: #fff;
+    }
+    .flow-cycle .step .arrow-down {
+      color: rgba(255,255,255,0.4);
+      font-size: 0.9rem;
+    }
+    .flow-cycle .footnote {
+      margin-top: 0.9rem;
+      font-size: 0.78rem;
+      color: rgba(255,255,255,0.65);
+      font-style: italic;
+      line-height: 1.4;
+    }
+
+    /* Hero card — AI Brain variant */
+    .brain-list { display: flex; flex-direction: column; gap: 0; }
+    .brain-node {
+      display: flex; flex-direction: column;
+      padding: 0.85rem 0;
+      border-bottom: 1px solid rgba(255,255,255,0.14);
+    }
+    .brain-node:last-of-type { border-bottom: 0; }
+    .brain-node .brain-label {
+      font-family: 'Inter', sans-serif;
+      font-size: 0.65rem;
+      font-weight: 600;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      color: rgba(255,255,255,0.5);
+      margin-bottom: 0.35rem;
+    }
+    .brain-node .brain-value {
+      font-family: 'Fraunces', serif;
+      font-weight: 500;
+      color: #fff;
+      font-size: 0.94rem;
+      line-height: 1.35;
+    }
+    .brain-footnote {
+      margin-top: 1rem;
+      font-size: 0.78rem;
+      color: rgba(255,255,255,0.65);
+      font-style: italic;
+      line-height: 1.45;
+    }
+    .brain-branch {
+      display: inline-flex; align-items: center; gap: 0.4rem;
+      margin-top: 0.4rem;
+      font-family: 'Inter', monospace;
+      font-size: 0.7rem;
+      color: rgba(255,255,255,0.5);
+      letter-spacing: 0.04em;
+    }
+    .brain-branch::before {
+      content: '⌐';
+      transform: rotate(90deg);
+      display: inline-block;
+      color: rgba(255,255,255,0.45);
+    }
+
+    /* ---------- THESIS / CYCLE ---------- */
+    .thesis-grid { display: grid; grid-template-columns: 1fr 1.2fr; gap: clamp(2rem, 5vw, 4rem); align-items: start; }
+    @media (max-width: 860px) { .thesis-grid { grid-template-columns: 1fr; } }
+    .thesis-copy .eyebrow { margin-bottom: 1rem; }
+    .thesis-copy h2 { margin-bottom: 1.25rem; }
+    .thesis-copy p { margin-bottom: 1rem; max-width: 32rem; }
+    .thesis-copy p strong { color: var(--ink); font-weight: 600; }
+
+    .cycle-diagram {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0;
+      background: var(--parchment-2);
+      border-radius: 14px;
+      overflow: hidden;
+      border: 1px solid var(--rule);
+    }
+    .cycle-cell {
+      padding: 1.5rem 1.4rem;
+      border-right: 1px solid var(--rule);
+      border-bottom: 1px solid var(--rule);
+      position: relative;
+    }
+    .cycle-cell:nth-child(2n) { border-right: 0; }
+    .cycle-cell:nth-last-child(-n+2) { border-bottom: 0; }
+    .cycle-cell .step-num {
+      font-family: 'Fraunces', serif;
+      font-size: 0.75rem;
+      color: var(--accent);
+      margin-bottom: 0.35rem;
+      letter-spacing: 0.06em;
+    }
+    .cycle-cell h4 {
+      font-family: 'Fraunces', serif;
+      font-size: 1.15rem;
+      color: var(--ink);
+      margin-bottom: 0.4rem;
+    }
+    .cycle-cell p {
+      font-size: 0.83rem;
+      color: var(--ink-mute);
+      line-height: 1.5;
+    }
+    .cycle-arrow {
+      position: absolute;
+      color: var(--accent);
+      font-family: 'Fraunces', serif;
+      font-weight: 500;
+      opacity: 0.7;
+      pointer-events: none;
+    }
+    .cycle-arrow.right { right: -0.6em; top: 50%; transform: translateY(-50%); }
+    .cycle-arrow.down  { bottom: -0.6em; right: 50%; transform: translateX(50%); }
+    @media (max-width: 640px) {
+      .cycle-arrow { display: none; }
+    }
+
+    /* ---------- HIERARCHY / LADDER ---------- */
+    .ladder-head { max-width: 46rem; margin-bottom: 3rem; }
+    .ladder-head .eyebrow { margin-bottom: 1rem; }
+    .ladder-head h2 { margin-bottom: 1.25rem; }
+
+    .ladder {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 0;
+      border-top: 1px solid var(--rule);
+    }
+    @media (max-width: 720px) { .ladder { grid-template-columns: 1fr; } }
+    .rung {
+      display: grid;
+      grid-template-columns: 5rem 1fr;
+      gap: 1.25rem;
+      padding: 1.5rem 1.4rem;
+      border-bottom: 1px solid var(--rule);
+      border-right: 1px solid var(--rule);
+      position: relative;
+      transition: background 0.18s ease;
+    }
+    .rung:nth-child(2n) { border-right: 0; }
+    @media (max-width: 720px) { .rung { border-right: 0; } }
+    .rung:hover { background: var(--accent-tint); }
+    .rung .rung-num {
+      font-family: 'Fraunces', serif;
+      font-size: 2.1rem;
+      font-weight: 500;
+      color: var(--accent);
+      line-height: 1;
+      letter-spacing: -0.02em;
+    }
+    .rung .rung-body h4 {
+      font-family: 'Fraunces', serif;
+      font-size: 1.1rem;
+      color: var(--ink);
+      margin-bottom: 0.4rem;
+      line-height: 1.15;
+    }
+    .rung .rung-body p {
+      font-size: 0.85rem;
+      color: var(--ink-mute);
+      line-height: 1.5;
+    }
+    .ladder-note {
+      margin-top: 2rem;
+      font-size: 0.85rem;
+      color: var(--ink-mute);
+      font-style: italic;
+      max-width: 46rem;
+    }
+
+    /* ---------- PRODUCTS ---------- */
+    .products-head { max-width: 46rem; margin-bottom: 3rem; }
+    .products-head .eyebrow { margin-bottom: 1rem; }
+    .products-head h2 { margin-bottom: 1.25rem; }
+    .products-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 1.15rem; }
+    @media (max-width: 780px) { .products-grid { grid-template-columns: 1fr; } }
+    .product-card {
+      display: flex; flex-direction: column;
+      padding: 2rem 1.75rem 1.75rem;
+      background: var(--parchment);
+      border: 1px solid var(--rule);
+      border-radius: 14px;
+      position: relative;
+      overflow: hidden;
+      min-height: 260px;
+    }
+    .product-card::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0;
+      width: 4px; height: 100%;
+      background: var(--accent);
+    }
+    .product-card .p-eyebrow {
+      display: inline-flex; align-items: center; gap: 0.4rem;
+      font-family: 'Inter', sans-serif;
+      font-size: 0.66rem;
+      font-weight: 600;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: var(--accent);
+      margin-bottom: 0.85rem;
+    }
+    .product-card h3 {
+      font-family: 'Fraunces', serif;
+      font-size: 1.5rem;
+      color: var(--ink);
+      margin-bottom: 0.6rem;
+    }
+    .product-card p {
+      font-size: 0.92rem;
+      color: var(--ink-soft);
+      line-height: 1.55;
+      margin-bottom: 1.25rem;
+    }
+    .product-card .p-detail {
+      margin-top: auto;
+      padding-top: 1rem;
+      border-top: 1px solid var(--rule);
+      font-family: 'Inter', monospace;
+      font-size: 0.75rem;
+      color: var(--ink-mute);
+      letter-spacing: 0.02em;
+    }
+    .product-card .p-detail strong { color: var(--accent); font-weight: 600; letter-spacing: 0.04em; }
+
+    /* ---------- PLATFORM (OptimumGrading360 + Prospect Edge + College Directory) ---------- */
+    .platform-head { max-width: 46rem; margin-bottom: 3rem; }
+    .platform-head .eyebrow { margin-bottom: 1rem; }
+    .platform-head h2 { margin-bottom: 1.25rem; }
+    .platform-grid { display: grid; grid-template-columns: 1fr 1.15fr; gap: clamp(2rem, 5vw, 4rem); align-items: start; }
+    @media (max-width: 900px) { .platform-grid { grid-template-columns: 1fr; } }
+
+    /* Sample athlete profile card mockup */
+    .athlete-card {
+      background: #fff;
+      border-radius: 14px;
+      border: 1px solid var(--rule);
+      box-shadow: 0 30px 60px -40px rgba(30, 58, 95, 0.35);
+      overflow: hidden;
+    }
+    .athlete-top {
+      display: grid;
+      grid-template-columns: 130px 1fr;
+      gap: 1.25rem;
+      padding: 1.25rem;
+      align-items: flex-start;
+    }
+    .athlete-photo {
+      width: 130px; height: 130px;
+      border-radius: 10px;
+      background: linear-gradient(135deg, #2C4E7A 0%, #1E3A5F 100%);
+      display: flex; align-items: center; justify-content: center;
+      color: rgba(255,255,255,0.6);
+      font-family: 'Fraunces', serif;
+      font-size: 2.5rem;
+      font-weight: 500;
+    }
+    .athlete-info h4 {
+      font-family: 'Inter', sans-serif;
+      font-size: 1.3rem;
+      font-weight: 700;
+      color: var(--ink);
+      margin-bottom: 0.5rem;
+      letter-spacing: -0.01em;
+    }
+    .athlete-info h4 .jersey { color: var(--accent); font-weight: 700; }
+    .athlete-meta {
+      display: flex; gap: 0.55rem; align-items: center; flex-wrap: wrap;
+      font-size: 0.78rem; color: var(--ink-mute);
+      margin-bottom: 0.55rem;
+    }
+    .athlete-meta .position {
+      background: var(--accent);
+      color: #fff;
+      padding: 0.12rem 0.55rem;
+      border-radius: 4px;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      font-size: 0.72rem;
+    }
+    .athlete-meta .stars { color: var(--advisory); letter-spacing: 0.1em; }
+    .athlete-commit {
+      display: flex; align-items: center; gap: 0.5rem;
+      font-size: 0.78rem;
+      color: var(--ink-soft);
+    }
+    .athlete-commit .flag {
+      width: 18px; height: 12px;
+      background: linear-gradient(180deg, #A70532 50%, #FFF 50%);
+      border-radius: 2px;
+    }
+    .athlete-commit strong { color: var(--accent); font-weight: 600; }
+
+    .athlete-stats {
+      display: grid;
+      grid-template-columns: repeat(6, 1fr);
+      gap: 0;
+      padding: 1rem 1.25rem;
+      border-top: 1px solid var(--rule);
+      border-bottom: 1px solid var(--rule);
+      background: rgba(30, 58, 95, 0.02);
+    }
+    @media (max-width: 520px) { .athlete-stats { grid-template-columns: repeat(3, 1fr); } }
+    .stat {
+      display: flex; flex-direction: column; align-items: center;
+      padding: 0.35rem 0.25rem;
+      border-right: 1px solid var(--rule);
+    }
+    .stat:last-child { border-right: 0; }
+    .stat .stat-icon {
+      width: 18px; height: 18px;
+      color: var(--accent);
+      margin-bottom: 0.3rem;
+      opacity: 0.85;
+    }
+    .stat .stat-val {
+      font-family: 'Inter', sans-serif;
+      font-weight: 700;
+      font-size: 0.9rem;
+      color: var(--ink);
+      line-height: 1;
+      letter-spacing: -0.01em;
+    }
+    .stat .stat-label {
+      font-size: 0.62rem;
+      color: var(--ink-mute);
+      margin-top: 0.2rem;
+    }
+
+    .athlete-offers {
+      padding: 1rem 1.25rem;
+    }
+    .athlete-offers .offers-title {
+      display: flex; align-items: center; gap: 0.55rem;
+      font-family: 'Inter', sans-serif;
+      font-size: 0.7rem;
+      font-weight: 700;
+      color: var(--ink);
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      margin-bottom: 0.75rem;
+    }
+    .athlete-offers .offers-title .accent { color: var(--accent); }
+    .offers-grid {
+      display: grid;
+      grid-template-columns: repeat(10, 1fr);
+      gap: 0.35rem;
+    }
+    @media (max-width: 640px) { .offers-grid { grid-template-columns: repeat(6, 1fr); } }
+    .offer-chip {
+      aspect-ratio: 1;
+      background: var(--parchment-2);
+      border: 1px solid var(--rule);
+      border-radius: 5px;
+      display: flex; align-items: center; justify-content: center;
+      font-family: 'Fraunces', serif;
+      font-weight: 700;
+      font-size: 0.72rem;
+      color: var(--accent);
+      letter-spacing: 0.02em;
+    }
+    .offer-chip.more {
+      background: var(--accent);
+      color: #fff;
+      border-color: var(--accent);
+      font-size: 0.62rem;
+      font-weight: 600;
+    }
+
+    .athlete-footer {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0;
+      border-top: 1px solid var(--rule);
+    }
+    @media (max-width: 520px) { .athlete-footer { grid-template-columns: 1fr; } }
+    .athlete-footer > div {
+      padding: 0.85rem 1.25rem;
+      border-right: 1px solid var(--rule);
+    }
+    .athlete-footer > div:last-child { border-right: 0; }
+    .athlete-footer .footer-label {
+      display: flex; align-items: center; gap: 0.4rem;
+      font-family: 'Inter', sans-serif;
+      font-size: 0.66rem;
+      font-weight: 700;
+      color: var(--ink);
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      margin-bottom: 0.55rem;
+    }
+    .athlete-footer .footer-links {
+      display: flex; flex-direction: column; gap: 0.28rem;
+      font-family: 'Inter', sans-serif;
+      font-size: 0.78rem;
+      color: var(--ink-mute);
+    }
+    .athlete-footer .footer-links span { color: var(--accent); font-weight: 600; }
+
+    .athlete-caption {
+      margin-top: 0.85rem;
+      font-size: 0.78rem;
+      color: var(--ink-mute);
+      font-style: italic;
+      text-align: center;
+    }
+    .athlete-caption a { color: var(--accent); text-decoration: none; font-weight: 500; }
+    .athlete-caption a:hover { text-decoration: underline; }
+
+    .platform-copy .eyebrow { margin-bottom: 1rem; }
+    .platform-copy h3 {
+      font-family: 'Fraunces', serif;
+      font-size: 1.35rem;
+      margin-bottom: 0.85rem;
+      color: var(--ink);
+    }
+    .platform-copy p { margin-bottom: 1.15rem; max-width: 34rem; }
+    .platform-copy p:last-of-type { margin-bottom: 1.5rem; }
+    .platform-features {
+      background: var(--parchment-2);
+      border-radius: 12px;
+      padding: 1.5rem 1.4rem;
+      border: 1px solid var(--rule);
+      margin-bottom: 1.5rem;
+    }
+    .platform-features h5 {
+      font-family: 'Inter', sans-serif;
+      font-size: 0.7rem;
+      font-weight: 700;
+      color: var(--accent);
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      margin-bottom: 0.9rem;
+    }
+    .platform-features ul {
+      list-style: none;
+      display: flex; flex-direction: column; gap: 0.55rem;
+    }
+    .platform-features li {
+      font-size: 0.87rem;
+      color: var(--ink-soft);
+      padding-left: 1.35rem;
+      position: relative;
+      line-height: 1.45;
+    }
+    .platform-features li::before {
+      content: '';
+      position: absolute;
+      left: 0; top: 0.55em;
+      width: 8px; height: 8px;
+      background: var(--accent);
+      border-radius: 999px;
+    }
+    .platform-features li strong { color: var(--ink); font-weight: 600; }
+    .platform-links {
+      display: flex; flex-wrap: wrap; gap: 0.55rem;
+    }
+    .platform-link {
+      display: inline-flex; align-items: center; gap: 0.4rem;
+      padding: 0.5rem 0.85rem;
+      background: transparent;
+      border: 1px solid var(--rule-strong);
+      border-radius: 999px;
+      font-family: 'Inter', monospace;
+      font-size: 0.76rem;
+      color: var(--ink-soft);
+      text-decoration: none;
+      transition: all 0.15s ease;
+      letter-spacing: 0.02em;
+    }
+    .platform-link:hover {
+      border-color: var(--accent);
+      color: var(--accent);
+      background: var(--accent-tint);
+    }
+
+    /* ---------- WHO IT'S FOR ---------- */
+    .who-head { max-width: 46rem; margin-bottom: 3rem; }
+    .who-head .eyebrow { margin-bottom: 1rem; }
+    .who-head h2 { margin-bottom: 1.25rem; }
+    .who-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem; }
+    @media (max-width: 980px) { .who-grid { grid-template-columns: repeat(2, 1fr); } }
+    @media (max-width: 520px) { .who-grid { grid-template-columns: 1fr; } }
+    .who-card {
+      padding: 1.5rem 1.35rem;
+      background: var(--parchment);
+      border: 1px solid var(--rule);
+      border-radius: 12px;
+      display: flex;
+      flex-direction: column;
+    }
+    .who-card .w-eyebrow {
+      font-size: 0.66rem;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: var(--accent);
+      font-weight: 600;
+      margin-bottom: 0.7rem;
+    }
+    .who-card h4 {
+      font-family: 'Fraunces', serif;
+      font-size: 1.15rem;
+      color: var(--ink);
+      margin-bottom: 0.6rem;
+      line-height: 1.15;
+    }
+    .who-card p {
+      font-size: 0.83rem;
+      color: var(--ink-mute);
+      line-height: 1.5;
+    }
+
+    /* ---------- THREE TIERS ---------- */
+    .tiers-wrap {
+      background: var(--ink);
+      color: var(--parchment);
+      border-radius: 20px;
+      padding: clamp(2.25rem, 4vw, 3rem);
+    }
+    .tiers-head { max-width: 46rem; margin-bottom: 2.5rem; }
+    .tiers-head .eyebrow { color: rgba(245,241,234,0.55); margin-bottom: 1rem; }
+    .tiers-head h2 { color: var(--parchment); margin-bottom: 1rem; }
+    .tiers-head p { color: rgba(245,241,234,0.7); max-width: 42rem; }
+    .tiers-head p strong { color: #fff; font-weight: 600; }
+
+    .b2b-b2c-band {
+      display: flex; align-items: center; justify-content: space-between;
+      flex-wrap: wrap; gap: 0.5rem;
+      padding: 0.85rem 1.25rem;
+      background: rgba(245, 241, 234, 0.05);
+      border: 1px solid rgba(245,241,234,0.12);
+      border-radius: 10px;
+      margin-bottom: 2rem;
+      font-family: 'Inter', monospace;
+      font-size: 0.72rem;
+      letter-spacing: 0.06em;
+      color: rgba(245,241,234,0.75);
+    }
+    .b2b-b2c-band .band-node {
+      display: flex; align-items: center; gap: 0.5rem;
+    }
+    .b2b-b2c-band .tag {
+      padding: 0.2rem 0.55rem;
+      border-radius: 4px;
+      font-size: 0.65rem;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      font-weight: 700;
+    }
+    .b2b-b2c-band .tag.b2b { background: var(--accent); color: #fff; }
+    .b2b-b2c-band .tag.b2c { background: rgba(184,132,59,0.85); color: #fff; }
+    .b2b-b2c-band .band-arrow { color: rgba(245,241,234,0.35); font-size: 0.85rem; }
+
+    .tiers-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 1rem;
+    }
+    @media (max-width: 900px) { .tiers-grid { grid-template-columns: 1fr; } }
+    .tier-card {
+      display: flex; flex-direction: column;
+      padding: 1.75rem 1.5rem 1.65rem;
+      background: rgba(245,241,234,0.04);
+      border: 1px solid rgba(245,241,234,0.12);
+      border-radius: 14px;
+      position: relative;
+    }
+    .tier-card::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0;
+      width: 100%; height: 3px;
+      background: var(--accent);
+      border-radius: 14px 14px 0 0;
+    }
+    .tier-card.mid::before { background: var(--advisory); }
+    .tier-card.top::before { background: var(--parchment); }
+    .tier-card .tier-num {
+      font-family: 'Fraunces', serif;
+      font-size: 0.78rem;
+      color: rgba(245,241,234,0.5);
+      margin-bottom: 0.35rem;
+      letter-spacing: 0.04em;
+    }
+    .tier-card .tier-role {
+      display: inline-flex; align-items: center; gap: 0.4rem;
+      font-size: 0.63rem;
+      font-weight: 700;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      margin-bottom: 0.85rem;
+      padding: 0.2rem 0.55rem;
+      border-radius: 4px;
+    }
+    .tier-card .tier-role.b2c { background: rgba(184,132,59,0.2); color: #E9C48A; }
+    .tier-card .tier-role.bridge { background: rgba(184,132,59,0.2); color: #E9C48A; }
+    .tier-card .tier-role.b2b { background: rgba(30,58,95,0.35); color: #B8CCE8; }
+    .tier-card h4 {
+      font-family: 'Fraunces', serif;
+      font-size: 1.4rem;
+      color: var(--parchment);
+      line-height: 1.15;
+      margin-bottom: 0.6rem;
+    }
+    .tier-card .tier-tag {
+      font-size: 0.78rem;
+      color: rgba(245,241,234,0.6);
+      margin-bottom: 1.25rem;
+      font-style: italic;
+      line-height: 1.4;
+    }
+    .tier-card ul {
+      list-style: none;
+      display: flex; flex-direction: column;
+      gap: 0.5rem;
+      padding-top: 1rem;
+      border-top: 1px solid rgba(245,241,234,0.12);
+    }
+    .tier-card ul li {
+      font-size: 0.82rem;
+      color: rgba(245,241,234,0.85);
+      padding-left: 1.1rem;
+      position: relative;
+      line-height: 1.45;
+    }
+    .tier-card ul li::before {
+      content: '';
+      position: absolute;
+      left: 0; top: 0.5em;
+      width: 6px; height: 1px;
+      background: rgba(245,241,234,0.5);
+    }
+
+    /* ---------- OPERATING SYSTEMS ---------- */
+    .os-head { max-width: 46rem; margin-bottom: 2.5rem; }
+    .os-head .eyebrow { margin-bottom: 1rem; }
+    .os-head h2 { margin-bottom: 1rem; }
+    .os-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; }
+    @media (max-width: 900px) { .os-grid { grid-template-columns: 1fr; } }
+    .os-card {
+      display: flex; flex-direction: column;
+      padding: 1.65rem 1.4rem 1.5rem;
+      background: var(--parchment);
+      border: 1px solid var(--rule);
+      border-radius: 12px;
+      position: relative;
+      overflow: hidden;
+    }
+    .os-card::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0;
+      width: 4px; height: 100%;
+      background: var(--accent);
+    }
+    .os-repo {
+      font-family: 'Courier New', monospace;
+      font-size: 0.78rem;
+      color: var(--accent);
+      font-weight: 600;
+      margin-bottom: 0.55rem;
+      letter-spacing: 0.02em;
+    }
+    .os-card h4 {
+      font-family: 'Fraunces', serif;
+      font-size: 1.15rem;
+      color: var(--ink);
+      margin-bottom: 0.3rem;
+      line-height: 1.2;
+    }
+    .os-card .os-founder {
+      font-size: 0.8rem;
+      color: var(--ink-mute);
+      margin-bottom: 1rem;
+      font-style: italic;
+    }
+    .os-meta {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0.5rem;
+      padding-top: 0.9rem;
+      border-top: 1px solid var(--rule);
+      margin-top: auto;
+    }
+    .os-meta .m {
+      display: flex; flex-direction: column;
+      font-size: 0.68rem;
+      color: var(--ink-mute);
+    }
+    .os-meta .m .m-label {
+      font-size: 0.6rem;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      font-weight: 600;
+      opacity: 0.7;
+      margin-bottom: 0.25rem;
+    }
+    .os-meta .m .m-value {
+      font-family: 'Inter', sans-serif;
+      font-size: 0.75rem;
+      color: var(--ink);
+      font-weight: 500;
+    }
+    .os-status {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+      font-family: 'Inter', sans-serif;
+      font-size: 0.66rem;
+      font-weight: 700;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      padding: 0.28rem 0.55rem;
+      border-radius: 4px;
+      margin-bottom: 0.9rem;
+      align-self: flex-start;
+    }
+    .os-status.active { background: rgba(47,93,78,0.15); color: #2F5D4E; }
+    .os-status.scaffolded { background: rgba(184,132,59,0.15); color: #A46F26; }
+    .os-status.pre { background: rgba(30,58,95,0.1); color: var(--accent); }
+    .os-note {
+      margin-top: 1.75rem;
+      font-size: 0.85rem;
+      color: var(--ink-mute);
+      font-style: italic;
+      max-width: 46rem;
+    }
+
+    /* ---------- APEX LADDER (kept for reference, unused after replace) ---------- */
+    .apex-wrap {
+      background: var(--ink);
+      color: var(--parchment);
+      border-radius: 20px;
+      padding: clamp(2.25rem, 4vw, 3rem);
+    }
+    .apex-head { max-width: 46rem; margin-bottom: 2.5rem; }
+    .apex-head .eyebrow { color: rgba(245,241,234,0.55); margin-bottom: 1rem; }
+    .apex-head h2 { color: var(--parchment); margin-bottom: 1rem; }
+    .apex-head p { color: rgba(245,241,234,0.7); max-width: 42rem; }
+    .apex-list { display: grid; grid-template-columns: repeat(2, 1fr); gap: 1rem; }
+    @media (max-width: 780px) { .apex-list { grid-template-columns: 1fr; } }
+    .apex-row {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 1.25rem;
+      align-items: baseline;
+      padding: 1.15rem 1.2rem;
+      background: rgba(245,241,234,0.05);
+      border: 1px solid rgba(245,241,234,0.1);
+      border-radius: 10px;
+    }
+    .apex-row.available { border-color: rgba(30, 58, 95, 0.6); background: rgba(30, 58, 95, 0.15); }
+    .apex-row .apex-name {
+      font-family: 'Fraunces', serif;
+      font-size: 1.02rem;
+      color: var(--parchment);
+      font-weight: 500;
+      line-height: 1.2;
+    }
+    .apex-row .apex-owner {
+      font-size: 0.75rem;
+      color: rgba(245,241,234,0.55);
+      margin-top: 0.2rem;
+      font-family: 'Inter', sans-serif;
+    }
+    .apex-row .apex-price {
+      font-family: 'Inter', monospace;
+      font-size: 0.8rem;
+      color: rgba(245,241,234,0.75);
+      white-space: nowrap;
+      letter-spacing: 0.02em;
+    }
+    .apex-row.forthcoming .apex-price { color: rgba(184,132,59,0.9); }
+
+    /* ---------- TIER / INFRASTRUCTURE ---------- */
+    .tier-grid { display: grid; grid-template-columns: 1fr 1.3fr; gap: clamp(2rem, 5vw, 4rem); align-items: start; }
+    @media (max-width: 860px) { .tier-grid { grid-template-columns: 1fr; } }
+    .tier-copy .eyebrow { margin-bottom: 1rem; }
+    .tier-copy h2 { margin-bottom: 1.25rem; }
+    .tier-copy p { margin-bottom: 1rem; max-width: 32rem; }
+    .tier-stack {
+      background: var(--parchment-2);
+      border-radius: 14px;
+      padding: 1.75rem 1.5rem;
+      border: 1px solid var(--rule);
+    }
+    .tier-stack .stack-eyebrow {
+      font-size: 0.66rem;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      color: var(--accent);
+      font-weight: 600;
+      margin-bottom: 1rem;
+    }
+    .tier-stack ul { list-style: none; display: flex; flex-direction: column; gap: 0.5rem; }
+    .tier-stack li {
+      padding: 0.8rem 1rem;
+      background: var(--parchment);
+      border: 1px solid var(--rule);
+      border-radius: 8px;
+      font-family: 'Inter', monospace;
+      font-size: 0.83rem;
+      color: var(--ink-soft);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 1rem;
+    }
+    .tier-stack li .tag {
+      font-family: 'Inter', sans-serif;
+      font-size: 0.68rem;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--accent);
+      font-weight: 600;
+    }
+
+    /* ---------- TRANSCRIPT-SPORTS ---------- */
+    .translate-grid { display: grid; grid-template-columns: 1fr 1fr; gap: clamp(2rem, 5vw, 4rem); align-items: start; }
+    @media (max-width: 860px) { .translate-grid { grid-template-columns: 1fr; } }
+    .translate-copy .eyebrow { margin-bottom: 1rem; }
+    .translate-copy h2 { margin-bottom: 1.25rem; }
+    .translate-copy p { margin-bottom: 1rem; max-width: 32rem; }
+    .translate-table {
+      background: var(--parchment);
+      border: 1px solid var(--rule);
+      border-radius: 12px;
+      overflow: hidden;
+    }
+    .translate-table .th-row,
+    .translate-table .tr-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0;
+    }
+    .translate-table .th-row {
+      background: var(--parchment-2);
+      border-bottom: 1px solid var(--rule);
+    }
+    .translate-table .th-row div {
+      padding: 0.8rem 1rem;
+      font-size: 0.68rem;
+      font-weight: 600;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: var(--ink-mute);
+    }
+    .translate-table .th-row div:first-child { border-right: 1px solid var(--rule); }
+    .translate-table .tr-row {
+      border-bottom: 1px solid var(--rule);
+    }
+    .translate-table .tr-row:last-child { border-bottom: 0; }
+    .translate-table .tr-row div {
+      padding: 0.9rem 1rem;
+      font-size: 0.88rem;
+      color: var(--ink-soft);
+      line-height: 1.35;
+    }
+    .translate-table .tr-row div:first-child {
+      border-right: 1px solid var(--rule);
+      font-family: 'Fraunces', serif;
+      font-weight: 500;
+      color: var(--ink);
+    }
+    .translate-table .tr-row div:last-child {
+      color: var(--accent);
+      font-weight: 500;
+    }
+
+    /* ---------- CTA / INTAKE ---------- */
+    .cta-wrap {
+      background: var(--accent);
+      color: #fff;
+      border-radius: 20px;
+      padding: clamp(2.5rem, 5vw, 3.5rem);
+      display: grid;
+      grid-template-columns: 1.4fr 1fr;
+      gap: clamp(2rem, 5vw, 4rem);
+      align-items: center;
+      position: relative;
+      overflow: hidden;
+    }
+    @media (max-width: 780px) { .cta-wrap { grid-template-columns: 1fr; } }
+    .cta-wrap::before {
+      content: '';
+      position: absolute;
+      top: -50%; left: -20%;
+      width: 60%; height: 200%;
+      background: radial-gradient(ellipse at center, rgba(255,255,255,0.1), transparent 65%);
+      pointer-events: none;
+    }
+    .cta-wrap .cta-eyebrow {
+      font-size: 0.68rem;
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      color: rgba(255,255,255,0.65);
+      font-weight: 600;
+      margin-bottom: 1rem;
+    }
+    .cta-wrap h2 { color: #fff; margin-bottom: 1rem; max-width: 20ch; }
+    .cta-wrap p { color: rgba(255,255,255,0.85); font-size: 1rem; line-height: 1.55; max-width: 38ch; }
+    .cta-actions { display: flex; flex-direction: column; gap: 0.85rem; align-items: flex-start; position: relative; z-index: 1; }
+    .cta-actions .btn-white {
+      display: inline-flex; align-items: center; gap: 0.6rem;
+      background: var(--parchment);
+      color: var(--accent);
+      padding: 1rem 1.6rem;
+      border-radius: 999px;
+      font-weight: 600;
+      font-size: 0.95rem;
+      text-decoration: none;
+      transition: transform 0.18s ease, background 0.18s ease;
+    }
+    .cta-actions .btn-white:hover { background: #fff; transform: translateY(-2px); }
+    .cta-actions .btn-outline {
+      display: inline-flex; align-items: center; gap: 0.5rem;
+      background: transparent;
+      color: #fff;
+      padding: 0.85rem 1.4rem;
+      border-radius: 999px;
+      font-weight: 500;
+      font-size: 0.9rem;
+      text-decoration: none;
+      border: 1px solid rgba(255,255,255,0.3);
+      transition: all 0.18s ease;
+    }
+    .cta-actions .btn-outline:hover { border-color: #fff; background: rgba(255,255,255,0.08); }
+
+    /* ---------- FOOTER ---------- */
+    footer {
+      background: var(--ink);
+      color: rgba(245,241,234,0.75);
+      padding: 3.5rem 0 2.25rem;
+    }
+    .footer-inner { max-width: 1180px; margin: 0 auto; padding: 0 clamp(1.25rem, 3vw, 2.25rem); }
+    .footer-grid {
+      display: grid;
+      grid-template-columns: 1.4fr 1fr 1fr 1fr;
+      gap: 2rem;
+      margin-bottom: 2.5rem;
+    }
+    @media (max-width: 780px) { .footer-grid { grid-template-columns: 1fr 1fr; } }
+    @media (max-width: 480px) { .footer-grid { grid-template-columns: 1fr; } }
+    .footer-brand .fbrand {
+      font-family: 'Fraunces', serif;
+      font-size: 1.25rem;
+      color: var(--parchment);
+      margin-bottom: 0.6rem;
+    }
+    .footer-brand .fbrand span { color: var(--accent-2); font-weight: 400; }
+    .footer-brand p { color: rgba(245,241,234,0.55); font-size: 0.85rem; max-width: 28ch; line-height: 1.55; }
+    .footer-col h5 {
+      font-family: 'Inter', sans-serif;
+      font-weight: 600;
+      font-size: 0.72rem;
+      color: rgba(245,241,234,0.55);
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      margin-bottom: 1rem;
+    }
+    .footer-col ul { list-style: none; display: flex; flex-direction: column; gap: 0.55rem; }
+    .footer-col a {
+      color: rgba(245,241,234,0.8);
+      text-decoration: none;
+      font-size: 0.9rem;
+      transition: color 0.15s ease;
+    }
+    .footer-col a:hover { color: var(--parchment); }
+    .footer-bar {
+      padding-top: 1.75rem;
+      border-top: 1px solid rgba(245,241,234,0.12);
+      display: flex; justify-content: space-between; align-items: center;
+      font-size: 0.78rem;
+      color: rgba(245,241,234,0.45);
+      flex-wrap: wrap; gap: 1rem;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- ============ HEADER ============ -->
+  <header class="top">
+    <div class="top-inner">
+      <div class="top-left">
+        <a href="/" class="back-link"><span class="caret">←</span> TOJ Campaign</a>
+        <span class="lane-badge"><span class="dot"></span> Avenue 03 · Big Business</span>
+      </div>
+      <nav class="primary">
+        <a href="#thesis">The flow</a>
+        <a href="#hierarchy">Value ladder</a>
+        <a href="#products">Inside</a>
+        <a href="#tiers">Tiers</a>
+        <a href="#intake">Start intake</a>
+      </nav>
+    </div>
+  </header>
+
+  <!-- ============ HERO ============ -->
+  <section class="hero">
+    <div class="container">
+      <div class="hero-grid">
+        <div>
+          <div class="eyebrow navy">TOJ Big Business · bigbusiness.tojcampaign.com</div>
+          <h1>Where scale meets <em>structure</em>.</h1>
+          <p class="lede">
+            The operating standard for multi-location trades, multi-studio operators, regional
+            service companies, and B2B providers. Every rung — lead generation, sales, delivery,
+            reporting, visibility, team development, brand, authority — runs under one
+            intelligence layer, applied consistently across every division.
+          </p>
+          <div class="hero-cta">
+            <a href="#intake" class="btn primary">Start intake <span class="arrow">→</span></a>
+            <a href="#hierarchy" class="btn ghost">See the value ladder</a>
+          </div>
+        </div>
+
+        <aside class="hero-card">
+          <div class="h-eyebrow">The TOJ AI Brain</div>
+          <h4>The intelligence layer behind every TOJ business.</h4>
+          <div class="brain-list">
+            <div class="brain-node">
+              <span class="brain-label">Universal skills stack</span>
+              <span class="brain-value">Sales · Content · Operations · Research · Analytics · Chief of Staff</span>
+            </div>
+            <div class="brain-node">
+              <span class="brain-label">The 90 / 10 standard</span>
+              <span class="brain-value">Nine of ten touches automated. The tenth is a person — where judgment matters most.</span>
+            </div>
+            <div class="brain-node">
+              <span class="brain-label">Same standard, everywhere</span>
+              <span class="brain-value">Every deliverable graded against the same rigor — evaluation, transcript, follow-up, report.</span>
+            </div>
+            <div class="brain-node">
+              <span class="brain-label">Compounds every week</span>
+              <span class="brain-value">A pattern discovered with one client becomes intelligence available to every client.</span>
+            </div>
+          </div>
+          <p class="brain-footnote">Every athlete, trainer, and organization on TOJ gets what feels like personal help — because the intelligence behind it never stops doing the reps.</p>
+        </aside>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ THESIS / CYCLE ============ -->
+  <section id="thesis">
+    <div class="container">
+      <div class="thesis-grid">
+        <div class="thesis-copy">
+          <div class="eyebrow navy">The flow</div>
+          <h2>Relationships → Opportunities → Revenue → Media.</h2>
+          <p>
+            The eight things below the line — lead gen, sales, delivery, reporting, visibility,
+            team development, brand, authority — are the <strong>services</strong>. The four
+            things at the center are the <strong>engine</strong>.
+          </p>
+          <p>
+            Every contract starts with a real relationship. Every relationship, when the
+            standard is right, becomes an opportunity — a quote, a service agreement, an
+            expansion into a new division. Opportunities produce revenue. Revenue funds
+            better reporting and trust signals. And better reporting multiplies the next
+            round of relationships.
+          </p>
+          <p>
+            TOJ Big Business operates every stage — across every division — not just one.
+            That's what turns a multi-location operation into a genuinely federated business.
+          </p>
+        </div>
+
+        <div class="cycle-diagram" aria-hidden="true">
+          <div class="cycle-cell">
+            <div class="step-num">01</div>
+            <h4>Relationships</h4>
+            <p>Repeat commercial clients, referring GCs, division leads, procurement contacts. Enterprise-scale ties tracked as the most valuable asset on the books.</p>
+            <span class="cycle-arrow right">→</span>
+          </div>
+          <div class="cycle-cell">
+            <div class="step-num">02</div>
+            <h4>Opportunities</h4>
+            <p>Quoted jobs, service contracts, RFP invitations, expansion conversations — what a relationship becomes across divisions.</p>
+            <span class="cycle-arrow down">↓</span>
+          </div>
+          <div class="cycle-cell">
+            <div class="step-num">04</div>
+            <h4>Reporting</h4>
+            <p>Cross-division rollups, benchmarks, case studies, trust signals — the visible evidence that lands in the next procurement decision.</p>
+            <span class="cycle-arrow right">↑</span>
+          </div>
+          <div class="cycle-cell">
+            <div class="step-num">03</div>
+            <h4>Revenue</h4>
+            <p>Contract renewals, per-location expansion, service-line upsells, retainer growth. What funds the next round of reporting and outreach.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ HIERARCHY / LADDER ============ -->
+  <section id="hierarchy">
+    <div class="container">
+      <div class="ladder-head">
+        <div class="eyebrow navy">The value ladder</div>
+        <h2>Eight rungs. From lead gen to authority.</h2>
+        <p class="lede">
+          Every service TOJ Big Business delivers stacks on the one below it. Lead generation is the
+          foundation. Authority is the peak. Each rung is a job the standard actually performs —
+          not a marketing promise.
+        </p>
+      </div>
+
+      <div class="ladder">
+        <div class="rung">
+          <div class="rung-num">01</div>
+          <div class="rung-body">
+            <h4>Lead Generation</h4>
+            <p>Bringing new athletes, trainers, sponsors, media partners, and program contacts into the pipeline through intake forms, tracked outreach, and content that earns replies.</p>
+          </div>
+        </div>
+        <div class="rung">
+          <div class="rung-num">02</div>
+          <div class="rung-body">
+            <h4>Sales</h4>
+            <p>Converting interest into signed rosters, booked evaluations, paid media engagements, and trainer blueprint purchases. Structured pitch, structured close, structured onboarding.</p>
+          </div>
+        </div>
+        <div class="rung">
+          <div class="rung-num">03</div>
+          <div class="rung-body">
+            <h4>Multi-Location Delivery</h4>
+            <p>The core work delivered consistently across every division, every location — the same standard reaching the customer whether they call your Plano office or your Frisco one.</p>
+          </div>
+        </div>
+        <div class="rung">
+          <div class="rung-num">04</div>
+          <div class="rung-body">
+            <h4>Cross-Division Reporting</h4>
+            <p>One rolled-up view across locations and service lines. Benchmarks, leak detection, weekly reports — decisions made from live data, not from guessing.</p>
+          </div>
+        </div>
+        <div class="rung">
+          <div class="rung-num">05</div>
+          <div class="rung-body">
+            <h4>Visibility</h4>
+            <p>Getting real audiences — coaches, recruiters, sponsors, peers — to see the athlete, the trainer, the results. Not just reach; the right eyes.</p>
+          </div>
+        </div>
+        <div class="rung">
+          <div class="rung-num">06</div>
+          <div class="rung-body">
+            <h4>Team Development</h4>
+            <p>Training, SOPs, career ladders, hiring pipelines. The way you turn a growing headcount into a durable operating capability, not just a bigger org chart.</p>
+          </div>
+        </div>
+        <div class="rung">
+          <div class="rung-num">07</div>
+          <div class="rung-body">
+            <h4>Brand</h4>
+            <p>Positioning each participant with a durable identity — not just a nickname or a highlight reel. What people say when the athlete or trainer isn't in the room.</p>
+          </div>
+        </div>
+        <div class="rung">
+          <div class="rung-num">08</div>
+          <div class="rung-body">
+            <h4>Authority</h4>
+            <p>The apex rung. Becoming the room others check before deciding — the trainer other trainers cite, the athlete other athletes name-drop, the report scouts trust by default.</p>
+          </div>
+        </div>
+      </div>
+
+      <p class="ladder-note">
+        Every company on TOJ Big Business has all eight rungs running underneath — even
+        when the client only asks for one.
+      </p>
+    </div>
+  </section>
+
+  <!-- ============ PRODUCTS INSIDE ============ -->
+  <section id="products">
+    <div class="container">
+      <div class="products-head">
+        <div class="eyebrow navy">Inside TOJ Big Business</div>
+        <h2>Four products. One shared standard behind them.</h2>
+        <p class="lede">
+          These are the products that sit inside TOJ Big Business itself. Customers engage with
+          them across every location. Companies run them from their own multi-division environment.
+          The TOJ Network holds the standard behind each one, so what a customer in one location
+          gets is what a customer in every other location gets.
+        </p>
+      </div>
+
+      <div class="products-grid">
+        <div class="product-card">
+          <div class="p-eyebrow">Multi-location standard · Governance</div>
+          <h3>The Multi-Location Standard</h3>
+          <p>
+            One operating standard applied across every division — SLA definitions, dispatch
+            protocol, customer communication cadence, escalation trees. The standard travels
+            with the brand; each location inherits it on day one.
+          </p>
+          <div class="p-detail"><strong>Delivers</strong> — Multi-Location Delivery · Brand</div>
+        </div>
+
+        <div class="product-card">
+          <div class="p-eyebrow">Cross-division reporting · Live rollups</div>
+          <h3>Division Dashboard</h3>
+          <p>
+            One rolled-up view of revenue, jobs, service lines, staffing, and customer sentiment
+            across every location. Benchmarks, funnel leak detection, weekly leadership reports —
+            the picture leadership actually needs before the Monday meeting.
+          </p>
+          <div class="p-detail"><strong>Delivers</strong> — Cross-Division Reporting · Authority</div>
+        </div>
+
+        <div class="product-card">
+          <div class="p-eyebrow">Training · SOPs · Hiring pipeline</div>
+          <h3>Team Enablement Kit</h3>
+          <p>
+            The infrastructure for turning growth in headcount into growth in capability —
+            role-based training, SOP library, onboarding sequences, hiring pipeline templates.
+            Every new hire enters with the standard already inherited.
+          </p>
+          <div class="p-detail"><strong>Delivers</strong> — Team Development · Multi-Location Delivery</div>
+        </div>
+
+        <div class="product-card">
+          <div class="p-eyebrow">B2B pipeline · Enterprise flow</div>
+          <h3>Enterprise Pipeline</h3>
+          <p>
+            Structured B2B pipeline — from RFP tracking through quote drafting, contract cadence,
+            renewal signals, and expansion opportunity flagging. Built for operations that sell
+            into procurement, not just into the phone book.
+          </p>
+          <div class="p-detail"><strong>Delivers</strong> — Sales · Authority</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ WHO IT'S FOR ============ -->
+  <section id="who">
+    <div class="container">
+      <div class="who-head">
+        <div class="eyebrow navy">Who TOJ Big Business serves</div>
+        <h2>Four archetypes. One standard.</h2>
+        <p class="lede">
+          If your business runs across multiple locations, divisions, or teams, TOJ Big Business
+          is your front door. What differs is which product configuration you enter through —
+          not the standard, and not the transcript.
+        </p>
+      </div>
+
+      <div class="who-grid">
+        <div class="who-card">
+          <div class="w-eyebrow">Archetype 01</div>
+          <h4>Multi-Location Trades</h4>
+          <p>HVAC, plumbing, contracting, electrical, roofing — service companies running across two or more locations who need one operating standard to travel with the brand.</p>
+        </div>
+        <div class="who-card">
+          <div class="w-eyebrow">Archetype 02</div>
+          <h4>Multi-Studio Operators</h4>
+          <p>Fitness chains, music schools, dance studios, wellness groups. Multiple studios, one standard — how you preserve the founder-culture as the operation grows.</p>
+        </div>
+        <div class="who-card">
+          <div class="w-eyebrow">Archetype 03</div>
+          <h4>Regional Service Companies</h4>
+          <p>10+ employees, one or two divisions, meaningful revenue. The operators too big to run on a spreadsheet, too specific to run on generic software.</p>
+        </div>
+        <div class="who-card">
+          <div class="w-eyebrow">Archetype 04</div>
+          <h4>B2B Service Providers</h4>
+          <p>Companies whose customers are other companies — where the sale is contractual, the delivery is team-based, and the reporting is what earns the renewal.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ THREE TIERS (B2B SaaS → B2C) ============ -->
+  <section id="tiers">
+    <div class="container">
+      <div class="tiers-wrap">
+        <div class="tiers-head">
+          <div class="eyebrow">The business architecture</div>
+          <h2>Three tiers. One product. B2B SaaS that filters into B2C.</h2>
+          <p>
+            TOJ is a <strong>B2B SaaS company</strong> at its core — it sells operating brains,
+            standards, and federated infrastructure to trainer brands. Those trainer brands are
+            themselves businesses running athlete pipelines. And athletes are the <strong>B2C</strong>
+            endpoint where the value shows up on the field, in the transcript, and in the offers ledger.
+          </p>
+        </div>
+
+        <div class="b2b-b2c-band">
+          <div class="band-node"><span class="tag b2b">B2B</span> TOJ Network sells to Trainer Brands</div>
+          <span class="band-arrow">→</span>
+          <div class="band-node"><span class="tag b2b">B2B</span> Trainer Brand serves Athletes</div>
+          <span class="band-arrow">→</span>
+          <div class="band-node"><span class="tag b2c">B2C</span> Athlete engagement + roster</div>
+        </div>
+
+        <div class="tiers-grid">
+          <!-- Tier 01 — End Customer (B2C or B2B endpoint) -->
+          <div class="tier-card">
+            <div class="tier-num">Tier 01</div>
+            <div class="tier-role b2c">B2C / B2B · The endpoint</div>
+            <h4>Customer / Client Company</h4>
+            <div class="tier-tag">The end recipient of the work. Where the standard shows up as a service delivered.</div>
+            <ul>
+              <li>Consistent service across every location</li>
+              <li>Clear SLA · one point of contact per contract</li>
+              <li>Reporting they can share with their board</li>
+              <li>Renewal + expansion handled proactively</li>
+              <li>The founder-culture preserved at scale</li>
+            </ul>
+          </div>
+
+          <!-- Tier 02 — Company / Division (Bridge) -->
+          <div class="tier-card mid">
+            <div class="tier-num">Tier 02</div>
+            <div class="tier-role bridge">B2B → B2C · The bridge</div>
+            <h4>Company / Division</h4>
+            <div class="tier-tag">The company is a business — with divisions. TOJ powers it; it serves customers at every location.</div>
+            <ul>
+              <li>Own branded environment · multi-division</li>
+              <li>Cross-location delivery + reporting rhythm</li>
+              <li>Team training, SOP library, hiring pipeline</li>
+              <li>Direct plug into the federation of peers</li>
+              <li>Weekly patterns fed back to the network</li>
+            </ul>
+          </div>
+
+          <!-- Tier 03 — Network / Federation (B2B Core) -->
+          <div class="tier-card top">
+            <div class="tier-num">Tier 03</div>
+            <div class="tier-role b2b">B2B core · The intelligence</div>
+            <h4>The TOJ Network</h4>
+            <div class="tier-tag">The connective tissue that turns N trainers into a federation smarter than any single brand.</div>
+            <ul>
+              <li>Universal standards (role-model, evaluation, rate card)</li>
+              <li>Master onboarding · sign-to-shipping in ~14 days</li>
+              <li>Cross-network intelligence log · updated every week</li>
+              <li>Prospect Edge · Optimum Grading affiliate</li>
+              <li>Legal + rights framework · pre-decided</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ TRAINERS ON THE NETWORK (the federation, made real) ============ -->
+  <section id="operating-systems">
+    <div class="container">
+      <div class="os-head">
+        <div class="eyebrow navy">The federation, made real</div>
+        <h2>Companies already on the network.</h2>
+        <p class="lede">
+          Each company operates under its own identity, its own divisions, its own customers —
+          and inherits the same standard as every other company on the network. The federation
+          grows peer by peer, and gets sharper every week.
+        </p>
+      </div>
+
+      <div class="os-grid">
+        <div class="os-card">
+          <div class="os-status scaffolded">◐ Reference build · demo transcript</div>
+          <h4>Meridian HVAC</h4>
+          <div class="os-founder">Multi-location residential + light commercial</div>
+          <div class="os-meta">
+            <div class="m"><span class="m-label">Region</span><span class="m-value">Plano, TX</span></div>
+            <div class="m"><span class="m-label">Type</span><span class="m-value">Established-lane composite</span></div>
+          </div>
+        </div>
+
+        <div class="os-card">
+          <div class="os-status pre">○ Slot open · template ready</div>
+          <h4>Your company here</h4>
+          <div class="os-founder">Multi-location trade · service · studios</div>
+          <div class="os-meta">
+            <div class="m"><span class="m-label">Region</span><span class="m-value">Your market</span></div>
+            <div class="m"><span class="m-label">Divisions</span><span class="m-value">Your divisions</span></div>
+          </div>
+        </div>
+
+        <div class="os-card">
+          <div class="os-status pre">○ Slot open · template ready</div>
+          <h4>Your company here</h4>
+          <div class="os-founder">Regional service · B2B provider</div>
+          <div class="os-meta">
+            <div class="m"><span class="m-label">Region</span><span class="m-value">Your market</span></div>
+            <div class="m"><span class="m-label">Team</span><span class="m-value">10+ staff</span></div>
+          </div>
+        </div>
+      </div>
+
+      <p class="os-note">
+        Every trainer on the network is peer — no apex, no hierarchy. Standards flow across
+        brands; patterns flow back into the network's intelligence every week.
+      </p>
+    </div>
+  </section>
+
+  <!-- ============ TIER / INFRASTRUCTURE ============ -->
+  <section id="tier">
+    <div class="container">
+      <div class="tier-grid">
+        <div class="tier-copy">
+          <div class="eyebrow navy">Tier 02 · in practice</div>
+          <h2>Every company runs its own operation — with the standard applied across every division.</h2>
+          <p>
+            When a company joins the network, it gets its own multi-division environment: its own
+            brand, its own leadership rhythm, its own customer base, its own numbers. Nothing shared,
+            nothing generic — a space configured for how the company actually runs.
+          </p>
+          <p>
+            Underneath, the intelligence runs the reps — quoting, follow-up, dispatch, reporting,
+            renewal signals. On top, leadership stays in control of the strategy. It's why each
+            company can compound its own reputation while the network gets smarter around it.
+          </p>
+        </div>
+
+        <div class="tier-stack">
+          <div class="stack-eyebrow">What Tier 02 looks like in practice</div>
+          <ul>
+            <li><span>Your own multi-division environment</span><span class="tag">Yours</span></li>
+            <li><span>Your own standards library</span><span class="tag">Inherited</span></li>
+            <li><span>Cross-location delivery rhythm</span><span class="tag">On cadence</span></li>
+            <li><span>Enterprise pipeline &amp; contract log</span><span class="tag">Tracked</span></li>
+            <li><span>Renewal &amp; expansion signals</span><span class="tag">Priced</span></li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ TRANSCRIPT IN SPORTS TERMS ============ -->
+  <section id="transcript-sports">
+    <div class="container">
+      <div class="translate-grid">
+        <div class="translate-copy">
+          <div class="eyebrow navy">The universal artifact</div>
+          <h2>Read in the language of the enterprise.</h2>
+          <p>
+            The Operational Transcript is the same document across every TOJ avenue —
+            same structure, same seven sections. But on TOJ Big Business, the terminology reads
+            the way multi-location leadership actually talks — divisions, service lines, SLAs,
+            contract cycles.
+          </p>
+          <p>
+            Same rigor everywhere. Different words, different context, same standard.
+          </p>
+          <a href="/#transcript" class="btn ghost">See the shared structure</a>
+        </div>
+
+        <div class="translate-table">
+          <div class="th-row">
+            <div>Transcript section</div>
+            <div>Reads on Big Business as</div>
+          </div>
+          <div class="tr-row">
+            <div>Executive summary</div>
+            <div>Standing of the enterprise</div>
+          </div>
+          <div class="tr-row">
+            <div>Five-pillar radar</div>
+            <div>Cross-division scorecard</div>
+          </div>
+          <div class="tr-row">
+            <div>Service-line health</div>
+            <div>Per-service-line performance</div>
+          </div>
+          <div class="tr-row">
+            <div>Revenue recovery</div>
+            <div>Renewals, expansion, contract leakage</div>
+          </div>
+          <div class="tr-row">
+            <div>Roster / portfolio</div>
+            <div>Divisions, locations, contract book</div>
+          </div>
+          <div class="tr-row">
+            <div>Path forward</div>
+            <div>Next quarter's build order across divisions</div>
+          </div>
+          <div class="tr-row">
+            <div>Ranked action plan</div>
+            <div>This month's leadership priorities</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ CTA / INTAKE ============ -->
+  <section id="intake">
+    <div class="container">
+      <div class="cta-wrap">
+        <div>
+          <div class="cta-eyebrow">Ready to install the standard across every division</div>
+          <h2>Start the TOJ Big Business intake.</h2>
+          <p>
+            Whether you're a multi-location trade, a multi-studio operator, a regional service
+            company, or a B2B provider — the intake is the same door. We learn how your operation
+            actually runs, then apply the standard across every division you serve.
+          </p>
+        </div>
+        <div class="cta-actions">
+          <a href="#intake-form" class="btn-white">Begin intake <span class="arrow">→</span></a>
+          <a href="/" class="btn-outline">Back to TOJ Campaign</a>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ FOOTER ============ -->
+  <footer>
+    <div class="footer-inner">
+      <div class="footer-grid">
+        <div class="footer-brand">
+          <div class="fbrand">TOJ <span>Big Business</span></div>
+          <p>Avenue 03 of the Trail of Joy Campaign. The operating standard for multi-location, multi-division operations.</p>
+        </div>
+        <div class="footer-col">
+          <h5>This avenue</h5>
+          <ul>
+            <li><a href="#thesis">The flow</a></li>
+            <li><a href="#hierarchy">Value ladder</a></li>
+            <li><a href="#products">Inside TOJ Big Business</a></li>
+            <li><a href="#tiers">Three tiers</a></li>
+            <li><a href="#operating-systems">Companies on the network</a></li>
+            <li><a href="#tier">Tier infrastructure</a></li>
+            <li><a href="#intake">Start intake</a></li>
+          </ul>
+        </div>
+        <div class="footer-col">
+          <h5>Sibling avenues</h5>
+          <ul>
+            <li><a href="/sports.html">TOJ Sports</a></li>
+            <li><a href="/smallbusiness.html">TOJ Small Business</a></li>
+            <li><a href="/advisory.html">TOJ Advisory</a></li>
+          </ul>
+        </div>
+        <div class="footer-col">
+          <h5>The hub</h5>
+          <ul>
+            <li><a href="/">TOJ Campaign home</a></li>
+            <li><a href="/#standard">The Standard</a></li>
+            <li><a href="/#transcript">The Transcript</a></li>
+            <li><a href="mailto:hello@tojcampaign.com">Contact</a></li>
+          </ul>
+        </div>
+      </div>
+      <div class="footer-bar">
+        <div>© 2026 Trail of Joy Player Management Group, LLC. All rights reserved.</div>
+        <div>Avenue 03 · Pine Green · Locked 2026-06-28.</div>
+      </div>
+    </div>
+  </footer>
+
+</body>
+</html>
