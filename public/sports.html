@@ -216,6 +216,52 @@
       line-height: 1.4;
     }
 
+    /* Hero card — AI Brain variant */
+    .brain-list { display: flex; flex-direction: column; gap: 0; }
+    .brain-node {
+      display: flex; flex-direction: column;
+      padding: 0.85rem 0;
+      border-bottom: 1px solid rgba(255,255,255,0.14);
+    }
+    .brain-node:last-of-type { border-bottom: 0; }
+    .brain-node .brain-label {
+      font-family: 'Inter', sans-serif;
+      font-size: 0.65rem;
+      font-weight: 600;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      color: rgba(255,255,255,0.5);
+      margin-bottom: 0.35rem;
+    }
+    .brain-node .brain-value {
+      font-family: 'Fraunces', serif;
+      font-weight: 500;
+      color: #fff;
+      font-size: 0.94rem;
+      line-height: 1.35;
+    }
+    .brain-footnote {
+      margin-top: 1rem;
+      font-size: 0.78rem;
+      color: rgba(255,255,255,0.65);
+      font-style: italic;
+      line-height: 1.45;
+    }
+    .brain-branch {
+      display: inline-flex; align-items: center; gap: 0.4rem;
+      margin-top: 0.4rem;
+      font-family: 'Inter', monospace;
+      font-size: 0.7rem;
+      color: rgba(255,255,255,0.5);
+      letter-spacing: 0.04em;
+    }
+    .brain-branch::before {
+      content: '⌐';
+      transform: rotate(90deg);
+      display: inline-block;
+      color: rgba(255,255,255,0.45);
+    }
+
     /* ---------- THESIS / CYCLE ---------- */
     .thesis-grid { display: grid; grid-template-columns: 1fr 1.2fr; gap: clamp(2rem, 5vw, 4rem); align-items: start; }
     @media (max-width: 860px) { .thesis-grid { grid-template-columns: 1fr; } }
@@ -382,6 +428,257 @@
     }
     .product-card .p-detail strong { color: var(--accent); font-weight: 600; letter-spacing: 0.04em; }
 
+    /* ---------- PLATFORM (OptimumGrading360 + Prospect Edge + College Directory) ---------- */
+    .platform-head { max-width: 46rem; margin-bottom: 3rem; }
+    .platform-head .eyebrow { margin-bottom: 1rem; }
+    .platform-head h2 { margin-bottom: 1.25rem; }
+    .platform-grid { display: grid; grid-template-columns: 1fr 1.15fr; gap: clamp(2rem, 5vw, 4rem); align-items: start; }
+    @media (max-width: 900px) { .platform-grid { grid-template-columns: 1fr; } }
+
+    /* Sample athlete profile card mockup */
+    .athlete-card {
+      background: #fff;
+      border-radius: 14px;
+      border: 1px solid var(--rule);
+      box-shadow: 0 30px 60px -40px rgba(30, 58, 95, 0.35);
+      overflow: hidden;
+    }
+    .athlete-top {
+      display: grid;
+      grid-template-columns: 130px 1fr;
+      gap: 1.25rem;
+      padding: 1.25rem;
+      align-items: flex-start;
+    }
+    .athlete-photo {
+      width: 130px; height: 130px;
+      border-radius: 10px;
+      background: linear-gradient(135deg, #2C4E7A 0%, #1E3A5F 100%);
+      display: flex; align-items: center; justify-content: center;
+      color: rgba(255,255,255,0.6);
+      font-family: 'Fraunces', serif;
+      font-size: 2.5rem;
+      font-weight: 500;
+    }
+    .athlete-info h4 {
+      font-family: 'Inter', sans-serif;
+      font-size: 1.3rem;
+      font-weight: 700;
+      color: var(--ink);
+      margin-bottom: 0.5rem;
+      letter-spacing: -0.01em;
+    }
+    .athlete-info h4 .jersey { color: var(--accent); font-weight: 700; }
+    .athlete-meta {
+      display: flex; gap: 0.55rem; align-items: center; flex-wrap: wrap;
+      font-size: 0.78rem; color: var(--ink-mute);
+      margin-bottom: 0.55rem;
+    }
+    .athlete-meta .position {
+      background: var(--accent);
+      color: #fff;
+      padding: 0.12rem 0.55rem;
+      border-radius: 4px;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      font-size: 0.72rem;
+    }
+    .athlete-meta .stars { color: var(--advisory); letter-spacing: 0.1em; }
+    .athlete-commit {
+      display: flex; align-items: center; gap: 0.5rem;
+      font-size: 0.78rem;
+      color: var(--ink-soft);
+    }
+    .athlete-commit .flag {
+      width: 18px; height: 12px;
+      background: linear-gradient(180deg, #A70532 50%, #FFF 50%);
+      border-radius: 2px;
+    }
+    .athlete-commit strong { color: var(--accent); font-weight: 600; }
+
+    .athlete-stats {
+      display: grid;
+      grid-template-columns: repeat(6, 1fr);
+      gap: 0;
+      padding: 1rem 1.25rem;
+      border-top: 1px solid var(--rule);
+      border-bottom: 1px solid var(--rule);
+      background: rgba(30, 58, 95, 0.02);
+    }
+    @media (max-width: 520px) { .athlete-stats { grid-template-columns: repeat(3, 1fr); } }
+    .stat {
+      display: flex; flex-direction: column; align-items: center;
+      padding: 0.35rem 0.25rem;
+      border-right: 1px solid var(--rule);
+    }
+    .stat:last-child { border-right: 0; }
+    .stat .stat-icon {
+      width: 18px; height: 18px;
+      color: var(--accent);
+      margin-bottom: 0.3rem;
+      opacity: 0.85;
+    }
+    .stat .stat-val {
+      font-family: 'Inter', sans-serif;
+      font-weight: 700;
+      font-size: 0.9rem;
+      color: var(--ink);
+      line-height: 1;
+      letter-spacing: -0.01em;
+    }
+    .stat .stat-label {
+      font-size: 0.62rem;
+      color: var(--ink-mute);
+      margin-top: 0.2rem;
+    }
+
+    .athlete-offers {
+      padding: 1rem 1.25rem;
+    }
+    .athlete-offers .offers-title {
+      display: flex; align-items: center; gap: 0.55rem;
+      font-family: 'Inter', sans-serif;
+      font-size: 0.7rem;
+      font-weight: 700;
+      color: var(--ink);
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      margin-bottom: 0.75rem;
+    }
+    .athlete-offers .offers-title .accent { color: var(--accent); }
+    .offers-grid {
+      display: grid;
+      grid-template-columns: repeat(10, 1fr);
+      gap: 0.35rem;
+    }
+    @media (max-width: 640px) { .offers-grid { grid-template-columns: repeat(6, 1fr); } }
+    .offer-chip {
+      aspect-ratio: 1;
+      background: var(--parchment-2);
+      border: 1px solid var(--rule);
+      border-radius: 5px;
+      display: flex; align-items: center; justify-content: center;
+      font-family: 'Fraunces', serif;
+      font-weight: 700;
+      font-size: 0.72rem;
+      color: var(--accent);
+      letter-spacing: 0.02em;
+    }
+    .offer-chip.more {
+      background: var(--accent);
+      color: #fff;
+      border-color: var(--accent);
+      font-size: 0.62rem;
+      font-weight: 600;
+    }
+
+    .athlete-footer {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0;
+      border-top: 1px solid var(--rule);
+    }
+    @media (max-width: 520px) { .athlete-footer { grid-template-columns: 1fr; } }
+    .athlete-footer > div {
+      padding: 0.85rem 1.25rem;
+      border-right: 1px solid var(--rule);
+    }
+    .athlete-footer > div:last-child { border-right: 0; }
+    .athlete-footer .footer-label {
+      display: flex; align-items: center; gap: 0.4rem;
+      font-family: 'Inter', sans-serif;
+      font-size: 0.66rem;
+      font-weight: 700;
+      color: var(--ink);
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      margin-bottom: 0.55rem;
+    }
+    .athlete-footer .footer-links {
+      display: flex; flex-direction: column; gap: 0.28rem;
+      font-family: 'Inter', sans-serif;
+      font-size: 0.78rem;
+      color: var(--ink-mute);
+    }
+    .athlete-footer .footer-links span { color: var(--accent); font-weight: 600; }
+
+    .athlete-caption {
+      margin-top: 0.85rem;
+      font-size: 0.78rem;
+      color: var(--ink-mute);
+      font-style: italic;
+      text-align: center;
+    }
+    .athlete-caption a { color: var(--accent); text-decoration: none; font-weight: 500; }
+    .athlete-caption a:hover { text-decoration: underline; }
+
+    .platform-copy .eyebrow { margin-bottom: 1rem; }
+    .platform-copy h3 {
+      font-family: 'Fraunces', serif;
+      font-size: 1.35rem;
+      margin-bottom: 0.85rem;
+      color: var(--ink);
+    }
+    .platform-copy p { margin-bottom: 1.15rem; max-width: 34rem; }
+    .platform-copy p:last-of-type { margin-bottom: 1.5rem; }
+    .platform-features {
+      background: var(--parchment-2);
+      border-radius: 12px;
+      padding: 1.5rem 1.4rem;
+      border: 1px solid var(--rule);
+      margin-bottom: 1.5rem;
+    }
+    .platform-features h5 {
+      font-family: 'Inter', sans-serif;
+      font-size: 0.7rem;
+      font-weight: 700;
+      color: var(--accent);
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      margin-bottom: 0.9rem;
+    }
+    .platform-features ul {
+      list-style: none;
+      display: flex; flex-direction: column; gap: 0.55rem;
+    }
+    .platform-features li {
+      font-size: 0.87rem;
+      color: var(--ink-soft);
+      padding-left: 1.35rem;
+      position: relative;
+      line-height: 1.45;
+    }
+    .platform-features li::before {
+      content: '';
+      position: absolute;
+      left: 0; top: 0.55em;
+      width: 8px; height: 8px;
+      background: var(--accent);
+      border-radius: 999px;
+    }
+    .platform-features li strong { color: var(--ink); font-weight: 600; }
+    .platform-links {
+      display: flex; flex-wrap: wrap; gap: 0.55rem;
+    }
+    .platform-link {
+      display: inline-flex; align-items: center; gap: 0.4rem;
+      padding: 0.5rem 0.85rem;
+      background: transparent;
+      border: 1px solid var(--rule-strong);
+      border-radius: 999px;
+      font-family: 'Inter', monospace;
+      font-size: 0.76rem;
+      color: var(--ink-soft);
+      text-decoration: none;
+      transition: all 0.15s ease;
+      letter-spacing: 0.02em;
+    }
+    .platform-link:hover {
+      border-color: var(--accent);
+      color: var(--accent);
+      background: var(--accent-tint);
+    }
+
     /* ---------- WHO IT'S FOR ---------- */
     .who-head { max-width: 46rem; margin-bottom: 3rem; }
     .who-head .eyebrow { margin-bottom: 1rem; }
@@ -418,7 +715,223 @@
       line-height: 1.5;
     }
 
-    /* ---------- APEX LADDER ---------- */
+    /* ---------- THREE TIERS ---------- */
+    .tiers-wrap {
+      background: var(--ink);
+      color: var(--parchment);
+      border-radius: 20px;
+      padding: clamp(2.25rem, 4vw, 3rem);
+    }
+    .tiers-head { max-width: 46rem; margin-bottom: 2.5rem; }
+    .tiers-head .eyebrow { color: rgba(245,241,234,0.55); margin-bottom: 1rem; }
+    .tiers-head h2 { color: var(--parchment); margin-bottom: 1rem; }
+    .tiers-head p { color: rgba(245,241,234,0.7); max-width: 42rem; }
+    .tiers-head p strong { color: #fff; font-weight: 600; }
+
+    .b2b-b2c-band {
+      display: flex; align-items: center; justify-content: space-between;
+      flex-wrap: wrap; gap: 0.5rem;
+      padding: 0.85rem 1.25rem;
+      background: rgba(245, 241, 234, 0.05);
+      border: 1px solid rgba(245,241,234,0.12);
+      border-radius: 10px;
+      margin-bottom: 2rem;
+      font-family: 'Inter', monospace;
+      font-size: 0.72rem;
+      letter-spacing: 0.06em;
+      color: rgba(245,241,234,0.75);
+    }
+    .b2b-b2c-band .band-node {
+      display: flex; align-items: center; gap: 0.5rem;
+    }
+    .b2b-b2c-band .tag {
+      padding: 0.2rem 0.55rem;
+      border-radius: 4px;
+      font-size: 0.65rem;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      font-weight: 700;
+    }
+    .b2b-b2c-band .tag.b2b { background: var(--accent); color: #fff; }
+    .b2b-b2c-band .tag.b2c { background: rgba(184,132,59,0.85); color: #fff; }
+    .b2b-b2c-band .band-arrow { color: rgba(245,241,234,0.35); font-size: 0.85rem; }
+
+    .tiers-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 1rem;
+    }
+    @media (max-width: 900px) { .tiers-grid { grid-template-columns: 1fr; } }
+    .tier-card {
+      display: flex; flex-direction: column;
+      padding: 1.75rem 1.5rem 1.65rem;
+      background: rgba(245,241,234,0.04);
+      border: 1px solid rgba(245,241,234,0.12);
+      border-radius: 14px;
+      position: relative;
+    }
+    .tier-card::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0;
+      width: 100%; height: 3px;
+      background: var(--accent);
+      border-radius: 14px 14px 0 0;
+    }
+    .tier-card.mid::before { background: var(--advisory); }
+    .tier-card.top::before { background: var(--parchment); }
+    .tier-card .tier-num {
+      font-family: 'Fraunces', serif;
+      font-size: 0.78rem;
+      color: rgba(245,241,234,0.5);
+      margin-bottom: 0.35rem;
+      letter-spacing: 0.04em;
+    }
+    .tier-card .tier-role {
+      display: inline-flex; align-items: center; gap: 0.4rem;
+      font-size: 0.63rem;
+      font-weight: 700;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      margin-bottom: 0.85rem;
+      padding: 0.2rem 0.55rem;
+      border-radius: 4px;
+    }
+    .tier-card .tier-role.b2c { background: rgba(184,132,59,0.2); color: #E9C48A; }
+    .tier-card .tier-role.bridge { background: rgba(184,132,59,0.2); color: #E9C48A; }
+    .tier-card .tier-role.b2b { background: rgba(30,58,95,0.35); color: #B8CCE8; }
+    .tier-card h4 {
+      font-family: 'Fraunces', serif;
+      font-size: 1.4rem;
+      color: var(--parchment);
+      line-height: 1.15;
+      margin-bottom: 0.6rem;
+    }
+    .tier-card .tier-tag {
+      font-size: 0.78rem;
+      color: rgba(245,241,234,0.6);
+      margin-bottom: 1.25rem;
+      font-style: italic;
+      line-height: 1.4;
+    }
+    .tier-card ul {
+      list-style: none;
+      display: flex; flex-direction: column;
+      gap: 0.5rem;
+      padding-top: 1rem;
+      border-top: 1px solid rgba(245,241,234,0.12);
+    }
+    .tier-card ul li {
+      font-size: 0.82rem;
+      color: rgba(245,241,234,0.85);
+      padding-left: 1.1rem;
+      position: relative;
+      line-height: 1.45;
+    }
+    .tier-card ul li::before {
+      content: '';
+      position: absolute;
+      left: 0; top: 0.5em;
+      width: 6px; height: 1px;
+      background: rgba(245,241,234,0.5);
+    }
+
+    /* ---------- OPERATING SYSTEMS ---------- */
+    .os-head { max-width: 46rem; margin-bottom: 2.5rem; }
+    .os-head .eyebrow { margin-bottom: 1rem; }
+    .os-head h2 { margin-bottom: 1rem; }
+    .os-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; }
+    @media (max-width: 900px) { .os-grid { grid-template-columns: 1fr; } }
+    .os-card {
+      display: flex; flex-direction: column;
+      padding: 1.65rem 1.4rem 1.5rem;
+      background: var(--parchment);
+      border: 1px solid var(--rule);
+      border-radius: 12px;
+      position: relative;
+      overflow: hidden;
+    }
+    .os-card::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0;
+      width: 4px; height: 100%;
+      background: var(--accent);
+    }
+    .os-repo {
+      font-family: 'Courier New', monospace;
+      font-size: 0.78rem;
+      color: var(--accent);
+      font-weight: 600;
+      margin-bottom: 0.55rem;
+      letter-spacing: 0.02em;
+    }
+    .os-card h4 {
+      font-family: 'Fraunces', serif;
+      font-size: 1.15rem;
+      color: var(--ink);
+      margin-bottom: 0.3rem;
+      line-height: 1.2;
+    }
+    .os-card .os-founder {
+      font-size: 0.8rem;
+      color: var(--ink-mute);
+      margin-bottom: 1rem;
+      font-style: italic;
+    }
+    .os-meta {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0.5rem;
+      padding-top: 0.9rem;
+      border-top: 1px solid var(--rule);
+      margin-top: auto;
+    }
+    .os-meta .m {
+      display: flex; flex-direction: column;
+      font-size: 0.68rem;
+      color: var(--ink-mute);
+    }
+    .os-meta .m .m-label {
+      font-size: 0.6rem;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      font-weight: 600;
+      opacity: 0.7;
+      margin-bottom: 0.25rem;
+    }
+    .os-meta .m .m-value {
+      font-family: 'Inter', sans-serif;
+      font-size: 0.75rem;
+      color: var(--ink);
+      font-weight: 500;
+    }
+    .os-status {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+      font-family: 'Inter', sans-serif;
+      font-size: 0.66rem;
+      font-weight: 700;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      padding: 0.28rem 0.55rem;
+      border-radius: 4px;
+      margin-bottom: 0.9rem;
+      align-self: flex-start;
+    }
+    .os-status.active { background: rgba(47,93,78,0.15); color: #2F5D4E; }
+    .os-status.scaffolded { background: rgba(184,132,59,0.15); color: #A46F26; }
+    .os-status.pre { background: rgba(30,58,95,0.1); color: var(--accent); }
+    .os-note {
+      margin-top: 1.75rem;
+      font-size: 0.85rem;
+      color: var(--ink-mute);
+      font-style: italic;
+      max-width: 46rem;
+    }
+
+    /* ---------- APEX LADDER (kept for reference, unused after replace) ---------- */
     .apex-wrap {
       background: var(--ink);
       color: var(--parchment);
@@ -681,7 +1194,8 @@
         <a href="#thesis">The flow</a>
         <a href="#hierarchy">Value ladder</a>
         <a href="#products">Inside</a>
-        <a href="#apex">Apex</a>
+        <a href="#platform">Platform</a>
+        <a href="#tiers">Tiers</a>
         <a href="#intake">Start intake</a>
       </nav>
     </div>
@@ -706,27 +1220,28 @@
         </div>
 
         <aside class="hero-card">
-          <div class="h-eyebrow">The deeper truth</div>
-          <h4>The whole business is one closed loop.</h4>
-          <div class="flow-cycle" aria-label="Relationships → Opportunities → Revenue → Media, cycled">
-            <div class="step">
-              <span class="idx">01</span>
-              <span class="name">Relationships</span>
+          <div class="h-eyebrow">TOJ Sports AI Brain</div>
+          <h4>A branch of the TOJ operational brain. A federation of trainer brands.</h4>
+          <div class="brain-list">
+            <div class="brain-node">
+              <span class="brain-label">Shared standards</span>
+              <span class="brain-value">Role-model · Evaluation · AC flag · Rate card · DNC</span>
             </div>
-            <div class="step">
-              <span class="idx">02</span>
-              <span class="name">Opportunities</span>
+            <div class="brain-node">
+              <span class="brain-label">Master intake SOP</span>
+              <span class="brain-value">7-step trainer onboarding · ~14 days sign-to-contribute</span>
             </div>
-            <div class="step">
-              <span class="idx">03</span>
-              <span class="name">Revenue</span>
+            <div class="brain-node">
+              <span class="brain-label">Operational Transcript</span>
+              <span class="brain-value">Cross-brand pattern log · compounds every Monday</span>
             </div>
-            <div class="step">
-              <span class="idx">04</span>
-              <span class="name">Media</span>
+            <div class="brain-node">
+              <span class="brain-label">Federation infra</span>
+              <span class="brain-value">Prospect Edge affiliate · Stripe entity · IP + content rights</span>
             </div>
-            <p class="footnote">Media multiplies relationships. The loop closes and compounds.</p>
           </div>
+          <div class="brain-branch">branch of · TOJ Network Brain</div>
+          <p class="brain-footnote">No apex. No hierarchy. Peer brands standing on the same standard — compounding into a federation smarter than any single brand.</p>
         </aside>
       </div>
     </div>
@@ -771,13 +1286,13 @@
           <div class="cycle-cell">
             <div class="step-num">04</div>
             <h4>Media</h4>
-            <p>Subject Report drops, athlete edits, trainer content — the visible evidence that feeds new relationships.</p>
+            <p>Subject Medias drops, athlete edits, trainer content — the visible evidence that feeds new relationships.</p>
             <span class="cycle-arrow right">↑</span>
           </div>
           <div class="cycle-cell">
             <div class="step-num">03</div>
             <h4>Revenue</h4>
-            <p>Roster fees, Subject Report bookings, trainer engagements, blueprint sales. What funds the next round of media.</p>
+            <p>Roster fees, automated bookings, trainer engagements, blueprint sales. What funds the next round of media.</p>
           </div>
         </div>
       </div>
@@ -868,29 +1383,29 @@
     <div class="container">
       <div class="products-head">
         <div class="eyebrow navy">Inside TOJ Sports</div>
-        <h2>Four products. One infrastructure.</h2>
+        <h2>Four products. One shared infrastructure.</h2>
         <p class="lede">
-          Each product sits inside the Premium tier — its own GHL sub-account, its own
-          operating brain repo, its own configured stack. All four connect back through the
-          master intake and share the same Operational Transcript.
+          These are the products that sit inside TOJ Sports itself — the infrastructure every
+          tier plugs into. Athletes engage with them through their roster access. Trainer
+          brands operate them through their own OS. The Network Brain governs the standard behind them.
         </p>
       </div>
 
       <div class="products-grid">
         <div class="product-card">
           <div class="p-eyebrow">Roster · Community · Brand</div>
-          <h3>Athletes Certified</h3>
+          <h3>CollegeFootballRecruiting.com</h3>
           <p>
             The verified-athlete roster product. Public-facing brand visibility for signed
             athletes, gated on consent. The community engine that connects peers, coaches,
-            recruiters, and sponsors around a single credible list.
+            recruiters, and sponsors around a single credible list — going global.
           </p>
           <div class="p-detail"><strong>Delivers</strong> — Community · Visibility · Brand</div>
         </div>
 
         <div class="product-card">
           <div class="p-eyebrow">Evaluation · Recruiting media</div>
-          <h3>Subject Report</h3>
+          <h3>Prospect Edge</h3>
           <p>
             Prospect Edge evaluation under the TOJ × Optimum Grading affiliate. The
             "verified by film" credibility infrastructure — an evaluation with structure,
@@ -912,16 +1427,153 @@
 
         <div class="product-card">
           <div class="p-eyebrow">Full operating brain</div>
-          <h3>Trainer Operating Brains</h3>
+          <h3>Trainer Operating Systems</h3>
           <p>
-            Full stacks for apex and high-audience trainers —
-            <code style="font-family:'Courier New',monospace;font-size:0.82em;color:var(--accent);">hooks-os</code> (Margin),
-            <code style="font-family:'Courier New',monospace;font-size:0.82em;color:var(--accent);">patterson-os</code> (Max),
-            <code style="font-family:'Courier New',monospace;font-size:0.82em;color:var(--accent);">youngblood-os</code> (Joshua),
-            and future apex trainers. Each brain runs the full GHL stack, content cadence,
-            athlete pipeline, and advocacy log for one trainer's business.
+            A dedicated operating system per trainer brand —
+            <code style="font-family:'Courier New',monospace;font-size:0.82em;color:var(--accent);">&lt;brand&gt;-os</code>.
+            Each OS runs the full GHL stack, content cadence, athlete pipeline, and advocacy
+            log for one trainer's business, inheriting all shared standards from the Network Brain.
           </p>
-          <div class="p-detail"><strong>Delivers</strong> — All eight rungs, per trainer</div>
+          <div class="p-detail"><strong>Delivers</strong> — All eight rungs, per trainer brand</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ OPTIMUM GRADING 360 / PROSPECT EDGE / COLLEGE DIRECTORY ============ -->
+  <section id="platform">
+    <div class="container">
+      <div class="platform-head">
+        <div class="eyebrow navy">Powered by OptimumGrading360</div>
+        <h2>Every client gets the platform behind the standard.</h2>
+        <p class="lede">
+          Beyond the individual brand, every athlete and trainer on TOJ Sports gets access
+          to the underlying evaluation and directory infrastructure. Prospect Edge is where
+          the film gets graded. The College Directory is where the opportunities live.
+        </p>
+      </div>
+
+      <div class="platform-grid">
+        <!-- Sample athlete profile card mockup -->
+        <div>
+          <div class="athlete-card">
+            <div class="athlete-top">
+              <div class="athlete-photo">GN</div>
+              <div class="athlete-info">
+                <h4>GAVIN NORTH <span class="jersey">#25</span></h4>
+                <div class="athlete-meta">
+                  <span class="position">DB</span>
+                  <span>Class of 2027</span>
+                  <span class="stars">★★★☆☆</span>
+                  <span>3 Star Recruit</span>
+                </div>
+                <div class="athlete-commit">
+                  <span class="flag"></span>
+                  <span>Committed to <strong>University of Wisconsin</strong> · 06-26-2026</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="athlete-stats">
+              <div class="stat"><span class="stat-val">5'9"</span><span class="stat-label">Height</span></div>
+              <div class="stat"><span class="stat-val">200</span><span class="stat-label">Weight</span></div>
+              <div class="stat"><span class="stat-val">4.32</span><span class="stat-label">40 Time</span></div>
+              <div class="stat"><span class="stat-val">3.50</span><span class="stat-label">GPA</span></div>
+              <div class="stat"><span class="stat-val">26</span><span class="stat-label">ACT</span></div>
+              <div class="stat"><span class="stat-val">28</span><span class="stat-label">Offers</span></div>
+            </div>
+
+            <div class="athlete-offers">
+              <div class="offers-title"><span class="accent">◆</span> Offers (28)</div>
+              <div class="offers-grid">
+                <div class="offer-chip">AC</div>
+                <div class="offer-chip">Y</div>
+                <div class="offer-chip">MU</div>
+                <div class="offer-chip">W</div>
+                <div class="offer-chip">GT</div>
+                <div class="offer-chip">UGA</div>
+                <div class="offer-chip">UT</div>
+                <div class="offer-chip">MIA</div>
+                <div class="offer-chip">FSU</div>
+                <div class="offer-chip">MSU</div>
+                <div class="offer-chip">UCLA</div>
+                <div class="offer-chip">OSU</div>
+                <div class="offer-chip">O</div>
+                <div class="offer-chip">BSU</div>
+                <div class="offer-chip">USC</div>
+                <div class="offer-chip">Cal</div>
+                <div class="offer-chip">SMU</div>
+                <div class="offer-chip">UTSA</div>
+                <div class="offer-chip">IU</div>
+                <div class="offer-chip more">+9</div>
+              </div>
+            </div>
+
+            <div class="athlete-footer">
+              <div>
+                <div class="footer-label"><span style="color:var(--accent);">🔗</span> Player Links</div>
+                <div class="footer-links">
+                  <div><span>X</span> · @ograding</div>
+                  <div><span>IG</span> · @optimumgrading</div>
+                  <div><span>TT</span> · @ograding</div>
+                </div>
+              </div>
+              <div>
+                <div class="footer-label"><span style="color:var(--accent);">📎</span> Attachments (1)</div>
+                <div class="footer-links">
+                  <div>Workout Video.mp4</div>
+                  <div style="opacity:0.65;">Uploaded 06-25-2026</div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <p class="athlete-caption">
+            Live profile format on <a href="https://prospectedge.optimumgrading.com/app/dashboard/home" target="_blank" rel="noopener">prospectedge.optimumgrading.com</a>
+            — sample view.
+          </p>
+        </div>
+
+        <!-- Copy + features -->
+        <div class="platform-copy">
+          <div class="eyebrow navy">The infrastructure underneath</div>
+          <h3>Two platforms, one credential trail.</h3>
+          <p>
+            Every athlete accepted onto the roster gets a Prospect Edge profile — an evaluation
+            with structure, film, verified physicals, academic record, and an offers ledger.
+            This is what recruiters actually check.
+          </p>
+          <p>
+            Alongside the profile, every client gets the College Directory — the working list
+            of coaches across every level of college football, from FBS through NAIA, with
+            academic requirements and a live database that flips the recruiting flow: colleges
+            can find the athlete, not the other way around.
+          </p>
+
+          <div class="platform-features">
+            <h5>Prospect Edge · What's on the profile</h5>
+            <ul>
+              <li><strong>Verified physicals</strong> — height, weight, 40 time, squat, bench</li>
+              <li><strong>Academic record</strong> — GPA, ACT, SAT, transcript uploads</li>
+              <li><strong>Film library</strong> — workout video, highlight link, on-field transcript</li>
+              <li><strong>Offers ledger</strong> — every offer tracked, with the commit path</li>
+              <li><strong>Player links</strong> — social handles rolled into one credential trail</li>
+            </ul>
+          </div>
+
+          <div class="platform-features">
+            <h5>College Directory · What every client gets</h5>
+            <ul>
+              <li><strong>Coach contacts</strong> — NAIA · D3 · D2 · D1 · FCS · FBS</li>
+              <li><strong>Academic requirements</strong> — per-school minimums, application deadlines</li>
+              <li><strong>Live athlete database</strong> — colleges browse the roster, not the other way around</li>
+              <li><strong>Cross-referenced</strong> — athletic + academic fit filters</li>
+            </ul>
+          </div>
+
+          <div class="platform-links">
+            <a class="platform-link" href="https://www.optimumgrading.com/" target="_blank" rel="noopener">optimumgrading.com ↗</a>
+            <a class="platform-link" href="https://prospectedge.optimumgrading.com/app/dashboard/home" target="_blank" rel="noopener">prospectedge.optimumgrading.com ↗</a>
+          </div>
         </div>
       </div>
     </div>
@@ -943,12 +1595,12 @@
         <div class="who-card">
           <div class="w-eyebrow">Archetype 01</div>
           <h4>Signed Athletes</h4>
-          <p>Athletes accepted onto the Athletes Certified roster. Individual brand infrastructure, Subject Report on record, roster visibility.</p>
+          <p>Athletes accepted onto the CollegeFootballRecruiting.com roster. Individual brand infrastructure, Prospect Edge evaluation on record, College Directory access, roster visibility.</p>
         </div>
         <div class="who-card">
           <div class="w-eyebrow">Archetype 02</div>
-          <h4>Apex Trainers</h4>
-          <p>High-authority trainers running verified pipelines. Own operating brain repo, own GHL sub-account, own content and athlete cadence.</p>
+          <h4>Trainers</h4>
+          <p>Trainers running their own athlete pipeline — regardless of scale. Every trainer brand inherits the same standard and joins the same federation.</p>
         </div>
         <div class="who-card">
           <div class="w-eyebrow">Archetype 03</div>
@@ -964,54 +1616,131 @@
     </div>
   </section>
 
-  <!-- ============ APEX LADDER ============ -->
-  <section id="apex">
+  <!-- ============ THREE TIERS (B2B SaaS → B2C) ============ -->
+  <section id="tiers">
     <div class="container">
-      <div class="apex-wrap">
-        <div class="apex-head">
-          <div class="eyebrow">The apex layer</div>
-          <h2>Apex products live inside the avenue.</h2>
+      <div class="tiers-wrap">
+        <div class="tiers-head">
+          <div class="eyebrow">The business architecture</div>
+          <h2>Three tiers. One product. B2B SaaS that filters into B2C.</h2>
           <p>
-            Beyond the four infrastructure products, TOJ Sports houses the sold-through
-            apex products — the certified-lineage offers each apex trainer brings to market.
-            These are premium, priced, and structured against the same standard.
+            TOJ is a <strong>B2B SaaS company</strong> at its core — it sells operating brains,
+            standards, and federated infrastructure to trainer brands. Those trainer brands are
+            themselves businesses running athlete pipelines. And athletes are the <strong>B2C</strong>
+            endpoint where the value shows up on the field, in the transcript, and in the offers ledger.
           </p>
         </div>
 
-        <div class="apex-list">
-          <div class="apex-row available">
-            <div>
-              <div class="apex-name">Margin's Trainer Blueprint</div>
-              <div class="apex-owner">Certified-lineage product · sold to other trainers</div>
-            </div>
-            <div class="apex-price">$3,500 – $5,000</div>
+        <div class="b2b-b2c-band">
+          <div class="band-node"><span class="tag b2b">B2B</span> TOJ Network sells to Trainer Brands</div>
+          <span class="band-arrow">→</span>
+          <div class="band-node"><span class="tag b2b">B2B</span> Trainer Brand serves Athletes</div>
+          <span class="band-arrow">→</span>
+          <div class="band-node"><span class="tag b2c">B2C</span> Athlete engagement + roster</div>
+        </div>
+
+        <div class="tiers-grid">
+          <!-- Tier 01 — Athlete / Individual (B2C) -->
+          <div class="tier-card">
+            <div class="tier-num">Tier 01</div>
+            <div class="tier-role b2c">B2C · The endpoint</div>
+            <h4>Athlete / Individual</h4>
+            <div class="tier-tag">The end consumer. Where the recruiting outcome shows up.</div>
+            <ul>
+              <li>CollegeFootballRecruiting.com roster (verified)</li>
+              <li>Prospect Edge evaluation on record</li>
+              <li>College Directory access (NAIA → FBS)</li>
+              <li>Subject Medias rate card</li>
+              <li>Live database — colleges see the athlete</li>
+            </ul>
           </div>
 
-          <div class="apex-row available">
-            <div>
-              <div class="apex-name">Athletes Certified — Signed Roster</div>
-              <div class="apex-owner">The verified public list · roster membership</div>
-            </div>
-            <div class="apex-price">By application</div>
+          <!-- Tier 02 — Trainer Brand (Bridge) -->
+          <div class="tier-card mid">
+            <div class="tier-num">Tier 02</div>
+            <div class="tier-role bridge">B2B → B2C · The bridge</div>
+            <h4>Trainer Brand</h4>
+            <div class="tier-tag">The trainer is a business. TOJ sells to it; it serves athletes.</div>
+            <ul>
+              <li>Own operating brain repo (e.g. <code style="font-family:'Courier New',monospace;color:#B8CCE8;">hooks-os</code>)</li>
+              <li>Own GHL sub-account</li>
+              <li>Full content + athlete cadence</li>
+              <li>Certified-lineage products (blueprints, cohorts)</li>
+              <li>Direct plug into the federation</li>
+            </ul>
           </div>
 
-          <div class="apex-row available">
-            <div>
-              <div class="apex-name">Coached by Hooks</div>
-              <div class="apex-owner">Margin's personal apex coaching brand</div>
-            </div>
-            <div class="apex-price">Waitlist</div>
-          </div>
-
-          <div class="apex-row forthcoming">
-            <div>
-              <div class="apex-name">Premier Athletes Blueprint</div>
-              <div class="apex-owner">Sly Johnson · forthcoming</div>
-            </div>
-            <div class="apex-price">In build</div>
+          <!-- Tier 03 — Network / Federation (B2B Core) -->
+          <div class="tier-card top">
+            <div class="tier-num">Tier 03</div>
+            <div class="tier-role b2b">B2B core · The SaaS</div>
+            <h4>Network / Federation</h4>
+            <div class="tier-tag">The connective tissue that turns N trainer brands into a federation.</div>
+            <ul>
+              <li>TOJ-wide standards (role-model, evaluation, rate card)</li>
+              <li>Master intake SOP · 7-step trainer onboarding</li>
+              <li>Master Operational Transcript · cross-brand log</li>
+              <li>Prospect Edge affiliate · Optimum Grading</li>
+              <li>Stripe entity · IP + content rights</li>
+            </ul>
           </div>
         </div>
       </div>
+    </div>
+  </section>
+
+  <!-- ============ OPERATING SYSTEMS (the federation, made real) ============ -->
+  <section id="operating-systems">
+    <div class="container">
+      <div class="os-head">
+        <div class="eyebrow navy">The federation, made real</div>
+        <h2>Operating systems on the network.</h2>
+        <p class="lede">
+          Each trainer brand runs its own operating system — its own repo, its own GHL sub-account,
+          its own voice, its own athletes. All three (and every future OS) inherit the same standard
+          and contribute back to the master Operational Transcript every Monday.
+        </p>
+      </div>
+
+      <div class="os-grid">
+        <div class="os-card">
+          <div class="os-status active">● Active · founding brand</div>
+          <div class="os-repo">hooks-os</div>
+          <h4>Sky's The Limit (STL)</h4>
+          <div class="os-founder">Margin Hooks</div>
+          <div class="os-meta">
+            <div class="m"><span class="m-label">Region</span><span class="m-value">DFW, TX</span></div>
+            <div class="m"><span class="m-label">Wedge</span><span class="m-value">WR · trainer cohort</span></div>
+          </div>
+        </div>
+
+        <div class="os-card">
+          <div class="os-status scaffolded">◐ Scaffolded · pre-intake</div>
+          <div class="os-repo">youngblood-os</div>
+          <h4>Youngblood (TBD)</h4>
+          <div class="os-founder">Joshua Youngblood</div>
+          <div class="os-meta">
+            <div class="m"><span class="m-label">Region</span><span class="m-value">Saarland, DE</span></div>
+            <div class="m"><span class="m-label">Wedge</span><span class="m-value">Europe · 2028 Olympic</span></div>
+          </div>
+        </div>
+
+        <div class="os-card">
+          <div class="os-status pre">○ Pre-signing · pitch ready</div>
+          <div class="os-repo">patterson-os</div>
+          <h4>0routez</h4>
+          <div class="os-founder">Max Patterson</div>
+          <div class="os-meta">
+            <div class="m"><span class="m-label">Region</span><span class="m-value">NJ / NY</span></div>
+            <div class="m"><span class="m-label">Wedge</span><span class="m-value">Route spec · 300k audience</span></div>
+          </div>
+        </div>
+      </div>
+
+      <p class="os-note">
+        Every OS on the network is peer — no apex, no hierarchy. Standards flow down from
+        the Network Brain; patterns flow up from the trainer brands' Monday reviews.
+      </p>
     </div>
   </section>
 
@@ -1020,28 +1749,29 @@
     <div class="container">
       <div class="tier-grid">
         <div class="tier-copy">
-          <div class="eyebrow navy">The tier</div>
-          <h2>TOJ Sports is Premium.</h2>
+          <div class="eyebrow navy">Tier 02 · under the hood</div>
+          <h2>Every trainer brand runs on its own Premium stack.</h2>
           <p>
-            Every trainer client on TOJ Sports gets a dedicated Premium stack — not a
-            multi-tenant slot inside a shared app. That's what makes running all eight rungs
-            possible.
+            When a trainer joins the network, they don't get a slot inside a shared app —
+            they get a dedicated Premium stack. That's what makes running all eight rungs
+            of the value ladder possible, per brand.
           </p>
           <p>
-            The reason is structural: an apex trainer's business is complex enough that
-            one shared dashboard can't hold it. Their content cadence, athlete pipeline,
-            advocacy log, and monetization stack each need their own space.
+            The reason is structural: a trainer's business is complex enough that a shared
+            multi-tenant dashboard can't hold it. Their content cadence, athlete pipeline,
+            advocacy log, and monetization stack each need their own space — inheriting
+            standards, not sharing infrastructure.
           </p>
         </div>
 
         <div class="tier-stack">
-          <div class="stack-eyebrow">Per apex trainer, on Premium</div>
+          <div class="stack-eyebrow">Per trainer brand, on Tier 02</div>
           <ul>
             <li><span>Dedicated GHL sub-account</span><span class="tag">Own tenant</span></li>
             <li><span>Own operating brain repo</span><span class="tag">Own SOPs</span></li>
             <li><span>Configured content cadence</span><span class="tag">Own calendar</span></li>
             <li><span>Athlete pipeline + advocacy log</span><span class="tag">Own data</span></li>
-            <li><span>Monetization + apex product stack</span><span class="tag">Own offers</span></li>
+            <li><span>Monetization + certified-lineage stack</span><span class="tag">Own offers</span></li>
           </ul>
         </div>
       </div>
@@ -1089,7 +1819,7 @@
           </div>
           <div class="tr-row">
             <div>Roster / portfolio</div>
-            <div>Signed athletes &amp; apex trainers</div>
+            <div>Signed athletes &amp; trainer brands on the network</div>
           </div>
           <div class="tr-row">
             <div>Path forward</div>
@@ -1139,8 +1869,10 @@
             <li><a href="#thesis">The flow</a></li>
             <li><a href="#hierarchy">Value ladder</a></li>
             <li><a href="#products">Inside TOJ Sports</a></li>
-            <li><a href="#apex">Apex layer</a></li>
-            <li><a href="#tier">The tier</a></li>
+            <li><a href="#platform">OptimumGrading360</a></li>
+            <li><a href="#tiers">Three tiers</a></li>
+            <li><a href="#operating-systems">Operating systems</a></li>
+            <li><a href="#tier">Tier infrastructure</a></li>
             <li><a href="#intake">Start intake</a></li>
           </ul>
         </div>
