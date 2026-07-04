@@ -4,8 +4,6 @@
   "installCommand": "echo skipping-install-static-site",
   "buildCommand": "node scripts/build-lanes.js",
   "outputDirectory": "public",
-  "cleanUrls": true,
-  "trailingSlash": false,
   "rewrites": [
     {
       "source": "/",
