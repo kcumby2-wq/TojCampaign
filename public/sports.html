@@ -1179,6 +1179,283 @@
       color: rgba(245,241,234,0.45);
       flex-wrap: wrap; gap: 1rem;
     }
+
+    /* ---------- THE RECORD (narrative gravity) ---------- */
+    .record-wrap {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: clamp(2rem, 5vw, 4.5rem);
+      align-items: start;
+    }
+    @media (max-width: 900px) { .record-wrap { grid-template-columns: 1fr; } }
+    .record-copy .eyebrow { margin-bottom: 1rem; }
+    .record-copy h2 { margin-bottom: 1.5rem; }
+    .record-copy p {
+      font-size: 1.05rem;
+      color: var(--ink-soft);
+      line-height: 1.65;
+      margin-bottom: 1.1rem;
+      max-width: 34rem;
+    }
+    .record-copy p:first-of-type::first-letter {
+      font-family: 'Fraunces', serif;
+      font-size: 3.4rem;
+      font-weight: 600;
+      color: var(--accent);
+      float: left;
+      line-height: 0.85;
+      padding-right: 0.6rem;
+      padding-top: 0.35rem;
+    }
+    .record-quote {
+      background: var(--parchment-2);
+      border-radius: 14px;
+      padding: 2rem 1.85rem;
+      border-left: 4px solid var(--accent);
+      position: relative;
+    }
+    .record-quote::before {
+      content: '&#8220;';
+      position: absolute;
+      top: -0.3rem;
+      left: 1.1rem;
+      font-family: 'Fraunces', serif;
+      font-size: 4rem;
+      color: var(--accent);
+      opacity: 0.35;
+      line-height: 1;
+    }
+    .record-quote blockquote {
+      font-family: 'Fraunces', serif;
+      font-size: 1.35rem;
+      line-height: 1.35;
+      color: var(--ink);
+      margin-bottom: 1.25rem;
+      font-style: italic;
+      font-weight: 500;
+      max-width: 22rem;
+    }
+    .record-quote cite {
+      font-style: normal;
+      display: flex; align-items: center; gap: 0.6rem;
+      font-family: 'Inter', sans-serif;
+      font-size: 0.82rem;
+      color: var(--ink-mute);
+    }
+    .record-quote cite strong { color: var(--ink); font-weight: 600; }
+    .record-quote cite .dot { width: 5px; height: 5px; border-radius: 999px; background: var(--accent); }
+    .record-facts {
+      display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0;
+      margin-top: 1.5rem;
+      background: var(--parchment);
+      border: 1px solid var(--rule);
+      border-radius: 10px;
+      overflow: hidden;
+    }
+    @media (max-width: 540px) { .record-facts { grid-template-columns: 1fr; } }
+    .record-facts .fact { padding: 1.1rem 1.15rem; border-right: 1px solid var(--rule); }
+    .record-facts .fact:last-child { border-right: 0; }
+    @media (max-width: 540px) {
+      .record-facts .fact { border-right: 0; border-bottom: 1px solid var(--rule); }
+      .record-facts .fact:last-child { border-bottom: 0; }
+    }
+    .record-facts .fact-num {
+      font-family: 'Fraunces', serif;
+      font-size: 1.9rem;
+      font-weight: 600;
+      color: var(--accent);
+      line-height: 1;
+      margin-bottom: 0.35rem;
+      letter-spacing: -0.02em;
+    }
+    .record-facts .fact-label {
+      font-size: 0.72rem;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: var(--ink-mute);
+      font-weight: 600;
+    }
+
+    /* ---------- SEASON CADENCE ---------- */
+    .season-head { max-width: 46rem; margin-bottom: 3rem; }
+    .season-head .eyebrow { margin-bottom: 1rem; }
+    .season-head h2 { margin-bottom: 1.25rem; }
+    .season-grid {
+      display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.9rem;
+    }
+    @media (max-width: 900px) { .season-grid { grid-template-columns: repeat(2, 1fr); } }
+    @media (max-width: 520px) { .season-grid { grid-template-columns: 1fr; } }
+    .season-cell {
+      display: flex; flex-direction: column;
+      padding: 1.65rem 1.4rem 1.5rem;
+      background: var(--parchment);
+      border: 1px solid var(--rule);
+      border-radius: 12px;
+      min-height: 240px;
+      transition: transform 0.2s ease, box-shadow 0.2s ease;
+    }
+    .season-cell:hover {
+      transform: translateY(-3px);
+      box-shadow: 0 20px 40px -25px rgba(30, 58, 95, 0.35);
+    }
+    .season-cell .phase {
+      font-family: 'Fraunces', serif;
+      font-size: 0.78rem;
+      color: var(--ink-mute);
+      letter-spacing: 0.02em;
+      margin-bottom: 0.35rem;
+      text-transform: uppercase;
+      font-weight: 600;
+    }
+    .season-cell h4 {
+      font-family: 'Fraunces', serif;
+      font-size: 1.1rem;
+      color: var(--ink);
+      line-height: 1.2;
+      margin-bottom: 0.85rem;
+    }
+    .season-cell ul {
+      list-style: none;
+      display: flex; flex-direction: column;
+      gap: 0.4rem;
+      flex: 1;
+    }
+    .season-cell ul li {
+      font-size: 0.82rem;
+      color: var(--ink-mute);
+      padding-left: 1rem;
+      position: relative;
+      line-height: 1.4;
+    }
+    .season-cell ul li::before {
+      content: '';
+      position: absolute;
+      left: 0; top: 0.5em;
+      width: 5px; height: 5px;
+      background: var(--accent);
+      border-radius: 999px;
+    }
+    .season-cell .to-tag {
+      margin-top: 0.85rem;
+      padding-top: 0.85rem;
+      border-top: 1px solid var(--rule);
+      font-family: 'Inter', monospace;
+      font-size: 0.68rem;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--accent);
+      font-weight: 600;
+    }
+    .season-summary {
+      margin-top: 2.5rem;
+      padding: 1.2rem 1.5rem;
+      background: var(--parchment-2);
+      border-radius: 10px;
+      font-family: 'Fraunces', serif;
+      font-size: 1rem;
+      color: var(--ink);
+      max-width: 52rem;
+      font-style: italic;
+    }
+
+    /* ---------- ROSTER WINDOWS ---------- */
+    .windows-wrap {
+      background: var(--ink);
+      color: var(--parchment);
+      border-radius: 20px;
+      padding: clamp(2.25rem, 4vw, 3rem);
+    }
+    .windows-head { max-width: 46rem; margin-bottom: 2rem; }
+    .windows-head .eyebrow { color: rgba(245,241,234,0.55); margin-bottom: 1rem; }
+    .windows-head h2 { color: var(--parchment); margin-bottom: 1rem; }
+    .windows-head p { color: rgba(245,241,234,0.72); max-width: 44rem; }
+    .windows-list {
+      display: flex; flex-direction: column; gap: 0.75rem;
+      margin-bottom: 2rem;
+    }
+    .window-row {
+      display: grid; grid-template-columns: auto 1fr auto auto;
+      gap: 1.25rem; align-items: center;
+      padding: 1.15rem 1.25rem;
+      background: rgba(245,241,234,0.04);
+      border: 1px solid rgba(245,241,234,0.12);
+      border-radius: 10px;
+    }
+    @media (max-width: 720px) { .window-row { grid-template-columns: auto 1fr; } }
+    .window-row.live { border-color: rgba(30,58,95,0.75); background: rgba(30,58,95,0.22); }
+    .window-row.open { border-color: rgba(245,241,234,0.32); }
+    .window-row .win-status {
+      font-family: 'Fraunces', serif;
+      font-size: 0.85rem;
+      color: rgba(245,241,234,0.55);
+      min-width: 1.4rem;
+    }
+    .window-row.live .win-status { color: #B8CCE8; }
+    .window-row.open .win-status { color: #E8C48A; }
+    .window-row .win-body { display: flex; flex-direction: column; }
+    .window-row .win-name {
+      font-family: 'Fraunces', serif;
+      font-size: 1.02rem;
+      color: var(--parchment);
+      font-weight: 500;
+      margin-bottom: 0.15rem;
+    }
+    .window-row .win-meta {
+      font-size: 0.75rem;
+      color: rgba(245,241,234,0.55);
+      font-family: 'Inter', sans-serif;
+    }
+    .window-row .win-timing {
+      font-family: 'Inter', monospace;
+      font-size: 0.78rem;
+      color: rgba(245,241,234,0.75);
+      letter-spacing: 0.02em;
+    }
+    @media (max-width: 720px) { .window-row .win-timing { grid-column: 2; } }
+    .window-row .win-tag {
+      font-family: 'Inter', sans-serif;
+      font-size: 0.66rem;
+      font-weight: 700;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      padding: 0.3rem 0.65rem;
+      border-radius: 4px;
+      white-space: nowrap;
+    }
+    .window-row.full .win-tag { background: rgba(245,241,234,0.1); color: rgba(245,241,234,0.55); }
+    .window-row.live .win-tag { background: rgba(30,58,95,0.55); color: #B8CCE8; }
+    .window-row.open .win-tag { background: rgba(30, 58, 95, 0.9); color: #FFF; }
+    @media (max-width: 720px) { .window-row .win-tag { grid-column: 2; justify-self: start; } }
+    .windows-cta {
+      display: flex; align-items: center; justify-content: space-between; gap: 1rem;
+      padding: 1.4rem 1.5rem;
+      background: rgba(245,241,234,0.06);
+      border: 1px solid rgba(245,241,234,0.15);
+      border-radius: 12px;
+      flex-wrap: wrap;
+    }
+    .windows-cta .cta-msg {
+      font-family: 'Fraunces', serif;
+      color: var(--parchment);
+      font-size: 1rem;
+      font-style: italic;
+      max-width: 32rem;
+    }
+    .windows-cta a {
+      display: inline-flex; align-items: center; gap: 0.4rem;
+      padding: 0.75rem 1.35rem;
+      background: var(--accent);
+      color: #fff;
+      border-radius: 999px;
+      font-family: 'Inter', sans-serif;
+      font-weight: 600;
+      font-size: 0.88rem;
+      text-decoration: none;
+      transition: background 0.15s ease;
+      white-space: nowrap;
+    }
+    .windows-cta a:hover { background: var(--accent-2); }
+
   </style>
 </head>
 <body>
@@ -1191,12 +1468,12 @@
         <span class="lane-badge"><span class="dot"></span> Avenue 01 · Sports</span>
       </div>
       <nav class="primary">
-        <a href="#thesis">The flow</a>
-        <a href="#hierarchy">Value ladder</a>
+        <a href="#record">The record</a>
+        <a href="#season">Season cadence</a>
         <a href="#products">Inside</a>
         <a href="#platform">Platform</a>
-        <a href="#tiers">Tiers</a>
-        <a href="#intake">Start intake</a>
+        <a href="#windows">Roster windows</a>
+        <a href="#intake">Join</a>
       </nav>
     </div>
   </header>
@@ -1207,16 +1484,19 @@
       <div class="hero-grid">
         <div>
           <div class="eyebrow navy">TOJ Sports · sports.tojcampaign.com</div>
-          <h1>Where sport meets <em>structure</em>.</h1>
+          <h1>You compete.<br/>We build the <em>record</em>.</h1>
           <p class="lede">
             The operating standard for athletes, trainers, sports media creators, and
-            sports-adjacent organizations. Every rung — lead generation, sales, recruiting,
-            media, visibility, community, brand, authority — runs under one intelligence layer,
-            and shows up on the other side as personal.
+            sports-adjacent organizations. Every rep, every rep-out, every offer — logged,
+            verified, tied to a record recruiters and scouts can actually trust. Highlight
+            reels don&rsquo;t compound. Standards do.
+          </p>
+          <p class="lede" style="font-family: 'Fraunces', serif; font-style: italic; color: var(--accent); font-size: 1rem; margin-top: 0.85rem; max-width: 42rem;">
+            Highlights fade. The record compounds.
           </p>
           <div class="hero-cta">
-            <a href="#intake" class="btn primary">Start intake <span class="arrow">→</span></a>
-            <a href="#hierarchy" class="btn ghost">See the value ladder</a>
+            <a href="#windows" class="btn primary">See the roster windows <span class="arrow">→</span></a>
+            <a href="#season" class="btn ghost">See the season cadence</a>
           </div>
         </div>
 
@@ -1243,6 +1523,63 @@
           </div>
           <p class="brain-footnote">Every athlete, trainer, and organization on TOJ gets what feels like personal help — because the intelligence behind it never stops doing the reps.</p>
         </aside>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ THE RECORD (narrative gravity) ============ -->
+  <section id="record">
+    <div class="container">
+      <div class="record-wrap">
+        <div class="record-copy">
+          <div class="eyebrow navy">What the record actually is</div>
+          <h2>Highlight reels don&rsquo;t compound. The record does.</h2>
+          <p>
+            A highlight reel gets a scout to hit play. A record gets a scout to make the call.
+            The gap between the two is film discipline, coach outreach that lands, an
+            evaluation with structure, and a Player Transcript recruiters can actually verify.
+            That&rsquo;s the standard.
+          </p>
+          <p>
+            On TOJ Sports, every signed athlete works under the same evaluation framework —
+            Prospect Edge grading, the CollegeFootballRecruiting.com roster, the College
+            Directory across seven division tiers. Trainers running their own operating
+            system inherit all of it on day one.
+          </p>
+          <p>
+            The upside isn&rsquo;t just offers. It&rsquo;s offers you can trust — because the
+            process behind them is documented, verified, and repeatable. When the next class
+            comes up, the standard doesn&rsquo;t reset. It compounds.
+          </p>
+        </div>
+
+        <div>
+          <div class="record-quote">
+            <blockquote>
+              &ldquo;My athletes&rsquo; offer sheets used to be highlight reels. Now
+              they&rsquo;re a track record.&rdquo;
+            </blockquote>
+            <cite>
+              <span class="dot"></span>
+              <span><strong>Trainer voice</strong> · Sky&rsquo;s The Limit &middot; founding brand on the network</span>
+            </cite>
+          </div>
+
+          <div class="record-facts">
+            <div class="fact">
+              <div class="fact-num">1</div>
+              <div class="fact-label">Standard applied<br/>per athlete</div>
+            </div>
+            <div class="fact">
+              <div class="fact-num">7</div>
+              <div class="fact-label">Division tiers<br/>covered (FBS &rarr; JUCO)</div>
+            </div>
+            <div class="fact">
+              <div class="fact-num">0</div>
+              <div class="fact-label">Unverified<br/>claims</div>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   </section>
@@ -1373,7 +1710,8 @@
 
       <p class="ladder-note">
         Every trainer and program on TOJ Sports has all eight rungs running underneath — even
-        when the client only asks for one.
+        when the athlete only signed up for one. That&rsquo;s how the record compounds instead
+        of resetting each season.
       </p>
     </div>
   </section>
@@ -1383,12 +1721,12 @@
     <div class="container">
       <div class="products-head">
         <div class="eyebrow navy">Inside TOJ Sports</div>
-        <h2>Four products. One shared standard behind them.</h2>
+        <h2>One record. Four surfaces. Every athlete.</h2>
         <p class="lede">
-          These are the products that sit inside TOJ Sports itself. Athletes engage with them
-          through their roster. Trainers and programs run them from their own environment. The
-          TOJ Network holds the standard behind each one, so what a scout, coach, or sponsor
-          receives feels consistent every single time.
+          It&rsquo;s not four separate tools. It&rsquo;s one operating layer that runs the
+          roster, the evaluation, the media, and the trainer infrastructure — behind every
+          athlete on the network. What a scout, coach, or sponsor sees on Monday is what
+          gets built into the record on Tuesday.
         </p>
       </div>
 
@@ -1580,6 +1918,73 @@
     </div>
   </section>
 
+
+  <!-- ============ SEASON CADENCE ============ -->
+  <section id="season">
+    <div class="container">
+      <div class="season-head">
+        <div class="eyebrow navy">The season cadence</div>
+        <h2>The record builds all year. Not just on game day.</h2>
+        <p class="lede">
+          Every phase of the sports calendar has a job. Pre-season sets baselines. In-season
+          ships evidence. Post-season converts that evidence to opportunity. Off-season
+          compounds the brand. The rhythm runs whether you&rsquo;re on the field or off it.
+        </p>
+      </div>
+
+      <div class="season-grid">
+        <div class="season-cell">
+          <div class="phase">Pre-season</div>
+          <h4>Baseline captured</h4>
+          <ul>
+            <li>Prospect Edge profile built</li>
+            <li>Verified physicals &amp; academic record</li>
+            <li>Film library baseline set</li>
+          </ul>
+          <div class="to-tag">Athlete &amp; trainer team</div>
+        </div>
+
+        <div class="season-cell">
+          <div class="phase">In-season</div>
+          <h4>Ships every week</h4>
+          <ul>
+            <li>Game film routed &amp; graded</li>
+            <li>Player Transcript updated</li>
+            <li>Coach outreach fires on cadence</li>
+          </ul>
+          <div class="to-tag">Coaches, scouts, sponsors</div>
+        </div>
+
+        <div class="season-cell">
+          <div class="phase">Post-season</div>
+          <h4>Roster spike</h4>
+          <ul>
+            <li>Camps &amp; showcases logged</li>
+            <li>Offers tracked in the ledger</li>
+            <li>Subject Report drops publicly</li>
+          </ul>
+          <div class="to-tag">Recruiters &amp; camps</div>
+        </div>
+
+        <div class="season-cell">
+          <div class="phase">Off-season</div>
+          <h4>Brand compounds</h4>
+          <ul>
+            <li>SubjectMedias content ships</li>
+            <li>Personal brand &amp; audience grow</li>
+            <li>Next season&rsquo;s build order set</li>
+          </ul>
+          <div class="to-tag">Personal brand &amp; followers</div>
+        </div>
+      </div>
+
+      <p class="season-summary">
+        &ldquo;The season doesn&rsquo;t stop building your record after the last whistle.
+        It just changes what it&rsquo;s recording.&rdquo;
+      </p>
+    </div>
+  </section>
+
   <!-- ============ WHO IT'S FOR ============ -->
   <section id="who">
     <div class="container">
@@ -1691,6 +2096,69 @@
   </section>
 
   <!-- ============ TRAINERS ON THE NETWORK (the federation, made real) ============ -->
+
+  <!-- ============ ROSTER WINDOWS ============ -->
+  <section id="windows">
+    <div class="container">
+      <div class="windows-wrap">
+        <div class="windows-head">
+          <div class="eyebrow">Roster windows</div>
+          <h2>Verified athlete rosters open by class year.</h2>
+          <p>
+            The CollegeFootballRecruiting.com roster stays small on purpose — every athlete
+            on it is verified against the standard, and every class year has a fixed number
+            of spots. When a window closes, the record is locked; when the next opens,
+            applications compete.
+          </p>
+        </div>
+
+        <div class="windows-list">
+          <div class="window-row full">
+            <span class="win-status">&#10003;</span>
+            <div class="win-body">
+              <div class="win-name">Class of 2026</div>
+              <div class="win-meta">Signed athletes on record &middot; roster locked</div>
+            </div>
+            <div class="win-timing">2026</div>
+            <span class="win-tag">Full</span>
+          </div>
+          <div class="window-row full">
+            <span class="win-status">&#10003;</span>
+            <div class="win-body">
+              <div class="win-name">Class of 2027</div>
+              <div class="win-meta">Signing period closed &middot; record archived</div>
+            </div>
+            <div class="win-timing">2027</div>
+            <span class="win-tag">Full</span>
+          </div>
+          <div class="window-row live">
+            <span class="win-status">&#9679;</span>
+            <div class="win-body">
+              <div class="win-name">Class of 2028</div>
+              <div class="win-meta">Currently onboarding &middot; live roster review</div>
+            </div>
+            <div class="win-timing">2028</div>
+            <span class="win-tag">Live now</span>
+          </div>
+          <div class="window-row open">
+            <span class="win-status">&#9675;</span>
+            <div class="win-body">
+              <div class="win-name">Class of 2029</div>
+              <div class="win-meta">Applications open &middot; verified applicants compete</div>
+            </div>
+            <div class="win-timing">Opens Q4 &rsquo;26</div>
+            <span class="win-tag">6 seats left</span>
+          </div>
+        </div>
+
+        <div class="windows-cta">
+          <div class="cta-msg">Class of 2029 is where the next standard gets set. Roster review is on a first-verified basis.</div>
+          <a href="#intake">Apply for the 2029 roster &rarr;</a>
+        </div>
+      </div>
+    </div>
+  </section>
+
   <section id="operating-systems">
     <div class="container">
       <div class="os-head">
@@ -1836,12 +2304,13 @@
     <div class="container">
       <div class="cta-wrap">
         <div>
-          <div class="cta-eyebrow">Ready to enter the roster</div>
-          <h2>Start the TOJ Sports intake.</h2>
+          <div class="cta-eyebrow">The record is the resume</div>
+          <h2>You put in the reps. Make sure they count.</h2>
           <p>
-            Whether you're an athlete looking to be evaluated, a trainer ready to run
-            the full stack, a media creator joining the Subject Medias team, or an
-            organization exploring a partnership — the intake is the same door.
+            Whether you&rsquo;re an athlete building the record, a trainer running the
+            operation behind athletes, a media creator on the SubjectSkillz path, or an
+            organization joining the federation — the door is the same. Behind it: verified
+            evaluation, roster visibility, and a track record that outlasts your last game.
           </p>
         </div>
         <div class="cta-actions">
@@ -1865,12 +2334,14 @@
           <ul>
             <li><a href="#thesis">The flow</a></li>
             <li><a href="#hierarchy">Value ladder</a></li>
+            <li><a href="#record">The record</a></li>
+            <li><a href="#season">Season cadence</a></li>
             <li><a href="#products">Inside TOJ Sports</a></li>
             <li><a href="#platform">OptimumGrading360</a></li>
+            <li><a href="#windows">Roster windows</a></li>
             <li><a href="#tiers">Three tiers</a></li>
-            <li><a href="#operating-systems">Operating systems</a></li>
-            <li><a href="#tier">Tier infrastructure</a></li>
-            <li><a href="#intake">Start intake</a></li>
+            <li><a href="#operating-systems">Trainer brands</a></li>
+            <li><a href="#intake">Join</a></li>
           </ul>
         </div>
         <div class="footer-col">

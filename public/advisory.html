@@ -1374,6 +1374,283 @@
       margin-top: 0.15rem;
     }
 
+
+    /* ---------- THE PIPELINE (narrative gravity) ---------- */
+    .pipeline-wrap {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: clamp(2rem, 5vw, 4.5rem);
+      align-items: start;
+    }
+    @media (max-width: 900px) { .pipeline-wrap { grid-template-columns: 1fr; } }
+    .pipeline-copy .eyebrow { margin-bottom: 1rem; }
+    .pipeline-copy h2 { margin-bottom: 1.5rem; }
+    .pipeline-copy p {
+      font-size: 1.05rem;
+      color: var(--ink-soft);
+      line-height: 1.65;
+      margin-bottom: 1.1rem;
+      max-width: 34rem;
+    }
+    .pipeline-copy p:first-of-type::first-letter {
+      font-family: 'Fraunces', serif;
+      font-size: 3.4rem;
+      font-weight: 600;
+      color: var(--accent);
+      float: left;
+      line-height: 0.85;
+      padding-right: 0.6rem;
+      padding-top: 0.35rem;
+    }
+    .pipeline-quote {
+      background: var(--parchment-2);
+      border-radius: 14px;
+      padding: 2rem 1.85rem;
+      border-left: 4px solid var(--accent);
+      position: relative;
+    }
+    .pipeline-quote::before {
+      content: '&#8220;';
+      position: absolute;
+      top: -0.3rem;
+      left: 1.1rem;
+      font-family: 'Fraunces', serif;
+      font-size: 4rem;
+      color: var(--accent);
+      opacity: 0.35;
+      line-height: 1;
+    }
+    .pipeline-quote blockquote {
+      font-family: 'Fraunces', serif;
+      font-size: 1.35rem;
+      line-height: 1.35;
+      color: var(--ink);
+      margin-bottom: 1.25rem;
+      font-style: italic;
+      font-weight: 500;
+      max-width: 22rem;
+    }
+    .pipeline-quote cite {
+      font-style: normal;
+      display: flex; align-items: center; gap: 0.6rem;
+      font-family: 'Inter', sans-serif;
+      font-size: 0.82rem;
+      color: var(--ink-mute);
+    }
+    .pipeline-quote cite strong { color: var(--ink); font-weight: 600; }
+    .pipeline-quote cite .dot { width: 5px; height: 5px; border-radius: 999px; background: var(--accent); }
+    .pipeline-facts {
+      display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0;
+      margin-top: 1.5rem;
+      background: var(--parchment);
+      border: 1px solid var(--rule);
+      border-radius: 10px;
+      overflow: hidden;
+    }
+    @media (max-width: 540px) { .pipeline-facts { grid-template-columns: 1fr; } }
+    .pipeline-facts .fact { padding: 1.1rem 1.15rem; border-right: 1px solid var(--rule); }
+    .pipeline-facts .fact:last-child { border-right: 0; }
+    @media (max-width: 540px) {
+      .pipeline-facts .fact { border-right: 0; border-bottom: 1px solid var(--rule); }
+      .pipeline-facts .fact:last-child { border-bottom: 0; }
+    }
+    .pipeline-facts .fact-num {
+      font-family: 'Fraunces', serif;
+      font-size: 1.9rem;
+      font-weight: 600;
+      color: var(--accent);
+      line-height: 1;
+      margin-bottom: 0.35rem;
+      letter-spacing: -0.02em;
+    }
+    .pipeline-facts .fact-label {
+      font-size: 0.72rem;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: var(--ink-mute);
+      font-weight: 600;
+    }
+
+    /* ---------- COHORT WEEK RHYTHM ---------- */
+    .week-head { max-width: 46rem; margin-bottom: 3rem; }
+    .week-head .eyebrow { margin-bottom: 1rem; }
+    .week-head h2 { margin-bottom: 1.25rem; }
+    .week-grid {
+      display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.9rem;
+    }
+    @media (max-width: 900px) { .week-grid { grid-template-columns: repeat(2, 1fr); } }
+    @media (max-width: 520px) { .week-grid { grid-template-columns: 1fr; } }
+    .week-cell {
+      display: flex; flex-direction: column;
+      padding: 1.65rem 1.4rem 1.5rem;
+      background: var(--parchment);
+      border: 1px solid var(--rule);
+      border-radius: 12px;
+      min-height: 240px;
+      transition: transform 0.2s ease, box-shadow 0.2s ease;
+    }
+    .week-cell:hover {
+      transform: translateY(-3px);
+      box-shadow: 0 20px 40px -25px rgba(184, 132, 59, 0.35);
+    }
+    .week-cell .day {
+      font-family: 'Fraunces', serif;
+      font-size: 0.78rem;
+      color: var(--ink-mute);
+      letter-spacing: 0.02em;
+      margin-bottom: 0.35rem;
+      text-transform: uppercase;
+      font-weight: 600;
+    }
+    .week-cell h4 {
+      font-family: 'Fraunces', serif;
+      font-size: 1.1rem;
+      color: var(--ink);
+      line-height: 1.2;
+      margin-bottom: 0.85rem;
+    }
+    .week-cell ul {
+      list-style: none;
+      display: flex; flex-direction: column;
+      gap: 0.4rem;
+      flex: 1;
+    }
+    .week-cell ul li {
+      font-size: 0.82rem;
+      color: var(--ink-mute);
+      padding-left: 1rem;
+      position: relative;
+      line-height: 1.4;
+    }
+    .week-cell ul li::before {
+      content: '';
+      position: absolute;
+      left: 0; top: 0.5em;
+      width: 5px; height: 5px;
+      background: var(--accent);
+      border-radius: 999px;
+    }
+    .week-cell .who-tag {
+      margin-top: 0.85rem;
+      padding-top: 0.85rem;
+      border-top: 1px solid var(--rule);
+      font-family: 'Inter', monospace;
+      font-size: 0.68rem;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--accent);
+      font-weight: 600;
+    }
+    .week-summary {
+      margin-top: 2.5rem;
+      padding: 1.2rem 1.5rem;
+      background: var(--parchment-2);
+      border-radius: 10px;
+      font-family: 'Fraunces', serif;
+      font-size: 1rem;
+      color: var(--ink);
+      max-width: 52rem;
+      font-style: italic;
+    }
+
+    /* ---------- COHORT WAVES ---------- */
+    .cw-wrap {
+      background: var(--ink);
+      color: var(--parchment);
+      border-radius: 20px;
+      padding: clamp(2.25rem, 4vw, 3rem);
+    }
+    .cw-head { max-width: 46rem; margin-bottom: 2rem; }
+    .cw-head .eyebrow { color: rgba(245,241,234,0.55); margin-bottom: 1rem; }
+    .cw-head h2 { color: var(--parchment); margin-bottom: 1rem; }
+    .cw-head p { color: rgba(245,241,234,0.72); max-width: 44rem; }
+    .cw-list {
+      display: flex; flex-direction: column; gap: 0.75rem;
+      margin-bottom: 2rem;
+    }
+    .cw-row {
+      display: grid; grid-template-columns: auto 1fr auto auto;
+      gap: 1.25rem; align-items: center;
+      padding: 1.15rem 1.25rem;
+      background: rgba(245,241,234,0.04);
+      border: 1px solid rgba(245,241,234,0.12);
+      border-radius: 10px;
+    }
+    @media (max-width: 720px) { .cw-row { grid-template-columns: auto 1fr; } }
+    .cw-row.live { border-color: rgba(184,132,59,0.75); background: rgba(184,132,59,0.22); }
+    .cw-row.open { border-color: rgba(245,241,234,0.32); }
+    .cw-row .cw-status {
+      font-family: 'Fraunces', serif;
+      font-size: 0.85rem;
+      color: rgba(245,241,234,0.55);
+      min-width: 1.4rem;
+    }
+    .cw-row.live .cw-status { color: #E8C48A; }
+    .cw-row.open .cw-status { color: #F5D48F; }
+    .cw-row .cw-body { display: flex; flex-direction: column; }
+    .cw-row .cw-name {
+      font-family: 'Fraunces', serif;
+      font-size: 1.02rem;
+      color: var(--parchment);
+      font-weight: 500;
+      margin-bottom: 0.15rem;
+    }
+    .cw-row .cw-meta {
+      font-size: 0.75rem;
+      color: rgba(245,241,234,0.55);
+      font-family: 'Inter', sans-serif;
+    }
+    .cw-row .cw-timing {
+      font-family: 'Inter', monospace;
+      font-size: 0.78rem;
+      color: rgba(245,241,234,0.75);
+      letter-spacing: 0.02em;
+    }
+    @media (max-width: 720px) { .cw-row .cw-timing { grid-column: 2; } }
+    .cw-row .cw-tag {
+      font-family: 'Inter', sans-serif;
+      font-size: 0.66rem;
+      font-weight: 700;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      padding: 0.3rem 0.65rem;
+      border-radius: 4px;
+      white-space: nowrap;
+    }
+    .cw-row.full .cw-tag { background: rgba(245,241,234,0.1); color: rgba(245,241,234,0.55); }
+    .cw-row.live .cw-tag { background: rgba(184,132,59,0.55); color: #FFF; }
+    .cw-row.open .cw-tag { background: rgba(184,132,59,0.9); color: #FFF; }
+    @media (max-width: 720px) { .cw-row .cw-tag { grid-column: 2; justify-self: start; } }
+    .cw-cta {
+      display: flex; align-items: center; justify-content: space-between; gap: 1rem;
+      padding: 1.4rem 1.5rem;
+      background: rgba(245,241,234,0.06);
+      border: 1px solid rgba(245,241,234,0.15);
+      border-radius: 12px;
+      flex-wrap: wrap;
+    }
+    .cw-cta .cta-msg {
+      font-family: 'Fraunces', serif;
+      color: var(--parchment);
+      font-size: 1rem;
+      font-style: italic;
+      max-width: 32rem;
+    }
+    .cw-cta a {
+      display: inline-flex; align-items: center; gap: 0.4rem;
+      padding: 0.75rem 1.35rem;
+      background: var(--accent);
+      color: #fff;
+      border-radius: 999px;
+      font-family: 'Inter', sans-serif;
+      font-weight: 600;
+      font-size: 0.88rem;
+      text-decoration: none;
+      transition: background 0.15s ease;
+      white-space: nowrap;
+    }
+    .cw-cta a:hover { background: var(--accent-2); }
+
   </style>
 </head>
 <body>
@@ -1386,11 +1663,11 @@
         <span class="lane-badge"><span class="dot"></span> Avenue 04 · Advisory</span>
       </div>
       <nav class="primary">
-        <a href="#ecosystem">Ecosystem</a>
+        <a href="#pipeline">The pipeline</a>
         <a href="#program">6-week program</a>
+        <a href="#week-rhythm">Cohort rhythm</a>
         <a href="#instructors">Instructors</a>
-        <a href="#products">Funnel</a>
-        <a href="#tiers">Tiers</a>
+        <a href="#cohort-waves">Cohort waves</a>
         <a href="#intake">Join</a>
       </nav>
     </div>
@@ -1441,6 +1718,63 @@
           </div>
           <p class="brain-footnote">Every athlete, trainer, and organization on TOJ gets what feels like personal help — because the intelligence behind it never stops doing the reps.</p>
         </aside>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ THE PIPELINE (narrative gravity) ============ -->
+  <section id="pipeline">
+    <div class="container">
+      <div class="pipeline-wrap">
+        <div class="pipeline-copy">
+          <div class="eyebrow navy">What the pipeline actually is</div>
+          <h2>NIL without structure ends in mistakes.</h2>
+          <p>
+            Bad contracts. Missed taxes. Brand liabilities that follow you into college. The
+            athletes who avoid this don&rsquo;t figure it out alone — they get on a pipeline
+            with people who&rsquo;ve already seen the landmines. That&rsquo;s the standard.
+          </p>
+          <p>
+            Every mentee runs the same 6-week curriculum with the same three instructors.
+            Academic readiness with Carly Notaroberto. NIL foundations &amp; branding with
+            Kyron Cumby. Financial literacy with Nicole Bradley. Same rigor, adapted to each
+            mentee&rsquo;s arc — never a template dumped on you.
+          </p>
+          <p>
+            The upside isn&rsquo;t just readiness. It&rsquo;s a documented record — Player
+            Transcript, Prospect Edge profile, coursework certificate, financial-literacy
+            attestation — that recruiters, sponsors, and colleges can actually verify.
+            You walk into representation with the receipts already on record.
+          </p>
+        </div>
+
+        <div>
+          <div class="pipeline-quote">
+            <blockquote>
+              &ldquo;I got into college knowing exactly what I was signing. My parents got
+              a plan they could actually follow. That&rsquo;s the difference.&rdquo;
+            </blockquote>
+            <cite>
+              <span class="dot"></span>
+              <span><strong>Mentee voice</strong> &middot; SubjectSkillz cohort composite</span>
+            </cite>
+          </div>
+
+          <div class="pipeline-facts">
+            <div class="fact">
+              <div class="fact-num">6</div>
+              <div class="fact-label">Weeks<br/>of curriculum</div>
+            </div>
+            <div class="fact">
+              <div class="fact-num">3</div>
+              <div class="fact-label">Instructors,<br/>one standard</div>
+            </div>
+            <div class="fact">
+              <div class="fact-num">100%</div>
+              <div class="fact-label">Documented<br/>deliverables</div>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   </section>
@@ -1575,6 +1909,73 @@
           </div>
         </div>
       </div>
+    </div>
+  </section>
+
+
+  <!-- ============ COHORT WEEK RHYTHM ============ -->
+  <section id="week-rhythm">
+    <div class="container">
+      <div class="week-head">
+        <div class="eyebrow navy">The cohort week rhythm</div>
+        <h2>You don&rsquo;t figure it out alone. The rhythm carries you.</h2>
+        <p class="lede">
+          Every week of the 6-week cohort runs on the same four-touch cadence — module drop,
+          1:1 with the lead instructor, cohort session, weekly assessment. Nobody misses a
+          beat because the beat is already scheduled.
+        </p>
+      </div>
+
+      <div class="week-grid">
+        <div class="week-cell">
+          <div class="day">Monday</div>
+          <h4>Module drops</h4>
+          <ul>
+            <li>New lessons unlock in the LMS</li>
+            <li>Reading, video, worksheets ready</li>
+            <li>Weekly context set by lead instructor</li>
+          </ul>
+          <div class="who-tag">Every mentee</div>
+        </div>
+
+        <div class="week-cell">
+          <div class="day">Wednesday</div>
+          <h4>1:1 with instructor</h4>
+          <ul>
+            <li>Scheduled 1:1 with the week&rsquo;s lead</li>
+            <li>Working agenda &middot; session plan</li>
+            <li>Takeaway list logged to record</li>
+          </ul>
+          <div class="who-tag">Instructor + mentee</div>
+        </div>
+
+        <div class="week-cell">
+          <div class="day">Friday</div>
+          <h4>Cohort session</h4>
+          <ul>
+            <li>Live cohort call &middot; peer review</li>
+            <li>Instructor Q&amp;A &middot; case walks</li>
+            <li>Guest voices from the field</li>
+          </ul>
+          <div class="who-tag">Full cohort</div>
+        </div>
+
+        <div class="week-cell">
+          <div class="day">Sunday</div>
+          <h4>Assessment + progress</h4>
+          <ul>
+            <li>Weekly assessment on the LMS</li>
+            <li>Certificate progress updates</li>
+            <li>Next week&rsquo;s prep unlocked</li>
+          </ul>
+          <div class="who-tag">Certificate track</div>
+        </div>
+      </div>
+
+      <p class="week-summary">
+        &ldquo;Nobody drifts out of a rhythm they didn&rsquo;t know they were in. That&rsquo;s
+        the retention math.&rdquo;
+      </p>
     </div>
   </section>
 
@@ -1885,6 +2286,68 @@
   </section>
 
   <!-- ============ TRAINERS ON THE NETWORK (the federation, made real) ============ -->
+
+  <!-- ============ COHORT WAVES ============ -->
+  <section id="cohort-waves">
+    <div class="container">
+      <div class="cw-wrap">
+        <div class="cw-head">
+          <div class="eyebrow">Cohort waves</div>
+          <h2>Cohorts stay small on purpose.</h2>
+          <p>
+            Every wave is a small group of mentees moving through the 6-week curriculum together —
+            same start date, same instructor cadence, same peer chat. The waves stay small so
+            the cohort effect actually compounds; every mentee gets real 1:1 time.
+          </p>
+        </div>
+
+        <div class="cw-list">
+          <div class="cw-row full">
+            <span class="cw-status">&#10003;</span>
+            <div class="cw-body">
+              <div class="cw-name">Spring 2026 &middot; Founding cohort</div>
+              <div class="cw-meta">Founding mentees &middot; first record on file</div>
+            </div>
+            <div class="cw-timing">Spring &rsquo;26</div>
+            <span class="cw-tag">Full</span>
+          </div>
+          <div class="cw-row full">
+            <span class="cw-status">&#10003;</span>
+            <div class="cw-body">
+              <div class="cw-name">Summer 2026 &middot; Second wave</div>
+              <div class="cw-meta">Nicole Bradley anchor &middot; NIL money block</div>
+            </div>
+            <div class="cw-timing">Summer &rsquo;26</div>
+            <span class="cw-tag">Full</span>
+          </div>
+          <div class="cw-row live">
+            <span class="cw-status">&#9679;</span>
+            <div class="cw-body">
+              <div class="cw-name">Fall 2026 &middot; Currently onboarding</div>
+              <div class="cw-meta">Live cohort chat &middot; Week 2 of 6</div>
+            </div>
+            <div class="cw-timing">Fall &rsquo;26</div>
+            <span class="cw-tag">Live now</span>
+          </div>
+          <div class="cw-row open">
+            <span class="cw-status">&#9675;</span>
+            <div class="cw-body">
+              <div class="cw-name">Winter 2026 &middot; Applications open</div>
+              <div class="cw-meta">Student-athletes, parents, creators &middot; kicks off Nov</div>
+            </div>
+            <div class="cw-timing">Opens Nov &rsquo;26</div>
+            <span class="cw-tag">5 seats left</span>
+          </div>
+        </div>
+
+        <div class="cw-cta">
+          <div class="cta-msg">Winter 2026 is the last cohort before spring signing season. Application closes when the seats do.</div>
+          <a href="#intake">Apply for Winter 2026 &rarr;</a>
+        </div>
+      </div>
+    </div>
+  </section>
+
   <section id="instructors">
     <div class="container">
       <div class="os-head">
@@ -2067,12 +2530,13 @@
           <ul>
             <li><a href="#thesis">The flow</a></li>
             <li><a href="#hierarchy">Value ladder</a></li>
+            <li><a href="#pipeline">The pipeline</a></li>
             <li><a href="#ecosystem">The ecosystem</a></li>
             <li><a href="#program">The 6-week program</a></li>
+            <li><a href="#week-rhythm">Cohort rhythm</a></li>
             <li><a href="#instructors">Instructors</a></li>
+            <li><a href="#cohort-waves">Cohort waves</a></li>
             <li><a href="#products">The funnel</a></li>
-            <li><a href="#tiers">Three tiers</a></li>
-            <li><a href="#tier">Tier infrastructure</a></li>
             <li><a href="#intake">Join</a></li>
           </ul>
         </div>
