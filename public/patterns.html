@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Patterns Log — TOJ Campaign</title>
+  <meta name="description" content="Cross-network patterns from TOJ operators. What we've seen work, what quietly fails, and the observations that compound every Monday." />
+  <link rel="icon" href='data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect width="100" height="100" rx="20" fill="%231A1613"/><text x="50" y="66" font-family="Georgia" font-size="52" font-weight="600" fill="%23F5F1EA" text-anchor="middle">P</text></svg>' />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; }
+    body { font-family: 'Inter', -apple-system, sans-serif; background: #F5F1EA; color: #1A1613; line-height: 1.65; }
+    :root { --parchment: #F5F1EA; --parchment-2: #EBE4D6; --ink: #1A1613; --ink-soft: #3B3530; --ink-mute: #6E655C; --rule: rgba(26,22,19,0.12); --sports: #1E3A5F; --smallbiz: #A85F26; --bigbiz: #2F5D4E; --advisory: #B8843B; }
+    h1, h2, h3, h4 { font-family: 'Fraunces', 'Georgia', serif; font-weight: 600; letter-spacing: -0.015em; color: var(--ink); }
+    a { color: var(--sports); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    .container { max-width: 780px; margin: 0 auto; padding: 0 clamp(1.25rem, 3vw, 2.5rem); }
+    .top-bar { padding: 1rem 0; border-bottom: 1px solid var(--rule); background: rgba(245,241,234,0.94); backdrop-filter: blur(10px); position: sticky; top: 0; z-index: 40; }
+    .top-inner { display: flex; justify-content: space-between; align-items: center; max-width: 780px; margin: 0 auto; padding: 0 clamp(1.25rem, 3vw, 2.5rem); }
+    .brand { font-family: 'Fraunces', serif; font-weight: 600; font-size: 1.05rem; color: var(--ink); text-decoration: none; }
+    .brand span { color: var(--ink-mute); font-weight: 400; }
+    .back-link { color: var(--ink-soft); font-size: 0.85rem; font-weight: 500; }
+
+    .hero { padding: clamp(4rem, 8vw, 5.5rem) 0 clamp(2rem, 4vw, 3rem); }
+    .hero .eyebrow { font-size: 0.72rem; font-weight: 600; letter-spacing: 0.18em; text-transform: uppercase; color: var(--ink-mute); margin-bottom: 1rem; }
+    .hero h1 { font-size: clamp(2.2rem, 4vw, 3rem); line-height: 1.05; margin-bottom: 1rem; max-width: 22ch; }
+    .hero h1 em { font-style: italic; font-weight: 500; color: var(--sports); }
+    .hero .lede { font-size: 1.1rem; color: var(--ink-soft); max-width: 42rem; }
+
+    article.entry { padding: clamp(2.25rem, 5vw, 3.5rem) 0; border-top: 1px solid var(--rule); }
+    article.entry .meta { display: flex; gap: 0.5rem; align-items: center; margin-bottom: 0.75rem; flex-wrap: wrap; }
+    article.entry .date { font-family: 'Inter', monospace; font-size: 0.72rem; color: var(--ink-mute); letter-spacing: 0.04em; }
+    article.entry .avenue { font-size: 0.66rem; padding: 0.2rem 0.55rem; border-radius: 4px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; color: #fff; }
+    article.entry .avenue.sports { background: var(--sports); }
+    article.entry .avenue.smallbiz { background: var(--smallbiz); }
+    article.entry .avenue.bigbiz { background: var(--bigbiz); }
+    article.entry .avenue.advisory { background: var(--advisory); }
+    article.entry .avenue.cross { background: var(--ink); }
+    article.entry h2 { font-size: clamp(1.4rem, 2.5vw, 1.75rem); margin-bottom: 1rem; line-height: 1.15; }
+    article.entry h2 em { font-style: italic; font-weight: 500; color: var(--sports); }
+    article.entry p { color: var(--ink-soft); margin-bottom: 1rem; font-size: 0.98rem; }
+    article.entry p strong { color: var(--ink); font-weight: 600; }
+    article.entry blockquote {
+      border-left: 3px solid var(--smallbiz); padding: 0.6rem 1.1rem;
+      margin: 1.25rem 0; background: var(--parchment-2); border-radius: 0 8px 8px 0;
+      font-style: italic; color: var(--ink); font-family: 'Fraunces', serif; font-size: 1.02rem;
+    }
+    article.entry .takeaway {
+      margin-top: 1.35rem; padding: 1.15rem 1.35rem; background: var(--parchment-2);
+      border-radius: 8px; border-left: 3px solid var(--ink);
+    }
+    article.entry .takeaway .lbl { font-size: 0.65rem; font-weight: 700; letter-spacing: 0.16em; text-transform: uppercase; color: var(--ink-mute); margin-bottom: 0.35rem; }
+    article.entry .takeaway p { margin: 0; color: var(--ink); font-family: 'Fraunces', serif; font-size: 1rem; }
+
+    .note {
+      max-width: 42rem; margin: 3rem auto 1rem; padding: 1.15rem 1.35rem;
+      background: rgba(30,58,95,0.05); border-left: 3px solid var(--sports);
+      border-radius: 4px; font-size: 0.85rem; color: var(--ink-soft);
+    }
+    .note strong { color: var(--ink); }
+
+    footer { background: var(--ink); color: rgba(245,241,234,0.65); padding: 2.5rem 0; margin-top: 4rem; }
+    footer .container { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem; font-size: 0.82rem; }
+    footer a { color: rgba(245,241,234,0.75); }
+  </style>
+</head>
+<body>
+  <div class="top-bar">
+    <div class="top-inner">
+      <a href="/" class="brand">TOJ Campaign <span>&mdash; Trail of Joy</span></a>
+      <a href="/" class="back-link">&larr; Back to home</a>
+    </div>
+  </div>
+
+  <section class="hero">
+    <div class="container">
+      <div class="eyebrow">The patterns log</div>
+      <h1>What the <em>network</em> is learning.</h1>
+      <p class="lede">
+        Every Monday, every operator on TOJ pushes an observation from the week &mdash;
+        what worked, what quietly failed, what surprised them. The best ones get published here.
+      </p>
+    </div>
+  </section>
+
+  <article class="entry">
+    <div class="container">
+      <div class="meta">
+        <span class="date">2026&middot;07&middot;01</span>
+        <span class="avenue smallbiz">Small Business</span>
+      </div>
+      <h2>Ship on cadence beats ship on inspiration <em>every single time</em>.</h2>
+      <p>
+        A yoga studio that ships a workshop calendar three months out fills 40% more seats
+        than one that announces &ldquo;a workshop next weekend.&rdquo; The reason isn&rsquo;t
+        the workshops. It&rsquo;s the trust that the calendar keeps going.
+      </p>
+      <p>
+        When we watched Sarah&rsquo;s June go dark on workshops, three memberships lapsed
+        within thirty days. When we replaced the cadence with a locked-in fall calendar in
+        early July, the same three &mdash; two of them &mdash; came back on the win-back sequence.
+      </p>
+      <div class="takeaway">
+        <div class="lbl">The takeaway</div>
+        <p>Regulars don&rsquo;t lapse because a specific event was mediocre. They lapse when the calendar goes quiet.</p>
+      </div>
+    </div>
+  </article>
+
+  <article class="entry">
+    <div class="container">
+      <div class="meta">
+        <span class="date">2026&middot;06&middot;24</span>
+        <span class="avenue sports">Sports</span>
+      </div>
+      <h2>The offer sheet that closes fast is the one <em>already documented</em>.</h2>
+      <p>
+        Two athletes at the same position tier, same GPA, similar film. One had a Player
+        Transcript, an on-file Prospect Edge grading, and a Subject Report drop from the
+        prior season. The other had a highlight reel and a coach&rsquo;s email.
+      </p>
+      <p>
+        Both got the same first offer within a week of each other. The documented athlete
+        got a second offer four days later; the highlight-reel athlete&rsquo;s next offer
+        came eleven weeks later, after a second round of outreach. The difference wasn&rsquo;t
+        talent. It was <strong>friction</strong>. Recruiters move faster on athletes whose
+        record is already verified.
+      </p>
+      <div class="takeaway">
+        <div class="lbl">The takeaway</div>
+        <p>Documentation is a compressor. It doesn&rsquo;t create offers. It shortens the time between them.</p>
+      </div>
+    </div>
+  </article>
+
+  <article class="entry">
+    <div class="container">
+      <div class="meta">
+        <span class="date">2026&middot;06&middot;17</span>
+        <span class="avenue bigbiz">Big Business</span>
+      </div>
+      <h2>Cross-division reporting is worth more than the reports it produces.</h2>
+      <p>
+        A multi-location HVAC operator switched from three separate spreadsheets to one
+        rollup dashboard. Total reporting time dropped from ~9 hours a week to ~40 minutes.
+        The interesting number wasn&rsquo;t the time saved.
+      </p>
+      <p>
+        The interesting number was the <strong>eight decisions</strong> that got made in
+        the first month that would previously have waited two weeks for the leadership
+        team to align. A slow dispatch queue at one location got a helper reassigned from
+        another location the same day it surfaced &mdash; not two weekly meetings later.
+      </p>
+      <div class="takeaway">
+        <div class="lbl">The takeaway</div>
+        <p>The dashboard&rsquo;s job isn&rsquo;t to inform leadership. It&rsquo;s to shorten the loop between problem and decision.</p>
+      </div>
+    </div>
+  </article>
+
+  <article class="entry">
+    <div class="container">
+      <div class="meta">
+        <span class="date">2026&middot;06&middot;10</span>
+        <span class="avenue advisory">Advisory</span>
+      </div>
+      <h2>Parents show up for cohorts. <em>Not for programs.</em></h2>
+      <p>
+        Advisory conversion doubled when we stopped calling the offering &ldquo;the
+        SubjectSkillz program&rdquo; and started calling it &ldquo;the fall cohort.&rdquo;
+        Same curriculum, same instructors, same price. Different word.
+      </p>
+      <p>
+        A program feels like a self-serve download. A cohort feels like a room. Parents
+        buy the room. They especially buy the room where they can see other parents.
+      </p>
+      <div class="takeaway">
+        <div class="lbl">The takeaway</div>
+        <p>Words that imply belonging outperform words that imply access. Always.</p>
+      </div>
+    </div>
+  </article>
+
+  <article class="entry">
+    <div class="container">
+      <div class="meta">
+        <span class="date">2026&middot;06&middot;03</span>
+        <span class="avenue cross">Cross-network</span>
+      </div>
+      <h2>The 90 / 10 threshold isn&rsquo;t &ldquo;90% automated.&rdquo; It&rsquo;s <em>90% same-standard</em>.</h2>
+      <p>
+        The mistake we made in Q1: framing the automation target as a percentage of tasks.
+        The right frame is percentage of deliverables that come out <em>indistinguishable
+        from each other</em>. If ten operators in the network each send a follow-up email
+        and all ten emails feel like they came from the same standard, we&rsquo;re at 90/10 &mdash;
+        regardless of how many humans clicked send.
+      </p>
+      <p>
+        This reframe changed how we grade skills at maturity. Consistency is the metric.
+        Manual execution that ships against the standard counts. Automated execution that
+        drifts doesn&rsquo;t.
+      </p>
+      <div class="takeaway">
+        <div class="lbl">The takeaway</div>
+        <p>Automation isn&rsquo;t the goal. Standard-consistency is. Automation is one way to get there.</p>
+      </div>
+    </div>
+  </article>
+
+  <div class="container">
+    <div class="note">
+      <strong>How this log gets written:</strong> every Monday, every operator on TOJ pushes
+      a <code>toj-transcript-candidates-YYYY-WW.md</code> to their operating brain repo. The
+      network brain harvests the observations that generalize across clients. The best ones
+      end up here. If your business is on the trail, the observations from your operation
+      may end up compounding for every other operator on it, too.
+    </div>
+  </div>
+
+  <footer>
+    <div class="container">
+      <div>&copy; 2026 Trail of Joy Player Management Group, LLC.</div>
+      <div><a href="/">TOJ Campaign home &rarr;</a></div>
+    </div>
+  </footer>
+</body>
+</html>

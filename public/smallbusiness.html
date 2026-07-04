@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>TOJ Small Business — Trail of Joy Campaign</title>
   <meta name="description" content="TOJ Small Business. The operating standard for solo coaches, neighborhood shops, local trades, programs, and small-audience creators. Lead generation, sales, delivery, care, visibility, community, brand — under one intelligence layer." />
+  <link rel="icon" href="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='20' fill='%23A85F26'/><text x='50' y='66' font-family='Georgia' font-size='52' font-weight='600' fill='white' text-anchor='middle'>B</text></svg>" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&display=swap" rel="stylesheet" />
@@ -1479,6 +1480,183 @@
     }
     .waves-cta a:hover { background: var(--accent-2); }
 
+
+    /* ==================================================
+       SHARED ENHANCEMENT BUNDLE — trust, modals, animations
+       ================================================== */
+
+    /* Client portal link in top nav */
+    .client-portal-link {
+      display: inline-flex; align-items: center; gap: 0.35rem;
+      padding: 0.4rem 0.85rem;
+      background: transparent;
+      border: 1px solid var(--rule-strong);
+      border-radius: 999px;
+      color: var(--ink-soft);
+      font-size: 0.78rem;
+      font-weight: 500;
+      text-decoration: none;
+      transition: all 0.15s ease;
+      margin-left: 1rem;
+      white-space: nowrap;
+    }
+    .client-portal-link:hover { border-color: var(--accent); color: var(--accent); }
+    .client-portal-link::before { content: ''; width: 6px; height: 6px; border-radius: 999px; background: var(--accent); }
+    @media (max-width: 860px) { .client-portal-link { display: none; } }
+
+    /* Trust badges strip */
+    .trust-strip { padding: clamp(2rem, 4vw, 3rem) 0; border-top: 1px solid var(--rule); }
+    .trust-inner { display: flex; flex-direction: column; align-items: center; gap: 1.25rem; text-align: center; }
+    .trust-strip .trust-lbl { font-size: 0.65rem; letter-spacing: 0.2em; text-transform: uppercase; color: var(--ink-mute); font-weight: 700; }
+    .trust-logos {
+      display: grid; grid-template-columns: repeat(4, 1fr); gap: clamp(0.75rem, 3vw, 3rem);
+      align-items: center; justify-items: center; width: 100%; max-width: 780px;
+      opacity: 0.75;
+    }
+    @media (max-width: 640px) { .trust-logos { grid-template-columns: repeat(2, 1fr); gap: 1.5rem 2.5rem; } }
+    .trust-badge {
+      display: flex; flex-direction: column; align-items: center; gap: 0.3rem;
+      font-family: 'Fraunces', serif;
+      font-size: 0.82rem; color: var(--ink-soft);
+      text-align: center; line-height: 1.2;
+    }
+    .trust-badge .badge-mark {
+      font-family: 'Fraunces', serif; font-weight: 700; font-size: 1.05rem;
+      color: var(--accent); letter-spacing: 0.04em;
+    }
+    .trust-badge .badge-sub { font-family: 'Inter', sans-serif; font-size: 0.68rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink-mute); font-weight: 600; }
+
+    /* Sample transcript button (inline anywhere) */
+    .sample-tr-inline {
+      display: inline-flex; align-items: center; gap: 0.5rem;
+      padding: 0.6rem 1rem;
+      background: var(--parchment-2);
+      border: 1px solid var(--rule);
+      border-radius: 999px;
+      color: var(--ink-soft);
+      font-family: 'Inter', sans-serif;
+      font-size: 0.82rem;
+      font-weight: 500;
+      text-decoration: none;
+      transition: all 0.15s ease;
+    }
+    .sample-tr-inline:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-tint); }
+    .sample-tr-inline::before {
+      content: '&#128196;';
+      font-family: sans-serif; font-size: 0.9em;
+    }
+
+    /* Video hero placeholder */
+    .video-frame {
+      position: relative;
+      border-radius: 14px;
+      overflow: hidden;
+      background: linear-gradient(135deg, var(--accent) 0%, var(--accent-2) 100%);
+      aspect-ratio: 16/9;
+      display: flex; align-items: center; justify-content: center;
+      color: #fff;
+      cursor: pointer;
+      transition: transform 0.2s;
+      margin-top: 1.25rem;
+    }
+    .video-frame:hover { transform: scale(1.01); }
+    .video-frame video { width: 100%; height: 100%; object-fit: cover; display: block; }
+    .video-frame .play-overlay {
+      position: absolute; inset: 0;
+      display: flex; align-items: center; justify-content: center;
+      background: linear-gradient(180deg, rgba(0,0,0,0.05) 40%, rgba(0,0,0,0.4) 100%);
+    }
+    .video-frame .play-btn {
+      width: 74px; height: 74px; border-radius: 999px;
+      background: rgba(255,255,255,0.94);
+      display: flex; align-items: center; justify-content: center;
+      box-shadow: 0 20px 40px -15px rgba(0,0,0,0.4);
+      transition: transform 0.2s;
+    }
+    .video-frame:hover .play-btn { transform: scale(1.05); }
+    .video-frame .play-btn::before {
+      content: '';
+      border-left: 22px solid var(--accent);
+      border-top: 14px solid transparent; border-bottom: 14px solid transparent;
+      margin-left: 5px;
+    }
+    .video-frame .video-caption {
+      position: absolute; bottom: 1rem; left: 1.15rem; right: 1.15rem;
+      font-family: 'Inter', sans-serif; font-size: 0.72rem;
+      color: rgba(255,255,255,0.9); letter-spacing: 0.06em;
+    }
+
+    /* Micro-animation — fade & lift on scroll */
+    .fade-in { opacity: 0; transform: translateY(20px); transition: opacity 0.55s ease-out, transform 0.55s ease-out; }
+    .fade-in.visible { opacity: 1; transform: translateY(0); }
+    @media (prefers-reduced-motion: reduce) {
+      .fade-in { opacity: 1; transform: none; transition: none; }
+    }
+
+    /* Modal shared */
+    .modal-backdrop {
+      position: fixed; inset: 0; z-index: 100;
+      background: rgba(26,22,19,0.72); backdrop-filter: blur(4px);
+      display: none; align-items: center; justify-content: center;
+      padding: 1.5rem;
+    }
+    .modal-backdrop.open { display: flex; animation: fade-in 0.2s ease-out; }
+    @keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
+    .modal-card {
+      background: var(--parchment); border-radius: 14px;
+      max-width: 540px; width: 100%; max-height: 90vh; overflow-y: auto;
+      padding: 2rem 1.75rem; position: relative;
+      box-shadow: 0 40px 80px -20px rgba(0,0,0,0.35);
+    }
+    .modal-card .close-btn {
+      position: absolute; top: 1rem; right: 1rem;
+      width: 32px; height: 32px; border-radius: 999px;
+      background: rgba(26,22,19,0.08); color: var(--ink);
+      border: 0; cursor: pointer; font-size: 1.25rem; line-height: 1;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .modal-card .close-btn:hover { background: rgba(26,22,19,0.15); }
+    .modal-card h3 { font-size: 1.5rem; margin-bottom: 0.35rem; }
+    .modal-card .modal-sub { font-size: 0.9rem; color: var(--ink-mute); margin-bottom: 1.5rem; }
+
+    /* Intake form */
+    .intake-form { display: flex; flex-direction: column; gap: 0.9rem; }
+    .intake-form label { display: flex; flex-direction: column; gap: 0.3rem; font-size: 0.82rem; color: var(--ink-soft); font-weight: 500; }
+    .intake-form input, .intake-form select, .intake-form textarea {
+      padding: 0.7rem 0.85rem; font-size: 0.92rem;
+      border: 1px solid var(--rule); border-radius: 8px;
+      background: #fff; color: var(--ink); font-family: inherit;
+      transition: border-color 0.15s;
+    }
+    .intake-form input:focus, .intake-form select:focus, .intake-form textarea:focus {
+      outline: none; border-color: var(--accent);
+    }
+    .intake-form textarea { min-height: 90px; resize: vertical; }
+    .intake-actions { display: flex; gap: 0.75rem; justify-content: space-between; align-items: center; padding-top: 0.5rem; }
+    .intake-actions .step-indicator { font-size: 0.75rem; color: var(--ink-mute); font-family: 'Inter', monospace; }
+    .intake-actions button {
+      padding: 0.75rem 1.35rem; border-radius: 999px; border: 0;
+      font-family: inherit; font-weight: 600; font-size: 0.88rem; cursor: pointer;
+      transition: all 0.15s;
+    }
+    .intake-actions button.primary { background: var(--accent); color: #fff; }
+    .intake-actions button.primary:hover { background: var(--accent-2); }
+    .intake-actions button.secondary { background: transparent; color: var(--ink-soft); border: 1px solid var(--rule-strong); }
+    .intake-actions button.secondary:hover { border-color: var(--accent); color: var(--accent); }
+    .intake-step { display: none; }
+    .intake-step.active { display: flex; flex-direction: column; gap: 0.9rem; }
+    .intake-success {
+      text-align: center; padding: 1rem 0;
+    }
+    .intake-success .checkmark {
+      width: 60px; height: 60px; border-radius: 999px;
+      background: var(--accent-tint); color: var(--accent);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 1.75rem; margin: 0 auto 1rem;
+    }
+    .intake-success h4 { font-size: 1.2rem; margin-bottom: 0.5rem; }
+    .intake-success p { font-size: 0.9rem; color: var(--ink-mute); margin-bottom: 1rem; }
+
   </style>
 </head>
 <body>
@@ -2204,6 +2382,194 @@
   </section>
 
   <!-- ============ FOOTER ============ -->
+  
+  <!-- ============ SHARED TRUST BADGES STRIP ============ -->
+  <section class="trust-strip fade-in">
+    <div class="container">
+      <div class="trust-inner">
+        <span class="trust-lbl">Trusted infrastructure &middot; aligned partners</span>
+        <div class="trust-logos">
+          <div class="trust-badge">
+            <span class="badge-mark">OPTIMUM GRADING</span>
+            <span class="badge-sub">Evaluation partner</span>
+          </div>
+          <div class="trust-badge">
+            <span class="badge-mark">PROSPECT EDGE</span>
+            <span class="badge-sub">Recruiting media</span>
+          </div>
+          <div class="trust-badge">
+            <span class="badge-mark">SUBJECTSKILLZ</span>
+            <span class="badge-sub">501(c)(3) education</span>
+          </div>
+          <div class="trust-badge">
+            <span class="badge-mark">TOJ NETWORK</span>
+            <span class="badge-sub">Federation standard</span>
+          </div>
+        </div>
+        <a href="https://tojcampaign.com/sample-transcript.html" target="_blank" rel="noopener" class="sample-tr-inline">
+          See a sample Operational Transcript
+        </a>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ INTAKE FORM MODAL ============ -->
+  <div id="intake-modal" class="modal-backdrop" onclick="if(event.target===this)closeIntake()">
+    <div class="modal-card">
+      <button class="close-btn" onclick="closeIntake()" aria-label="Close">&times;</button>
+      <h3>Talk to us about TOJ Small Business</h3>
+      <div class="modal-sub">Three questions. About sixty seconds. We&rsquo;ll get back within one business day.</div>
+
+      <form class="intake-form" id="intake-form-el" onsubmit="submitIntake(event)">
+        <div class="intake-step active" data-step="1">
+          <label>Your name
+            <input type="text" name="name" required autocomplete="name" />
+          </label>
+          <label>Email
+            <input type="email" name="email" required autocomplete="email" placeholder="you@yourbusiness.com" />
+          </label>
+          <div class="intake-actions">
+            <span class="step-indicator">Step 1 of 3</span>
+            <button type="button" class="primary" onclick="nextStep()">Continue &rarr;</button>
+          </div>
+        </div>
+
+        <div class="intake-step" data-step="2">
+          <label>What&rsquo;s your business or role?
+            <input type="text" name="business" required placeholder="Business name, role, or what you do" />
+          </label>
+          <label>Which best describes you?
+            <select name="type" required>
+              <option value="">Choose one&hellip;</option>
+              <option value="athlete">Athlete building my record</option>
+              <option value="trainer">Trainer / program</option>
+              <option value="operator">Small operator / solo</option>
+              <option value="multi-location">Multi-location / company</option>
+              <option value="mentee">Individual building a personal brand</option>
+              <option value="other">Something else</option>
+            </select>
+          </label>
+          <div class="intake-actions">
+            <button type="button" class="secondary" onclick="prevStep()">&larr; Back</button>
+            <span class="step-indicator">Step 2 of 3</span>
+            <button type="button" class="primary" onclick="nextStep()">Continue &rarr;</button>
+          </div>
+        </div>
+
+        <div class="intake-step" data-step="3">
+          <label>What&rsquo;s the outcome you&rsquo;re after?
+            <textarea name="outcome" required placeholder="In your own words. One or two sentences is fine."></textarea>
+          </label>
+          <div class="intake-actions">
+            <button type="button" class="secondary" onclick="prevStep()">&larr; Back</button>
+            <span class="step-indicator">Step 3 of 3</span>
+            <button type="submit" class="primary">Send &rarr;</button>
+          </div>
+        </div>
+
+        <div class="intake-step" data-step="success">
+          <div class="intake-success">
+            <div class="checkmark">&#10003;</div>
+            <h4>Thanks. We&rsquo;ll be in touch.</h4>
+            <p>We reply within one business day, usually faster. Watch your inbox.</p>
+            <button type="button" class="primary" onclick="closeIntake()">Close</button>
+          </div>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- ============ SHARED JS BUNDLE ============ -->
+  <script>
+    // Micro-animations via IntersectionObserver
+    (function() {
+      if (typeof IntersectionObserver === 'undefined') {
+        document.querySelectorAll('.fade-in').forEach(el => el.classList.add('visible'));
+        return;
+      }
+      const observer = new IntersectionObserver((entries) => {
+        entries.forEach(entry => {
+          if (entry.isIntersecting) {
+            entry.target.classList.add('visible');
+            observer.unobserve(entry.target);
+          }
+        });
+      }, { threshold: 0.15, rootMargin: '0px 0px -50px 0px' });
+      document.querySelectorAll('section, .fade-in').forEach(el => {
+        el.classList.add('fade-in');
+        observer.observe(el);
+      });
+    })();
+
+    // Intake modal handlers
+    function openIntake(e) {
+      if (e) e.preventDefault();
+      document.getElementById('intake-modal').classList.add('open');
+      document.body.style.overflow = 'hidden';
+      const first = document.querySelector('.intake-step.active input');
+      if (first) setTimeout(() => first.focus(), 100);
+    }
+    function closeIntake() {
+      document.getElementById('intake-modal').classList.remove('open');
+      document.body.style.overflow = '';
+    }
+    let currentStep = 1;
+    function showStep(n) {
+      document.querySelectorAll('.intake-step').forEach(s => s.classList.remove('active'));
+      const step = document.querySelector(`.intake-step[data-step="${n}"]`);
+      if (step) step.classList.add('active');
+      currentStep = typeof n === 'number' ? n : currentStep;
+    }
+    function nextStep() {
+      const activeStep = document.querySelector('.intake-step.active');
+      const requiredEls = activeStep.querySelectorAll('[required]');
+      let valid = true;
+      requiredEls.forEach(el => {
+        if (!el.value.trim()) { valid = false; el.focus(); }
+      });
+      if (!valid) return;
+      currentStep++;
+      showStep(currentStep);
+    }
+    function prevStep() {
+      currentStep = Math.max(1, currentStep - 1);
+      showStep(currentStep);
+    }
+    function submitIntake(e) {
+      e.preventDefault();
+      const form = document.getElementById('intake-form-el');
+      const data = {};
+      new FormData(form).forEach((v, k) => { data[k] = v; });
+      data.avenue = 'smallbusiness';
+      // TODO — wire this to your real endpoint / GHL webhook / Typeform / etc.
+      // For now, log the payload and show the success step.
+      console.log('TOJ intake submission:', data);
+      showStep('success');
+      // Example fetch (uncomment when endpoint ready):
+      // fetch('/api/intake', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(data) });
+    }
+
+    // Hijack any anchor pointing at #intake or #wave-apply etc. to open the modal
+    document.addEventListener('DOMContentLoaded', () => {
+      const INTAKE_ANCHORS = ['#intake', '#intake-form', '#wave-apply', '#cohort-apply', '#discovery', '#starter-class'];
+      document.querySelectorAll('a[href^="#"]').forEach(a => {
+        if (INTAKE_ANCHORS.some(h => a.getAttribute('href') === h)) {
+          a.addEventListener('click', openIntake);
+        }
+      });
+      // Live wave counter — reads from data-count attribute on any element with class wave-live-count
+      document.querySelectorAll('[data-wave-count]').forEach(el => {
+        const n = parseInt(el.getAttribute('data-wave-count'), 10);
+        if (!isNaN(n) && n > 0) el.textContent = `${n} seats left`;
+      });
+    });
+
+    // ESC key closes modal
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') closeIntake();
+    });
+  </script>
+
   <footer>
     <div class="footer-inner">
       <div class="footer-grid">

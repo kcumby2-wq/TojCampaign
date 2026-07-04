@@ -534,6 +534,96 @@
     }
     .footer-bar a { color: rgba(245,241,234,0.6); text-decoration: none; }
     .footer-bar a:hover { color: var(--parchment); }
+
+    /* ---------- WHICH LANE ARE YOU? QUIZ ---------- */
+    .quiz-wrap {
+      background: var(--ink);
+      color: var(--parchment);
+      border-radius: 20px;
+      padding: clamp(2.25rem, 4vw, 3rem);
+      position: relative;
+      overflow: hidden;
+    }
+    .quiz-head { max-width: 44rem; margin: 0 auto 2.25rem; text-align: center; }
+    .quiz-head .eyebrow { color: rgba(245,241,234,0.55); margin-bottom: 1rem; }
+    .quiz-head h2 { color: var(--parchment); margin-bottom: 1rem; }
+    .quiz-head p { color: rgba(245,241,234,0.72); max-width: 38rem; margin: 0 auto; }
+
+    .quiz-body { max-width: 640px; margin: 0 auto; }
+    .quiz-progress {
+      display: flex; gap: 0.35rem; margin-bottom: 1.75rem;
+    }
+    .quiz-progress .dot {
+      flex: 1; height: 4px; background: rgba(245,241,234,0.14); border-radius: 4px;
+      transition: background 0.3s;
+    }
+    .quiz-progress .dot.active { background: var(--parchment); }
+    .quiz-progress .dot.done { background: rgba(245,241,234,0.5); }
+
+    .quiz-question {
+      display: none;
+    }
+    .quiz-question.active { display: block; animation: quiz-fade 0.35s ease-out; }
+    @keyframes quiz-fade { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+    .quiz-question h3 {
+      font-family: 'Fraunces', serif; font-weight: 500;
+      color: var(--parchment); font-size: clamp(1.25rem, 2.5vw, 1.55rem);
+      margin-bottom: 1.35rem; line-height: 1.3;
+    }
+    .quiz-answers { display: flex; flex-direction: column; gap: 0.55rem; }
+    .quiz-answer {
+      display: block; width: 100%;
+      padding: 1rem 1.2rem;
+      background: rgba(245,241,234,0.05);
+      border: 1px solid rgba(245,241,234,0.14);
+      color: var(--parchment);
+      border-radius: 10px; text-align: left; cursor: pointer;
+      font-family: inherit; font-size: 0.95rem; line-height: 1.4;
+      transition: all 0.15s ease;
+    }
+    .quiz-answer:hover {
+      background: rgba(245,241,234,0.1);
+      border-color: rgba(245,241,234,0.35);
+      transform: translateX(4px);
+    }
+
+    /* Result state */
+    .quiz-result { display: none; text-align: center; }
+    .quiz-result.active { display: block; animation: quiz-fade 0.4s ease-out; }
+    .quiz-result .result-eyebrow {
+      font-size: 0.7rem; letter-spacing: 0.18em; text-transform: uppercase;
+      color: rgba(245,241,234,0.55); font-weight: 700; margin-bottom: 0.85rem;
+    }
+    .quiz-result h3 {
+      font-family: 'Fraunces', serif; font-size: clamp(1.75rem, 3.5vw, 2.4rem);
+      color: var(--parchment); margin-bottom: 1rem;
+    }
+    .quiz-result h3 em { font-style: italic; font-weight: 500; }
+    .quiz-result p {
+      color: rgba(245,241,234,0.75); max-width: 32rem; margin: 0 auto 1.75rem;
+      line-height: 1.55;
+    }
+    .quiz-result-cta {
+      display: inline-flex; align-items: center; gap: 0.5rem;
+      padding: 1rem 1.75rem; border-radius: 999px;
+      font-family: 'Inter', sans-serif; font-weight: 600; font-size: 0.95rem;
+      text-decoration: none; color: #fff;
+      transition: transform 0.15s;
+    }
+    .quiz-result-cta:hover { transform: translateY(-2px); text-decoration: none; }
+    .quiz-result-cta.sports { background: var(--sports); }
+    .quiz-result-cta.smallbiz { background: var(--smallbiz); }
+    .quiz-result-cta.bigbiz { background: var(--bigbiz); }
+    .quiz-result-cta.advisory { background: var(--advisory); }
+
+    .quiz-restart {
+      display: inline-block; margin-top: 1.35rem;
+      background: transparent; border: 0; cursor: pointer;
+      color: rgba(245,241,234,0.55); font-family: inherit;
+      font-size: 0.82rem; text-decoration: underline;
+    }
+    .quiz-restart:hover { color: var(--parchment); }
+
   </style>
 </head>
 <body>
@@ -890,6 +980,166 @@
     </div>
   </section>
 
+
+  <!-- ============ WHICH LANE ARE YOU? QUIZ ============ -->
+  <section id="quiz">
+    <div class="container">
+      <div class="quiz-wrap">
+        <div class="quiz-head">
+          <div class="eyebrow">Not sure which avenue?</div>
+          <h2>Which lane are you?</h2>
+          <p>Three questions. Take about twenty seconds. We&rsquo;ll route you to the right front door.</p>
+        </div>
+
+        <div class="quiz-body">
+          <div class="quiz-progress" id="quizProgress">
+            <span class="dot active"></span><span class="dot"></span><span class="dot"></span>
+          </div>
+
+          <div class="quiz-question active" data-q="1">
+            <h3>What&rsquo;s your business really about?</h3>
+            <div class="quiz-answers">
+              <button class="quiz-answer" data-lane="sports">Sport &mdash; athlete brands, training, sports media, or organizations around sport.</button>
+              <button class="quiz-answer" data-lane="advisory">Building my own brand &mdash; individual, personal, mine as a person more than a business.</button>
+              <button class="quiz-answer" data-lane="business">A real business &mdash; goods, services, a team, customers who pay for what I do.</button>
+            </div>
+          </div>
+
+          <div class="quiz-question" data-q="2a" data-if-lane="business">
+            <h3>What&rsquo;s the shape of the operation right now?</h3>
+            <div class="quiz-answers">
+              <button class="quiz-answer" data-lane="smallbiz">One location &middot; solo or a small team &middot; relationships still fit in my head.</button>
+              <button class="quiz-answer" data-lane="bigbiz">Multiple locations, divisions, or a team of 10+ &middot; one standard has to cross them.</button>
+            </div>
+          </div>
+
+          <div class="quiz-question" data-q="2b" data-if-lane="sports">
+            <h3>Where do you sit in the sports world?</h3>
+            <div class="quiz-answers">
+              <button class="quiz-answer" data-lane="sports">I&rsquo;m an athlete, trainer, media creator, or organization that runs on sport.</button>
+              <button class="quiz-answer" data-lane="advisory">I&rsquo;m building a personal brand around sport but not running a business yet.</button>
+            </div>
+          </div>
+
+          <div class="quiz-question" data-q="2c" data-if-lane="advisory">
+            <h3>What&rsquo;s the outcome you&rsquo;re after?</h3>
+            <div class="quiz-answers">
+              <button class="quiz-answer" data-lane="advisory">Coaching + framework so I can build my brand right &mdash; not full operations.</button>
+              <button class="quiz-answer" data-lane="smallbiz">Actually, I already run something that generates revenue and I want that scaled.</button>
+            </div>
+          </div>
+
+          <div class="quiz-question" data-q="3">
+            <h3>What matters most right now?</h3>
+            <div class="quiz-answers">
+              <button class="quiz-answer" data-final="preserve">Preserving what already works. I don&rsquo;t want to lose the thing that got me here.</button>
+              <button class="quiz-answer" data-final="scale">Scaling. I&rsquo;ve outgrown how I&rsquo;ve been doing it and need infrastructure.</button>
+              <button class="quiz-answer" data-final="start">Starting. I want the standard in place before I open the doors publicly.</button>
+            </div>
+          </div>
+
+          <div class="quiz-result" data-result="sports">
+            <div class="result-eyebrow">Recommended avenue &middot; Avenue 01</div>
+            <h3>You&rsquo;re headed to <em>TOJ Sports</em>.</h3>
+            <p>Your world runs on athletic performance, evaluation, and the record you build around it. TOJ Sports is where the roster, the Prospect Edge grading, and the trainer infrastructure live.</p>
+            <a href="/sports.html" class="quiz-result-cta sports">Enter TOJ Sports &rarr;</a>
+            <br/><button class="quiz-restart" onclick="restartQuiz()">Start over</button>
+          </div>
+
+          <div class="quiz-result" data-result="smallbiz">
+            <div class="result-eyebrow">Recommended avenue &middot; Avenue 02</div>
+            <h3>You&rsquo;re headed to <em>TOJ Small Business</em>.</h3>
+            <p>Your business runs on relationships and reputation. TOJ Small Business is where the trail lives &mdash; a peer cohort, a monthly rhythm, and one platform that runs the four jobs your business needs.</p>
+            <a href="/smallbusiness.html" class="quiz-result-cta smallbiz">Walk the trail &rarr;</a>
+            <br/><button class="quiz-restart" onclick="restartQuiz()">Start over</button>
+          </div>
+
+          <div class="quiz-result" data-result="bigbiz">
+            <div class="result-eyebrow">Recommended avenue &middot; Avenue 03</div>
+            <h3>You&rsquo;re headed to <em>TOJ Big Business</em>.</h3>
+            <p>Your operation spans locations, divisions, or a real team. TOJ Big Business installs one standard across every location &mdash; and gives leadership one report where there used to be fifty spreadsheets.</p>
+            <a href="/bigbusiness.html" class="quiz-result-cta bigbiz">Install the standard &rarr;</a>
+            <br/><button class="quiz-restart" onclick="restartQuiz()">Start over</button>
+          </div>
+
+          <div class="quiz-result" data-result="advisory">
+            <div class="result-eyebrow">Recommended avenue &middot; Avenue 04</div>
+            <h3>You&rsquo;re headed to <em>TOJ Advisory</em>.</h3>
+            <p>You&rsquo;re building your own brand, personally &mdash; not running an operation. TOJ Advisory is the full-circle NIL wealth pipeline: 6-week cohort, three instructors, one standard, real documentation.</p>
+            <a href="/advisory.html" class="quiz-result-cta advisory">Enter TOJ Advisory &rarr;</a>
+            <br/><button class="quiz-restart" onclick="restartQuiz()">Start over</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <script>
+    // Quiz state
+    let quizPath = { q1: null, q2: null, q3: null, finalRoute: null };
+
+    function showQuizQuestion(selector) {
+      document.querySelectorAll('.quiz-question, .quiz-result').forEach(el => el.classList.remove('active'));
+      const el = document.querySelector(selector);
+      if (el) el.classList.add('active');
+      updateProgress();
+    }
+
+    function updateProgress() {
+      const dots = document.querySelectorAll('#quizProgress .dot');
+      const activeQ = document.querySelector('.quiz-question.active');
+      const result = document.querySelector('.quiz-result.active');
+      dots.forEach(d => d.classList.remove('active', 'done'));
+      if (result) {
+        dots.forEach(d => d.classList.add('done'));
+        return;
+      }
+      if (!activeQ) return;
+      const q = activeQ.getAttribute('data-q');
+      if (q === '1') { dots[0].classList.add('active'); }
+      else if (q.startsWith('2')) { dots[0].classList.add('done'); dots[1].classList.add('active'); }
+      else if (q === '3') { dots[0].classList.add('done'); dots[1].classList.add('done'); dots[2].classList.add('active'); }
+    }
+
+    document.querySelectorAll('.quiz-question[data-q="1"] .quiz-answer').forEach(btn => {
+      btn.addEventListener('click', () => {
+        quizPath.q1 = btn.getAttribute('data-lane');
+        if (quizPath.q1 === 'business') showQuizQuestion('[data-q="2a"]');
+        else if (quizPath.q1 === 'sports') showQuizQuestion('[data-q="2b"]');
+        else if (quizPath.q1 === 'advisory') showQuizQuestion('[data-q="2c"]');
+      });
+    });
+
+    document.querySelectorAll('.quiz-question[data-q^="2"] .quiz-answer').forEach(btn => {
+      btn.addEventListener('click', () => {
+        quizPath.q2 = btn.getAttribute('data-lane');
+        showQuizQuestion('[data-q="3"]');
+      });
+    });
+
+    document.querySelectorAll('.quiz-question[data-q="3"] .quiz-answer').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const finalIntent = btn.getAttribute('data-final');
+        let route = quizPath.q2; // default routing from q2
+        // Refinements based on final intent
+        if (finalIntent === 'start' && route === 'sports') route = 'advisory';
+        if (finalIntent === 'scale' && route === 'smallbiz') route = 'bigbiz';
+        showResult(route);
+      });
+    });
+
+    function showResult(lane) {
+      const map = { sports: 'sports', smallbiz: 'smallbiz', bigbiz: 'bigbiz', advisory: 'advisory' };
+      const target = map[lane] || 'smallbiz';
+      showQuizQuestion(`.quiz-result[data-result="${target}"]`);
+    }
+
+    function restartQuiz() {
+      quizPath = { q1: null, q2: null, q3: null, finalRoute: null };
+      showQuizQuestion('.quiz-question[data-q="1"]');
+    }
+  </script>
+
   <!-- ============ CLASSIFIER ============ -->
   <section id="classifier">
     <div class="container">
@@ -1003,6 +1253,17 @@
             <li><a href="#transcript">The Transcript</a></li>
             <li><a href="#distinction">Avenues vs Tiers</a></li>
             <li><a href="#classifier">Find your lane</a></li>
+          </ul>
+        </div>
+
+        <div class="footer-col">
+          <h5>Learn more</h5>
+          <ul>
+            <li><a href="/mission.html">The mission</a></li>
+            <li><a href="/instructors.html">Instructors</a></li>
+            <li><a href="/patterns.html">Patterns log</a></li>
+            <li><a href="/sample-transcript.html">Sample transcript</a></li>
+            <li><a href="/client.html">Client login</a></li>
           </ul>
         </div>
         <div class="footer-col">

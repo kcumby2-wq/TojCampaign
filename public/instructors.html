@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Instructors — TOJ Advisory</title>
+  <meta name="description" content="Meet the three instructors behind TOJ Advisory: Carly Notaroberto (academic + college readiness), Kyron Cumby (NIL gameplan), Nicole Bradley (financial literacy). Track records across NCAA D1, NFL, Big Ten programs." />
+  <link rel="icon" href='data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect width="100" height="100" rx="20" fill="%23B8843B"/><text x="50" y="66" font-family="Georgia" font-size="52" font-weight="600" fill="white" text-anchor="middle">A</text></svg>' />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; }
+    body { font-family: 'Inter', -apple-system, sans-serif; background: #F5F1EA; color: #1A1613; line-height: 1.6; }
+    :root { --parchment: #F5F1EA; --parchment-2: #EBE4D6; --ink: #1A1613; --ink-soft: #3B3530; --ink-mute: #6E655C; --rule: rgba(26,22,19,0.12); --advisory: #B8843B; --advisory-2: #D19E5A; --advisory-tint: rgba(184,132,59,0.12); }
+    h1, h2, h3, h4 { font-family: 'Fraunces', 'Georgia', serif; font-weight: 600; letter-spacing: -0.015em; color: var(--ink); }
+    a { color: var(--advisory); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    .container { max-width: 900px; margin: 0 auto; padding: 0 clamp(1.25rem, 3vw, 2.5rem); }
+    .top-bar { padding: 1rem 0; border-bottom: 1px solid var(--rule); background: rgba(245,241,234,0.94); backdrop-filter: blur(10px); position: sticky; top: 0; z-index: 40; }
+    .top-inner { display: flex; justify-content: space-between; align-items: center; max-width: 900px; margin: 0 auto; padding: 0 clamp(1.25rem, 3vw, 2.5rem); }
+    .brand { font-family: 'Fraunces', serif; font-weight: 600; font-size: 1.05rem; color: var(--ink); text-decoration: none; }
+    .brand span { color: var(--advisory); font-weight: 400; }
+    .back-link { color: var(--ink-soft); font-size: 0.85rem; font-weight: 500; }
+
+    .hero { padding: clamp(4rem, 8vw, 6rem) 0 clamp(2rem, 4vw, 3rem); }
+    .hero .eyebrow { font-size: 0.72rem; font-weight: 600; letter-spacing: 0.18em; text-transform: uppercase; color: var(--advisory); margin-bottom: 1rem; }
+    .hero h1 { font-size: clamp(2.2rem, 4.5vw, 3.2rem); line-height: 1.1; margin-bottom: 1.25rem; }
+    .hero h1 em { font-style: italic; font-weight: 500; color: var(--advisory); }
+    .hero .lede { font-size: 1.1rem; color: var(--ink-soft); max-width: 42rem; }
+
+    .instructor { padding: clamp(3rem, 5vw, 4rem) 0; border-top: 1px solid var(--rule); }
+    .instructor-header { display: grid; grid-template-columns: 130px 1fr; gap: 2rem; align-items: center; margin-bottom: 2rem; }
+    @media (max-width: 640px) { .instructor-header { grid-template-columns: 100px 1fr; gap: 1.25rem; } }
+    .avatar {
+      width: 130px; height: 130px; border-radius: 50%;
+      background: linear-gradient(135deg, var(--advisory) 0%, var(--advisory-2) 100%);
+      display: flex; align-items: center; justify-content: center;
+      font-family: 'Fraunces', serif; font-size: 3.2rem; font-weight: 600; color: #fff;
+      box-shadow: 0 20px 40px -20px rgba(184,132,59,0.4);
+    }
+    @media (max-width: 640px) { .avatar { width: 100px; height: 100px; font-size: 2.5rem; } }
+    .instructor-title .badge {
+      display: inline-block; font-family: 'Inter', sans-serif; font-size: 0.7rem;
+      letter-spacing: 0.12em; text-transform: uppercase; color: var(--advisory);
+      background: var(--advisory-tint); padding: 0.3rem 0.7rem; border-radius: 4px;
+      font-weight: 700; margin-bottom: 0.75rem;
+    }
+    .instructor-title h2 { font-size: clamp(1.7rem, 3vw, 2.1rem); margin-bottom: 0.35rem; line-height: 1.1; }
+    .instructor-title .subtitle { font-style: italic; color: var(--ink-mute); font-family: 'Fraunces', serif; }
+
+    .track-record {
+      display: grid; grid-template-columns: repeat(3, 1fr); gap: 0;
+      background: var(--parchment-2); border-radius: 10px; overflow: hidden;
+      margin-bottom: 2rem; border: 1px solid var(--rule);
+    }
+    @media (max-width: 640px) { .track-record { grid-template-columns: 1fr; } }
+    .track-record .cell { padding: 1.1rem 1.15rem; border-right: 1px solid var(--rule); }
+    .track-record .cell:last-child { border-right: 0; }
+    @media (max-width: 640px) {
+      .track-record .cell { border-right: 0; border-bottom: 1px solid var(--rule); }
+      .track-record .cell:last-child { border-bottom: 0; }
+    }
+    .track-record .lbl { font-size: 0.65rem; letter-spacing: 0.14em; text-transform: uppercase; color: var(--ink-mute); font-weight: 700; margin-bottom: 0.35rem; }
+    .track-record .val { font-family: 'Fraunces', serif; font-size: 1rem; color: var(--ink); line-height: 1.3; }
+
+    .bio-body p { color: var(--ink-soft); margin-bottom: 1.15rem; max-width: 42rem; }
+    .bio-body p strong { color: var(--ink); font-weight: 600; }
+
+    .teaches {
+      background: var(--parchment); border: 1px solid var(--rule); border-radius: 10px;
+      padding: 1.35rem 1.5rem; margin-top: 1.5rem; max-width: 42rem;
+    }
+    .teaches h4 { font-size: 1rem; margin-bottom: 0.75rem; }
+    .teaches ul { list-style: none; display: flex; flex-direction: column; gap: 0.45rem; }
+    .teaches li { padding-left: 1.1rem; position: relative; font-size: 0.9rem; color: var(--ink-soft); line-height: 1.45; }
+    .teaches li::before { content: ''; position: absolute; left: 0; top: 0.55em; width: 6px; height: 6px; background: var(--advisory); border-radius: 999px; }
+
+    .cta-bar { margin-top: 4rem; padding: 2.5rem; background: var(--ink); color: var(--parchment); border-radius: 16px; display: grid; grid-template-columns: 1fr auto; gap: 1.5rem; align-items: center; }
+    @media (max-width: 640px) { .cta-bar { grid-template-columns: 1fr; } }
+    .cta-bar h3 { color: var(--parchment); font-size: 1.4rem; margin-bottom: 0.4rem; }
+    .cta-bar p { color: rgba(245,241,234,0.72); font-size: 0.9rem; margin: 0; }
+    .cta-btn {
+      display: inline-flex; align-items: center; gap: 0.5rem;
+      padding: 0.9rem 1.5rem; background: var(--advisory); color: #fff;
+      border-radius: 999px; font-weight: 600; font-size: 0.9rem; text-decoration: none;
+    }
+    .cta-btn:hover { background: var(--advisory-2); text-decoration: none; }
+
+    footer { background: var(--ink); color: rgba(245,241,234,0.65); padding: 2.5rem 0; margin-top: 4rem; }
+    footer .container { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem; font-size: 0.82rem; }
+    footer a { color: rgba(245,241,234,0.75); }
+  </style>
+</head>
+<body>
+  <div class="top-bar">
+    <div class="top-inner">
+      <a href="https://advisory.tojcampaign.com/" class="brand">TOJ <span>Advisory</span></a>
+      <a href="https://advisory.tojcampaign.com/" class="back-link">&larr; Back to Advisory</a>
+    </div>
+  </div>
+
+  <section class="hero">
+    <div class="container">
+      <div class="eyebrow">The instructors</div>
+      <h1>Three voices. One curriculum. <em>All in your corner.</em></h1>
+      <p class="lede">
+        Every mentee in the TOJ Advisory cohort works with three instructors &mdash; academic
+        readiness, NIL gameplan, financial literacy. Each one has real classroom time with
+        student-athletes at real programs. Nobody teaches from theory here.
+      </p>
+    </div>
+  </section>
+
+  <section class="instructor" id="carly">
+    <div class="container">
+      <div class="instructor-header">
+        <div class="avatar">CN</div>
+        <div class="instructor-title">
+          <span class="badge">Weeks 1&ndash;2 &middot; Academic + College Readiness</span>
+          <h2>Carly Notaroberto</h2>
+          <div class="subtitle">The peer voice for student-athletes</div>
+        </div>
+      </div>
+
+      <div class="track-record">
+        <div class="cell"><div class="lbl">University track record</div><div class="val">Georgia State &middot; Delaware &middot; USF</div></div>
+        <div class="cell"><div class="lbl">Sports covered</div><div class="val">All sports &middot; all teams</div></div>
+        <div class="cell"><div class="lbl">Classroom experience</div><div class="val">Has led college courses for student-athletes</div></div>
+      </div>
+
+      <div class="bio-body">
+        <p>
+          Carly has spent her career inside the student-athlete life at Division I programs.
+          At <strong>Georgia State</strong>, she supported student-athletes across every sport
+          on the roster. At <strong>Delaware</strong>, she built out academic support systems
+          that traveled across every team. She&rsquo;s now at the <strong>University of South
+          Florida</strong>, still working directly with the athletes who show up on the field
+          Saturday and in class Monday.
+        </p>
+        <p>
+          Her track record isn&rsquo;t just administrative &mdash; she&rsquo;s led college courses
+          designed for student-athletes. She knows what actually lands in a room where every
+          person has a game to prepare for. She teaches what she&rsquo;s already taught.
+        </p>
+      </div>
+
+      <div class="teaches">
+        <h4>What she leads in the cohort</h4>
+        <ul>
+          <li>College eligibility &middot; what it actually means (NCAA / NAIA clearinghouses)</li>
+          <li>Division levels &middot; FBS / FCS / D1 / D2 / D3 / NAIA / JUCO</li>
+          <li>Academic minimums &middot; GPA / test scores / course requirements</li>
+          <li>Balancing sport, school, and life &middot; time management for real</li>
+          <li>Intro to college &middot; dorms, classes, being on your own</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <section class="instructor" id="kyron">
+    <div class="container">
+      <div class="instructor-header">
+        <div class="avatar">KC</div>
+        <div class="instructor-title">
+          <span class="badge">Weeks 3&ndash;4 &middot; NIL Foundations + Branding</span>
+          <h2>Kyron Cumby</h2>
+          <div class="subtitle">The NIL Gameplan Architect &middot; strategic + compliance backbone</div>
+        </div>
+      </div>
+
+      <div class="track-record">
+        <div class="cell"><div class="lbl">University track record</div><div class="val">University of Illinois &middot; Delaware</div></div>
+        <div class="cell"><div class="lbl">Focus</div><div class="val">Contracts &middot; compliance &middot; brand positioning</div></div>
+        <div class="cell"><div class="lbl">Role</div><div class="val">Founder, Trail of Joy Player Management Group</div></div>
+      </div>
+
+      <div class="bio-body">
+        <p>
+          Kyron built Trail of Joy Player Management Group around a single conviction &mdash;
+          <em>the athlete is not the product, they are the subject.</em> That reframe is what
+          led to the six-role Core Agent Stack, the Operational Transcript, and the standard
+          that now sits behind every TOJ deliverable across all four avenues.
+        </p>
+        <p>
+          His track record spans the <strong>University of Illinois</strong> and
+          <strong>Delaware</strong>, where he worked directly with athletes on positioning,
+          contract literacy, and the strategic side of NIL. When a mentee needs help reading a
+          brand deal before signing, understanding a collective&rsquo;s valid business purpose
+          under the 2026 rules, or shaping a personal brand that lasts past their last game
+          &mdash; that&rsquo;s the room he owns.
+        </p>
+      </div>
+
+      <div class="teaches">
+        <h4>What he leads in the cohort</h4>
+        <ul>
+          <li>What NIL actually means &middot; rule map</li>
+          <li>High school vs. college NIL &middot; collectives &middot; schools</li>
+          <li>NIL contracts &middot; key terms &middot; what to sign</li>
+          <li>Film discipline &middot; Player Transcript &middot; coach outreach</li>
+          <li>Brand positioning &middot; content execution &middot; social audit</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <section class="instructor" id="nicole">
+    <div class="container">
+      <div class="instructor-header">
+        <div class="avatar">NB</div>
+        <div class="instructor-title">
+          <span class="badge">Weeks 5&ndash;6 &middot; Financial Literacy + NIL Money</span>
+          <h2>Nicole Bradley</h2>
+          <div class="subtitle">The Money Coach Behind the Athletes</div>
+        </div>
+      </div>
+
+      <div class="track-record">
+        <div class="cell"><div class="lbl">Track record</div><div class="val">Gonzaga &middot; NFL &middot; Big Ten</div></div>
+        <div class="cell"><div class="lbl">Scope</div><div class="val">All sports &middot; all athletes</div></div>
+        <div class="cell"><div class="lbl">Focus</div><div class="val">Taxes &middot; budgeting &middot; red-flag awareness</div></div>
+      </div>
+
+      <div class="bio-body">
+        <p>
+          Nicole is the financial literacy anchor of the SubjectSkillz funnel &mdash; the
+          voice parents actually trust when the topic is money. Her track record spans
+          <strong>Gonzaga</strong>, the <strong>NFL</strong>, and <strong>Big Ten</strong>
+          programs, working with athletes across every sport and every stage of income.
+        </p>
+        <p>
+          She teaches what most athletes learn only after they&rsquo;ve made a mistake &mdash;
+          taxes on NIL income, the 25&ndash;30% rule, quarterly estimates, budgeting habits
+          that outlast the deal that made them necessary, and how to spot the predatory
+          advisor before the contract gets signed. If Weeks 1&ndash;4 are about earning the
+          deal, Weeks 5&ndash;6 are about keeping the money the deal produced.
+        </p>
+      </div>
+
+      <div class="teaches">
+        <h4>What she leads in the cohort</h4>
+        <ul>
+          <li>NIL income is taxable &middot; the 25&ndash;30% rule</li>
+          <li>Quarterly estimated taxes</li>
+          <li>Contracts &amp; payment records &middot; keeping receipts</li>
+          <li>Budgeting &middot; saving &middot; red-flag awareness</li>
+          <li>Signing day &middot; what you&rsquo;re actually agreeing to</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <div class="container">
+    <div class="cta-bar">
+      <div>
+        <h3>Ready to work with all three?</h3>
+        <p>The 6-week cohort runs on rhythm. Applications open by wave.</p>
+      </div>
+      <a href="https://advisory.tojcampaign.com/#cohort-waves" class="cta-btn">See cohort waves &rarr;</a>
+    </div>
+  </div>
+
+  <footer>
+    <div class="container">
+      <div>&copy; 2026 Trail of Joy Player Management Group, LLC.</div>
+      <div><a href="https://advisory.tojcampaign.com/">TOJ Advisory &rarr;</a></div>
+    </div>
+  </footer>
+</body>
+</html>

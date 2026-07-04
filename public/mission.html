@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>The Mission — TOJ Campaign</title>
+  <meta name="description" content="Trail of Joy Player Management Group. One standard, four avenues, one federation. The mission, the standards, and the philosophy behind every TOJ deliverable." />
+  <link rel="icon" href='data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect width="100" height="100" rx="20" fill="%231A1613"/><text x="50" y="66" font-family="Georgia" font-size="52" font-weight="600" fill="%23F5F1EA" text-anchor="middle">T</text></svg>' />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; }
+    body { font-family: 'Inter', -apple-system, sans-serif; background: #F5F1EA; color: #1A1613; line-height: 1.65; }
+    :root { --parchment: #F5F1EA; --parchment-2: #EBE4D6; --ink: #1A1613; --ink-soft: #3B3530; --ink-mute: #6E655C; --rule: rgba(26,22,19,0.12); --sports: #1E3A5F; --smallbiz: #A85F26; --bigbiz: #2F5D4E; --advisory: #B8843B; }
+    h1, h2, h3, h4 { font-family: 'Fraunces', 'Georgia', serif; font-weight: 600; letter-spacing: -0.015em; color: var(--ink); }
+    a { color: var(--sports); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    .container { max-width: 900px; margin: 0 auto; padding: 0 clamp(1.25rem, 3vw, 2.5rem); }
+    .top-bar { padding: 1rem 0; border-bottom: 1px solid var(--rule); background: rgba(245,241,234,0.94); backdrop-filter: blur(10px); position: sticky; top: 0; z-index: 40; }
+    .top-inner { display: flex; justify-content: space-between; align-items: center; max-width: 900px; margin: 0 auto; padding: 0 clamp(1.25rem, 3vw, 2.5rem); }
+    .brand { font-family: 'Fraunces', serif; font-weight: 600; font-size: 1.05rem; color: var(--ink); text-decoration: none; }
+    .brand span { color: var(--ink-mute); font-weight: 400; }
+    .back-link { color: var(--ink-soft); font-size: 0.85rem; font-weight: 500; }
+
+    .hero { padding: clamp(4rem, 8vw, 6rem) 0 clamp(2rem, 4vw, 3rem); }
+    .hero .eyebrow { font-size: 0.72rem; font-weight: 600; letter-spacing: 0.18em; text-transform: uppercase; color: var(--ink-mute); margin-bottom: 1rem; }
+    .hero h1 { font-size: clamp(2.4rem, 5vw, 3.6rem); line-height: 1.05; margin-bottom: 1.25rem; max-width: 22ch; }
+    .hero h1 em { font-style: italic; font-weight: 500; color: var(--sports); }
+    .hero .lede { font-size: 1.15rem; color: var(--ink-soft); max-width: 42rem; }
+
+    section { padding: clamp(3rem, 6vw, 4.5rem) 0; border-top: 1px solid var(--rule); }
+    section h2 { font-size: clamp(1.8rem, 3vw, 2.2rem); margin-bottom: 1.25rem; }
+    section p { color: var(--ink-soft); margin-bottom: 1.15rem; font-size: 1.02rem; max-width: 42rem; }
+    section p strong { color: var(--ink); font-weight: 600; }
+
+    .avenues-strip { display: grid; grid-template-columns: repeat(4,1fr); gap: 0.85rem; margin-top: 1.5rem; }
+    @media (max-width: 720px) { .avenues-strip { grid-template-columns: repeat(2,1fr); } }
+    .av-chip { padding: 1rem 1.15rem; color: #fff; border-radius: 10px; text-decoration: none; display: flex; flex-direction: column; gap: 0.15rem; transition: transform 0.2s; }
+    .av-chip:hover { transform: translateY(-2px); text-decoration: none; }
+    .av-chip .num { font-family: 'Fraunces', serif; font-size: 0.72rem; opacity: 0.7; }
+    .av-chip .name { font-family: 'Fraunces', serif; font-size: 1.1rem; font-weight: 500; }
+    .av-chip.sports { background: var(--sports); }
+    .av-chip.smallbiz { background: var(--smallbiz); }
+    .av-chip.bigbiz { background: var(--bigbiz); }
+    .av-chip.advisory { background: var(--advisory); }
+
+    .principle {
+      background: var(--parchment-2); padding: 1.85rem 1.65rem; border-radius: 12px; margin: 1.5rem 0;
+      border-left: 4px solid var(--sports);
+    }
+    .principle .lbl { font-size: 0.7rem; font-weight: 700; letter-spacing: 0.16em; text-transform: uppercase; color: var(--sports); margin-bottom: 0.6rem; }
+    .principle p { font-family: 'Fraunces', serif; font-size: 1.15rem; color: var(--ink); font-style: italic; margin: 0; }
+
+    .standards-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 1rem; margin-top: 1.5rem; }
+    @media (max-width: 640px) { .standards-grid { grid-template-columns: 1fr; } }
+    .std-card { padding: 1.35rem 1.25rem; background: var(--parchment); border: 1px solid var(--rule); border-radius: 10px; }
+    .std-card h4 { font-size: 1.05rem; margin-bottom: 0.4rem; }
+    .std-card p { font-size: 0.9rem; color: var(--ink-mute); margin: 0; }
+
+    footer { background: var(--ink); color: rgba(245,241,234,0.65); padding: 2.5rem 0; margin-top: 4rem; }
+    footer .container { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem; font-size: 0.82rem; }
+    footer a { color: rgba(245,241,234,0.75); }
+  </style>
+</head>
+<body>
+  <div class="top-bar">
+    <div class="top-inner">
+      <a href="/" class="brand">TOJ Campaign <span>&mdash; Trail of Joy</span></a>
+      <a href="/" class="back-link">&larr; Back to home</a>
+    </div>
+  </div>
+
+  <section class="hero" style="border:0;">
+    <div class="container">
+      <div class="eyebrow">The mission</div>
+      <h1>One standard. Four avenues. <em>One federation.</em></h1>
+      <p class="lede">
+        Trail of Joy Player Management Group exists to move relationships into revenue,
+        preserve the founder-culture that got each operator here, and keep the
+        Operational Transcript honest across every avenue &mdash; sport, small business,
+        big business, or personal brand.
+      </p>
+    </div>
+  </section>
+
+  <section>
+    <div class="container">
+      <h2>The principle underneath.</h2>
+      <p>
+        Every TOJ client &mdash; athlete, small operator, established business, or individual
+        building their own brand &mdash; receives the same artifact, graded on the same five
+        pillars. The four avenues are <strong>front doors</strong>, not different products.
+        Underneath every avenue, the same infrastructure serves every client.
+      </p>
+
+      <div class="principle">
+        <div class="lbl">The one-line version</div>
+        <p>The avenue is who the customer is. The tier is how their account is hosted. The standard is the same for both.</p>
+      </div>
+
+      <div class="avenues-strip">
+        <a class="av-chip sports" href="https://sports.tojcampaign.com/">
+          <span class="num">Avenue 01</span><span class="name">TOJ Sports</span>
+        </a>
+        <a class="av-chip smallbiz" href="https://smallbusiness.tojcampaign.com/">
+          <span class="num">Avenue 02</span><span class="name">Small Business</span>
+        </a>
+        <a class="av-chip bigbiz" href="https://bigbusiness.tojcampaign.com/">
+          <span class="num">Avenue 03</span><span class="name">Big Business</span>
+        </a>
+        <a class="av-chip advisory" href="https://advisory.tojcampaign.com/">
+          <span class="num">Avenue 04</span><span class="name">Advisory</span>
+        </a>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="container">
+      <h2>The five pillars behind every transcript.</h2>
+      <p>
+        The Operational Transcript is TOJ&rsquo;s universal artifact. Every client on every
+        avenue gets one; every one is graded on the same five pillars.
+      </p>
+      <div class="standards-grid">
+        <div class="std-card"><h4>Brand</h4><p>How the operator&rsquo;s identity reads &mdash; positioning, voice, discoverability, differentiation.</p></div>
+        <div class="std-card"><h4>Delivery</h4><p>What actually ships to customers &mdash; consistency, SLA adherence, service-line health.</p></div>
+        <div class="std-card"><h4>Retention</h4><p>How well the operator holds onto customers &mdash; renewals, repeat rates, referral yield.</p></div>
+        <div class="std-card"><h4>Financial</h4><p>The economic engine &mdash; margin, pricing hygiene, revenue-recovery discipline.</p></div>
+        <div class="std-card"><h4>Demand</h4><p>How the funnel gets fed &mdash; outreach, discoverability, top-of-funnel health.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="container">
+      <h2>The 90 / 10 posture.</h2>
+      <p>
+        Every mature TOJ deployment converges toward roughly 90% automated execution and 10%
+        human interaction. The 10% that stays human isn&rsquo;t random &mdash; it&rsquo;s the
+        specific verification step where judgment matters most: pricing decisions, tone on a
+        message that will be read in public, the moment before a contract gets signed.
+      </p>
+      <p>
+        The path to 90/10 is the same for every avenue because the mechanism is the same
+        &mdash; a repeatable process for turning any repetitive manual task into a named,
+        verifiable skill. What differs by avenue is <em>which</em> skills get automated first.
+        The destination is the same shape; the route there is client-specific.
+      </p>
+    </div>
+  </section>
+
+  <section>
+    <div class="container">
+      <h2>What the federation actually is.</h2>
+      <p>
+        The TOJ federation is a set of independent operators &mdash; trainers, small
+        businesses, multi-location companies, individuals building personal brands &mdash; who
+        share standards but keep their own identity. No apex, no hierarchy. Each brand keeps
+        its voice; each brand contributes back to a cross-network intelligence log that gets
+        sharper every week.
+      </p>
+      <p>
+        The math is compounding: every operator on the network gets slightly smarter every
+        week because of what another operator on the network learned. That&rsquo;s why the
+        cohort effect matters. That&rsquo;s why waves stay small.
+      </p>
+    </div>
+  </section>
+
+  <section>
+    <div class="container">
+      <h2>See it in action.</h2>
+      <p>
+        Every claim above is either already delivering for a real operator or is a
+        commitment we&rsquo;re making publicly. To see the shape of the deliverable:
+      </p>
+      <p>
+        &rarr; <a href="/sample-transcript.html">See a sample Operational Transcript</a><br/>
+        &rarr; <a href="/instructors.html">Meet the instructors behind Advisory</a><br/>
+        &rarr; <a href="/patterns.html">Read the patterns log</a>
+      </p>
+    </div>
+  </section>
+
+  <footer>
+    <div class="container">
+      <div>&copy; 2026 Trail of Joy Player Management Group, LLC.</div>
+      <div><a href="/">TOJ Campaign home &rarr;</a></div>
+    </div>
+  </footer>
+</body>
+</html>
