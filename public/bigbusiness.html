@@ -1179,6 +1179,284 @@
       color: rgba(245,241,234,0.45);
       flex-wrap: wrap; gap: 1rem;
     }
+
+    /* ---------- THE STANDARD (executive gravity center) ---------- */
+    .standard-wrap {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: clamp(2rem, 5vw, 4.5rem);
+      align-items: start;
+    }
+    @media (max-width: 900px) { .standard-wrap { grid-template-columns: 1fr; } }
+    .standard-copy .eyebrow { margin-bottom: 1rem; }
+    .standard-copy h2 { margin-bottom: 1.5rem; }
+    .standard-copy p {
+      font-size: 1.05rem;
+      color: var(--ink-soft);
+      line-height: 1.65;
+      margin-bottom: 1.1rem;
+      max-width: 34rem;
+    }
+    .standard-copy p:first-of-type::first-letter {
+      font-family: 'Fraunces', serif;
+      font-size: 3.4rem;
+      font-weight: 600;
+      color: var(--accent);
+      float: left;
+      line-height: 0.85;
+      padding-right: 0.6rem;
+      padding-top: 0.35rem;
+    }
+    .standard-quote {
+      background: var(--parchment-2);
+      border-radius: 14px;
+      padding: 2rem 1.85rem;
+      border-left: 4px solid var(--accent);
+      position: relative;
+    }
+    .standard-quote::before {
+      content: '&#8220;';
+      position: absolute;
+      top: -0.3rem;
+      left: 1.1rem;
+      font-family: 'Fraunces', serif;
+      font-size: 4rem;
+      color: var(--accent);
+      opacity: 0.35;
+      line-height: 1;
+    }
+    .standard-quote blockquote {
+      font-family: 'Fraunces', serif;
+      font-size: 1.35rem;
+      line-height: 1.35;
+      color: var(--ink);
+      margin-bottom: 1.25rem;
+      font-style: italic;
+      font-weight: 500;
+      max-width: 22rem;
+    }
+    .standard-quote cite {
+      font-style: normal;
+      display: flex; align-items: center; gap: 0.6rem;
+      font-family: 'Inter', sans-serif;
+      font-size: 0.82rem;
+      color: var(--ink-mute);
+    }
+    .standard-quote cite strong { color: var(--ink); font-weight: 600; }
+    .standard-quote cite .dot { width: 5px; height: 5px; border-radius: 999px; background: var(--accent); }
+    .standard-facts {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 0;
+      margin-top: 1.5rem;
+      background: var(--parchment);
+      border: 1px solid var(--rule);
+      border-radius: 10px;
+      overflow: hidden;
+    }
+    @media (max-width: 540px) { .standard-facts { grid-template-columns: 1fr; } }
+    .standard-facts .fact {
+      padding: 1.1rem 1.15rem;
+      border-right: 1px solid var(--rule);
+    }
+    .standard-facts .fact:last-child { border-right: 0; }
+    @media (max-width: 540px) {
+      .standard-facts .fact { border-right: 0; border-bottom: 1px solid var(--rule); }
+      .standard-facts .fact:last-child { border-bottom: 0; }
+    }
+    .standard-facts .fact-num {
+      font-family: 'Fraunces', serif;
+      font-size: 1.9rem;
+      font-weight: 600;
+      color: var(--accent);
+      line-height: 1;
+      margin-bottom: 0.35rem;
+      letter-spacing: -0.02em;
+    }
+    .standard-facts .fact-label {
+      font-size: 0.72rem;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: var(--ink-mute);
+      font-weight: 600;
+    }
+
+    /* ---------- REPORTING RHYTHM ---------- */
+    .rhythm-head { max-width: 46rem; margin-bottom: 3rem; }
+    .rhythm-head .eyebrow { margin-bottom: 1rem; }
+    .rhythm-head h2 { margin-bottom: 1.25rem; }
+    .rhythm-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 0.9rem;
+    }
+    @media (max-width: 900px) { .rhythm-grid { grid-template-columns: repeat(2, 1fr); } }
+    @media (max-width: 520px) { .rhythm-grid { grid-template-columns: 1fr; } }
+    .rhythm-cell {
+      display: flex; flex-direction: column;
+      padding: 1.65rem 1.4rem 1.5rem;
+      background: var(--parchment);
+      border: 1px solid var(--rule);
+      border-radius: 12px;
+      min-height: 240px;
+      transition: transform 0.2s ease, box-shadow 0.2s ease;
+    }
+    .rhythm-cell:hover {
+      transform: translateY(-3px);
+      box-shadow: 0 20px 40px -25px rgba(47, 93, 78, 0.35);
+    }
+    .rhythm-cell .cadence {
+      font-family: 'Fraunces', serif;
+      font-size: 0.78rem;
+      color: var(--ink-mute);
+      letter-spacing: 0.02em;
+      margin-bottom: 0.35rem;
+      text-transform: uppercase;
+      font-weight: 600;
+    }
+    .rhythm-cell h4 {
+      font-family: 'Fraunces', serif;
+      font-size: 1.1rem;
+      color: var(--ink);
+      line-height: 1.2;
+      margin-bottom: 0.85rem;
+    }
+    .rhythm-cell ul {
+      list-style: none;
+      display: flex; flex-direction: column;
+      gap: 0.4rem;
+      flex: 1;
+    }
+    .rhythm-cell ul li {
+      font-size: 0.82rem;
+      color: var(--ink-mute);
+      padding-left: 1rem;
+      position: relative;
+      line-height: 1.4;
+    }
+    .rhythm-cell ul li::before {
+      content: '';
+      position: absolute;
+      left: 0; top: 0.5em;
+      width: 5px; height: 5px;
+      background: var(--accent);
+      border-radius: 999px;
+    }
+    .rhythm-cell .destination {
+      margin-top: 0.85rem;
+      padding-top: 0.85rem;
+      border-top: 1px solid var(--rule);
+      font-family: 'Inter', monospace;
+      font-size: 0.68rem;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--accent);
+      font-weight: 600;
+    }
+    .rhythm-summary {
+      margin-top: 2.5rem;
+      padding: 1.2rem 1.5rem;
+      background: var(--parchment-2);
+      border-radius: 10px;
+      font-family: 'Fraunces', serif;
+      font-size: 1rem;
+      color: var(--ink);
+      max-width: 52rem;
+      font-style: italic;
+    }
+
+    /* ---------- ROLLOUT PATH ---------- */
+    .rollout-wrap {
+      background: var(--ink);
+      color: var(--parchment);
+      border-radius: 20px;
+      padding: clamp(2.25rem, 4vw, 3rem);
+    }
+    .rollout-head { max-width: 46rem; margin-bottom: 2rem; }
+    .rollout-head .eyebrow { color: rgba(245,241,234,0.55); margin-bottom: 1rem; }
+    .rollout-head h2 { color: var(--parchment); margin-bottom: 1rem; }
+    .rollout-head p { color: rgba(245,241,234,0.72); max-width: 44rem; }
+    .rollout-path {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 0.85rem;
+      margin-bottom: 2rem;
+      position: relative;
+    }
+    @media (max-width: 900px) { .rollout-path { grid-template-columns: 1fr 1fr; } }
+    @media (max-width: 520px) { .rollout-path { grid-template-columns: 1fr; } }
+    .rollout-step {
+      display: flex; flex-direction: column;
+      padding: 1.55rem 1.4rem 1.4rem;
+      background: rgba(245,241,234,0.05);
+      border: 1px solid rgba(245,241,234,0.14);
+      border-radius: 12px;
+      position: relative;
+    }
+    .rollout-step .phase-num {
+      font-family: 'Fraunces', serif;
+      font-size: 0.78rem;
+      color: rgba(245,241,234,0.55);
+      letter-spacing: 0.02em;
+      margin-bottom: 0.3rem;
+      font-weight: 500;
+    }
+    .rollout-step h4 {
+      font-family: 'Fraunces', serif;
+      font-size: 1.1rem;
+      color: var(--parchment);
+      line-height: 1.2;
+      margin-bottom: 0.6rem;
+    }
+    .rollout-step p {
+      font-size: 0.82rem;
+      color: rgba(245,241,234,0.72);
+      line-height: 1.45;
+      margin-bottom: 1rem;
+      flex: 1;
+    }
+    .rollout-step .step-tag {
+      padding-top: 0.85rem;
+      border-top: 1px solid rgba(245,241,234,0.14);
+      font-family: 'Inter', monospace;
+      font-size: 0.66rem;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: var(--accent);
+      font-weight: 600;
+    }
+    .rollout-step.now { border-color: rgba(47,93,78,0.65); background: rgba(47,93,78,0.15); }
+    .rollout-step.now .step-tag { color: #6FA894; }
+    .rollout-cta {
+      display: flex; align-items: center; justify-content: space-between; gap: 1rem;
+      padding: 1.4rem 1.5rem;
+      background: rgba(245,241,234,0.06);
+      border: 1px solid rgba(245,241,234,0.15);
+      border-radius: 12px;
+      flex-wrap: wrap;
+    }
+    .rollout-cta .cta-msg {
+      font-family: 'Fraunces', serif;
+      color: var(--parchment);
+      font-size: 1rem;
+      font-style: italic;
+      max-width: 32rem;
+    }
+    .rollout-cta a {
+      display: inline-flex; align-items: center; gap: 0.4rem;
+      padding: 0.75rem 1.35rem;
+      background: var(--accent);
+      color: #fff;
+      border-radius: 999px;
+      font-family: 'Inter', sans-serif;
+      font-weight: 600;
+      font-size: 0.88rem;
+      text-decoration: none;
+      transition: background 0.15s ease;
+      white-space: nowrap;
+    }
+    .rollout-cta a:hover { background: var(--accent-2); }
+
   </style>
 </head>
 <body>
@@ -1191,11 +1469,11 @@
         <span class="lane-badge"><span class="dot"></span> Avenue 03 · Big Business</span>
       </div>
       <nav class="primary">
-        <a href="#thesis">The flow</a>
-        <a href="#hierarchy">Value ladder</a>
+        <a href="#standard">The standard</a>
+        <a href="#rhythm">Reporting rhythm</a>
         <a href="#products">Inside</a>
-        <a href="#tiers">Tiers</a>
-        <a href="#intake">Start intake</a>
+        <a href="#rollout">Rollout path</a>
+        <a href="#intake">Talk to us</a>
       </nav>
     </div>
   </header>
@@ -1206,16 +1484,19 @@
       <div class="hero-grid">
         <div>
           <div class="eyebrow navy">TOJ Big Business · bigbusiness.tojcampaign.com</div>
-          <h1>Where scale meets <em>structure</em>.</h1>
+          <h1>You built the operation.<br/>Now <em>scale it</em> without losing it.</h1>
           <p class="lede">
-            The operating standard for multi-location trades, multi-studio operators, regional
-            service companies, and B2B providers. Every rung — lead generation, sales, delivery,
-            reporting, visibility, team development, brand, authority — runs under one
-            intelligence layer, applied consistently across every division.
+            Multi-location trades, multi-studio operators, regional service companies, B2B
+            providers. When one standard has to cross every division, every location, every
+            ZIP code — that&rsquo;s TOJ Big Business. The founder-culture stays. The reporting
+            stops being manual. The next location opens against a system, not a scramble.
+          </p>
+          <p class="lede" style="font-family: 'Fraunces', serif; font-style: italic; color: var(--accent); font-size: 1rem; margin-top: 0.85rem; max-width: 42rem;">
+            The standard scales. You don&rsquo;t have to.
           </p>
           <div class="hero-cta">
-            <a href="#intake" class="btn primary">Start intake <span class="arrow">→</span></a>
-            <a href="#hierarchy" class="btn ghost">See the value ladder</a>
+            <a href="#rollout" class="btn primary">See the rollout path <span class="arrow">→</span></a>
+            <a href="#rhythm" class="btn ghost">See the reporting rhythm</a>
           </div>
         </div>
 
@@ -1246,6 +1527,65 @@
     </div>
   </section>
 
+  <!-- ============ THE STANDARD (executive gravity) ============ -->
+  <section id="standard-narrative">
+    <div class="container">
+      <div class="standard-wrap">
+        <div class="standard-copy">
+          <div class="eyebrow navy">What the standard actually is</div>
+          <h2>Founder-culture. Preserved. At scale.</h2>
+          <p>
+            Meridian HVAC opened its first location in Plano because the founder answered every
+            call. Six years later, five locations run under the same brand, but the founder
+            stopped answering calls in year two. What kept the brand from eroding was a standard
+            written down once, applied everywhere, updated when it changed. That&rsquo;s what
+            we install.
+          </p>
+          <p>
+            The standard isn&rsquo;t a manual on a shelf. It&rsquo;s a working system —
+            dispatch protocol, customer communication cadence, SLA definitions, escalation
+            trees, weekly reporting rhythms. Every location inherits it on day one. A new
+            location that opens against the standard performs like the flagship by month three,
+            not month thirty.
+          </p>
+          <p>
+            The upside for leadership is precision. The number you need to see on Monday morning
+            is the number waiting for you on Monday morning — for every division, every location,
+            every service line. Not a phone tree. Not a manager&rsquo;s guess. The number.
+          </p>
+        </div>
+
+        <div>
+          <div class="standard-quote">
+            <blockquote>
+              &ldquo;My Plano location taught us who we are. TOJ made sure the next four
+              locations remembered.&rdquo;
+            </blockquote>
+            <cite>
+              <span class="dot"></span>
+              <span><strong>Meridian HVAC</strong> · Plano, TX · Established lane composite</span>
+            </cite>
+          </div>
+
+          <div class="standard-facts">
+            <div class="fact">
+              <div class="fact-num">1</div>
+              <div class="fact-label">Standard, applied<br/>everywhere</div>
+            </div>
+            <div class="fact">
+              <div class="fact-num">1</div>
+              <div class="fact-label">Report,<br/>every division</div>
+            </div>
+            <div class="fact">
+              <div class="fact-num">0</div>
+              <div class="fact-label">Founder-culture<br/>drift</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
   <!-- ============ THESIS / CYCLE ============ -->
   <section id="thesis">
     <div class="container">
@@ -1266,8 +1606,9 @@
             round of relationships.
           </p>
           <p>
-            TOJ Big Business operates every stage — across every division — not just one.
-            That's what turns a multi-location operation into a genuinely federated business.
+            The standard runs every stage — across every division — so a location that just
+            opened performs the same as your flagship, and leadership never has to phone-tree
+            for the number they need to see.
           </p>
         </div>
 
@@ -1373,8 +1714,9 @@
       </div>
 
       <p class="ladder-note">
-        Every company on TOJ Big Business has all eight rungs running underneath — even
-        when the client only asks for one.
+        Every company on TOJ Big Business has all eight rungs running underneath — even when
+        leadership onboards for just one. That&rsquo;s how the founder-culture keeps compounding
+        as the network grows.
       </p>
     </div>
   </section>
@@ -1384,12 +1726,12 @@
     <div class="container">
       <div class="products-head">
         <div class="eyebrow navy">Inside TOJ Big Business</div>
-        <h2>Four products. One shared standard behind them.</h2>
+        <h2>One operating layer. Four surfaces. Every division.</h2>
         <p class="lede">
-          These are the products that sit inside TOJ Big Business itself. Customers engage with
-          them across every location. Companies run them from their own multi-division environment.
-          The TOJ Network holds the standard behind each one, so what a customer in one location
-          gets is what a customer in every other location gets.
+          It&rsquo;s not four separate tools bolted together. It&rsquo;s one operating layer that
+          runs the standard, the reporting, the team enablement, and the enterprise pipeline —
+          across every location. What a customer gets in Plano is what a customer gets in Frisco.
+          What leadership sees on Monday is what leadership sees every Monday.
         </p>
       </div>
 
@@ -1438,6 +1780,74 @@
           <div class="p-detail"><strong>Delivers</strong> — Sales · Authority</div>
         </div>
       </div>
+    </div>
+  </section>
+
+
+  <!-- ============ REPORTING RHYTHM ============ -->
+  <section id="rhythm">
+    <div class="container">
+      <div class="rhythm-head">
+        <div class="eyebrow navy">The reporting rhythm</div>
+        <h2>Precision, on cadence, without the scramble.</h2>
+        <p class="lede">
+          Cross-division reporting was the biggest hidden time cost at your size. It&rsquo;s
+          not anymore. Every location&rsquo;s numbers roll up on schedule, land in front of
+          leadership when they&rsquo;re useful, and get compared against the standard —
+          automatically.
+        </p>
+      </div>
+
+      <div class="rhythm-grid">
+        <div class="rhythm-cell">
+          <div class="cadence">Every day</div>
+          <h4>Location dashboards live</h4>
+          <ul>
+            <li>Per-location revenue &amp; job counts</li>
+            <li>Service-line performance vs. standard</li>
+            <li>SLA breach flags surface in real time</li>
+          </ul>
+          <div class="destination">Location leaders</div>
+        </div>
+
+        <div class="rhythm-cell">
+          <div class="cadence">Every week</div>
+          <h4>Cross-division rollup</h4>
+          <ul>
+            <li>Every location on one screen</li>
+            <li>Benchmarks against the standard</li>
+            <li>Funnel-leak detection &amp; action items</li>
+          </ul>
+          <div class="destination">Leadership team</div>
+        </div>
+
+        <div class="rhythm-cell">
+          <div class="cadence">Every month</div>
+          <h4>Executive report</h4>
+          <ul>
+            <li>Renewal &amp; expansion signals</li>
+            <li>Team development &amp; hiring pipeline</li>
+            <li>Board-ready summary of the network</li>
+          </ul>
+          <div class="destination">C-suite &amp; board</div>
+        </div>
+
+        <div class="rhythm-cell">
+          <div class="cadence">Every quarter</div>
+          <h4>Standard health audit</h4>
+          <ul>
+            <li>Standard drift check across locations</li>
+            <li>New locations audited against baseline</li>
+            <li>Next quarter&rsquo;s build order set</li>
+          </ul>
+          <div class="destination">Founder &amp; leadership</div>
+        </div>
+      </div>
+
+      <p class="rhythm-summary">
+        &ldquo;What used to take a two-day scramble each Monday now waits for us at 7 AM,
+        already aggregated, already benchmarked.&rdquo;
+      </p>
     </div>
   </section>
 
@@ -1553,6 +1963,59 @@
   </section>
 
   <!-- ============ TRAINERS ON THE NETWORK (the federation, made real) ============ -->
+
+  <!-- ============ ROLLOUT PATH ============ -->
+  <section id="rollout">
+    <div class="container">
+      <div class="rollout-wrap">
+        <div class="rollout-head">
+          <div class="eyebrow">The rollout path</div>
+          <h2>You don&rsquo;t flip a switch. You roll out in phases.</h2>
+          <p>
+            The rollout starts where you already work — your founder location. We map what
+            makes it work, extract the standard, and apply it to the next locations one at a
+            time. The pace matches your operational risk tolerance, not our billing cycle.
+          </p>
+        </div>
+
+        <div class="rollout-path">
+          <div class="rollout-step">
+            <div class="phase-num">Phase 01</div>
+            <h4>Baseline capture</h4>
+            <p>Founder location gets mapped. What&rsquo;s working, what&rsquo;s tribal knowledge, what&rsquo;s never been written down.</p>
+            <div class="step-tag">Weeks 1–2</div>
+          </div>
+
+          <div class="rollout-step">
+            <div class="phase-num">Phase 02</div>
+            <h4>Standard extracted</h4>
+            <p>What makes the founder location work becomes the standard: SLA, dispatch, customer cadence, escalation trees.</p>
+            <div class="step-tag">Weeks 3–4</div>
+          </div>
+
+          <div class="rollout-step now">
+            <div class="phase-num">Phase 03</div>
+            <h4>First rollout</h4>
+            <p>Standard applied to your next two or three locations. Weekly cross-location comparison begins. Drift caught early.</p>
+            <div class="step-tag">Month 2–3 · Most enter here</div>
+          </div>
+
+          <div class="rollout-step">
+            <div class="phase-num">Phase 04</div>
+            <h4>Network mode</h4>
+            <p>Every location on standard. Cross-division reporting live. Leadership runs from one screen. Next expansion opens against a system.</p>
+            <div class="step-tag">Month 4+</div>
+          </div>
+        </div>
+
+        <div class="rollout-cta">
+          <div class="cta-msg">Most engagements enter at Phase 03. The founder location work is usually already done — we just need to write it down.</div>
+          <a href="#intake">Book a scoping call &rarr;</a>
+        </div>
+      </div>
+    </div>
+  </section>
+
   <section id="operating-systems">
     <div class="container">
       <div class="os-head">
@@ -1560,8 +2023,9 @@
         <h2>Companies already on the network.</h2>
         <p class="lede">
           Each company operates under its own identity, its own divisions, its own customers —
-          and inherits the same standard as every other company on the network. The federation
-          grows peer by peer, and gets sharper every week.
+          and inherits the same standard as every other company on the network. Leadership
+          teams talk to each other. Standards flow across brands; patterns flow back into the
+          network&rsquo;s intelligence every quarter.
         </p>
       </div>
 
@@ -1598,8 +2062,9 @@
       </div>
 
       <p class="os-note">
-        Every trainer on the network is peer — no apex, no hierarchy. Standards flow across
-        brands; patterns flow back into the network's intelligence every week.
+        Every company on the network is peer — no apex, no hierarchy. Multi-location trades,
+        multi-studio operators, regional service companies. Standards flow across every brand;
+        patterns flow back into the network&rsquo;s intelligence every quarter.
       </p>
     </div>
   </section>
@@ -1699,12 +2164,13 @@
     <div class="container">
       <div class="cta-wrap">
         <div>
-          <div class="cta-eyebrow">Ready to install the standard across every division</div>
-          <h2>Start the TOJ Big Business intake.</h2>
+          <div class="cta-eyebrow">Ready to scale without losing what got you here</div>
+          <h2>Install the standard across every location.</h2>
           <p>
-            Whether you're a multi-location trade, a multi-studio operator, a regional service
-            company, or a B2B provider — the intake is the same door. We learn how your operation
-            actually runs, then apply the standard across every division you serve.
+            The path starts with your founder location — the one that already works. We map what
+            makes it work, extract the standard, and roll it out to the next locations without
+            eroding it. By the time you&rsquo;re in five ZIP codes, leadership is running from
+            one report, not fifty spreadsheets.
           </p>
         </div>
         <div class="cta-actions">
@@ -1728,11 +2194,13 @@
           <ul>
             <li><a href="#thesis">The flow</a></li>
             <li><a href="#hierarchy">Value ladder</a></li>
+            <li><a href="#standard-narrative">The standard</a></li>
+            <li><a href="#rhythm">Reporting rhythm</a></li>
             <li><a href="#products">Inside TOJ Big Business</a></li>
+            <li><a href="#rollout">Rollout path</a></li>
             <li><a href="#tiers">Three tiers</a></li>
             <li><a href="#operating-systems">Companies on the network</a></li>
-            <li><a href="#tier">Tier infrastructure</a></li>
-            <li><a href="#intake">Start intake</a></li>
+            <li><a href="#intake">Talk to us</a></li>
           </ul>
         </div>
         <div class="footer-col">
