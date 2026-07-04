@@ -1,31 +1,9 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": null,
-  "installCommand": "echo skipping-install-static-site",
+  "installCommand": "npm install @vercel/edge@1 --no-save --no-audit --no-fund",
   "buildCommand": "node scripts/build-lanes.js",
   "outputDirectory": "public",
-  "rewrites": [
-    {
-      "source": "/",
-      "has": [{ "type": "host", "value": "sports.tojcampaign.com" }],
-      "destination": "/sports.html"
-    },
-    {
-      "source": "/",
-      "has": [{ "type": "host", "value": "smallbusiness.tojcampaign.com" }],
-      "destination": "/smallbusiness.html"
-    },
-    {
-      "source": "/",
-      "has": [{ "type": "host", "value": "bigbusiness.tojcampaign.com" }],
-      "destination": "/bigbusiness.html"
-    },
-    {
-      "source": "/",
-      "has": [{ "type": "host", "value": "advisory.tojcampaign.com" }],
-      "destination": "/advisory.html"
-    }
-  ],
   "redirects": [
     {
       "source": "/app.html",
