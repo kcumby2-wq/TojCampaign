@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-wavecloses="2026-11-15T00:00:00">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -1674,6 +1674,28 @@
     .intake-success h4 { font-size: 1.2rem; margin-bottom: 0.5rem; }
     .intake-success p { font-size: 0.9rem; color: var(--ink-mute); margin-bottom: 1rem; }
 
+
+    /* Trust strip below hero CTAs */
+    .trust-hero {
+      display: flex; flex-wrap: wrap; gap: 0.55rem;
+      margin-top: 1.75rem; padding-top: 1.35rem;
+      border-top: 1px solid var(--rule);
+      max-width: 42rem;
+    }
+    .trust-hero .fact-chip {
+      display: inline-flex; align-items: center; gap: 0.45rem;
+      padding: 0.4rem 0.8rem;
+      background: var(--parchment-2);
+      border-radius: 999px;
+      font-size: 0.78rem; color: var(--ink-soft);
+      font-family: 'Inter', sans-serif; font-weight: 500;
+    }
+    .trust-hero .fact-chip::before {
+      content: '\2713'; color: var(--accent); font-weight: 700;
+    }
+    .trust-hero .fact-chip.live::before { content: '\25CF'; animation: pulse 2s infinite; color: var(--accent); }
+    @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+
   </style>
 </head>
 <body>
@@ -1700,15 +1722,16 @@
     <div class="container">
       <div class="hero-grid">
         <div>
-          <div class="eyebrow navy">TOJ Small Business · smallbusiness.tojcampaign.com</div>
-          <h1>You built the craft.<br/>We build the <em>trail</em> behind it.</h1>
+          <div class="eyebrow navy">The problem TOJ Small Business solves</div>
+          <h1>Your regulars don&rsquo;t leave because you&rsquo;re bad.<br/>They leave when you <em>go quiet</em>.</h1>
           <p class="lede">
-            Every neighborhood shop, every solo coach, every local trade that runs on
-            relationships — the trail is what turns your reputation into a rhythm. Ship on
-            cadence. Stay yourself. Compound month over month.
+            You&rsquo;re the bottleneck. The days you can&rsquo;t show up, the follow-ups
+            don&rsquo;t. The reviews stop coming. The referral prompts don&rsquo;t fire. TOJ
+            builds the trail behind you &mdash; so the standard runs even when you&rsquo;re
+            teaching, cutting hair, or on the truck.
           </p>
           <p class="lede" style="font-family: 'Fraunces', serif; font-style: italic; color: var(--accent); font-size: 1rem; margin-top: 0.85rem; max-width: 42rem;">
-            You don&rsquo;t join a platform. You join a trail — with operators already on it.
+            You built the craft. We build the trail behind it.
           </p>
           <div class="hero-cta">
             <a href="#waves" class="btn primary">Walk the trail with us <span class="arrow">→</span></a>
@@ -2632,6 +2655,27 @@
       </div>
     </div>
   </footer>
+
+
+  <script>
+    // Live countdown to the next window / wave / rollout gate
+    (function() {
+      const target = new Date(document.documentElement.dataset.wavecloses || '2026-11-15T00:00:00');
+      function tick() {
+        const el = document.querySelector('#waveCountdown, #cohortCountdown, #windowCountdown, #rolloutCountdown');
+        if (!el) return;
+        const now = new Date();
+        const diff = target - now;
+        if (diff <= 0) return;
+        const days = Math.floor(diff / 86400000);
+        const hours = Math.floor((diff % 86400000) / 3600000);
+        const base = el.textContent.split(' \u00b7 ')[0];
+        el.textContent = base + ' \u00b7 closes in ' + days + 'd ' + hours + 'h';
+      }
+      tick();
+      setInterval(tick, 60000);
+    })();
+  </script>
 
 </body>
 </html>

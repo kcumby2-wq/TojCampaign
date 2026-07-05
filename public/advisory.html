@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-wavecloses="2026-11-05T00:00:00">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -1846,6 +1846,84 @@
     .intake-success h4 { font-size: 1.2rem; margin-bottom: 0.5rem; }
     .intake-success p { font-size: 0.9rem; color: var(--ink-mute); margin-bottom: 1rem; }
 
+
+    /* Trust strip below hero CTAs */
+    .trust-hero {
+      display: flex; flex-wrap: wrap; gap: 0.55rem;
+      margin-top: 1.75rem; padding-top: 1.35rem;
+      border-top: 1px solid var(--rule);
+      max-width: 42rem;
+    }
+    .trust-hero .fact-chip {
+      display: inline-flex; align-items: center; gap: 0.45rem;
+      padding: 0.4rem 0.8rem;
+      background: var(--parchment-2);
+      border-radius: 999px;
+      font-size: 0.78rem; color: var(--ink-soft);
+      font-family: 'Inter', sans-serif; font-weight: 500;
+    }
+    .trust-hero .fact-chip::before {
+      content: '\2713'; color: var(--accent); font-weight: 700;
+    }
+    .trust-hero .fact-chip.live::before { content: '\25CF'; animation: pulse 2s infinite; color: var(--accent); }
+    @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+
+
+    /* Mastery-based section */
+    .mastery-wrap {
+      display: grid; grid-template-columns: 1fr 1fr;
+      gap: clamp(2rem, 5vw, 4rem); align-items: start;
+    }
+    @media (max-width: 900px) { .mastery-wrap { grid-template-columns: 1fr; } }
+    .mastery-copy .eyebrow { margin-bottom: 1rem; }
+    .mastery-copy h2 { margin-bottom: 1.25rem; }
+    .mastery-copy p { margin-bottom: 1.15rem; max-width: 34rem; color: var(--ink-soft); }
+    .mastery-copy p strong { color: var(--ink); font-weight: 600; }
+    .mastery-copy .pedagogy-tag {
+      display: inline-block; margin-top: 0.5rem;
+      padding: 0.3rem 0.75rem;
+      background: var(--accent-tint);
+      color: var(--accent);
+      border-radius: 4px;
+      font-size: 0.72rem; letter-spacing: 0.12em; text-transform: uppercase; font-weight: 700;
+    }
+    .mastery-visual {
+      background: var(--parchment-2);
+      border: 1px solid var(--rule);
+      border-radius: 16px;
+      padding: 1.85rem 1.65rem;
+      position: relative;
+    }
+    .mastery-visual h4 {
+      font-family: 'Fraunces', serif; font-size: 1.15rem;
+      margin-bottom: 1.35rem; padding-bottom: 1rem;
+      border-bottom: 1px solid var(--rule);
+    }
+    .mastery-steps { display: flex; flex-direction: column; gap: 1rem; }
+    .mastery-step {
+      display: grid; grid-template-columns: 42px 1fr; gap: 1rem;
+      padding: 0.85rem 0.9rem; background: var(--parchment);
+      border-radius: 10px; border: 1px solid var(--rule);
+      align-items: flex-start;
+    }
+    .mastery-step .step-badge {
+      width: 40px; height: 40px; border-radius: 999px;
+      background: var(--accent); color: #fff;
+      display: flex; align-items: center; justify-content: center;
+      font-family: 'Fraunces', serif; font-weight: 600; font-size: 0.95rem;
+    }
+    .mastery-step .step-body strong { display: block; color: var(--ink); font-weight: 600; font-size: 0.92rem; margin-bottom: 0.2rem; }
+    .mastery-step .step-body span { display: block; color: var(--ink-mute); font-size: 0.82rem; line-height: 1.45; }
+    .mastery-comparison {
+      margin-top: 1.15rem; padding: 0.85rem 1.05rem;
+      background: rgba(184,132,59,0.12);
+      border-left: 3px solid var(--accent);
+      border-radius: 4px;
+      font-family: 'Fraunces', serif; font-size: 0.92rem;
+      color: var(--ink); font-style: italic;
+    }
+    .mastery-comparison strong { color: var(--accent); font-style: normal; font-weight: 700; }
+
   </style>
 </head>
 <body>
@@ -1873,16 +1951,17 @@
     <div class="container">
       <div class="hero-grid">
         <div>
-          <div class="eyebrow navy">TOJ Advisory · SubjectSkillz · SubjectMedia</div>
-          <h1>The Full-Circle <em>NIL Wealth Pipeline</em>.</h1>
+          <div class="eyebrow navy">The problem TOJ Advisory solves</div>
+          <h1>The athletes losing NIL money aren&rsquo;t losing on talent.<br/>They&rsquo;re losing on <em>education</em>.</h1>
           <p class="lede">
-            A structured, legally compliant pathway that moves student-athletes and creators
-            from education → NIL readiness → financial literacy → representation. Free
-            starter class, a 6-week cohort on the SubjectReport LMS, and a path to becoming
-            fundable — not just followable.
+            Bad contracts. Missed taxes. Brand liabilities that follow you into college. The
+            pipeline is the opposite: master the basics, then become prime. Six weeks. Three
+            instructors. A mastery-based curriculum that has students learning
+            <strong style="color:var(--ink);">twice as much in half the time</strong> —
+            walking into college with the receipts already on record.
           </p>
           <p class="lede" style="font-family: 'Fraunces', serif; font-style: italic; color: var(--accent); font-size: 1.05rem; margin-top: 1rem; max-width: 42rem;">
-            &ldquo;The athlete is not the product. They are the subject.&rdquo;
+            Master the basics. Then become prime.
           </p>
           <div class="hero-cta">
             <a href="#program" class="btn primary">See the 6-week program <span class="arrow">→</span></a>
@@ -1968,6 +2047,76 @@
               <div class="fact-num">100%</div>
               <div class="fact-label">Documented<br/>deliverables</div>
             </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+
+  <!-- ============ MASTERY-BASED PEDAGOGY ============ -->
+  <section id="mastery">
+    <div class="container">
+      <div class="mastery-wrap">
+        <div class="mastery-copy">
+          <div class="eyebrow navy">The pedagogy</div>
+          <h2>Master the basics. Then become <em style="font-style:italic;font-weight:500;color:var(--accent);">prime</em>.</h2>
+          <p>
+            Most youth programs move at the pace of the calendar. Ours moves at the pace of
+            <strong>mastery</strong>. A student who understands NIL taxes on Monday moves to
+            personal branding on Tuesday. A student who needs another day on collectives gets
+            another day &mdash; without the whole cohort slowing down.
+          </p>
+          <p>
+            That&rsquo;s the mechanism behind our target: <strong>students learn twice as much
+            in half the time</strong>. Competence compounds into confidence. Confidence compounds
+            into creators and contributors &mdash; the kids who go on to build their own work
+            once the program ends.
+          </p>
+          <p>
+            We borrow the discipline from three places: <strong>NWEA MAP</strong>-style adaptive
+            assessment (tested against 10M+ students nationally), <strong>E.D. Hirsch&rsquo;s
+            core knowledge</strong> foundation, and Vygotsky&rsquo;s <strong>Zone of Proximal
+            Development</strong>. The point is not the theory. The point is that the kid
+            actually gets it before we move on.
+          </p>
+          <span class="pedagogy-tag">Mastery-based &middot; adaptive &middot; peer-cohorted</span>
+        </div>
+
+        <div class="mastery-visual">
+          <h4>How mastery works, week by week</h4>
+          <div class="mastery-steps">
+            <div class="mastery-step">
+              <span class="step-badge">1</span>
+              <div class="step-body">
+                <strong>Assess</strong>
+                <span>Weekly diagnostic. Where the student is right now, on this module. No guessing.</span>
+              </div>
+            </div>
+            <div class="mastery-step">
+              <span class="step-badge">2</span>
+              <div class="step-body">
+                <strong>Adapt</strong>
+                <span>Next lesson matches their zone. Not the calendar&rsquo;s zone &mdash; theirs.</span>
+              </div>
+            </div>
+            <div class="mastery-step">
+              <span class="step-badge">3</span>
+              <div class="step-body">
+                <strong>Practice</strong>
+                <span>Real reps: mock contracts, tax scenarios, brand audits, 1:1 with the lead instructor.</span>
+              </div>
+            </div>
+            <div class="mastery-step">
+              <span class="step-badge">4</span>
+              <div class="step-body">
+                <strong>Master &rarr; move</strong>
+                <span>Passes the mastery check &rarr; next module unlocks. Doesn&rsquo;t pass &rarr; another reps rotation.</span>
+              </div>
+            </div>
+          </div>
+          <div class="mastery-comparison">
+            Target: <strong>2&times; learning in half the time</strong>. Six weeks of content, mastered on the student&rsquo;s clock.
           </div>
         </div>
       </div>
@@ -2947,6 +3096,27 @@
       </div>
     </div>
   </footer>
+
+
+  <script>
+    // Live countdown to the next window / wave / rollout gate
+    (function() {
+      const target = new Date(document.documentElement.dataset.wavecloses || '2026-11-15T00:00:00');
+      function tick() {
+        const el = document.querySelector('#waveCountdown, #cohortCountdown, #windowCountdown, #rolloutCountdown');
+        if (!el) return;
+        const now = new Date();
+        const diff = target - now;
+        if (diff <= 0) return;
+        const days = Math.floor(diff / 86400000);
+        const hours = Math.floor((diff % 86400000) / 3600000);
+        const base = el.textContent.split(' \u00b7 ')[0];
+        el.textContent = base + ' \u00b7 closes in ' + days + 'd ' + hours + 'h';
+      }
+      tick();
+      setInterval(tick, 60000);
+    })();
+  </script>
 
 </body>
 </html>

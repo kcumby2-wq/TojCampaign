@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-wavecloses="2026-12-15T00:00:00">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -1651,6 +1651,28 @@
     .intake-success h4 { font-size: 1.2rem; margin-bottom: 0.5rem; }
     .intake-success p { font-size: 0.9rem; color: var(--ink-mute); margin-bottom: 1rem; }
 
+
+    /* Trust strip below hero CTAs */
+    .trust-hero {
+      display: flex; flex-wrap: wrap; gap: 0.55rem;
+      margin-top: 1.75rem; padding-top: 1.35rem;
+      border-top: 1px solid var(--rule);
+      max-width: 42rem;
+    }
+    .trust-hero .fact-chip {
+      display: inline-flex; align-items: center; gap: 0.45rem;
+      padding: 0.4rem 0.8rem;
+      background: var(--parchment-2);
+      border-radius: 999px;
+      font-size: 0.78rem; color: var(--ink-soft);
+      font-family: 'Inter', sans-serif; font-weight: 500;
+    }
+    .trust-hero .fact-chip::before {
+      content: '\2713'; color: var(--accent); font-weight: 700;
+    }
+    .trust-hero .fact-chip.live::before { content: '\25CF'; animation: pulse 2s infinite; color: var(--accent); }
+    @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+
   </style>
 </head>
 <body>
@@ -1678,13 +1700,13 @@
     <div class="container">
       <div class="hero-grid">
         <div>
-          <div class="eyebrow navy">TOJ Sports · sports.tojcampaign.com</div>
-          <h1>You compete.<br/>We build the <em>record</em>.</h1>
+          <div class="eyebrow navy">The problem TOJ Sports solves</div>
+          <h1>Coaches don&rsquo;t act on hype.<br/>Give them <em>something they can trust</em>.</h1>
           <p class="lede">
-            The operating standard for athletes, trainers, sports media creators, and
-            sports-adjacent organizations. Every rep, every rep-out, every offer — logged,
-            verified, tied to a record recruiters and scouts can actually trust. Highlight
-            reels don&rsquo;t compound. Standards do.
+            The athletes losing offers aren&rsquo;t losing on talent &mdash; they&rsquo;re
+            losing on the record behind it. TOJ Sports builds the record. Prospect Edge grading,
+            Player Transcripts, coach outreach that lands, and a federation of trainer brands
+            all working against the same verified standard.
           </p>
           <p class="lede" style="font-family: 'Fraunces', serif; font-style: italic; color: var(--accent); font-size: 1rem; margin-top: 0.85rem; max-width: 42rem;">
             Highlights fade. The record compounds.
@@ -2751,6 +2773,27 @@
       </div>
     </div>
   </footer>
+
+
+  <script>
+    // Live countdown to the next window / wave / rollout gate
+    (function() {
+      const target = new Date(document.documentElement.dataset.wavecloses || '2026-11-15T00:00:00');
+      function tick() {
+        const el = document.querySelector('#waveCountdown, #cohortCountdown, #windowCountdown, #rolloutCountdown');
+        if (!el) return;
+        const now = new Date();
+        const diff = target - now;
+        if (diff <= 0) return;
+        const days = Math.floor(diff / 86400000);
+        const hours = Math.floor((diff % 86400000) / 3600000);
+        const base = el.textContent.split(' \u00b7 ')[0];
+        el.textContent = base + ' \u00b7 closes in ' + days + 'd ' + hours + 'h';
+      }
+      tick();
+      setInterval(tick, 60000);
+    })();
+  </script>
 
 </body>
 </html>
