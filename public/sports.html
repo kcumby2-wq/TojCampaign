@@ -1462,6 +1462,23 @@
        SHARED ENHANCEMENT BUNDLE — trust, modals, animations
        ================================================== */
 
+
+    /* Intake CTA chip in top nav */
+    .nav-intake-cta {
+      display: inline-flex; align-items: center; gap: 0.4rem;
+      padding: 0.55rem 1.05rem;
+      background: var(--accent); color: #fff;
+      border-radius: 999px;
+      font-size: 0.82rem; font-weight: 600;
+      text-decoration: none;
+      transition: all 0.15s;
+      margin-left: 1rem;
+      white-space: nowrap;
+    }
+    .nav-intake-cta:hover { background: var(--accent-2); transform: translateY(-1px); }
+    .nav-intake-cta::after { content: '→'; font-weight: 500; }
+    @media (max-width: 860px) { .nav-intake-cta { display: none; } }
+
     /* Client portal link in top nav */
     .client-portal-link {
       display: inline-flex; align-items: center; gap: 0.35rem;

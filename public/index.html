@@ -60,6 +60,23 @@
     section { padding: clamp(4.5rem, 8vw, 7rem) 0; border-top: 1px solid var(--rule); }
     section:first-of-type { border-top: 0; }
 
+
+    /* Intake CTA chip in top nav */
+    .nav-intake-cta {
+      display: inline-flex; align-items: center; gap: 0.4rem;
+      padding: 0.55rem 1.05rem;
+      background: var(--ink); color: var(--parchment);
+      border-radius: 999px;
+      font-size: 0.82rem; font-weight: 600;
+      text-decoration: none;
+      transition: all 0.15s;
+      margin-left: 1rem;
+      white-space: nowrap;
+    }
+    .nav-intake-cta:hover { background: var(--ink-soft); transform: translateY(-1px); }
+    .nav-intake-cta::after { content: ' →'; font-weight: 500; }
+    @media (max-width: 720px) { .nav-intake-cta { display: none; } }
+
     /* ---------- HEADER ---------- */
     header.top {
       position: sticky; top: 0; z-index: 40;
@@ -637,6 +654,7 @@
         <a href="#standard">The Standard</a>
         <a href="#transcript">Transcript</a>
         <a href="#classifier">Find your lane</a>
+        <a href="/intake.html" class="nav-intake-cta">Start intake</a>
       </nav>
     </div>
   </header>
