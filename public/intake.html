@@ -1,0 +1,1278 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Intake — TOJ Campaign</title>
+  <meta name="description" content="Tell us who you are, what you want, and what's blocking you. We'll route you to the right avenue and be in touch within one business day." />
+  <link rel="icon" href='data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect width="100" height="100" rx="20" fill="%231A1613"/><text x="50" y="66" font-family="Georgia" font-size="52" font-weight="600" fill="%23F5F1EA" text-anchor="middle">T</text></svg>' />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; }
+    body {
+      font-family: 'Inter', -apple-system, sans-serif;
+      background: #F5F1EA; color: #1A1613; line-height: 1.55;
+      min-height: 100vh; display: flex; flex-direction: column;
+    }
+    :root {
+      --parchment: #F5F1EA; --parchment-2: #EBE4D6; --ink: #1A1613;
+      --ink-soft: #3B3530; --ink-mute: #6E655C;
+      --rule: rgba(26,22,19,0.12); --rule-strong: rgba(26,22,19,0.35);
+      --sports: #1E3A5F; --smallbiz: #A85F26; --bigbiz: #2F5D4E; --advisory: #B8843B;
+      --accent: var(--ink);
+    }
+    h1, h2, h3, h4 { font-family: 'Fraunces', 'Georgia', serif; font-weight: 600; letter-spacing: -0.015em; color: var(--ink); }
+    a { color: var(--sports); text-decoration: none; }
+
+    /* Top bar */
+    .top-bar {
+      padding: 1rem clamp(1.25rem, 3vw, 2rem);
+      border-bottom: 1px solid var(--rule);
+      display: flex; justify-content: space-between; align-items: center;
+      background: rgba(245,241,234,0.94); backdrop-filter: blur(10px);
+      position: sticky; top: 0; z-index: 40;
+    }
+    .brand { font-family: 'Fraunces', serif; font-weight: 600; font-size: 1.05rem; color: var(--ink); text-decoration: none; }
+    .brand span { color: var(--ink-mute); font-weight: 400; }
+    .save-note { font-family: 'Inter', monospace; font-size: 0.7rem; letter-spacing: 0.04em; color: var(--ink-mute); }
+    .save-note.saved { color: #2F5D4E; }
+
+    /* Progress bar */
+    .progress-bar {
+      background: var(--parchment-2); height: 4px; border-bottom: 1px solid var(--rule);
+      overflow: hidden;
+    }
+    .progress-fill {
+      height: 100%; background: linear-gradient(90deg, var(--sports), var(--smallbiz), var(--bigbiz), var(--advisory));
+      background-size: 400% 100%; background-position: 0% 50%;
+      width: 0%; transition: width 0.35s ease-out;
+    }
+
+    /* Main container */
+    main {
+      flex: 1; display: flex; align-items: flex-start; justify-content: center;
+      padding: clamp(2.5rem, 5vw, 4rem) 1.5rem;
+    }
+    .intake-shell {
+      width: 100%; max-width: 640px;
+    }
+
+    /* Step counter + eyebrow */
+    .step-header { margin-bottom: 1.75rem; }
+    .step-header .step-count {
+      font-family: 'Inter', monospace; font-size: 0.7rem;
+      letter-spacing: 0.16em; text-transform: uppercase; color: var(--ink-mute);
+      margin-bottom: 0.85rem;
+    }
+    .step-header h2 {
+      font-size: clamp(1.65rem, 3.5vw, 2.15rem);
+      line-height: 1.15; margin-bottom: 0.6rem;
+    }
+    .step-header h2 em { font-style: italic; font-weight: 500; color: var(--ink-mute); }
+    .step-header .sub {
+      color: var(--ink-mute); font-size: 0.95rem; max-width: 36rem;
+    }
+
+    /* Steps */
+    .step { display: none; animation: fade-up 0.35s ease-out; }
+    .step.active { display: block; }
+    @keyframes fade-up {
+      from { opacity: 0; transform: translateY(12px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    /* Form controls */
+    .field { margin-bottom: 1.15rem; }
+    .field label.field-label {
+      display: block; font-size: 0.82rem; color: var(--ink-soft);
+      font-weight: 500; margin-bottom: 0.4rem;
+    }
+    .field .hint {
+      display: block; font-size: 0.76rem; color: var(--ink-mute);
+      font-style: italic; margin-top: 0.25rem;
+    }
+    .field input[type="text"], .field input[type="email"], .field input[type="tel"], .field input[type="url"], .field select, .field textarea {
+      width: 100%; padding: 0.85rem 0.95rem;
+      font-size: 0.98rem; border: 1px solid var(--rule);
+      border-radius: 10px; background: #fff; color: var(--ink);
+      font-family: inherit; transition: border-color 0.15s, box-shadow 0.15s;
+    }
+    .field input:focus, .field select:focus, .field textarea:focus {
+      outline: none; border-color: var(--sports);
+      box-shadow: 0 0 0 3px rgba(30,58,95,0.12);
+    }
+    .field textarea { min-height: 110px; resize: vertical; line-height: 1.55; }
+
+    .field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 0.9rem; }
+    @media (max-width: 520px) { .field-row { grid-template-columns: 1fr; } }
+
+    /* Checkbox card grid — for Goal / Need multi-select */
+    .choices { display: grid; grid-template-columns: 1fr 1fr; gap: 0.55rem; margin-top: 0.5rem; }
+    @media (max-width: 520px) { .choices { grid-template-columns: 1fr; } }
+    .choice {
+      position: relative; cursor: pointer;
+      display: flex; gap: 0.75rem; align-items: flex-start;
+      padding: 0.95rem 1rem;
+      background: #fff; border: 1px solid var(--rule);
+      border-radius: 10px;
+      transition: all 0.15s;
+    }
+    .choice:hover { border-color: var(--rule-strong); transform: translateY(-1px); }
+    .choice input { position: absolute; opacity: 0; pointer-events: none; }
+    .choice .check-box {
+      width: 20px; height: 20px; border-radius: 5px;
+      border: 1.5px solid var(--rule-strong); background: var(--parchment);
+      flex-shrink: 0; margin-top: 0.05rem;
+      display: flex; align-items: center; justify-content: center;
+      transition: all 0.15s;
+    }
+    .choice .check-box::after {
+      content: ''; opacity: 0;
+      width: 10px; height: 6px;
+      border-left: 2px solid #fff; border-bottom: 2px solid #fff;
+      transform: rotate(-45deg) translateY(-1px);
+      transition: opacity 0.15s;
+    }
+    .choice.selected {
+      background: var(--parchment-2); border-color: var(--ink);
+    }
+    .choice.selected .check-box { background: var(--ink); border-color: var(--ink); }
+    .choice.selected .check-box::after { opacity: 1; }
+    .choice-body { flex: 1; }
+    .choice-body strong {
+      display: block; color: var(--ink); font-weight: 600;
+      font-size: 0.92rem; margin-bottom: 0.15rem; line-height: 1.3;
+    }
+    .choice-body span {
+      display: block; color: var(--ink-mute); font-size: 0.8rem; line-height: 1.4;
+    }
+    .choice-avenue-tag {
+      position: absolute; top: 0.55rem; right: 0.55rem;
+      width: 8px; height: 8px; border-radius: 999px;
+      opacity: 0; transition: opacity 0.15s;
+    }
+    .choice.selected .choice-avenue-tag { opacity: 1; }
+    .choice-avenue-tag.sports { background: var(--sports); }
+    .choice-avenue-tag.smallbiz { background: var(--smallbiz); }
+    .choice-avenue-tag.bigbiz { background: var(--bigbiz); }
+    .choice-avenue-tag.advisory { background: var(--advisory); }
+
+    /* Radio card group */
+    .radios { display: grid; gap: 0.5rem; margin-top: 0.5rem; }
+    .radio-card {
+      position: relative; cursor: pointer;
+      display: flex; align-items: center; gap: 0.75rem;
+      padding: 0.85rem 1rem;
+      background: #fff; border: 1px solid var(--rule);
+      border-radius: 10px;
+      transition: all 0.15s;
+    }
+    .radio-card:hover { border-color: var(--rule-strong); }
+    .radio-card input { position: absolute; opacity: 0; pointer-events: none; }
+    .radio-card .radio-dot {
+      width: 20px; height: 20px; border-radius: 999px;
+      border: 1.5px solid var(--rule-strong); background: var(--parchment);
+      flex-shrink: 0; position: relative;
+      transition: all 0.15s;
+    }
+    .radio-card.selected {
+      background: var(--parchment-2); border-color: var(--ink);
+    }
+    .radio-card.selected .radio-dot { border-color: var(--ink); }
+    .radio-card.selected .radio-dot::after {
+      content: ''; position: absolute; inset: 4px; border-radius: 999px; background: var(--ink);
+    }
+    .radio-card .radio-label {
+      font-size: 0.92rem; color: var(--ink); font-weight: 500;
+    }
+    .radio-card .radio-label span { display: block; font-size: 0.78rem; color: var(--ink-mute); font-weight: 400; margin-top: 0.1rem; }
+
+    /* Nav buttons */
+    .step-nav {
+      display: flex; justify-content: space-between; align-items: center;
+      margin-top: 2rem; padding-top: 1.5rem; border-top: 1px solid var(--rule);
+    }
+    .btn {
+      display: inline-flex; align-items: center; gap: 0.45rem;
+      padding: 0.85rem 1.5rem; border-radius: 999px; border: 0;
+      font-family: inherit; font-weight: 600; font-size: 0.92rem; cursor: pointer;
+      transition: all 0.15s; text-decoration: none;
+    }
+    .btn.primary { background: var(--ink); color: var(--parchment); }
+    .btn.primary:hover { background: var(--ink-soft); transform: translateX(2px); }
+    .btn.primary:disabled { background: var(--ink-mute); cursor: not-allowed; transform: none; opacity: 0.6; }
+    .btn.secondary { background: transparent; color: var(--ink-soft); border: 1px solid var(--rule-strong); }
+    .btn.secondary:hover { border-color: var(--ink); color: var(--ink); }
+
+    /* Avenue-colored primary button (for the final avenue-detected screen) */
+    .btn.primary.sports { background: var(--sports); }
+    .btn.primary.smallbiz { background: var(--smallbiz); }
+    .btn.primary.bigbiz { background: var(--bigbiz); }
+    .btn.primary.advisory { background: var(--advisory); }
+
+    /* Review screen */
+    .review-list { background: var(--parchment); border: 1px solid var(--rule); border-radius: 12px; padding: 1.25rem 1.35rem; }
+    .review-row { display: grid; grid-template-columns: 130px 1fr; gap: 1rem; padding: 0.6rem 0; border-bottom: 1px dashed var(--rule); }
+    .review-row:last-child { border-bottom: 0; }
+    .review-row .rev-lbl { font-family: 'Inter', monospace; font-size: 0.7rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink-mute); font-weight: 700; padding-top: 0.15rem; }
+    .review-row .rev-val { color: var(--ink); font-size: 0.9rem; line-height: 1.45; }
+    .review-row .rev-val em { color: var(--ink-mute); font-style: italic; }
+
+    /* Detected avenue banner */
+    .avenue-banner {
+      display: grid; grid-template-columns: auto 1fr; gap: 1.25rem;
+      padding: 1.5rem 1.5rem; margin-top: 1.5rem;
+      background: var(--parchment); border: 1px solid var(--rule); border-radius: 14px;
+      align-items: center; position: relative; overflow: hidden;
+    }
+    .avenue-banner::before {
+      content: ''; position: absolute; top: 0; left: 0; width: 6px; height: 100%;
+      background: var(--avenue-color, var(--ink));
+    }
+    .avenue-banner .av-mark {
+      width: 60px; height: 60px; border-radius: 12px;
+      background: var(--avenue-color, var(--ink)); color: #fff;
+      display: flex; align-items: center; justify-content: center;
+      font-family: 'Fraunces', serif; font-weight: 600; font-size: 1.5rem;
+    }
+    .avenue-banner .av-body { display: flex; flex-direction: column; }
+    .avenue-banner .av-eyebrow {
+      font-size: 0.66rem; letter-spacing: 0.16em; text-transform: uppercase;
+      color: var(--avenue-color, var(--ink)); font-weight: 700; margin-bottom: 0.15rem;
+    }
+    .avenue-banner .av-name { font-family: 'Fraunces', serif; font-size: 1.25rem; color: var(--ink); font-weight: 600; margin-bottom: 0.15rem; }
+    .avenue-banner .av-reason { font-size: 0.82rem; color: var(--ink-mute); line-height: 1.4; }
+
+    /* Success screen */
+    .success-wrap { text-align: center; padding: 2rem 0; }
+    .success-check {
+      width: 80px; height: 80px; border-radius: 999px;
+      background: var(--parchment-2); color: var(--ink);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 2.5rem; margin: 0 auto 1.5rem;
+    }
+    .success-check.sports { background: rgba(30,58,95,0.15); color: var(--sports); }
+    .success-check.smallbiz { background: rgba(168,95,38,0.15); color: var(--smallbiz); }
+    .success-check.bigbiz { background: rgba(47,93,78,0.15); color: var(--bigbiz); }
+    .success-check.advisory { background: rgba(184,132,59,0.15); color: var(--advisory); }
+    .success-wrap h2 { font-size: clamp(1.75rem, 3.5vw, 2.4rem); margin-bottom: 0.85rem; }
+    .success-wrap p { color: var(--ink-mute); max-width: 32rem; margin: 0 auto 1.5rem; line-height: 1.55; }
+    .success-wrap p strong { color: var(--ink); font-weight: 600; }
+    .success-actions { display: flex; gap: 0.75rem; justify-content: center; flex-wrap: wrap; margin-top: 2rem; }
+
+    /* Intro screen */
+    .intro-wrap { padding: 1.5rem 0; }
+    .intro-wrap h1 {
+      font-size: clamp(2.2rem, 4.5vw, 3rem); line-height: 1.05; margin-bottom: 1rem; max-width: 20ch;
+    }
+    .intro-wrap h1 em { font-style: italic; font-weight: 500; color: var(--sports); }
+    .intro-wrap .intro-lede {
+      font-size: 1.05rem; color: var(--ink-soft); margin-bottom: 1.75rem; max-width: 36rem; line-height: 1.6;
+    }
+    .three-questions {
+      display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.8rem;
+      margin-bottom: 2rem;
+    }
+    @media (max-width: 560px) { .three-questions { grid-template-columns: 1fr; } }
+    .tq {
+      padding: 1.15rem 1.15rem; background: var(--parchment-2); border-radius: 10px;
+      border-left: 3px solid var(--ink);
+    }
+    .tq .tq-num {
+      font-family: 'Fraunces', serif; font-size: 0.75rem; color: var(--ink-mute); margin-bottom: 0.3rem; letter-spacing: 0.02em;
+    }
+    .tq .tq-name {
+      font-family: 'Fraunces', serif; font-weight: 600; font-size: 1.15rem; color: var(--ink); margin-bottom: 0.3rem;
+    }
+    .tq .tq-q { font-size: 0.85rem; color: var(--ink-mute); font-style: italic; }
+
+    .intro-meta {
+      display: flex; gap: 1.5rem; padding: 1rem 0; margin-bottom: 1.5rem;
+      border-top: 1px solid var(--rule); border-bottom: 1px solid var(--rule);
+      font-size: 0.85rem; color: var(--ink-mute);
+      flex-wrap: wrap;
+    }
+    .intro-meta strong { color: var(--ink); font-weight: 600; }
+    .intro-meta .dot { color: var(--rule-strong); }
+
+    /* Footer */
+    footer { padding: 1.5rem clamp(1.25rem, 3vw, 2rem); background: var(--ink); color: rgba(245,241,234,0.65); font-size: 0.78rem; text-align: center; }
+    footer a { color: rgba(245,241,234,0.8); text-decoration: none; }
+    footer a:hover { color: var(--parchment); }
+  </style>
+</head>
+<body>
+
+  <div class="top-bar">
+    <a href="/" class="brand">TOJ Campaign <span>&middot; Intake</span></a>
+    <span class="save-note" id="saveNote">Auto-saves as you go</span>
+  </div>
+
+  <div class="progress-bar"><div class="progress-fill" id="progressFill"></div></div>
+
+  <main>
+    <div class="intake-shell">
+
+      <!-- =================== STEP 0 — INTRO =================== -->
+      <div class="step active" data-step="0">
+        <div class="intro-wrap">
+          <h1>Tell us who you are, what you want, and what&rsquo;s <em>in the way</em>.</h1>
+          <p class="intro-lede">
+            The intake starts the same for everyone &mdash; three questions. From there it
+            splits into the avenue that fits how you actually work. A person on our end reads
+            every submission and gets back to you within one business day.
+          </p>
+
+          <div class="three-questions">
+            <div class="tq">
+              <div class="tq-num">01</div>
+              <div class="tq-name">Brand</div>
+              <div class="tq-q">Who are you?</div>
+            </div>
+            <div class="tq">
+              <div class="tq-num">02</div>
+              <div class="tq-name">Goal</div>
+              <div class="tq-q">What are your goals?</div>
+            </div>
+            <div class="tq">
+              <div class="tq-num">03</div>
+              <div class="tq-name">User</div>
+              <div class="tq-q">What are your needs?</div>
+            </div>
+          </div>
+
+          <div class="intro-meta">
+            <span><strong>~4 minutes.</strong> Auto-saves as you go.</span>
+            <span class="dot">&middot;</span>
+            <span>Nothing sold, nothing shared. Read by a human first.</span>
+          </div>
+
+          <div class="step-nav">
+            <span></span>
+            <button class="btn primary" onclick="goToStep(1)">Let&rsquo;s start &rarr;</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- =================== STEP 1 — BRAND =================== -->
+      <div class="step" data-step="1">
+        <div class="step-header">
+          <div class="step-count">Question 01 of 03 &middot; Brand</div>
+          <h2>Who are <em>you</em>?</h2>
+          <p class="sub">Start with the basics. This is what shows up on our end when the submission lands.</p>
+        </div>
+
+        <div class="field">
+          <label class="field-label" for="q_name">Your name</label>
+          <input type="text" id="q_name" data-field="name" required autocomplete="name" />
+        </div>
+        <div class="field">
+          <label class="field-label" for="q_business">Business or brand name</label>
+          <input type="text" id="q_business" data-field="business" required placeholder="Business name &mdash; or your name if you're the brand" />
+          <span class="hint">If you&rsquo;re an individual building a personal brand, put your name.</span>
+        </div>
+        <div class="field-row">
+          <div class="field">
+            <label class="field-label" for="q_email">Email</label>
+            <input type="email" id="q_email" data-field="email" required autocomplete="email" placeholder="you@example.com" />
+          </div>
+          <div class="field">
+            <label class="field-label" for="q_phone">Phone <em style="color:var(--ink-mute);font-style:italic;font-weight:400;">(optional)</em></label>
+            <input type="tel" id="q_phone" data-field="phone" autocomplete="tel" />
+          </div>
+        </div>
+        <div class="field">
+          <label class="field-label" for="q_location">Location <em style="color:var(--ink-mute);font-style:italic;font-weight:400;">(city, state / region)</em></label>
+          <input type="text" id="q_location" data-field="location" placeholder="e.g. Plano, TX &middot; or DFW &middot; or Saarland, DE" />
+        </div>
+
+        <div class="step-nav">
+          <button class="btn secondary" onclick="goToStep(0)">&larr; Back</button>
+          <button class="btn primary" onclick="validateAndAdvance(1)">Continue &rarr;</button>
+        </div>
+      </div>
+
+      <!-- =================== STEP 2 — GOAL =================== -->
+      <div class="step" data-step="2">
+        <div class="step-header">
+          <div class="step-count">Question 02 of 03 &middot; Goal</div>
+          <h2>What are your <em>goals</em>?</h2>
+          <p class="sub">Pick as many as fit. The colored dots signal which avenue each goal maps to &mdash; but they don&rsquo;t decide anything yet.</p>
+        </div>
+
+        <div class="choices" data-multi="goals">
+          <label class="choice" data-value="grow-revenue" data-weight="sports:1,smallbiz:2,bigbiz:2,advisory:1">
+            <span class="check-box"></span>
+            <span class="choice-body"><strong>Grow revenue</strong><span>More money coming in, in a repeatable way.</span></span>
+            <span class="choice-avenue-tag smallbiz"></span>
+          </label>
+          <label class="choice" data-value="brand-identity" data-weight="advisory:3,sports:1,smallbiz:1">
+            <span class="check-box"></span>
+            <span class="choice-body"><strong>Build my brand identity</strong><span>Position, voice, story &mdash; who I am publicly.</span></span>
+            <span class="choice-avenue-tag advisory"></span>
+          </label>
+          <label class="choice" data-value="more-customers" data-weight="smallbiz:3,bigbiz:1">
+            <span class="check-box"></span>
+            <span class="choice-body"><strong>Get more customers</strong><span>Feed the top of the funnel and keep it fed.</span></span>
+            <span class="choice-avenue-tag smallbiz"></span>
+          </label>
+          <label class="choice" data-value="scale-locations" data-weight="bigbiz:3">
+            <span class="check-box"></span>
+            <span class="choice-body"><strong>Scale across locations / divisions</strong><span>One standard, every location, every team.</span></span>
+            <span class="choice-avenue-tag bigbiz"></span>
+          </label>
+          <label class="choice" data-value="athletic-record" data-weight="sports:3">
+            <span class="check-box"></span>
+            <span class="choice-body"><strong>Get documented as an athlete</strong><span>Prospect Edge, Player Transcript, verified record.</span></span>
+            <span class="choice-avenue-tag sports"></span>
+          </label>
+          <label class="choice" data-value="recruiting-cred" data-weight="sports:3,advisory:1">
+            <span class="check-box"></span>
+            <span class="choice-body"><strong>Build recruiting credibility</strong><span>Coach outreach, film discipline, offers logged.</span></span>
+            <span class="choice-avenue-tag sports"></span>
+          </label>
+          <label class="choice" data-value="nil-money" data-weight="advisory:3,sports:1">
+            <span class="check-box"></span>
+            <span class="choice-body"><strong>Learn NIL &amp; financial literacy</strong><span>Contracts, taxes, budgeting done right.</span></span>
+            <span class="choice-avenue-tag advisory"></span>
+          </label>
+          <label class="choice" data-value="team-standard" data-weight="bigbiz:2,smallbiz:2">
+            <span class="check-box"></span>
+            <span class="choice-body"><strong>Install a team standard</strong><span>A written operating standard my team can follow.</span></span>
+            <span class="choice-avenue-tag bigbiz"></span>
+          </label>
+          <label class="choice" data-value="peer-cohort" data-weight="advisory:2,smallbiz:1">
+            <span class="check-box"></span>
+            <span class="choice-body"><strong>Join a peer cohort</strong><span>A room of people at my stage, doing similar work.</span></span>
+            <span class="choice-avenue-tag advisory"></span>
+          </label>
+        </div>
+
+        <div class="step-nav">
+          <button class="btn secondary" onclick="goToStep(1)">&larr; Back</button>
+          <button class="btn primary" onclick="validateAndAdvance(2)">Continue &rarr;</button>
+        </div>
+      </div>
+
+      <!-- =================== STEP 3 — NEED =================== -->
+      <div class="step" data-step="3">
+        <div class="step-header">
+          <div class="step-count">Question 03 of 03 &middot; User</div>
+          <h2>What are your <em>needs</em>?</h2>
+          <p class="sub">What&rsquo;s in the way right now &mdash; the honest version. Same rules: pick as many as fit.</p>
+        </div>
+
+        <div class="choices" data-multi="needs">
+          <label class="choice" data-value="not-enough-time" data-weight="smallbiz:2,bigbiz:1">
+            <span class="check-box"></span>
+            <span class="choice-body"><strong>Not enough time</strong><span>I&rsquo;m the bottleneck. The reps aren&rsquo;t getting done.</span></span>
+            <span class="choice-avenue-tag smallbiz"></span>
+          </label>
+          <label class="choice" data-value="dont-know-process" data-weight="advisory:2,sports:1">
+            <span class="check-box"></span>
+            <span class="choice-body"><strong>I don&rsquo;t know the process</strong><span>I&rsquo;m guessing at things that should be systemized.</span></span>
+            <span class="choice-avenue-tag advisory"></span>
+          </label>
+          <label class="choice" data-value="need-credibility" data-weight="sports:2,advisory:1,smallbiz:1">
+            <span class="check-box"></span>
+            <span class="choice-body"><strong>I need credibility</strong><span>Third-party validation &mdash; not another self-claim.</span></span>
+            <span class="choice-avenue-tag sports"></span>
+          </label>
+          <label class="choice" data-value="need-system" data-weight="smallbiz:2,bigbiz:2">
+            <span class="check-box"></span>
+            <span class="choice-body"><strong>I need a system that doesn&rsquo;t rely on me</strong><span>Things should ship when I&rsquo;m not there.</span></span>
+            <span class="choice-avenue-tag smallbiz"></span>
+          </label>
+          <label class="choice" data-value="need-financial-help" data-weight="advisory:3">
+            <span class="check-box"></span>
+            <span class="choice-body"><strong>I need financial literacy help</strong><span>Taxes, budgeting, contracts, red flags.</span></span>
+            <span class="choice-avenue-tag advisory"></span>
+          </label>
+          <label class="choice" data-value="need-corner" data-weight="advisory:2,sports:1">
+            <span class="check-box"></span>
+            <span class="choice-body"><strong>I need someone in my corner</strong><span>A coach, a mentor, a room. Not just a tool.</span></span>
+            <span class="choice-avenue-tag advisory"></span>
+          </label>
+          <label class="choice" data-value="need-coaches" data-weight="sports:3">
+            <span class="check-box"></span>
+            <span class="choice-body"><strong>I need help with coaches / recruiters</strong><span>Access to the right rooms, outreach that lands.</span></span>
+            <span class="choice-avenue-tag sports"></span>
+          </label>
+          <label class="choice" data-value="ops-chaotic" data-weight="bigbiz:2,smallbiz:2">
+            <span class="check-box"></span>
+            <span class="choice-body"><strong>My operations are chaotic</strong><span>Spreadsheets everywhere, nothing rolls up.</span></span>
+            <span class="choice-avenue-tag bigbiz"></span>
+          </label>
+        </div>
+
+        <div class="step-nav">
+          <button class="btn secondary" onclick="goToStep(2)">&larr; Back</button>
+          <button class="btn primary" onclick="branchAfterNeeds()">Continue &rarr;</button>
+        </div>
+      </div>
+
+      <!-- =================== STEP 4a — SPORTS BRANCH =================== -->
+      <div class="step" data-step="4-sports">
+        <div class="step-header">
+          <div class="step-count">Sports track &middot; Step 04</div>
+          <h2>Tell us how you sit in <em>sport</em>.</h2>
+          <p class="sub">Everyone on TOJ Sports fits one of four archetypes. Which one describes your work?</p>
+        </div>
+
+        <div class="radios" data-single="sports-role">
+          <label class="radio-card" data-value="signed-athlete">
+            <span class="radio-dot"></span>
+            <span class="radio-label">Signed athlete<span>I compete. I want the record built around me.</span></span>
+          </label>
+          <label class="radio-card" data-value="trainer">
+            <span class="radio-dot"></span>
+            <span class="radio-label">Trainer / program<span>I train athletes. I want the operating brain behind my brand.</span></span>
+          </label>
+          <label class="radio-card" data-value="media-creator">
+            <span class="radio-dot"></span>
+            <span class="radio-label">Sports media creator<span>I shoot / edit sports media. SubjectSkillz-path or independent.</span></span>
+          </label>
+          <label class="radio-card" data-value="org">
+            <span class="radio-dot"></span>
+            <span class="radio-label">Sports-adjacent organization<span>Program, team, camp, sponsor, evaluator.</span></span>
+          </label>
+        </div>
+
+        <div class="field" style="margin-top: 1.5rem;">
+          <label class="field-label" for="q_sport_detail">Give us the specifics <em style="color:var(--ink-mute);font-style:italic;font-weight:400;">(class year, position &amp; sport, region, athlete count, etc.)</em></label>
+          <textarea id="q_sport_detail" data-field="sport_detail" placeholder="e.g. WR / Class of 2028 / DFW &middot; 12 athletes across 3 positions &middot; NAIA + JUCO focus"></textarea>
+        </div>
+
+        <div class="step-nav">
+          <button class="btn secondary" onclick="goToStep(3)">&larr; Back</button>
+          <button class="btn primary" onclick="goToStep(5)">Continue &rarr;</button>
+        </div>
+      </div>
+
+      <!-- =================== STEP 4b — SMALL BUSINESS BRANCH =================== -->
+      <div class="step" data-step="4-smallbiz">
+        <div class="step-header">
+          <div class="step-count">Small Business track &middot; Step 04</div>
+          <h2>Tell us the shape of your <em>operation</em>.</h2>
+          <p class="sub">Every operator on the trail is peer &mdash; but the shape of your work changes what ships first.</p>
+        </div>
+
+        <div class="radios" data-single="smallbiz-shape">
+          <label class="radio-card" data-value="solo-coach">
+            <span class="radio-dot"></span>
+            <span class="radio-label">Solo coach / instructor<span>Yoga, fitness, music, tutoring &mdash; me is the brand.</span></span>
+          </label>
+          <label class="radio-card" data-value="shop">
+            <span class="radio-dot"></span>
+            <span class="radio-label">Neighborhood shop<span>Cafe, salon, boutique, service &mdash; one location.</span></span>
+          </label>
+          <label class="radio-card" data-value="trade">
+            <span class="radio-dot"></span>
+            <span class="radio-label">Local trade<span>HVAC, plumbing, contracting &mdash; single location.</span></span>
+          </label>
+          <label class="radio-card" data-value="program">
+            <span class="radio-dot"></span>
+            <span class="radio-label">Program / small org<span>7v7, school athletics, tutoring program, small nonprofit.</span></span>
+          </label>
+          <label class="radio-card" data-value="creator">
+            <span class="radio-dot"></span>
+            <span class="radio-label">Growing creator<span>Non-sports creator with a small-but-real audience.</span></span>
+          </label>
+        </div>
+
+        <div class="field" style="margin-top: 1.5rem;">
+          <label class="field-label" for="q_smallbiz_revenue">Rough revenue range <em style="color:var(--ink-mute);font-style:italic;font-weight:400;">(a ballpark is fine)</em></label>
+          <select id="q_smallbiz_revenue" data-field="revenue_range">
+            <option value="">Choose one&hellip;</option>
+            <option value="pre-revenue">Pre-revenue / just starting</option>
+            <option value="under-50k">Under $50k / year</option>
+            <option value="50k-150k">$50k &ndash; $150k / year</option>
+            <option value="150k-500k">$150k &ndash; $500k / year</option>
+            <option value="500k-plus">$500k+ / year</option>
+            <option value="skip">Prefer not to say</option>
+          </select>
+        </div>
+        <div class="field">
+          <label class="field-label" for="q_smallbiz_bottleneck">What&rsquo;s the biggest bottleneck right now?</label>
+          <textarea id="q_smallbiz_bottleneck" data-field="bottleneck" placeholder="In your words. e.g. 'I lose leads because I don't follow up in time.'"></textarea>
+        </div>
+
+        <div class="step-nav">
+          <button class="btn secondary" onclick="goToStep(3)">&larr; Back</button>
+          <button class="btn primary" onclick="goToStep(5)">Continue &rarr;</button>
+        </div>
+      </div>
+
+      <!-- =================== STEP 4c — BIG BUSINESS BRANCH =================== -->
+      <div class="step" data-step="4-bigbiz">
+        <div class="step-header">
+          <div class="step-count">Big Business track &middot; Step 04</div>
+          <h2>Tell us the shape of your <em>operation</em>.</h2>
+          <p class="sub">We&rsquo;ll match the rollout path to your current network size and division structure.</p>
+        </div>
+
+        <div class="field-row">
+          <div class="field">
+            <label class="field-label" for="q_bb_locations">How many locations?</label>
+            <select id="q_bb_locations" data-field="location_count">
+              <option value="">Choose&hellip;</option>
+              <option value="1">1 &mdash; but planning to expand</option>
+              <option value="2-3">2 &ndash; 3</option>
+              <option value="4-9">4 &ndash; 9</option>
+              <option value="10-plus">10+</option>
+            </select>
+          </div>
+          <div class="field">
+            <label class="field-label" for="q_bb_team">Team size</label>
+            <select id="q_bb_team" data-field="team_size">
+              <option value="">Choose&hellip;</option>
+              <option value="under-10">Under 10</option>
+              <option value="10-25">10 &ndash; 25</option>
+              <option value="25-100">25 &ndash; 100</option>
+              <option value="100-plus">100+</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="field">
+          <label class="field-label" for="q_bb_divisions">What service lines or divisions?</label>
+          <input type="text" id="q_bb_divisions" data-field="divisions" placeholder="e.g. Residential HVAC + Commercial HVAC + Maintenance retainers" />
+        </div>
+
+        <div class="field">
+          <label class="field-label">Do you already have a written operating standard across locations?</label>
+          <div class="radios" data-single="has-standard">
+            <label class="radio-card" data-value="yes-solid">
+              <span class="radio-dot"></span>
+              <span class="radio-label">Yes &mdash; and it&rsquo;s solid<span>Just want it enforced consistently.</span></span>
+            </label>
+            <label class="radio-card" data-value="yes-drifting">
+              <span class="radio-dot"></span>
+              <span class="radio-label">Yes &mdash; but it&rsquo;s drifting<span>Newer locations don&rsquo;t follow it.</span></span>
+            </label>
+            <label class="radio-card" data-value="no">
+              <span class="radio-dot"></span>
+              <span class="radio-label">No &mdash; it&rsquo;s tribal<span>Lives in the founder&rsquo;s head.</span></span>
+            </label>
+          </div>
+        </div>
+
+        <div class="step-nav">
+          <button class="btn secondary" onclick="goToStep(3)">&larr; Back</button>
+          <button class="btn primary" onclick="goToStep(5)">Continue &rarr;</button>
+        </div>
+      </div>
+
+      <!-- =================== STEP 4d — ADVISORY BRANCH =================== -->
+      <div class="step" data-step="4-advisory">
+        <div class="step-header">
+          <div class="step-count">Advisory track &middot; Step 04</div>
+          <h2>Tell us where you&rsquo;re at in the <em>pipeline</em>.</h2>
+          <p class="sub">The Advisory cohort works differently by stage. Give us enough to route you to the right wave.</p>
+        </div>
+
+        <div class="radios" data-single="advisory-who">
+          <label class="radio-card" data-value="student-athlete">
+            <span class="radio-dot"></span>
+            <span class="radio-label">Student-athlete<span>I&rsquo;m the athlete building my own brand.</span></span>
+          </label>
+          <label class="radio-card" data-value="parent">
+            <span class="radio-dot"></span>
+            <span class="radio-label">Parent / guardian<span>Filling this out for my kid.</span></span>
+          </label>
+          <label class="radio-card" data-value="coach-ad">
+            <span class="radio-dot"></span>
+            <span class="radio-label">Coach / school AD<span>Interested in deploying the cohort to my team or program.</span></span>
+          </label>
+          <label class="radio-card" data-value="creator">
+            <span class="radio-dot"></span>
+            <span class="radio-label">Young sports creator<span>Camera, edit, sports media &mdash; SubjectSkillz path.</span></span>
+          </label>
+          <label class="radio-card" data-value="personal-brand">
+            <span class="radio-dot"></span>
+            <span class="radio-label">Personal brand builder<span>Not sport-only. Individual building my name.</span></span>
+          </label>
+        </div>
+
+        <div class="field-row" style="margin-top: 1.5rem;">
+          <div class="field">
+            <label class="field-label" for="q_adv_class">Class year <em style="color:var(--ink-mute);font-style:italic;font-weight:400;">(if student)</em></label>
+            <select id="q_adv_class" data-field="class_year">
+              <option value="">Choose&hellip;</option>
+              <option value="2026">Class of 2026</option>
+              <option value="2027">Class of 2027</option>
+              <option value="2028">Class of 2028</option>
+              <option value="2029">Class of 2029</option>
+              <option value="2030">Class of 2030</option>
+              <option value="na">N/A &mdash; not a student</option>
+            </select>
+          </div>
+          <div class="field">
+            <label class="field-label" for="q_adv_nil">Prior NIL income?</label>
+            <select id="q_adv_nil" data-field="nil_income">
+              <option value="">Choose&hellip;</option>
+              <option value="none">None yet</option>
+              <option value="under-5k">Under $5k</option>
+              <option value="5k-25k">$5k &ndash; $25k</option>
+              <option value="25k-plus">$25k+</option>
+              <option value="skip">Prefer not to say</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="step-nav">
+          <button class="btn secondary" onclick="goToStep(3)">&larr; Back</button>
+          <button class="btn primary" onclick="goToStep(5)">Continue &rarr;</button>
+        </div>
+      </div>
+
+      <!-- =================== STEP 5 — SUCCESS =================== -->
+      <div class="step" data-step="5">
+        <div class="step-header">
+          <div class="step-count">Almost there &middot; Step 05</div>
+          <h2>What does <em>success</em> look like 90 days from now?</h2>
+          <p class="sub">Be specific. This becomes the outcome we&rsquo;re measured against on the discovery call.</p>
+        </div>
+
+        <div class="field">
+          <textarea data-field="success_90d" placeholder="e.g. 'I have 3 signed athletes on the roster with Prospect Edge profiles complete.' &middot; 'I&rsquo;m booked out three weeks in advance without me chasing anyone.' &middot; 'Every location closes the day at the same standard.'"></textarea>
+        </div>
+
+        <div class="step-nav">
+          <button class="btn secondary" onclick="goBackFromClosing()">&larr; Back</button>
+          <button class="btn primary" onclick="goToStep(6)">Continue &rarr;</button>
+        </div>
+      </div>
+
+      <!-- =================== STEP 6 — TIMELINE + BUDGET =================== -->
+      <div class="step" data-step="6">
+        <div class="step-header">
+          <div class="step-count">Step 06</div>
+          <h2>Timeline &amp; <em>budget</em> signal.</h2>
+          <p class="sub">Both are optional &mdash; but honest signals shorten the discovery call.</p>
+        </div>
+
+        <div class="field">
+          <label class="field-label" for="q_timeline">When do you want to start?</label>
+          <select id="q_timeline" data-field="timeline">
+            <option value="">Choose&hellip;</option>
+            <option value="asap">As soon as possible</option>
+            <option value="30-days">Within 30 days</option>
+            <option value="90-days">Within 90 days</option>
+            <option value="exploring">Just exploring</option>
+          </select>
+        </div>
+
+        <div class="field">
+          <label class="field-label" for="q_budget">Budget in mind? <em style="color:var(--ink-mute);font-style:italic;font-weight:400;">(optional)</em></label>
+          <select id="q_budget" data-field="budget_range">
+            <option value="">Choose&hellip;</option>
+            <option value="under-2k">Under $2k</option>
+            <option value="2k-10k">$2k &ndash; $10k</option>
+            <option value="10k-25k">$10k &ndash; $25k</option>
+            <option value="25k-50k">$25k &ndash; $50k</option>
+            <option value="50k-plus">$50k+</option>
+            <option value="unsure">Not sure yet</option>
+            <option value="skip">Prefer not to say</option>
+          </select>
+        </div>
+
+        <div class="step-nav">
+          <button class="btn secondary" onclick="goToStep(5)">&larr; Back</button>
+          <button class="btn primary" onclick="goToStep(7)">Continue &rarr;</button>
+        </div>
+      </div>
+
+      <!-- =================== STEP 7 — ANYTHING ELSE =================== -->
+      <div class="step" data-step="7">
+        <div class="step-header">
+          <div class="step-count">Step 07 &middot; Last one</div>
+          <h2>Anything else we should <em>know</em>?</h2>
+          <p class="sub">Blockers, context, quirks. The stuff that would come up on the call anyway.</p>
+        </div>
+
+        <div class="field">
+          <textarea data-field="anything_else" placeholder="e.g. 'I&rsquo;ve worked with three agencies and been burned.' &middot; 'I&rsquo;m signing an important brand deal in September.'"></textarea>
+        </div>
+        <div class="field">
+          <label class="field-label" for="q_source">How did you find us?</label>
+          <select id="q_source" data-field="source">
+            <option value="">Choose&hellip;</option>
+            <option value="referral">A referral from someone I trust</option>
+            <option value="social">Social (X, IG, TikTok, LinkedIn)</option>
+            <option value="search">Google / search</option>
+            <option value="event">Event / conference</option>
+            <option value="press">Press or podcast</option>
+            <option value="direct">Direct outreach from TOJ</option>
+            <option value="other">Other</option>
+          </select>
+        </div>
+
+        <div class="step-nav">
+          <button class="btn secondary" onclick="goToStep(6)">&larr; Back</button>
+          <button class="btn primary" onclick="advanceToReview()">Review &rarr;</button>
+        </div>
+      </div>
+
+      <!-- =================== STEP 8 — REVIEW =================== -->
+      <div class="step" data-step="8">
+        <div class="step-header">
+          <div class="step-count">Review &middot; Step 08 of 08</div>
+          <h2>Here&rsquo;s <em>what we heard</em>.</h2>
+          <p class="sub">Skim it once. If anything&rsquo;s off, go back and fix it. Then send it our way.</p>
+        </div>
+
+        <div class="review-list" id="reviewList"></div>
+
+        <div class="avenue-banner" id="avenueBanner">
+          <div class="av-mark" id="avMark">?</div>
+          <div class="av-body">
+            <div class="av-eyebrow" id="avEyebrow">Detected avenue</div>
+            <div class="av-name" id="avName">Loading&hellip;</div>
+            <div class="av-reason" id="avReason">Reading your answers&hellip;</div>
+          </div>
+        </div>
+
+        <div class="step-nav">
+          <button class="btn secondary" onclick="goToStep(7)">&larr; Back &amp; edit</button>
+          <button class="btn primary" id="submitBtn" onclick="submitIntake()">Send it &rarr;</button>
+        </div>
+      </div>
+
+      <!-- =================== STEP 9 — SUCCESS =================== -->
+      <div class="step" data-step="9">
+        <div class="success-wrap">
+          <div class="success-check" id="successCheck">&#10003;</div>
+          <h2 id="successHead">Received. We&rsquo;ll be in touch.</h2>
+          <p id="successBody">
+            A person on our end reads every submission. You&rsquo;ll hear from us within
+            <strong>one business day</strong>, usually faster. Keep an eye on your inbox
+            &mdash; the reply will be personal, not a template.
+          </p>
+          <p id="successRouting" style="font-family: 'Fraunces', serif; font-style: italic; color: var(--ink);"></p>
+
+          <div class="success-actions">
+            <a href="/" class="btn primary">Back to TOJ Campaign</a>
+            <a href="/sample-transcript.html" class="btn secondary">See a sample transcript</a>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </main>
+
+  <footer>
+    &copy; 2026 Trail of Joy Player Management Group, LLC. &middot;
+    <a href="/">TOJ Campaign</a> &middot;
+    <a href="/mission.html">Mission</a>
+  </footer>
+
+  <script>
+    // =================== STATE ===================
+    const STATE = {
+      currentStep: 0,
+      totalSteps: 9,        // 0..9
+      answers: {},
+      avenueScores: { sports: 0, smallbiz: 0, bigbiz: 0, advisory: 0 },
+      selectedGoals: [],
+      selectedNeeds: [],
+      branch: null,          // 'sports' | 'smallbiz' | 'bigbiz' | 'advisory'
+      confidence: 0,
+    };
+
+    const STORAGE_KEY = 'toj_intake_draft_v1';
+
+    // =================== NAV ===================
+    function goToStep(n) {
+      // n can be 0..9 or "4-<branch>" for branch step
+      document.querySelectorAll('.step').forEach(s => s.classList.remove('active'));
+      const target = document.querySelector(`.step[data-step="${n}"]`);
+      if (target) target.classList.add('active');
+      STATE.currentStep = n;
+      updateProgress();
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      saveDraft();
+    }
+
+    function updateProgress() {
+      let pct = 0;
+      const s = String(STATE.currentStep);
+      if (s === '0') pct = 5;
+      else if (s === '1') pct = 15;
+      else if (s === '2') pct = 27;
+      else if (s === '3') pct = 40;
+      else if (s.startsWith('4')) pct = 55;
+      else if (s === '5') pct = 68;
+      else if (s === '6') pct = 78;
+      else if (s === '7') pct = 88;
+      else if (s === '8') pct = 95;
+      else if (s === '9') pct = 100;
+      document.getElementById('progressFill').style.width = pct + '%';
+    }
+
+    // =================== VALIDATION ===================
+    function validateAndAdvance(fromStep) {
+      // Step 1: brand fields
+      if (fromStep === 1) {
+        const name = document.querySelector('[data-field="name"]').value.trim();
+        const business = document.querySelector('[data-field="business"]').value.trim();
+        const email = document.querySelector('[data-field="email"]').value.trim();
+        if (!name || !business || !email) {
+          alert('Please fill in your name, business/brand name, and email to continue.');
+          return;
+        }
+        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+          alert('Please enter a valid email.');
+          return;
+        }
+        goToStep(2);
+      }
+      // Step 2: goals multi-select
+      else if (fromStep === 2) {
+        if (STATE.selectedGoals.length === 0) {
+          alert('Pick at least one goal to continue.');
+          return;
+        }
+        goToStep(3);
+      }
+    }
+
+    function branchAfterNeeds() {
+      if (STATE.selectedNeeds.length === 0) {
+        alert('Pick at least one need to continue.');
+        return;
+      }
+      // Compute avenue scores from goals + needs weights
+      recalculateAvenueScores();
+      // Pick highest-score avenue
+      const scores = STATE.avenueScores;
+      const sorted = Object.entries(scores).sort((a,b) => b[1] - a[1]);
+      const primary = sorted[0][0];
+      const secondaryDelta = sorted[0][1] - sorted[1][1];
+      STATE.branch = primary;
+      STATE.confidence = Math.min(1, sorted[0][1] / (sorted[0][1] + sorted[1][1] + 0.01));
+      goToStep(`4-${primary}`);
+    }
+
+    function goBackFromClosing() {
+      // Return to whichever branch step we came from
+      const b = STATE.branch || 'smallbiz';
+      goToStep(`4-${b}`);
+    }
+
+    function advanceToReview() {
+      // Capture all remaining fields
+      captureAllFields();
+      renderReview();
+      goToStep(8);
+    }
+
+    // =================== FIELD CAPTURE ===================
+    function captureAllFields() {
+      document.querySelectorAll('[data-field]').forEach(el => {
+        const f = el.getAttribute('data-field');
+        STATE.answers[f] = el.value.trim();
+      });
+      STATE.answers.goals = [...STATE.selectedGoals];
+      STATE.answers.needs = [...STATE.selectedNeeds];
+      STATE.answers.branch = STATE.branch;
+      STATE.answers.avenueScores = {...STATE.avenueScores};
+      STATE.answers.confidence = STATE.confidence;
+      STATE.answers.timestamp = new Date().toISOString();
+      STATE.answers.source_page = document.referrer || 'direct';
+      // Capture single-select radio-cards
+      document.querySelectorAll('[data-single]').forEach(group => {
+        const key = group.getAttribute('data-single');
+        const selected = group.querySelector('.radio-card.selected');
+        if (selected) STATE.answers[key] = selected.getAttribute('data-value');
+      });
+    }
+
+    // =================== SCORING ===================
+    function recalculateAvenueScores() {
+      STATE.avenueScores = { sports: 0, smallbiz: 0, bigbiz: 0, advisory: 0 };
+      // Apply goal weights
+      document.querySelectorAll('[data-multi="goals"] .choice.selected').forEach(el => {
+        applyWeights(el.getAttribute('data-weight'));
+      });
+      document.querySelectorAll('[data-multi="needs"] .choice.selected').forEach(el => {
+        applyWeights(el.getAttribute('data-weight'));
+      });
+    }
+    function applyWeights(weightStr) {
+      if (!weightStr) return;
+      weightStr.split(',').forEach(pair => {
+        const [k, v] = pair.split(':');
+        if (STATE.avenueScores[k] !== undefined) {
+          STATE.avenueScores[k] += parseInt(v, 10) || 0;
+        }
+      });
+    }
+
+    // =================== MULTI-SELECT HANDLING ===================
+    document.querySelectorAll('[data-multi]').forEach(group => {
+      const listKey = group.getAttribute('data-multi'); // 'goals' or 'needs'
+      group.querySelectorAll('.choice').forEach(choice => {
+        choice.addEventListener('click', (e) => {
+          e.preventDefault();
+          choice.classList.toggle('selected');
+          const val = choice.getAttribute('data-value');
+          const target = listKey === 'goals' ? STATE.selectedGoals : STATE.selectedNeeds;
+          const idx = target.indexOf(val);
+          if (idx > -1) target.splice(idx, 1);
+          else target.push(val);
+          saveDraft();
+        });
+      });
+    });
+
+    // =================== SINGLE-SELECT (RADIO CARDS) ===================
+    document.querySelectorAll('[data-single]').forEach(group => {
+      group.querySelectorAll('.radio-card').forEach(card => {
+        card.addEventListener('click', (e) => {
+          e.preventDefault();
+          group.querySelectorAll('.radio-card').forEach(c => c.classList.remove('selected'));
+          card.classList.add('selected');
+          saveDraft();
+        });
+      });
+    });
+
+    // =================== AUTOSAVE ===================
+    document.querySelectorAll('input, textarea, select').forEach(el => {
+      el.addEventListener('input', () => {
+        saveDraft();
+        flashSaveNote();
+      });
+    });
+    function saveDraft() {
+      try {
+        // Capture live values into STATE for storage
+        const draft = {
+          currentStep: STATE.currentStep,
+          answers: {},
+          selectedGoals: [...STATE.selectedGoals],
+          selectedNeeds: [...STATE.selectedNeeds],
+          branch: STATE.branch,
+        };
+        document.querySelectorAll('[data-field]').forEach(el => {
+          draft.answers[el.getAttribute('data-field')] = el.value;
+        });
+        document.querySelectorAll('[data-single]').forEach(group => {
+          const key = group.getAttribute('data-single');
+          const sel = group.querySelector('.radio-card.selected');
+          if (sel) draft.answers[key] = sel.getAttribute('data-value');
+        });
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(draft));
+      } catch(e) { /* localStorage disabled — ignore */ }
+    }
+    let saveFlashTimeout;
+    function flashSaveNote() {
+      const note = document.getElementById('saveNote');
+      note.textContent = 'Saved';
+      note.classList.add('saved');
+      clearTimeout(saveFlashTimeout);
+      saveFlashTimeout = setTimeout(() => {
+        note.textContent = 'Auto-saves as you go';
+        note.classList.remove('saved');
+      }, 1500);
+    }
+    // Restore draft on load
+    (function restoreDraft() {
+      try {
+        const raw = localStorage.getItem(STORAGE_KEY);
+        if (!raw) return;
+        const draft = JSON.parse(raw);
+        Object.entries(draft.answers || {}).forEach(([k, v]) => {
+          const el = document.querySelector(`[data-field="${k}"]`);
+          if (el) el.value = v;
+        });
+        (draft.selectedGoals || []).forEach(val => {
+          const el = document.querySelector(`[data-multi="goals"] .choice[data-value="${val}"]`);
+          if (el) { el.classList.add('selected'); STATE.selectedGoals.push(val); }
+        });
+        (draft.selectedNeeds || []).forEach(val => {
+          const el = document.querySelector(`[data-multi="needs"] .choice[data-value="${val}"]`);
+          if (el) { el.classList.add('selected'); STATE.selectedNeeds.push(val); }
+        });
+        // Restore single-selects
+        document.querySelectorAll('[data-single]').forEach(group => {
+          const key = group.getAttribute('data-single');
+          const val = draft.answers && draft.answers[key];
+          if (val) {
+            const card = group.querySelector(`.radio-card[data-value="${val}"]`);
+            if (card) card.classList.add('selected');
+          }
+        });
+        STATE.branch = draft.branch || null;
+      } catch(e) { /* ignore */ }
+    })();
+
+    // =================== REVIEW ===================
+    function renderReview() {
+      const AVENUE_META = {
+        sports:   { name: 'TOJ Sports',         color: '#1E3A5F', letter: 'S', reason: 'Your answers signaled athletic evaluation, recruiting, and roster building.' },
+        smallbiz: { name: 'TOJ Small Business', color: '#A85F26', letter: 'B', reason: 'Your answers signaled relationship-built operations, customer care, and steady rhythm.' },
+        bigbiz:   { name: 'TOJ Big Business',   color: '#2F5D4E', letter: 'B', reason: 'Your answers signaled multi-location scale, cross-division reporting, and team enablement.' },
+        advisory: { name: 'TOJ Advisory',       color: '#B8843B', letter: 'A', reason: 'Your answers signaled personal-brand building, coaching, and cohort learning.' }
+      };
+      const a = STATE.answers;
+      const goalLabels = STATE.selectedGoals.map(v => {
+        const el = document.querySelector(`[data-multi="goals"] .choice[data-value="${v}"] strong`);
+        return el ? el.textContent : v;
+      });
+      const needLabels = STATE.selectedNeeds.map(v => {
+        const el = document.querySelector(`[data-multi="needs"] .choice[data-value="${v}"] strong`);
+        return el ? el.textContent : v;
+      });
+
+      const rows = [
+        ['Name', a.name],
+        ['Business', a.business],
+        ['Contact', `${a.email || ''}${a.phone ? ' · ' + a.phone : ''}`],
+        ['Location', a.location],
+        ['Goals', goalLabels.join(' · ') || '<em>none selected</em>'],
+        ['Needs', needLabels.join(' · ') || '<em>none selected</em>'],
+        ['Success @ 90d', a.success_90d || '<em>skipped</em>'],
+        ['Timeline', a.timeline || '<em>skipped</em>'],
+        ['Budget', a.budget_range || '<em>skipped</em>'],
+        ['Anything else', a.anything_else || '<em>none</em>'],
+        ['Source', a.source || '<em>skipped</em>'],
+      ];
+      // Add branch-specific rows
+      if (STATE.branch === 'sports') {
+        rows.push(['Sports role', a['sports-role'] || '<em>—</em>']);
+        rows.push(['Sport detail', a.sport_detail || '<em>—</em>']);
+      } else if (STATE.branch === 'smallbiz') {
+        rows.push(['Shape', a['smallbiz-shape'] || '<em>—</em>']);
+        rows.push(['Revenue', a.revenue_range || '<em>—</em>']);
+        rows.push(['Bottleneck', a.bottleneck || '<em>—</em>']);
+      } else if (STATE.branch === 'bigbiz') {
+        rows.push(['Locations', a.location_count || '<em>—</em>']);
+        rows.push(['Team size', a.team_size || '<em>—</em>']);
+        rows.push(['Divisions', a.divisions || '<em>—</em>']);
+        rows.push(['Standard status', a['has-standard'] || '<em>—</em>']);
+      } else if (STATE.branch === 'advisory') {
+        rows.push(['Who filling', a['advisory-who'] || '<em>—</em>']);
+        rows.push(['Class year', a.class_year || '<em>—</em>']);
+        rows.push(['Prior NIL', a.nil_income || '<em>—</em>']);
+      }
+
+      document.getElementById('reviewList').innerHTML = rows.map(([lbl, val]) => `
+        <div class="review-row">
+          <div class="rev-lbl">${lbl}</div>
+          <div class="rev-val">${val || '<em>skipped</em>'}</div>
+        </div>
+      `).join('');
+
+      // Banner
+      const meta = AVENUE_META[STATE.branch] || AVENUE_META.smallbiz;
+      const banner = document.getElementById('avenueBanner');
+      banner.style.setProperty('--avenue-color', meta.color);
+      document.getElementById('avMark').textContent = meta.letter;
+      document.getElementById('avMark').style.background = meta.color;
+      document.getElementById('avEyebrow').textContent = `Detected avenue · ${(STATE.confidence * 100).toFixed(0)}% confidence`;
+      document.getElementById('avEyebrow').style.color = meta.color;
+      document.getElementById('avName').textContent = meta.name;
+      document.getElementById('avReason').textContent = meta.reason;
+    }
+
+    // =================== SUBMIT ===================
+    function submitIntake() {
+      captureAllFields();
+
+      // Assemble the full agent-facing payload
+      const payload = {
+        submitted_at: new Date().toISOString(),
+        avenue: {
+          primary: STATE.branch,
+          scores: {...STATE.avenueScores},
+          confidence: STATE.confidence
+        },
+        brand: {
+          name: STATE.answers.name,
+          business: STATE.answers.business,
+          email: STATE.answers.email,
+          phone: STATE.answers.phone,
+          location: STATE.answers.location,
+        },
+        goals: STATE.selectedGoals,
+        needs: STATE.selectedNeeds,
+        branch_data: extractBranchData(),
+        closing: {
+          success_90d: STATE.answers.success_90d,
+          timeline: STATE.answers.timeline,
+          budget_range: STATE.answers.budget_range,
+          anything_else: STATE.answers.anything_else,
+          source: STATE.answers.source,
+        },
+        tags: computeTags(),
+        source_page: STATE.answers.source_page || 'direct',
+      };
+
+      // TODO — WIRE THIS TO YOUR ENDPOINT
+      // Options:
+      //   - GHL webhook: fetch('https://services.leadconnectorhq.com/hooks/...', {method:'POST', body: JSON.stringify(payload)})
+      //   - Typeform / Airtable / Zapier: same pattern
+      //   - Custom Node/Express endpoint: fetch('/api/intake', ...)
+      console.log('TOJ intake submission — READ THIS:', payload);
+
+      // Show success state
+      const AVENUE_LABELS = {
+        sports:   { name: 'TOJ Sports',         cls: 'sports' },
+        smallbiz: { name: 'TOJ Small Business', cls: 'smallbiz' },
+        bigbiz:   { name: 'TOJ Big Business',   cls: 'bigbiz' },
+        advisory: { name: 'TOJ Advisory',       cls: 'advisory' }
+      };
+      const meta = AVENUE_LABELS[STATE.branch] || AVENUE_LABELS.smallbiz;
+      document.getElementById('successCheck').className = 'success-check ' + meta.cls;
+      document.getElementById('successRouting').innerHTML =
+        `You&rsquo;re routed to <strong>${meta.name}</strong>. That&rsquo;s the door we&rsquo;ll walk through together on the first call.`;
+
+      // Clear draft
+      try { localStorage.removeItem(STORAGE_KEY); } catch(e) {}
+
+      goToStep(9);
+    }
+
+    function extractBranchData() {
+      const a = STATE.answers;
+      if (STATE.branch === 'sports') return { role: a['sports-role'], detail: a.sport_detail };
+      if (STATE.branch === 'smallbiz') return { shape: a['smallbiz-shape'], revenue: a.revenue_range, bottleneck: a.bottleneck };
+      if (STATE.branch === 'bigbiz') return { locations: a.location_count, team_size: a.team_size, divisions: a.divisions, has_standard: a['has-standard'] };
+      if (STATE.branch === 'advisory') return { who: a['advisory-who'], class_year: a.class_year, nil_income: a.nil_income };
+      return {};
+    }
+
+    function computeTags() {
+      const tags = [`avenue:${STATE.branch}`];
+      // Timeline urgency
+      const t = STATE.answers.timeline;
+      if (t === 'asap' || t === '30-days') tags.push('urgency:hot');
+      else if (t === '90-days') tags.push('urgency:warm');
+      else if (t === 'exploring') tags.push('urgency:cold');
+      // Budget signal
+      const b = STATE.answers.budget_range;
+      if (b === '25k-50k' || b === '50k-plus') tags.push('budget:premium');
+      else if (b === '10k-25k') tags.push('budget:mid');
+      else if (b === 'under-2k' || b === '2k-10k') tags.push('budget:starter');
+      // Confidence tier
+      if (STATE.confidence < 0.5) tags.push('routing:needs-review');
+      // Source
+      if (STATE.answers.source === 'referral') tags.push('source:warm-referral');
+      // Branch-specific tags
+      if (STATE.branch === 'sports' && STATE.answers['sports-role'] === 'trainer') tags.push('sports:trainer-track');
+      if (STATE.branch === 'bigbiz' && STATE.answers['has-standard'] === 'no') tags.push('bigbiz:standard-greenfield');
+      if (STATE.branch === 'advisory' && STATE.answers['advisory-who'] === 'parent') tags.push('advisory:parent-inquiry');
+      return tags;
+    }
+
+    // Init progress
+    updateProgress();
+  </script>
+
+</body>
+</html>
