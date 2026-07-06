@@ -672,7 +672,7 @@
       <div class="hero-cta">
         <a href="#lanes" class="btn primary">Find your lane <span class="arrow">→</span></a>
         <a href="/brand-pulse.html" class="btn ghost">Take the Brand Pulse</a>
-        <a href="#standard" class="btn ghost">The Standard</a>
+        <a href="#" class="btn ghost" onclick="event.preventDefault(); document.getElementById('ideas-modal').classList.add('open');">Get 3 free ideas</a>
       </div>
     </div>
   </section>
@@ -1331,6 +1331,33 @@
       </div>
     </div>
   </footer>
+
+  <!-- ============ 3 FREE IDEAS MODAL ============ -->
+  <div id="ideas-modal" style="position: fixed; inset: 0; background: rgba(26,22,19,0.55); display: none; align-items: center; justify-content: center; z-index: 1000; padding: 1.5rem; backdrop-filter: blur(2px);">
+    <div style="background: #fff; max-width: 480px; width: 100%; border-radius: 14px; padding: 2rem clamp(1.25rem, 3vw, 2.25rem); box-shadow: 0 40px 80px -40px rgba(26,22,19,0.4); position: relative;">
+      <button type="button" onclick="document.getElementById('ideas-modal').classList.remove('open');" aria-label="Close" style="position: absolute; top: 0.85rem; right: 0.85rem; background: transparent; border: 0; font-size: 1.4rem; cursor: pointer; color: var(--ink-mute); line-height: 1;">&times;</button>
+      <div style="font-size: 0.72rem; font-weight: 700; letter-spacing: 0.18em; text-transform: uppercase; color: var(--sports); margin-bottom: 0.75rem;">Free &middot; No obligation</div>
+      <h3 style="font-family: 'Fraunces', Georgia, serif; font-size: 1.5rem; margin-bottom: 0.5rem; color: var(--ink);">Get 3 ideas you can use this week.</h3>
+      <p style="color: var(--ink-mute); font-size: 0.92rem; margin-bottom: 1.5rem;">Tell us what you're building. Kyron reads it and sends back three specific, avenue-matched ideas &mdash; not a sales sequence.</p>
+      <form id="ideas-form" onsubmit="event.preventDefault(); document.getElementById('ideas-form').style.display='none'; document.getElementById('ideas-ok').style.display='block'; return false;" style="display: flex; flex-direction: column; gap: 0.85rem;">
+        <label style="display: flex; flex-direction: column; gap: 0.35rem; font-size: 0.8rem; color: var(--ink-soft); font-weight: 500;">Email
+          <input type="email" required placeholder="you@yourbusiness.com" style="padding: 0.75rem 0.85rem; font-size: 0.95rem; border: 1px solid var(--rule); border-radius: 8px; background: var(--parchment); color: var(--ink); font-family: inherit;" />
+        </label>
+        <label style="display: flex; flex-direction: column; gap: 0.35rem; font-size: 0.8rem; color: var(--ink-soft); font-weight: 500;">What are you building?
+          <textarea required rows="3" placeholder="One line about your business, your customer, and what's stuck." style="padding: 0.75rem 0.85rem; font-size: 0.95rem; border: 1px solid var(--rule); border-radius: 8px; background: var(--parchment); color: var(--ink); font-family: inherit; resize: vertical;"></textarea>
+        </label>
+        <button type="submit" style="padding: 0.9rem 1rem; background: var(--ink); color: var(--parchment); border: 0; border-radius: 8px; font-weight: 600; cursor: pointer; font-family: inherit; font-size: 0.95rem; margin-top: 0.25rem;">Send me 3 ideas &rarr;</button>
+        <div style="font-size: 0.75rem; color: var(--ink-mute); text-align: center;">No drip funnel. No sales sequence. Reply to unsubscribe with a word.</div>
+      </form>
+      <div id="ideas-ok" style="display: none;">
+        <div style="padding: 1rem 1.15rem; background: rgba(30,58,95,0.08); border-left: 3px solid var(--sports); border-radius: 4px; font-size: 0.9rem; color: var(--ink);">
+          <strong>Got it.</strong> Kyron reads intake before writing. Your three ideas land within 48 hours from <em>hello@tojcampaign.com</em>.
+        </div>
+        <button type="button" onclick="document.getElementById('ideas-modal').classList.remove('open');" style="margin-top: 1rem; width: 100%; padding: 0.75rem; background: transparent; color: var(--ink); border: 1px solid var(--rule); border-radius: 8px; cursor: pointer; font-family: inherit; font-weight: 500;">Close</button>
+      </div>
+    </div>
+  </div>
+  <style>#ideas-modal.open { display: flex !important; } #ideas-modal input:focus, #ideas-modal textarea:focus { outline: none; border-color: var(--sports); background: #fff; }</style>
 
 </body>
 </html>
