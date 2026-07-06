@@ -69,6 +69,40 @@
     }
     .niche .cta { margin-top: 1rem; font-size: 0.85rem; font-weight: 600; color: var(--accent); }
 
+    .quiet { padding: clamp(3.5rem, 6vw, 5rem) 0; border-top: 1px solid var(--rule); }
+    .quiet .container { display: grid; grid-template-columns: 1fr 1fr; gap: clamp(2rem, 5vw, 4rem); align-items: center; }
+    @media (max-width: 860px) { .quiet .container { grid-template-columns: 1fr; } }
+    .quiet .eyebrow { margin-bottom: 1rem; }
+    .quiet h2 { margin-bottom: 1.25rem; max-width: 20ch; }
+    .quiet p { color: var(--ink-soft); margin-bottom: 1rem; }
+    .quiet .pull { font-family: 'Fraunces', serif; font-size: clamp(1.15rem, 2vw, 1.4rem); color: var(--ink); border-left: 3px solid var(--accent); padding: 1rem 1.35rem; margin-top: 1.5rem; background: var(--parchment-2); }
+
+    .system { background: var(--ink); color: var(--parchment); padding: clamp(3.5rem, 6vw, 5rem) 0; border-top: 0; }
+    .system-head { max-width: 44rem; margin: 0 auto clamp(2rem, 4vw, 3rem); text-align: center; }
+    .system-head .eyebrow { color: var(--score); margin-bottom: 1rem; }
+    .system-head h2 { color: var(--parchment); margin-bottom: 1rem; }
+    .system-head p { color: rgba(245,241,234,0.7); font-size: 0.95rem; }
+    .system-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem; }
+    @media (max-width: 900px) { .system-grid { grid-template-columns: repeat(2, 1fr); } }
+    @media (max-width: 480px) { .system-grid { grid-template-columns: 1fr; } }
+    .sys-card { background: rgba(245,241,234,0.05); border: 1px solid rgba(245,241,234,0.12); border-radius: 12px; padding: 1.35rem 1.15rem; }
+    .sys-card .s-eyebrow { font-size: 0.68rem; font-weight: 700; letter-spacing: 0.16em; text-transform: uppercase; color: var(--accent); margin-bottom: 0.55rem; }
+    .sys-card h4 { color: var(--parchment); font-family: 'Fraunces', serif; font-weight: 600; font-size: 1.05rem; margin-bottom: 0.5rem; letter-spacing: -0.015em; }
+    .sys-card p { color: rgba(245,241,234,0.7); font-size: 0.85rem; line-height: 1.5; }
+
+    .cadence { padding: clamp(3.5rem, 6vw, 5rem) 0; background: var(--parchment-2); }
+    .cadence-head { max-width: 44rem; margin: 0 auto clamp(2rem, 4vw, 2.5rem); text-align: center; }
+    .cadence-head .eyebrow { margin-bottom: 1rem; }
+    .cadence-list { max-width: 720px; margin: 0 auto; }
+    .cad-row {
+      display: grid; grid-template-columns: 90px 1fr; gap: 1.5rem;
+      padding: 1.15rem 0; border-bottom: 1px solid var(--rule); align-items: baseline;
+    }
+    .cad-row:last-child { border-bottom: 0; }
+    .cad-week { font-family: 'Fraunces', serif; color: var(--accent); font-size: 0.85rem; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; }
+    .cad-body h4 { font-size: 1rem; margin-bottom: 0.35rem; }
+    .cad-body p { color: var(--ink-soft); font-size: 0.9rem; }
+
     .creds { background: var(--ink); color: var(--parchment); padding: 3rem 0; text-align: center; }
     .creds .eyebrow { color: var(--score); margin-bottom: 1rem; }
     .creds h4 { font-family: 'Fraunces', serif; color: var(--parchment); font-weight: 500; font-size: 1.1rem; max-width: 44rem; margin: 0 auto 1.5rem; }
@@ -122,6 +156,107 @@
           system that turns your reputation into a repeatable delivery &mdash; without
           changing what makes the work yours.
         </p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ THE QUIET PROBLEM ============ -->
+  <section class="quiet">
+    <div class="container">
+      <div>
+        <div class="eyebrow">The pattern we see</div>
+        <h2>Your regulars don&rsquo;t leave because you&rsquo;re bad. They leave when you go quiet.</h2>
+        <div class="pull">
+          &ldquo;Solo operators lose more money to silence than to service failure.&rdquo;
+        </div>
+      </div>
+      <div>
+        <p>
+          The gap between a customer&rsquo;s last session and the next reason to come back
+          is where retention actually dies. Something else fills the gap. A new
+          trainer. A different creator. A quieter Sunday.
+        </p>
+        <p>
+          The system underneath your reputation isn&rsquo;t about pushing content or
+          running ads. It&rsquo;s about the specific breadcrumb that shows up in the
+          silence &mdash; the one that says &ldquo;you were remembered.&rdquo;
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ THE FOUR-PART OPERATING SYSTEM ============ -->
+  <section class="system">
+    <div class="container">
+      <div class="system-head">
+        <div class="eyebrow">What we install</div>
+        <h2>One operating system. Four working parts.</h2>
+        <p>Underneath every Personal Brand engagement, the same four surfaces get installed. Same standard. Your voice, your customer, your cadence.</p>
+      </div>
+      <div class="system-grid">
+        <div class="sys-card">
+          <div class="s-eyebrow">Part 01</div>
+          <h4>The Presence Kit</h4>
+          <p>The client-facing surface a stranger meets first. Clear one-sentence positioning, right buttons, right proof.</p>
+        </div>
+        <div class="sys-card">
+          <div class="s-eyebrow">Part 02</div>
+          <h4>The Intake System</h4>
+          <p>The way a lead becomes a booked client without you hand-holding the transition. Documented, repeatable, calm.</p>
+        </div>
+        <div class="sys-card">
+          <div class="s-eyebrow">Part 03</div>
+          <h4>The Content Cadence</h4>
+          <p>The specific weekly rhythm your audience gets used to. Not more content &mdash; more predictable content.</p>
+        </div>
+        <div class="sys-card">
+          <div class="s-eyebrow">Part 04</div>
+          <h4>The Retention Rhythm</h4>
+          <p>The one-line touchpoint that lives in the silence. So the customer you already earned doesn&rsquo;t drift.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ MONTH ONE CADENCE ============ -->
+  <section class="cadence">
+    <div class="container">
+      <div class="cadence-head">
+        <div class="eyebrow">What month one looks like</div>
+        <h2>Not a plan. A shipping schedule.</h2>
+        <p style="color: var(--ink-soft); font-size: 0.9rem;">
+          You&rsquo;ll know it&rsquo;s working because things ship on the day they&rsquo;re supposed to ship. That&rsquo;s the whole test.
+        </p>
+      </div>
+      <div class="cadence-list">
+        <div class="cad-row">
+          <div class="cad-week">Week 01</div>
+          <div class="cad-body">
+            <h4>Presence Kit installed</h4>
+            <p>The client-facing surface is live and reads as inevitable. First public artifact your audience can point to.</p>
+          </div>
+        </div>
+        <div class="cad-row">
+          <div class="cad-week">Week 02</div>
+          <div class="cad-body">
+            <h4>Intake system connected</h4>
+            <p>New leads route through a documented path. You stop being the manual step between interested and booked.</p>
+          </div>
+        </div>
+        <div class="cad-row">
+          <div class="cad-week">Week 03</div>
+          <div class="cad-body">
+            <h4>Content cadence launched</h4>
+            <p>The first predictable week ships. Your audience starts learning when to expect you.</p>
+          </div>
+        </div>
+        <div class="cad-row">
+          <div class="cad-week">Week 04</div>
+          <div class="cad-body">
+            <h4>Retention rhythm running</h4>
+            <p>Past customers receive the first specific touchpoint. Reactivations start showing up in the calendar.</p>
+          </div>
+        </div>
       </div>
     </div>
   </section>

@@ -65,6 +65,40 @@
     }
     .legal-note strong { color: var(--ink); }
 
+    .mission { padding: clamp(3.5rem, 6vw, 5rem) 0; border-top: 1px solid var(--rule); }
+    .mission .container { display: grid; grid-template-columns: 1fr 1fr; gap: clamp(2rem, 5vw, 4rem); align-items: center; }
+    @media (max-width: 860px) { .mission .container { grid-template-columns: 1fr; } }
+    .mission .eyebrow { margin-bottom: 1rem; }
+    .mission h2 { margin-bottom: 1.25rem; max-width: 20ch; }
+    .mission p { color: var(--ink-soft); margin-bottom: 1rem; }
+    .mission .pull { font-family: 'Fraunces', serif; font-size: clamp(1.15rem, 2vw, 1.4rem); color: var(--ink); border-left: 3px solid var(--accent); padding: 1rem 1.35rem; margin-top: 1.5rem; background: var(--parchment-2); }
+
+    .surfaces { background: var(--ink); color: var(--parchment); padding: clamp(3.5rem, 6vw, 5rem) 0; border-top: 0; }
+    .surfaces-head { max-width: 44rem; margin: 0 auto clamp(2rem, 4vw, 3rem); text-align: center; }
+    .surfaces-head .eyebrow { color: var(--score); margin-bottom: 1rem; }
+    .surfaces-head h2 { color: var(--parchment); margin-bottom: 1rem; }
+    .surfaces-head p { color: rgba(245,241,234,0.7); font-size: 0.95rem; }
+    .surfaces-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem; }
+    @media (max-width: 900px) { .surfaces-grid { grid-template-columns: repeat(2, 1fr); } }
+    @media (max-width: 480px) { .surfaces-grid { grid-template-columns: 1fr; } }
+    .surf-card { background: rgba(245,241,234,0.05); border: 1px solid rgba(245,241,234,0.12); border-radius: 12px; padding: 1.35rem 1.15rem; }
+    .surf-card .s-eyebrow { font-size: 0.68rem; font-weight: 700; letter-spacing: 0.16em; text-transform: uppercase; color: var(--accent); margin-bottom: 0.55rem; }
+    .surf-card h4 { color: var(--parchment); font-family: 'Fraunces', serif; font-weight: 600; font-size: 1.05rem; margin-bottom: 0.5rem; letter-spacing: -0.015em; }
+    .surf-card p { color: rgba(245,241,234,0.7); font-size: 0.85rem; line-height: 1.5; }
+
+    .rollout { padding: clamp(3.5rem, 6vw, 5rem) 0; background: var(--parchment-2); }
+    .rollout-head { max-width: 44rem; margin: 0 auto clamp(2rem, 4vw, 2.5rem); text-align: center; }
+    .rollout-head .eyebrow { margin-bottom: 1rem; }
+    .phase-list { max-width: 780px; margin: 0 auto; display: grid; gap: 0.85rem; }
+    .phase-row {
+      display: grid; grid-template-columns: 100px 1fr; gap: 1.5rem;
+      padding: 1.25rem 1.35rem; background: #fff; border: 1px solid var(--rule);
+      border-radius: 10px; border-left: 3px solid var(--accent); align-items: baseline;
+    }
+    .phase-num { font-family: 'Fraunces', serif; color: var(--accent); font-size: 0.85rem; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; }
+    .phase-body h4 { font-size: 1rem; margin-bottom: 0.35rem; }
+    .phase-body p { color: var(--ink-soft); font-size: 0.9rem; }
+
     .creds { background: var(--ink); color: var(--parchment); padding: 3rem 0; text-align: center; }
     .creds .eyebrow { color: var(--score); margin-bottom: 1rem; }
     .creds h4 { font-family: 'Fraunces', serif; color: var(--parchment); font-weight: 500; font-size: 1.1rem; max-width: 46rem; margin: 0 auto 1.5rem; }
@@ -119,6 +153,110 @@
           reportable, repeatable, fundable work &mdash; without changing what makes
           your mission yours.
         </p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ MISSION PRESERVED AT SCALE ============ -->
+  <section class="mission">
+    <div class="container">
+      <div>
+        <div class="eyebrow">What most nonprofits lose in year three</div>
+        <h2>Every new program was supposed to feel like the first one. It doesn&rsquo;t.</h2>
+        <div class="pull">
+          &ldquo;Mission preserved. At scale.&rdquo;
+        </div>
+      </div>
+      <div>
+        <p>
+          The first program worked because founders were in every room. The second
+          worked because they were in most of them. By the fourth, the mission is
+          being interpreted through people who have never met the founders &mdash; and
+          the drift starts.
+        </p>
+        <p>
+          We install the operating layer that carries the mission through every
+          program, every location, and every staff turnover. Documented, transferable,
+          survivable. So the twentieth family feels the same standard as the first.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ FOUR SURFACES ============ -->
+  <section class="surfaces">
+    <div class="container">
+      <div class="surfaces-head">
+        <div class="eyebrow">What we install</div>
+        <h2>One operating layer. Four surfaces. Every program.</h2>
+        <p>Every nonprofit engagement installs the same four working surfaces. Different mission, same standard.</p>
+      </div>
+      <div class="surfaces-grid">
+        <div class="surf-card">
+          <div class="s-eyebrow">Surface 01</div>
+          <h4>The Program Standard</h4>
+          <p>Documented delivery so every family, athlete, or participant gets the same experience as the flagship cohort.</p>
+        </div>
+        <div class="surf-card">
+          <div class="s-eyebrow">Surface 02</div>
+          <h4>The Reporting Rhythm</h4>
+          <p>Donor, grantor, and board reports assembled on cadence &mdash; not rebuilt from scratch every ask.</p>
+        </div>
+        <div class="surf-card">
+          <div class="s-eyebrow">Surface 03</div>
+          <h4>The Staff Enablement Kit</h4>
+          <p>The onboarding, playbook, and training layer so new team members carry the mission on day one, not month three.</p>
+        </div>
+        <div class="surf-card">
+          <div class="s-eyebrow">Surface 04</div>
+          <h4>The Funder Pipeline</h4>
+          <p>The evidence trail, credibility surface, and application infrastructure that turns program work into repeat funding.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ PHASED ROLLOUT ============ -->
+  <section class="rollout">
+    <div class="container">
+      <div class="rollout-head">
+        <div class="eyebrow">How the rollout works</div>
+        <h2>You don&rsquo;t flip a switch. You roll out in phases.</h2>
+        <p style="color: var(--ink-soft); font-size: 0.9rem; max-width: 44rem; margin: 0.85rem auto 0;">
+          Nonprofits can&rsquo;t afford a Big Bang launch that risks the field-facing
+          program. We install the operating system phase-by-phase so the mission
+          keeps moving while the back office catches up.
+        </p>
+      </div>
+      <div class="phase-list">
+        <div class="phase-row">
+          <div class="phase-num">Phase 01</div>
+          <div class="phase-body">
+            <h4>Baseline &middot; Foundation Score</h4>
+            <p>We score the operation across the five pillars, name the two lowest, and scope the phased work.</p>
+          </div>
+        </div>
+        <div class="phase-row">
+          <div class="phase-num">Phase 02</div>
+          <div class="phase-body">
+            <h4>Standardize the flagship program</h4>
+            <p>We document what the best program looks like when it&rsquo;s running well. That document becomes the standard.</p>
+          </div>
+        </div>
+        <div class="phase-row">
+          <div class="phase-num">Phase 03</div>
+          <div class="phase-body">
+            <h4>Install reporting and staff enablement</h4>
+            <p>Reporting rhythm goes on cadence. Staff enablement kit lands. Turnover stops resetting the clock.</p>
+          </div>
+        </div>
+        <div class="phase-row">
+          <div class="phase-num">Phase 04</div>
+          <div class="phase-body">
+            <h4>Extend across programs, hand off ownership</h4>
+            <p>The standard rolls out program-by-program, or location-by-location. Then we hand you the keys.</p>
+          </div>
+        </div>
       </div>
     </div>
   </section>

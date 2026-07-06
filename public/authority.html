@@ -61,6 +61,30 @@
     .score-block h2 { margin-bottom: 1rem; }
     .score-block p { color: var(--ink-soft); max-width: 42rem; margin: 0 auto 1.75rem; }
 
+    .record { background: var(--ink); color: var(--parchment); padding: clamp(3.5rem, 6vw, 5rem) 0; border-top: 0; }
+    .record .container { display: grid; grid-template-columns: 1fr 1fr; gap: clamp(2rem, 5vw, 4rem); align-items: center; }
+    @media (max-width: 860px) { .record .container { grid-template-columns: 1fr; } }
+    .record .eyebrow { color: var(--score); margin-bottom: 1rem; }
+    .record h2 { color: var(--parchment); margin-bottom: 1.25rem; }
+    .record p { color: rgba(245,241,234,0.75); font-size: 1rem; margin-bottom: 1rem; max-width: 34rem; }
+    .record .pull { font-family: 'Fraunces', serif; font-size: clamp(1.15rem, 2vw, 1.4rem); color: var(--parchment); border-left: 3px solid var(--score); padding: 1rem 1.35rem; margin-top: 1.5rem; }
+    .record-surfaces { background: rgba(245,241,234,0.05); border: 1px solid rgba(245,241,234,0.12); border-radius: 14px; padding: 1.75rem; }
+    .record-surfaces h4 { color: var(--parchment); font-size: 1rem; margin-bottom: 1rem; }
+    .record-surfaces ul { list-style: none; display: flex; flex-direction: column; gap: 0.85rem; }
+    .record-surfaces li { color: rgba(245,241,234,0.75); font-size: 0.92rem; padding-left: 1.25rem; position: relative; }
+    .record-surfaces li::before { content: ''; position: absolute; left: 0; top: 0.55rem; width: 6px; height: 6px; background: var(--score); border-radius: 999px; }
+    .record-surfaces li strong { color: var(--parchment); font-weight: 600; }
+
+    .archetypes { padding: clamp(3.5rem, 6vw, 5rem) 0; }
+    .archetypes-head { max-width: 44rem; margin: 0 auto clamp(2rem, 4vw, 3rem); text-align: center; }
+    .archetype-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.85rem; }
+    @media (max-width: 900px) { .archetype-grid { grid-template-columns: repeat(2, 1fr); } }
+    @media (max-width: 480px) { .archetype-grid { grid-template-columns: 1fr; } }
+    .arch { background: #fff; border: 1px solid var(--rule); border-radius: 10px; padding: 1.25rem 1.15rem; }
+    .arch .a-eyebrow { font-size: 0.66rem; font-weight: 700; letter-spacing: 0.16em; text-transform: uppercase; color: var(--accent); margin-bottom: 0.5rem; }
+    .arch h4 { font-size: 0.98rem; margin-bottom: 0.45rem; }
+    .arch p { color: var(--ink-mute); font-size: 0.82rem; line-height: 1.5; }
+
     footer { padding: 1.5rem clamp(1.25rem, 3vw, 2.5rem); background: var(--ink); color: rgba(245,241,234,0.65); text-align: center; font-size: 0.78rem; }
     footer a { color: rgba(245,241,234,0.75); }
   </style>
@@ -163,9 +187,76 @@
     </div>
   </section>
 
+  <!-- ============ THE RECORD ============ -->
+  <section class="record">
+    <div class="container">
+      <div>
+        <div class="eyebrow">The philosophy</div>
+        <h2>Highlight reels don&rsquo;t compound. The record does.</h2>
+        <p>
+          A viral clip fades in a week. The record &mdash; the documentation of every rep,
+          every game, every session, and every off-field development that got the athlete
+          into the room &mdash; is what a decision-maker actually funds.
+        </p>
+        <p>
+          We build the record all year. Not just on game day. Not just when there's a
+          camera. When it&rsquo;s time to move, the paperwork is already done, the media
+          is already cut, and the story is already earned.
+        </p>
+        <div class="pull">
+          &ldquo;Coaches don&rsquo;t act on hype. Give them something they can trust.&rdquo;
+        </div>
+      </div>
+      <div class="record-surfaces">
+        <h4>One record. Four surfaces.</h4>
+        <ul>
+          <li><strong>The transcript.</strong> A written operating record a scout, coach, or agent can read start-to-finish.</li>
+          <li><strong>The media.</strong> Cut, dated, and captioned &mdash; not raw phone footage buried in a group chat.</li>
+          <li><strong>The credibility layer.</strong> Reporting portal, receipts, third-party validation. The Google-search-passes surface.</li>
+          <li><strong>The pipeline.</strong> The relationships and network positioned to receive the record when it&rsquo;s ready to move.</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ ARCHETYPES ============ -->
+  <section class="archetypes">
+    <div class="container">
+      <div class="archetypes-head">
+        <div class="eyebrow">Who this is for</div>
+        <h2>Four archetypes. One standard.</h2>
+        <p style="color: var(--ink-soft); font-size: 0.95rem;">
+          Different starting points. Same operating record underneath.
+        </p>
+      </div>
+      <div class="archetype-grid">
+        <div class="arch">
+          <div class="a-eyebrow">Archetype 01</div>
+          <h4>The Prospect</h4>
+          <p>High-school or early-college athlete building the record that gets the next-level meeting.</p>
+        </div>
+        <div class="arch">
+          <div class="a-eyebrow">Archetype 02</div>
+          <h4>The NIL Earner</h4>
+          <p>Athlete with real money moving who needs the operational infrastructure to protect and compound it.</p>
+        </div>
+        <div class="arch">
+          <div class="a-eyebrow">Archetype 03</div>
+          <h4>The Program</h4>
+          <p>Club, team, or organization building the pipeline coaches trust and families choose.</p>
+        </div>
+        <div class="arch">
+          <div class="a-eyebrow">Archetype 04</div>
+          <h4>The Sport-Adjacent Creator</h4>
+          <p>Creator whose audience lives in sport and whose credibility surface needs to match the reach.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
   <section class="score-block">
     <div class="container">
-      <div class="eyebrow">Start here</div>
+      <div class="eyebrow">Start here &middot; The reps count</div>
       <h2>Your Foundation Score is 8&ndash;12 minutes.</h2>
       <p>
         Scored across five pillars &mdash; Brand Identity, Operational Health, Revenue
