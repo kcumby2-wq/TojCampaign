@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Nonprofit — An operating system for mission-driven organizations. — TOJ Campaign</title>
+  <meta name="description" content="TOJ Campaign for 501(c)(3) organizations. We work with nonprofits as a standard commercial vendor — building the intake, delivery, and reporting rhythm underneath your mission." />
+  <link rel="icon" href='data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect width="100" height="100" rx="20" fill="%232F5D4E"/><text x="50" y="66" font-family="Georgia" font-size="52" font-weight="600" fill="%23F5F1EA" text-anchor="middle">T</text></svg>' />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --parchment: #F5F1EA; --parchment-2: #EBE4D6;
+      --ink: #1A1613; --ink-soft: #3B3530; --ink-mute: #6E655C;
+      --rule: rgba(26,22,19,0.12); --rule-strong: rgba(26,22,19,0.35);
+      --accent: #2F5D4E; --authority: #1E3A5F; --score: #B8843B;
+    }
+    body { font-family: 'Inter', -apple-system, sans-serif; background: var(--parchment); color: var(--ink); line-height: 1.55; }
+    h1, h2, h3 { font-family: 'Fraunces', 'Georgia', serif; font-weight: 600; letter-spacing: -0.015em; color: var(--ink); }
+    h1 { font-size: clamp(2.2rem, 4.8vw, 3.8rem); line-height: 1.05; }
+    h2 { font-size: clamp(1.6rem, 3vw, 2.4rem); line-height: 1.15; }
+    a { color: var(--accent); text-decoration: none; }
+    .container { max-width: 1120px; margin: 0 auto; padding: 0 clamp(1.25rem, 3vw, 2.25rem); }
+    .eyebrow { font-size: 0.72rem; font-weight: 700; letter-spacing: 0.18em; text-transform: uppercase; color: var(--accent); }
+
+    .top-bar { padding: 0.85rem clamp(1.25rem, 3vw, 2.5rem); border-bottom: 1px solid var(--rule); display: flex; justify-content: space-between; align-items: center; background: rgba(245,241,234,0.9); position: sticky; top: 0; z-index: 10; backdrop-filter: blur(10px); }
+    .brand { font-family: 'Fraunces', serif; font-weight: 600; font-size: 1.05rem; color: var(--ink); }
+    .brand span { color: var(--ink-mute); font-weight: 400; }
+    .nav-cta { padding: 0.5rem 1rem; background: var(--score); color: #fff; border-radius: 999px; font-size: 0.82rem; font-weight: 600; }
+
+    .hero { padding: clamp(4rem, 8vw, 6rem) 0; }
+    .hero .eyebrow { margin-bottom: 1rem; }
+    .hero h1 { max-width: 22ch; margin-bottom: 1.35rem; }
+    .hero .lede { font-size: clamp(1.05rem, 1.55vw, 1.2rem); color: var(--ink-soft); max-width: 44rem; margin-bottom: 2rem; }
+    .hero-cta { display: flex; gap: 0.85rem; flex-wrap: wrap; }
+    .btn { display: inline-flex; align-items: center; gap: 0.5rem; padding: 0.85rem 1.5rem; border-radius: 999px; font-size: 0.92rem; font-weight: 600; border: 1px solid transparent; cursor: pointer; font-family: inherit; }
+    .btn.accent { background: var(--accent); color: #fff; }
+    .btn.accent:hover { background: #244a3f; }
+    .btn.ghost { background: transparent; color: var(--ink); border-color: var(--rule-strong); }
+
+    section { padding: clamp(3.5rem, 6vw, 5rem) 0; border-top: 1px solid var(--rule); }
+    .promise { background: var(--parchment-2); padding: 2rem 0; }
+    .promise .container { display: grid; grid-template-columns: 1fr 1fr; gap: 2rem; align-items: center; }
+    @media (max-width: 800px) { .promise .container { grid-template-columns: 1fr; } }
+
+    .status-block { text-align: center; }
+    .status-block .eyebrow { margin-bottom: 1rem; }
+    .status-card {
+      max-width: 640px; margin: 2rem auto 0; padding: 2rem;
+      background: #fff; border: 1px solid var(--rule); border-radius: 14px;
+      border-left: 4px solid var(--accent); text-align: left;
+    }
+    .status-card h3 { font-size: 1.2rem; margin-bottom: 0.75rem; }
+    .status-card p { color: var(--ink-soft); font-size: 0.93rem; margin-bottom: 1rem; }
+    .status-card ul { list-style: none; padding: 0; margin: 1rem 0; }
+    .status-card li { padding-left: 1.15rem; position: relative; font-size: 0.9rem; color: var(--ink-soft); margin-bottom: 0.5rem; }
+    .status-card li::before { content: '→'; position: absolute; left: 0; color: var(--accent); font-weight: 700; }
+
+    .legal-note {
+      max-width: 720px; margin: 2rem auto 0; padding: 1.15rem 1.35rem;
+      background: rgba(30,58,95,0.05); border-left: 3px solid var(--ink-mute);
+      border-radius: 4px; font-size: 0.85rem; color: var(--ink-soft); line-height: 1.65;
+    }
+    .legal-note strong { color: var(--ink); }
+
+    .creds { background: var(--ink); color: var(--parchment); padding: 3rem 0; text-align: center; }
+    .creds .eyebrow { color: var(--score); margin-bottom: 1rem; }
+    .creds h4 { font-family: 'Fraunces', serif; color: var(--parchment); font-weight: 500; font-size: 1.1rem; max-width: 46rem; margin: 0 auto 1.5rem; }
+    .creds-list { display: flex; gap: clamp(1rem, 3vw, 2.25rem); justify-content: center; flex-wrap: wrap; font-family: 'Fraunces', serif; color: rgba(245,241,234,0.85); font-size: 0.98rem; font-weight: 500; }
+    .creds-list .sep { color: rgba(245,241,234,0.35); }
+
+    .score-block { text-align: center; }
+    .score-block h2 { margin-bottom: 1rem; }
+    .score-block p { color: var(--ink-soft); max-width: 42rem; margin: 0 auto 1.75rem; }
+
+    footer { padding: 1.5rem clamp(1.25rem, 3vw, 2.5rem); background: var(--ink); color: rgba(245,241,234,0.65); text-align: center; font-size: 0.78rem; }
+    footer a { color: rgba(245,241,234,0.75); }
+  </style>
+</head>
+<body>
+  <div class="top-bar">
+    <a href="/" class="brand" style="text-decoration: none;">TOJ Campaign <span>&mdash; Nonprofit</span></a>
+    <a href="/foundation-score.html" class="nav-cta">Get your score</a>
+  </div>
+
+  <section class="hero">
+    <div class="container">
+      <div class="eyebrow">Nonprofit vertical</div>
+      <h1>Your mission is real. Your operating system should be too.</h1>
+      <p class="lede">
+        TOJ Campaign works with 501(c)(3) organizations as a standard commercial vendor.
+        We install the intake, delivery, and reporting rhythm underneath the mission &mdash;
+        so program hours go to program work, not administrative catch-up.
+      </p>
+      <div class="hero-cta">
+        <a href="/foundation-score.html" class="btn accent">Start with your Foundation Score <span class="arrow">→</span></a>
+        <a href="mailto:hello@tojcampaign.com" class="btn ghost">Open a conversation</a>
+      </div>
+    </div>
+  </section>
+
+  <section class="promise">
+    <div class="container">
+      <div>
+        <div class="eyebrow" style="margin-bottom: 1rem;">The problem</div>
+        <h2>Nonprofits earn trust in the field and lose it in the back office.</h2>
+      </div>
+      <div>
+        <p>
+          The mission is compelling. The people are committed. The programs work.
+          Then a donor asks for a report and someone spends the weekend rebuilding
+          it from scratch. A grant comes through and the delivery paperwork takes
+          longer than the delivery itself.
+        </p>
+        <p>
+          We install the operating system that turns program energy into
+          reportable, repeatable, fundable work &mdash; without changing what makes
+          your mission yours.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <section class="status-block">
+    <div class="container">
+      <div class="eyebrow">Vertical status</div>
+      <h2>Now accepting nonprofit engagements.</h2>
+      <p style="color: var(--ink-soft); max-width: 42rem; margin: 1rem auto 0; font-size: 0.95rem;">
+        The Nonprofit vertical is open. Niche-specific case studies publish here as
+        engagements land &mdash; we ship what's proven, not what's promised. If your
+        organization has an operational or campaign need TOJ can fulfill as a paid
+        vendor, we can start today.
+      </p>
+
+      <div class="status-card">
+        <h3>What we take on right now</h3>
+        <p>Operational or campaign scopes typical of a Core or Premium engagement:</p>
+        <ul>
+          <li>Program intake and family-facing delivery systems</li>
+          <li>Donor and grantor reporting rhythms</li>
+          <li>Community event operations and campaign builds</li>
+          <li>Nonprofit management &amp; fiscal sponsor infrastructure</li>
+          <li>Religious and mission-aligned community organization systems</li>
+        </ul>
+        <p style="margin-top: 1.25rem; margin-bottom: 0;">
+          <a href="mailto:hello@tojcampaign.com" style="color: var(--accent); font-weight: 600;">Reach out at hello@tojcampaign.com &rarr;</a>
+        </p>
+      </div>
+
+      <div class="legal-note">
+        <strong>A note on how we work with nonprofits.</strong>
+        Trail of Joy Player Management Group is a for-profit LLC. We invoice 501(c)(3)
+        clients as a standard commercial vendor. Engagements are not tax-deductible
+        contributions, and no cross-promotional language on this site implies donor
+        dollars flow to TOJ. Our founder&rsquo;s separate work with the SubjectSkillz
+        501(c)(3) is governed by independent contracts and standard board governance
+        &mdash; it is referenced here only as evidence of nonprofit operational fluency,
+        not as a TOJ client.
+      </div>
+    </div>
+  </section>
+
+  <div class="creds">
+    <div class="container">
+      <div class="eyebrow">The operator&rsquo;s field</div>
+      <h4>The same operating systems that support Authority clients power our nonprofit engagements &mdash; documented, repeatable, and built to survive turnover.</h4>
+      <div class="creds-list">
+        <span>Pylon 7v7</span>
+        <span class="sep">&middot;</span>
+        <span>SubjectReport portal</span>
+        <span class="sep">&middot;</span>
+        <span>Optimum Grading</span>
+        <span class="sep">&middot;</span>
+        <span>Margin Hooks</span>
+      </div>
+    </div>
+  </div>
+
+  <section class="score-block">
+    <div class="container">
+      <div class="eyebrow">Start here</div>
+      <h2>Your Foundation Score is 8&ndash;12 minutes.</h2>
+      <p>
+        Scored across five pillars &mdash; Brand Identity, Operational Health, Revenue
+        Architecture, Content &amp; Credibility, Growth Readiness. Delivered as your
+        Operational Transcript within 72 business hours. Nonprofit intake maps donor
+        development, program delivery, and reporting rhythm onto the same standard.
+      </p>
+      <a href="/foundation-score.html" class="btn accent">Get your Foundation Score <span class="arrow">→</span></a>
+    </div>
+  </section>
+
+  <footer>
+    &copy; 2026 Trail of Joy Player Management Group, LLC. &middot;
+    <a href="/">Home</a> &middot;
+    <a href="/personal-brand.html">Personal Brand</a> &middot;
+    <a href="/authority.html">Authority</a> &middot;
+    <a href="/how-we-work.html">How we work</a>
+  </footer>
+</body>
+</html>
