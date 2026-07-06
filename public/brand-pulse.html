@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>The Brand Pulse — 60-second self-diagnostic — TOJ Campaign</title>
+  <meta name="description" content="Grade your brand against the five pillars. 60 seconds. Get your radar and the one gap that unlocks the rest." />
+  <link rel="icon" href='data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect width="100" height="100" rx="20" fill="%231A1613"/><text x="50" y="66" font-family="Georgia" font-size="52" font-weight="600" fill="%23F5F1EA" text-anchor="middle">P</text></svg>' />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Inter', -apple-system, sans-serif; background: #F5F1EA; color: #1A1613; line-height: 1.55; min-height: 100vh; display: flex; flex-direction: column; }
+    :root { --parchment: #F5F1EA; --parchment-2: #EBE4D6; --ink: #1A1613; --ink-soft: #3B3530; --ink-mute: #6E655C; --rule: rgba(26,22,19,0.12); --sports: #1E3A5F; --smallbiz: #A85F26; --bigbiz: #2F5D4E; --advisory: #B8843B; }
+    h1, h2, h3, h4 { font-family: 'Fraunces', 'Georgia', serif; font-weight: 600; letter-spacing: -0.015em; color: var(--ink); }
+    a { color: var(--sports); text-decoration: none; }
+    .top-bar { padding: 1rem clamp(1.25rem, 3vw, 2rem); border-bottom: 1px solid var(--rule); background: rgba(245,241,234,0.94); position: sticky; top: 0; z-index: 40; display: flex; justify-content: space-between; align-items: center; }
+    .brand { font-family: 'Fraunces', serif; font-weight: 600; font-size: 1.05rem; }
+    .brand span { color: var(--ink-mute); font-weight: 400; }
+    main { flex: 1; display: flex; align-items: flex-start; justify-content: center; padding: clamp(2rem, 5vw, 4rem) 1.5rem; }
+    .pulse-shell { width: 100%; max-width: 720px; }
+
+    .intro { text-align: center; margin-bottom: 2rem; }
+    .intro .eyebrow { font-size: 0.72rem; letter-spacing: 0.18em; text-transform: uppercase; color: var(--ink-mute); font-weight: 600; margin-bottom: 1rem; }
+    .intro h1 { font-size: clamp(2.2rem, 4.5vw, 3rem); line-height: 1.05; margin-bottom: 1rem; max-width: 22ch; margin-left: auto; margin-right: auto; }
+    .intro h1 em { font-style: italic; font-weight: 500; color: var(--sports); }
+    .intro .lede { font-size: 1.05rem; color: var(--ink-soft); max-width: 40rem; margin: 0 auto; }
+
+    .pillar { display: none; animation: fade-up 0.35s ease-out; margin-bottom: 1.5rem; padding: 1.75rem 1.75rem; background: #fff; border: 1px solid var(--rule); border-radius: 14px; }
+    .pillar.active { display: block; }
+    @keyframes fade-up { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+    .pillar .count { font-family: 'Inter', monospace; font-size: 0.7rem; letter-spacing: 0.16em; text-transform: uppercase; color: var(--ink-mute); margin-bottom: 0.75rem; font-weight: 700; }
+    .pillar h2 { font-size: 1.5rem; margin-bottom: 0.4rem; }
+    .pillar h2 em { color: var(--sports); font-weight: 500; font-style: italic; }
+    .pillar .prompt { font-size: 0.95rem; color: var(--ink-mute); margin-bottom: 1.5rem; }
+
+    .rating { display: grid; grid-template-columns: repeat(5, 1fr); gap: 0.55rem; }
+    @media (max-width: 480px) { .rating { grid-template-columns: repeat(5, 1fr); gap: 0.35rem; } }
+    .rating-btn { padding: 1rem 0.5rem; background: var(--parchment); border: 1px solid var(--rule); border-radius: 10px; cursor: pointer; font-family: 'Fraunces', serif; font-weight: 500; font-size: 1.15rem; color: var(--ink); transition: all 0.15s; }
+    .rating-btn:hover { border-color: var(--sports); transform: translateY(-2px); }
+    .rating-btn.selected { background: var(--ink); color: var(--parchment); border-color: var(--ink); }
+    .rating-labels { display: flex; justify-content: space-between; margin-top: 0.6rem; font-size: 0.72rem; color: var(--ink-mute); letter-spacing: 0.04em; }
+
+    .nav-row { display: flex; justify-content: space-between; align-items: center; margin-top: 1.5rem; }
+    .btn { display: inline-flex; align-items: center; gap: 0.5rem; padding: 0.8rem 1.4rem; border-radius: 999px; border: 0; font-family: inherit; font-weight: 600; font-size: 0.9rem; cursor: pointer; transition: all 0.15s; text-decoration: none; }
+    .btn.primary { background: var(--ink); color: var(--parchment); }
+    .btn.primary:hover { background: var(--ink-soft); }
+    .btn.ghost { background: transparent; color: var(--ink-soft); border: 1px solid rgba(26,22,19,0.35); }
+    .btn.ghost:hover { border-color: var(--ink); color: var(--ink); }
+    .btn.primary:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    .progress { display: flex; gap: 0.3rem; justify-content: center; margin-bottom: 2rem; }
+    .progress .p-dot { flex: 1; height: 4px; max-width: 80px; background: rgba(26,22,19,0.14); border-radius: 4px; transition: background 0.3s; }
+    .progress .p-dot.active { background: var(--ink); }
+    .progress .p-dot.done { background: rgba(26,22,19,0.55); }
+
+    .result { display: none; animation: fade-up 0.4s ease-out; text-align: center; }
+    .result.active { display: block; }
+    .result h2 { font-size: clamp(1.8rem, 3.5vw, 2.4rem); margin-bottom: 1rem; }
+    .result h2 em { font-style: italic; color: var(--sports); font-weight: 500; }
+    .result-radar { max-width: 400px; margin: 1.5rem auto; }
+    .result-radar svg { width: 100%; height: auto; }
+    .result-diagnostic { background: var(--parchment-2); padding: 1.5rem 1.65rem; border-radius: 14px; margin: 1.75rem auto; max-width: 500px; text-align: left; border-left: 4px solid var(--sports); }
+    .result-diagnostic .diag-label { font-size: 0.7rem; letter-spacing: 0.16em; text-transform: uppercase; color: var(--sports); font-weight: 700; margin-bottom: 0.6rem; }
+    .result-diagnostic .diag-headline { font-family: 'Fraunces', serif; font-size: 1.2rem; color: var(--ink); font-weight: 600; margin-bottom: 0.85rem; }
+    .result-diagnostic .diag-body { font-size: 0.92rem; color: var(--ink-soft); line-height: 1.55; margin-bottom: 1rem; }
+    .result-diagnostic .diag-next { padding-top: 1rem; border-top: 1px solid rgba(26,22,19,0.1); font-size: 0.85rem; color: var(--ink-mute); }
+    .result-actions { display: flex; gap: 0.75rem; justify-content: center; flex-wrap: wrap; margin-top: 2rem; }
+
+    footer { padding: 1.5rem clamp(1.25rem, 3vw, 2rem); background: var(--ink); color: rgba(245,241,234,0.65); text-align: center; font-size: 0.78rem; margin-top: auto; }
+    footer a { color: rgba(245,241,234,0.85); }
+  </style>
+</head>
+<body>
+  <div class="top-bar">
+    <a href="/" class="brand">TOJ Campaign <span>· Brand Pulse</span></a>
+    <a href="/" style="color:var(--ink-soft);font-size:0.85rem;">← Home</a>
+  </div>
+
+  <main>
+    <div class="pulse-shell">
+
+      <div class="intro" id="introBlock">
+        <div class="eyebrow">The Brand Pulse · 60-second self-diagnostic</div>
+        <h1>Grade your brand against the <em>five pillars</em>.</h1>
+        <p class="lede">Five 1–5 ratings. Sixty seconds. Get your radar chart, the pillar most likely to be dragging the rest down, and the one move that unlocks it.</p>
+      </div>
+
+      <div class="progress" id="progress" style="display:none;">
+        <span class="p-dot"></span><span class="p-dot"></span><span class="p-dot"></span><span class="p-dot"></span><span class="p-dot"></span>
+      </div>
+
+      <!-- Pillar 1: Brand -->
+      <div class="pillar" data-pillar="brand">
+        <div class="count">Pillar 01 · Brand</div>
+        <h2>How <em>clear</em> is your positioning to a stranger?</h2>
+        <p class="prompt">If someone new landed on your website or your storefront today, could they say back what you do, who it's for, and why you're different — in one sentence?</p>
+        <div class="rating"></div>
+        <div class="rating-labels"><span>Not at all</span><span>Very clear</span></div>
+      </div>
+
+      <!-- Pillar 2: Delivery -->
+      <div class="pillar" data-pillar="delivery">
+        <div class="count">Pillar 02 · Delivery</div>
+        <h2>How <em>consistent</em> is what customers actually receive?</h2>
+        <p class="prompt">Does every customer get the same experience — on-time, on-standard, on-brand? Or does quality dip when you're busy?</p>
+        <div class="rating"></div>
+        <div class="rating-labels"><span>Chaotic</span><span>Rock-steady</span></div>
+      </div>
+
+      <!-- Pillar 3: Retention -->
+      <div class="pillar" data-pillar="retention">
+        <div class="count">Pillar 03 · Retention</div>
+        <h2>How well do you <em>hold onto</em> the customers you have?</h2>
+        <p class="prompt">Are you actively cultivating repeat customers, renewals, or referrals — or hoping they come back on their own?</p>
+        <div class="rating"></div>
+        <div class="rating-labels"><span>They drift</span><span>They stay</span></div>
+      </div>
+
+      <!-- Pillar 4: Financial -->
+      <div class="pillar" data-pillar="financial">
+        <div class="count">Pillar 04 · Financial</div>
+        <h2>How <em>strong</em> is the economic engine?</h2>
+        <p class="prompt">Do you know your margins per service line? Are you pricing at market? Is money being left on the table you could recover this quarter?</p>
+        <div class="rating"></div>
+        <div class="rating-labels"><span>Blurry</span><span>Dialed in</span></div>
+      </div>
+
+      <!-- Pillar 5: Demand -->
+      <div class="pillar" data-pillar="demand">
+        <div class="count">Pillar 05 · Demand</div>
+        <h2>How well is the <em>top of the funnel</em> being fed?</h2>
+        <p class="prompt">Are you actively generating new leads, or are you fully dependent on referrals and repeat customers?</p>
+        <div class="rating"></div>
+        <div class="rating-labels"><span>Nothing structured</span><span>Steady flow</span></div>
+      </div>
+
+      <div class="nav-row" id="navRow" style="display:none;">
+        <button class="btn ghost" id="backBtn">← Back</button>
+        <button class="btn primary" id="nextBtn" disabled>Next →</button>
+      </div>
+
+      <!-- Result screen -->
+      <div class="result" id="result">
+        <h2>Your <em>Brand Pulse</em>.</h2>
+        <p style="color:var(--ink-mute);max-width:34rem;margin:0 auto 1rem;">Weakest pillar drags the rest. Here's yours — and the one move that unlocks it.</p>
+
+        <div class="result-radar" id="radarWrap"></div>
+
+        <div class="result-diagnostic" id="diagnostic">
+          <div class="diag-label">The bottleneck</div>
+          <div class="diag-headline" id="diagHead"></div>
+          <div class="diag-body" id="diagBody"></div>
+          <div class="diag-next" id="diagNext"></div>
+        </div>
+
+        <div class="result-actions">
+          <a href="/intake.html" class="btn primary">Start intake →</a>
+          <button class="btn ghost" onclick="restart()">Start over</button>
+        </div>
+      </div>
+
+      <div style="text-align:center;margin-top:1.5rem;">
+        <button class="btn primary" id="beginBtn">Take the Pulse →</button>
+      </div>
+
+    </div>
+  </main>
+
+  <footer>© 2026 Trail of Joy Player Management Group, LLC. · <a href="/">TOJ Campaign</a></footer>
+
+  <script>
+    const PILLARS = ['brand', 'delivery', 'retention', 'financial', 'demand'];
+    const scores = {};
+    let currentIdx = 0;
+
+    // Build 1-5 buttons in each pillar
+    document.querySelectorAll('.pillar .rating').forEach(container => {
+      const pillar = container.closest('.pillar').dataset.pillar;
+      for (let n = 1; n <= 5; n++) {
+        const b = document.createElement('button');
+        b.className = 'rating-btn';
+        b.textContent = n;
+        b.addEventListener('click', () => {
+          container.querySelectorAll('.rating-btn').forEach(x => x.classList.remove('selected'));
+          b.classList.add('selected');
+          scores[pillar] = n;
+          document.getElementById('nextBtn').disabled = false;
+        });
+        container.appendChild(b);
+      }
+    });
+
+    document.getElementById('beginBtn').addEventListener('click', () => {
+      document.getElementById('beginBtn').style.display = 'none';
+      document.getElementById('introBlock').style.display = 'none';
+      document.getElementById('progress').style.display = 'flex';
+      document.getElementById('navRow').style.display = 'flex';
+      showPillar(0);
+    });
+
+    function showPillar(idx) {
+      document.querySelectorAll('.pillar').forEach(p => p.classList.remove('active'));
+      document.querySelector(`.pillar[data-pillar="${PILLARS[idx]}"]`).classList.add('active');
+      currentIdx = idx;
+      updateProgress();
+      const nextBtn = document.getElementById('nextBtn');
+      const backBtn = document.getElementById('backBtn');
+      nextBtn.disabled = !scores[PILLARS[idx]];
+      nextBtn.textContent = idx === PILLARS.length - 1 ? 'See my results →' : 'Next →';
+      backBtn.style.visibility = idx === 0 ? 'hidden' : 'visible';
+    }
+
+    function updateProgress() {
+      const dots = document.querySelectorAll('#progress .p-dot');
+      dots.forEach((d, i) => {
+        d.classList.remove('active', 'done');
+        if (i < currentIdx) d.classList.add('done');
+        else if (i === currentIdx) d.classList.add('active');
+      });
+    }
+
+    document.getElementById('nextBtn').addEventListener('click', () => {
+      if (currentIdx === PILLARS.length - 1) {
+        showResult();
+      } else {
+        showPillar(currentIdx + 1);
+      }
+    });
+    document.getElementById('backBtn').addEventListener('click', () => {
+      if (currentIdx > 0) showPillar(currentIdx - 1);
+    });
+
+    function showResult() {
+      document.querySelectorAll('.pillar').forEach(p => p.classList.remove('active'));
+      document.getElementById('navRow').style.display = 'none';
+      document.getElementById('progress').style.display = 'none';
+      document.getElementById('result').classList.add('active');
+      renderRadar();
+      renderDiagnostic();
+      // TODO: POST scores to /api/brand-pulse for lead capture
+      console.log('Brand Pulse scores:', scores);
+    }
+
+    function renderRadar() {
+      const labels = ['Brand', 'Delivery', 'Retention', 'Financial', 'Demand'];
+      const vals = PILLARS.map(k => scores[k] || 0);
+      const cx = 160, cy = 160;
+      const scale = 24;   // 5 * 24 = 120 max radius
+      const angles = [-90, -18, 54, 126, 198].map(d => d * Math.PI / 180);
+
+      const pt = (i, v) => `${(cx + Math.cos(angles[i]) * v * scale).toFixed(1)},${(cy + Math.sin(angles[i]) * v * scale).toFixed(1)}`;
+      const rings = [1, 2, 3, 4, 5].map(r => `<polygon points="${labels.map((_, i) => pt(i, r)).join(' ')}" fill="none" stroke="rgba(26,22,19,0.14)" />`).join('');
+      const axes = labels.map((_, i) => `<line x1="${cx}" y1="${cy}" x2="${(cx + Math.cos(angles[i]) * 5 * scale).toFixed(1)}" y2="${(cy + Math.sin(angles[i]) * 5 * scale).toFixed(1)}" stroke="rgba(26,22,19,0.14)" />`).join('');
+      const dataPoints = labels.map((_, i) => pt(i, vals[i])).join(' ');
+      const dots = labels.map((_, i) => `<circle cx="${(cx + Math.cos(angles[i]) * vals[i] * scale).toFixed(1)}" cy="${(cy + Math.sin(angles[i]) * vals[i] * scale).toFixed(1)}" r="5" fill="#1E3A5F"/>`).join('');
+      const labelText = labels.map((lb, i) => {
+        const lx = cx + Math.cos(angles[i]) * (5.6 * scale);
+        const ly = cy + Math.sin(angles[i]) * (5.6 * scale) + 4;
+        return `<text x="${lx.toFixed(1)}" y="${ly.toFixed(1)}" text-anchor="middle" font-family="Inter,sans-serif" font-size="13" font-weight="600" fill="#1A1613">${lb}</text>`;
+      }).join('');
+
+      document.getElementById('radarWrap').innerHTML = `
+        <svg viewBox="0 0 320 320">
+          ${rings}${axes}
+          <polygon points="${dataPoints}" fill="rgba(30,58,95,0.22)" stroke="#1E3A5F" stroke-width="2.5"/>
+          ${dots}${labelText}
+        </svg>`;
+    }
+
+    function renderDiagnostic() {
+      const entries = Object.entries(scores).sort((a, b) => a[1] - b[1]);
+      const weakest = entries[0][0];
+      const weakestScore = entries[0][1];
+
+      const D = {
+        brand:     { head: 'Your positioning is the bottleneck.', body: 'When brand is the low pillar, everything else has to work harder — every ad costs more, every sale takes longer, and referrals suffer because word-of-mouth needs a clear sentence to pass along. Fixing brand doesn\'t just raise brand; it lifts every pillar above it.', next: 'The move: rewrite your one-sentence positioning. TOJ can facilitate that in a 90-minute working session.' },
+        delivery:  { head: 'Delivery consistency is the bottleneck.', body: 'When delivery slips, every downstream pillar breaks — retention drops because customers don\'t come back to inconsistent service, financials break because rework eats margin, and demand can\'t grow because reviews suffer. Fix delivery first; everything else follows.', next: 'The move: install a service standard your team can execute on your worst day. That\'s TOJ\'s core deliverable.' },
+        retention: { head: 'Retention is the bottleneck.', body: 'Losing customers you already earned is the most expensive form of leakage. When retention lags, you\'re paying full customer-acquisition cost twice — once to win them, once to win them back. Every dollar spent here compounds.', next: 'The move: install a monthly rhythm of follow-up, review captures, and referral prompts. TOJ builds the trail.' },
+        financial: { head: 'Financial hygiene is the bottleneck.', body: 'When financials are blurry, you can\'t make the pricing, hiring, or investment decisions that scale the business. Every operator we\'ve worked with has 15-25% margin recoverable this quarter — they just can\'t see it.', next: 'The move: get a quarterly Operational Transcript so the numbers guide the decisions, not the other way around.' },
+        demand:    { head: 'Demand generation is the bottleneck.', body: 'When top-of-funnel is broken, everything else is fighting a shrinking audience. Referrals and repeat customers alone can\'t compound past a certain point — you need a repeatable engine feeding it.', next: 'The move: install one demand-generation cadence that ships weekly. TOJ Small Business is built around this.' },
+      };
+      const map = { brand: 'Brand', delivery: 'Delivery', retention: 'Retention', financial: 'Financial', demand: 'Demand' };
+      document.getElementById('diagHead').textContent = D[weakest].head;
+      document.getElementById('diagBody').textContent = D[weakest].body;
+      document.getElementById('diagNext').textContent = D[weakest].next;
+    }
+
+    function restart() {
+      Object.keys(scores).forEach(k => delete scores[k]);
+      document.querySelectorAll('.rating-btn.selected').forEach(b => b.classList.remove('selected'));
+      document.getElementById('result').classList.remove('active');
+      document.getElementById('introBlock').style.display = 'block';
+      document.getElementById('beginBtn').style.display = 'inline-flex';
+      currentIdx = 0;
+    }
+  </script>
+</body>
+</html>

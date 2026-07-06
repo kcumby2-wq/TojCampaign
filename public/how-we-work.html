@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>How We Work — The 7-Phase Learning Loop — TOJ Campaign</title>
+  <meta name="description" content="TOJ is a consultancy, not an agency. We install a learning loop inside your operation so you master the basics, then become prime. Seven phases. One standard." />
+  <link rel="icon" href='data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect width="100" height="100" rx="20" fill="%231A1613"/><text x="50" y="66" font-family="Georgia" font-size="52" font-weight="600" fill="%23F5F1EA" text-anchor="middle">T</text></svg>' />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --parchment: #F5F1EA; --parchment-2: #EBE4D6; --ink: #1A1613; --ink-soft: #3B3530;
+      --ink-mute: #6E655C; --rule: rgba(26,22,19,0.12); --accent: #1A1613;
+    }
+    body { font-family: 'Inter', -apple-system, sans-serif; background: var(--parchment); color: var(--ink); line-height: 1.5; }
+    h1, h2, h3 { font-family: 'Fraunces', 'Georgia', serif; font-weight: 600; letter-spacing: -0.015em; color: var(--ink); }
+    h1 { font-size: clamp(2.2rem, 5vw, 3.8rem); line-height: 1.05; }
+    h2 { font-size: clamp(1.6rem, 3vw, 2.4rem); line-height: 1.15; }
+    a { color: var(--ink); }
+    .top-bar { padding: 1rem clamp(1.25rem, 3vw, 2.5rem); border-bottom: 1px solid var(--rule); display: flex; justify-content: space-between; align-items: center; background: rgba(245,241,234,0.94); position: sticky; top: 0; z-index: 10; }
+    .brand { font-family: 'Fraunces', serif; font-weight: 600; font-size: 1.05rem; color: var(--ink); text-decoration: none; }
+    .brand span { color: var(--ink-mute); font-weight: 400; }
+    .back-link { color: var(--ink-soft); font-size: 0.85rem; font-weight: 500; text-decoration: none; }
+
+    .hero { padding: clamp(3rem, 8vw, 6rem) clamp(1.25rem, 4vw, 3rem) clamp(2rem, 5vw, 4rem); max-width: 980px; margin: 0 auto; }
+    .eyebrow { font-size: 0.72rem; font-weight: 700; letter-spacing: 0.18em; text-transform: uppercase; color: var(--ink-mute); margin-bottom: 1rem; }
+    .hero p.lede { font-size: clamp(1.05rem, 1.6vw, 1.2rem); color: var(--ink-soft); margin-top: 1.25rem; max-width: 62ch; }
+    .pull { margin-top: 2rem; padding: 1.25rem 1.5rem; border-left: 3px solid var(--ink); background: var(--parchment-2); font-family: 'Fraunces', serif; font-size: 1.1rem; color: var(--ink); }
+
+    section { padding: clamp(2rem, 5vw, 4rem) clamp(1.25rem, 4vw, 3rem); max-width: 980px; margin: 0 auto; }
+    .phases { display: grid; gap: 1rem; margin-top: 2rem; }
+    .phase { background: #fff; border: 1px solid var(--rule); border-radius: 12px; padding: 1.5rem 1.75rem; display: grid; grid-template-columns: 60px 1fr; gap: 1.25rem; align-items: start; }
+    .phase .num { font-family: 'Fraunces', serif; font-size: 2.2rem; color: var(--ink-mute); line-height: 1; }
+    .phase h3 { font-size: 1.2rem; margin-bottom: 0.35rem; }
+    .phase .sub { font-size: 0.78rem; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink-mute); margin-bottom: 0.75rem; }
+    .phase p { color: var(--ink-soft); font-size: 0.95rem; }
+    .phase .what { margin-top: 0.85rem; font-size: 0.85rem; color: var(--ink); padding: 0.65rem 0.9rem; background: var(--parchment); border-radius: 6px; }
+    .phase .what strong { color: var(--ink); }
+
+    .principles { background: var(--ink); color: var(--parchment); padding: clamp(3rem, 6vw, 5rem) clamp(1.25rem, 4vw, 3rem); }
+    .principles-inner { max-width: 980px; margin: 0 auto; }
+    .principles h2 { color: var(--parchment); }
+    .principles .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 1.5rem; margin-top: 2rem; }
+    .principle h3 { color: var(--parchment); font-size: 1.05rem; margin-bottom: 0.5rem; }
+    .principle p { color: rgba(245,241,234,0.72); font-size: 0.92rem; }
+
+    .cta { padding: clamp(3rem, 6vw, 5rem) clamp(1.25rem, 4vw, 3rem) clamp(4rem, 8vw, 6rem); max-width: 980px; margin: 0 auto; text-align: center; }
+    .cta h2 { margin-bottom: 1rem; }
+    .cta p { color: var(--ink-soft); max-width: 52ch; margin: 0 auto 2rem; }
+    .btn-row { display: flex; gap: 1rem; justify-content: center; flex-wrap: wrap; }
+    .btn { padding: 0.9rem 1.5rem; border-radius: 8px; font-weight: 600; text-decoration: none; font-size: 0.95rem; display: inline-block; }
+    .btn.primary { background: var(--ink); color: var(--parchment); }
+    .btn.ghost { background: transparent; color: var(--ink); border: 1px solid var(--ink); }
+
+    footer { padding: 1.5rem clamp(1.25rem, 3vw, 2.5rem); background: var(--ink); color: rgba(245,241,234,0.65); text-align: center; font-size: 0.78rem; }
+    footer a { color: rgba(245,241,234,0.75); }
+
+    @media (max-width: 640px) {
+      .phase { grid-template-columns: 1fr; gap: 0.5rem; }
+      .phase .num { font-size: 1.6rem; }
+    }
+  </style>
+</head>
+<body>
+  <div class="top-bar">
+    <a href="/" class="brand">TOJ Campaign <span>&mdash; Trail of Joy</span></a>
+    <a href="/" class="back-link">&larr; Home</a>
+  </div>
+
+  <div class="hero">
+    <div class="eyebrow">How we work</div>
+    <h1>We're a consultancy, not an agency. We install a learning loop.</h1>
+    <p class="lede">Agencies deliver a deliverable and disappear. We stay long enough for your team to run the operation without us &mdash; then we hand you the keys. Master the basics, then become prime.</p>
+    <div class="pull">&ldquo;Students learn twice as much in half the time when the sequence is mastery-based. The same rule applies to teams, brands, and businesses.&rdquo;</div>
+  </div>
+
+  <section>
+    <div class="eyebrow">The 7-phase learning loop</div>
+    <h2>Seven phases. One standard. Every avenue.</h2>
+    <div class="phases">
+      <div class="phase"><div class="num">01</div><div>
+        <div class="sub">Discovery</div><h3>Assess where you actually are.</h3>
+        <p>We baseline your five pillars &mdash; Brand, Delivery, Retention, Financial, Demand &mdash; the same way NWEA MAP baselines a student. No guesswork. No inflated scores. Just a starting line you can trust.</p>
+        <div class="what"><strong>You leave with:</strong> a pillar-by-pillar radar of your operation and a named bottleneck.</div>
+      </div></div>
+
+      <div class="phase"><div class="num">02</div><div>
+        <div class="sub">Provision</div><h3>Set the environment before we teach.</h3>
+        <p>Tools, accounts, brand kit, workspace, and the working canvas. Before phase three, everything you need to actually do the work is already sitting on the desk.</p>
+        <div class="what"><strong>You leave with:</strong> a provisioned environment mapped to your avenue.</div>
+      </div></div>
+
+      <div class="phase"><div class="num">03</div><div>
+        <div class="sub">Customize</div><h3>Fit the system to your voice, not ours.</h3>
+        <p>Templates and workflows get tuned to your customer, your cadence, and your language. We don't clone. Vygotsky's zone of proximal development: the work sits just above what you can already do, so growth is felt, not forced.</p>
+        <div class="what"><strong>You leave with:</strong> workflows that sound like you and stretch you.</div>
+      </div></div>
+
+      <div class="phase"><div class="num">04</div><div>
+        <div class="sub">Test</div><h3>Run it small before you run it live.</h3>
+        <p>Dry runs against real inputs. We surface the failure modes on our time, not on your customer's time. Solve problems, don't create them.</p>
+        <div class="what"><strong>You leave with:</strong> a system that has already broken and been fixed once.</div>
+      </div></div>
+
+      <div class="phase"><div class="num">05</div><div>
+        <div class="sub">Launch</div><h3>Go live with a spotter behind you.</h3>
+        <p>You run the operation. We stand behind, catching what you miss and coaching in real time. Competence first, then confidence.</p>
+        <div class="what"><strong>You leave with:</strong> a live operation and a running transcript of what worked.</div>
+      </div></div>
+
+      <div class="phase"><div class="num">06</div><div>
+        <div class="sub">Productize</div><h3>Turn what you did into something you can repeat.</h3>
+        <p>The wins get named, documented, and pressed into a playbook your team can run without you narrating over their shoulder. This is where a service becomes a product.</p>
+        <div class="what"><strong>You leave with:</strong> a repeatable version of your best result.</div>
+      </div></div>
+
+      <div class="phase"><div class="num">07</div><div>
+        <div class="sub">Handoff</div><h3>We leave. The system stays.</h3>
+        <p>Ownership transfer, final transcript, and a maintenance rhythm your team can hold. The goal was never dependence &mdash; it was mastery. We hand you the keys and step back.</p>
+        <div class="what"><strong>You leave with:</strong> ownership of a system that runs whether we're in the room or not.</div>
+      </div></div>
+    </div>
+  </section>
+
+  <div class="principles">
+    <div class="principles-inner">
+      <div class="eyebrow" style="color: rgba(245,241,234,0.6);">What we believe</div>
+      <h2>The principles behind the loop.</h2>
+      <div class="grid">
+        <div class="principle"><h3>Master the basics, then become prime.</h3><p>Nobody skips the basics on their way to elite. The fundamentals aren't a phase &mdash; they're the whole foundation.</p></div>
+        <div class="principle"><h3>Result is the brand.</h3><p>The logo is not the brand. The typography is not the brand. The result the customer walks away with &mdash; that's the brand.</p></div>
+        <div class="principle"><h3>Competence, then confidence.</h3><p>Confidence built before competence collapses under pressure. We build the skill first. The certainty follows.</p></div>
+        <div class="principle"><h3>Kind, smart, creative, moving fast.</h3><p>The DNA we hire for. The DNA we teach for. If it's not all four at once, we don't ship it.</p></div>
+        <div class="principle"><h3>Solve problems, don't create them.</h3><p>Every system we install has to remove more friction than it adds. If it doesn't, we cut it.</p></div>
+        <div class="principle"><h3>Create creators and contributors.</h3><p>The point isn't that you need us forever. The point is that you become the operator other people learn from next.</p></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="cta">
+    <h2>Ready to see which phase you're actually in?</h2>
+    <p>Start with the Brand Pulse &mdash; a five-minute self-assessment on the same five pillars we grade in Discovery. Or open an intake and we'll run the baseline with you.</p>
+    <div class="btn-row">
+      <a href="/brand-pulse.html" class="btn ghost">Take the Brand Pulse</a>
+      <a href="/intake.html" class="btn primary">Open an intake &rarr;</a>
+    </div>
+  </div>
+
+  <footer>
+    &copy; 2026 Trail of Joy Player Management Group, LLC. &middot; <a href="/">TOJ Campaign</a> &middot; <a href="/brand-pulse.html">Brand Pulse</a> &middot; <a href="/intake.html">Intake</a>
+  </footer>
+</body>
+</html>
