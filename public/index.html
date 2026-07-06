@@ -8,7 +8,7 @@
   <link rel="icon" href='data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect width="100" height="100" rx="20" fill="%231A1613"/><text x="50" y="66" font-family="Georgia" font-size="52" font-weight="600" fill="%23F5F1EA" text-anchor="middle">T</text></svg>' />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     html { scroll-behavior: smooth; }
@@ -26,6 +26,7 @@
       --authority: #1E3A5F; /* Authority — navy */
       --score:     #B8843B; /* Foundation Score / Operational Transcript accent */
     }
+    .serif { font-family: 'Fraunces', 'Georgia', serif; letter-spacing: -0.01em; }
     h1, h2, h3, h4 { font-family: 'Fraunces', 'Georgia', serif; font-weight: 600; letter-spacing: -0.015em; color: var(--ink); }
     h1 { font-size: clamp(2.3rem, 5vw, 4.1rem); line-height: 1.03; }
     h2 { font-size: clamp(1.7rem, 3.2vw, 2.6rem); line-height: 1.12; }
@@ -40,6 +41,17 @@
     section { padding: clamp(4rem, 7vw, 6rem) 0; border-top: 1px solid var(--rule); }
     section:first-of-type { border-top: 0; }
     a { color: var(--ink); text-decoration: none; }
+
+    /* ---------- PROGRESS BAR ---------- */
+    #progress-bar {
+      position: fixed; top: 0; left: 0; height: 3px; width: 0%;
+      z-index: 100; transition: background 0.4s ease, width 0.1s linear;
+      pointer-events: none;
+    }
+
+    /* ---------- REVEAL ---------- */
+    .reveal { opacity: 0; transform: translateY(18px); transition: opacity 0.55s ease, transform 0.55s ease; }
+    .reveal.visible { opacity: 1; transform: translateY(0); }
 
     /* ---------- HEADER ---------- */
     header.top {
@@ -112,8 +124,8 @@
       display: inline-block;
     }
     @keyframes pulse { 0%,100% { box-shadow: 0 0 0 3px rgba(184,132,59,0.16);} 50% { box-shadow: 0 0 0 6px rgba(184,132,59,0.05);} }
-    .pillars { color: var(--ink-mute); }
-    .pillars strong { color: var(--ink); font-weight: 600; }
+    .pillars-label { color: var(--ink-mute); }
+    .pillars-label strong { color: var(--ink); font-weight: 600; }
 
     /* ---------- VERTICAL DOORS ---------- */
     .verticals-head { max-width: 44rem; margin: 0 auto clamp(2.5rem, 5vw, 3.5rem); text-align: center; }
@@ -150,47 +162,182 @@
     .d-nonprofit { --accent: var(--nonprofit); }
     .d-authority { --accent: var(--authority); }
 
-    /* ---------- WHAT TOJ DOES ---------- */
-    .systems { background: var(--ink); color: var(--parchment); border-top: 0; }
-    .systems .container { display: grid; grid-template-columns: 1fr 1fr; gap: clamp(2rem, 5vw, 4rem); align-items: center; }
-    @media (max-width: 860px) { .systems .container { grid-template-columns: 1fr; } }
-    .systems .eyebrow { color: rgba(245,241,234,0.55); margin-bottom: 1rem; }
-    .systems h2 { color: var(--parchment); margin-bottom: 1.25rem; }
-    .systems p { color: rgba(245,241,234,0.72); font-size: 1rem; margin-bottom: 1rem; max-width: 34rem; }
-    .systems .pull {
-      font-family: 'Fraunces', serif; font-size: clamp(1.15rem, 2vw, 1.4rem);
-      color: var(--parchment); border-left: 3px solid var(--score);
-      padding: 1rem 1.35rem; margin-top: 1.5rem;
+    /* ---------- WHAT IS TRAIL OF JOY (dark) ---------- */
+    .wit { background: var(--ink); color: var(--parchment); border-top: 1px solid var(--ink); }
+    .wit .eyebrow { color: rgba(245,241,234,0.5); }
+    .wit h2 { color: var(--parchment); max-width: 22ch; margin: 1rem 0 1.25rem; }
+    .wit h2 em { font-style: italic; font-weight: 500; color: #C9A468; }
+    .wit .lede { color: rgba(245,241,234,0.72); margin-bottom: 0; }
+    .wit-intro { max-width: 52rem; margin-bottom: clamp(2.5rem, 5vw, 3.75rem); }
+    .wit-def {
+      font-family: 'Fraunces', serif; font-size: clamp(1.15rem, 1.9vw, 1.4rem);
+      line-height: 1.5; color: rgba(245,241,234,0.9); max-width: 44rem; margin-top: 1.5rem;
     }
-    .systems-right {
-      background: rgba(245,241,234,0.05); border: 1px solid rgba(245,241,234,0.12);
-      border-radius: 14px; padding: 1.75rem;
+    .wit-def strong { color: var(--parchment); font-weight: 600; }
+    .trail-wrap {
+      background: #FBF9F4; border: 1px solid var(--rule); border-radius: 16px;
+      padding: clamp(1.5rem, 3vw, 2.5rem); margin-bottom: clamp(2.5rem, 5vw, 3.75rem);
     }
-    .systems-right h4 { color: var(--parchment); font-size: 1rem; margin-bottom: 1rem; }
-    .systems-right ul { list-style: none; display: flex; flex-direction: column; gap: 0.85rem; }
-    .systems-right li { color: rgba(245,241,234,0.75); font-size: 0.92rem; padding-left: 1.25rem; position: relative; }
-    .systems-right li::before {
-      content: ''; position: absolute; left: 0; top: 0.55rem;
-      width: 6px; height: 6px; background: var(--score); border-radius: 999px;
+    .trail-head { margin-bottom: 0.35rem; }
+    .trail-sub { font-size: 0.9rem; color: var(--ink-mute); margin-bottom: 1.5rem; max-width: 40rem; }
+    .trail-svg { width: 100%; height: auto; display: block; overflow: visible; }
+    .trail-legend {
+      display: flex; gap: 1.5rem; flex-wrap: wrap; margin-top: 1rem;
+      font-size: 0.78rem; color: var(--ink-mute);
     }
+    .trail-legend span { display: inline-flex; align-items: center; gap: 0.45rem; }
+    .tl-dot { width: 11px; height: 11px; border-radius: 50%; flex-shrink: 0; }
+    .tl-dot.way { background: #FBF9F4; border: 2.5px solid var(--personal); }
+    .tl-dot.end { background: var(--nonprofit); }
+    .layers-head { max-width: 44rem; margin-bottom: clamp(2rem, 4vw, 2.75rem); }
+    .layers-head .eyebrow { color: rgba(245,241,234,0.5); }
+    .layers-head h3 { color: var(--parchment); font-size: 1.6rem; margin: 0.85rem 0 0.75rem; }
+    .layers-head p { color: rgba(245,241,234,0.6); font-size: 0.98rem; max-width: 40rem; }
+    .layers { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem; }
+    @media (max-width: 900px) { .layers { grid-template-columns: repeat(2, 1fr); } }
+    @media (max-width: 520px) { .layers { grid-template-columns: 1fr; } }
+    .layer {
+      background: rgba(245,241,234,0.045); border: 1px solid rgba(245,241,234,0.13);
+      border-radius: 13px; padding: 1.6rem 1.4rem;
+      transition: border-color 0.25s ease, background 0.25s ease;
+      position: relative; overflow: hidden;
+    }
+    .layer:hover { border-color: rgba(245,241,234,0.3); background: rgba(245,241,234,0.07); }
+    .layer-ico {
+      width: 38px; height: 38px; border-radius: 9px;
+      display: flex; align-items: center; justify-content: center; margin-bottom: 1rem;
+    }
+    .layer-ico svg { width: 20px; height: 20px; stroke-width: 1.6; }
+    .layer .l-num {
+      font-family: 'JetBrains Mono', monospace; font-size: 0.68rem; letter-spacing: 0.14em;
+      color: rgba(245,241,234,0.4); position: absolute; top: 1.3rem; right: 1.4rem;
+    }
+    .layer h4 { font-family: 'Fraunces', serif; font-weight: 600; font-size: 1.15rem; color: var(--parchment); margin-bottom: 0.5rem; }
+    .layer p { font-size: 0.85rem; line-height: 1.55; color: rgba(245,241,234,0.62); }
+    .l-automation .layer-ico { background: rgba(184,132,59,0.16); }
+    .l-automation .layer-ico svg { stroke: #D9AE63; }
+    .l-ownership .layer-ico { background: rgba(30,58,95,0.28); }
+    .l-ownership .layer-ico svg { stroke: #7FA8D4; }
+    .l-economy .layer-ico { background: rgba(47,93,78,0.26); }
+    .l-economy .layer-ico svg { stroke: #6FB597; }
+    .l-credibility .layer-ico { background: rgba(168,95,38,0.2); }
+    .l-credibility .layer-ico svg { stroke: #E0965E; }
+    .wit-close {
+      margin-top: clamp(2rem, 4vw, 2.75rem); padding-top: 1.75rem;
+      border-top: 1px solid rgba(245,241,234,0.13);
+      display: flex; justify-content: space-between; align-items: center;
+      gap: 1.5rem; flex-wrap: wrap;
+    }
+    .wit-close p { color: rgba(245,241,234,0.6); font-size: 0.92rem; max-width: 38rem; }
+    .btn-light {
+      display: inline-flex; align-items: center; gap: 0.5rem;
+      padding: 0.8rem 1.4rem; border-radius: 999px; font-size: 0.9rem; font-weight: 600;
+      background: var(--parchment); color: var(--ink);
+      transition: transform 0.18s ease; white-space: nowrap; border: none; cursor: pointer; font-family: inherit;
+    }
+    .btn-light:hover { transform: translateY(-2px); }
 
-    /* ---------- FOUNDATION SCORE EXPLAINER ---------- */
-    .score-explain-head { max-width: 44rem; margin: 0 auto clamp(2.5rem, 5vw, 3.5rem); text-align: center; }
-    .score-explain-head .eyebrow { margin-bottom: 1rem; color: var(--score); }
-    .pillar-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 1rem; margin-bottom: 2rem; }
-    @media (max-width: 940px) { .pillar-grid { grid-template-columns: repeat(2, 1fr); } }
-    @media (max-width: 500px) { .pillar-grid { grid-template-columns: 1fr; } }
+    /* ---------- THE PRINCIPLE ---------- */
+    .principle-grid {
+      display: grid; grid-template-columns: 1fr 1.15fr; gap: clamp(2rem, 5vw, 4.5rem);
+      align-items: start;
+    }
+    @media (max-width: 860px) { .principle-grid { grid-template-columns: 1fr; } }
+    .principle-copy .eyebrow { margin-bottom: 1rem; }
+    .principle-copy h2 { margin-bottom: 1.25rem; }
+    .principle-copy p { margin-bottom: 1rem; max-width: 34rem; }
+    .arch-diagram {
+      background: var(--parchment-2); border: 1px solid var(--rule); border-radius: 14px;
+      padding: clamp(1.5rem, 3vw, 2.5rem);
+    }
+    .arch-node {
+      display: flex; flex-direction: column; align-items: center; gap: 0.35rem;
+      padding: 0.9rem 1rem; background: var(--parchment); border: 1px solid var(--rule); border-radius: 8px;
+    }
+    .arch-node .label {
+      font-size: 0.68rem; font-weight: 600; text-transform: uppercase;
+      letter-spacing: 0.14em; color: var(--ink-mute);
+    }
+    .arch-node .value {
+      font-family: 'Fraunces', serif; font-weight: 600; font-size: 1rem;
+      color: var(--ink); text-align: center;
+    }
+    .arch-connector { width: 1px; height: 22px; background: var(--rule-strong); margin: 0.5rem auto; }
+    .arch-fanout {
+      display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.6rem; margin-top: 0.5rem;
+    }
+    .arch-leaf {
+      padding: 0.85rem 0.55rem; border-radius: 6px; text-align: center;
+      color: #fff; font-size: 0.82rem; font-weight: 600; line-height: 1.2;
+    }
+    .arch-leaf .tier {
+      display: block; font-weight: 400; opacity: 0.85;
+      font-size: 0.66rem; margin-top: 0.2rem; letter-spacing: 0.02em;
+    }
+    .leaf-personal  { background: var(--personal); }
+    .leaf-nonprofit { background: var(--nonprofit); }
+    .leaf-authority { background: var(--authority); }
+
+    /* ---------- THE STANDARD (5 pillars canonical) ---------- */
+    .standard-head { max-width: 46rem; margin-bottom: 3rem; }
+    .standard-head .eyebrow { margin-bottom: 1rem; color: var(--score); }
+    .standard-head h2 { margin-bottom: 1.25rem; }
+    .pillar-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 1rem; }
+    @media (max-width: 980px) { .pillar-grid { grid-template-columns: repeat(2, 1fr); } }
+    @media (max-width: 520px) { .pillar-grid { grid-template-columns: 1fr; } }
     .pillar {
-      background: #fff; border: 1px solid var(--rule); border-radius: 10px;
-      padding: 1.15rem 1.1rem; text-align: left;
+      padding: 1.5rem 1.25rem; background: #fff; border: 1px solid var(--rule);
+      border-radius: 12px; min-height: 210px; display: flex; flex-direction: column;
+      border-top: 3px solid var(--score);
     }
     .pillar .num {
-      font-family: 'Fraunces', serif; color: var(--score); font-size: 1.1rem;
-      font-weight: 600; margin-bottom: 0.5rem; display: block;
+      font-family: 'Fraunces', serif; font-size: 0.78rem; color: var(--ink-mute);
+      margin-bottom: 0.4rem;
     }
-    .pillar h4 { font-size: 0.98rem; margin-bottom: 0.4rem; }
-    .pillar p { color: var(--ink-mute); font-size: 0.83rem; line-height: 1.45; }
-    .score-cta-row { text-align: center; margin-top: 1.5rem; }
+    .pillar h4 {
+      font-family: 'Fraunces', serif; font-weight: 600; font-size: 1.05rem;
+      color: var(--ink); margin-bottom: 0.5rem; line-height: 1.2;
+    }
+    .pillar p { font-size: 0.86rem; color: var(--ink-mute); line-height: 1.5; }
+    .pillar-note {
+      margin-top: 2rem; padding: 0.85rem 1.1rem; background: var(--parchment-2);
+      border-left: 3px solid var(--score); border-radius: 0 4px 4px 0;
+      font-size: 0.82rem; color: var(--ink-mute); max-width: 46rem;
+    }
+    .pillar-note strong { color: var(--ink); font-weight: 600; }
+    .standard-cta { text-align: center; margin-top: 2rem; }
+    .standard-cta p { font-size: 0.82rem; color: var(--ink-mute); margin-top: 0.85rem; }
+
+    /* ---------- OPERATIONAL TRANSCRIPT ---------- */
+    .transcript-grid {
+      display: grid; grid-template-columns: 1.1fr 1fr; gap: clamp(2rem, 5vw, 4.5rem);
+      align-items: start;
+    }
+    @media (max-width: 860px) { .transcript-grid { grid-template-columns: 1fr; } }
+    .transcript-copy .eyebrow { margin-bottom: 1rem; }
+    .transcript-copy h2 { margin-bottom: 1.25rem; }
+    .transcript-copy p { margin-bottom: 1rem; max-width: 34rem; }
+    .transcript-structure {
+      background: var(--ink); color: var(--parchment); border-radius: 14px;
+      padding: 2rem 1.75rem;
+    }
+    .transcript-structure .eyebrow { color: rgba(245,241,234,0.55); margin-bottom: 1.25rem; }
+    .flow { display: flex; flex-direction: column; gap: 0; counter-reset: step; }
+    .flow-step {
+      display: flex; align-items: baseline; gap: 1rem;
+      padding: 0.9rem 0; border-bottom: 1px solid rgba(245,241,234,0.14);
+      counter-increment: step;
+    }
+    .flow-step:last-child { border-bottom: 0; }
+    .flow-step::before {
+      content: counter(step, decimal-leading-zero);
+      font-family: 'Fraunces', serif; font-size: 0.85rem;
+      color: rgba(245,241,234,0.5); min-width: 2.2rem;
+    }
+    .flow-step .label {
+      font-family: 'Fraunces', serif; font-weight: 500;
+      color: var(--parchment); font-size: 1rem;
+    }
 
     /* ---------- TIERS ---------- */
     .tiers { background: var(--parchment-2); }
@@ -220,10 +367,61 @@
       padding-top: 1rem; border-top: 1px solid var(--rule);
     }
 
+    /* ---------- CLASSIFIER ---------- */
+    .classifier-head { max-width: 44rem; margin: 0 auto clamp(2rem, 5vw, 3rem); text-align: center; }
+    .classifier-head .eyebrow { margin-bottom: 1rem; }
+    .classifier-head h2 { margin-bottom: 1rem; }
+    .classifier { max-width: 900px; margin: 0 auto; }
+    .classifier-row {
+      display: grid; grid-template-columns: 1fr auto; gap: 1.5rem;
+      padding: 1.4rem 1.25rem; border-bottom: 1px solid var(--rule); align-items: center;
+    }
+    .classifier-row:first-child { border-top: 1px solid var(--rule); }
+    .classifier-q {
+      font-family: 'Fraunces', serif; font-size: 1.05rem;
+      color: var(--ink); line-height: 1.35;
+    }
+    .classifier-a {
+      display: inline-flex; align-items: center; gap: 0.6rem;
+      padding: 0.5rem 0.9rem; border-radius: 999px;
+      font-size: 0.8rem; font-weight: 600; color: #fff;
+      white-space: nowrap; transition: opacity 0.15s ease;
+    }
+    .classifier-a:hover { opacity: 0.85; }
+    .cls-personal { background: var(--personal); }
+    .cls-nonprofit { background: var(--nonprofit); }
+    .cls-authority { background: var(--authority); }
+    @media (max-width: 640px) {
+      .classifier-row { grid-template-columns: 1fr; gap: 0.85rem; }
+      .classifier-a { justify-self: start; }
+    }
+    .classifier-note {
+      margin-top: 1.75rem; padding: 1rem 1.15rem;
+      background: rgba(184,132,59,0.08); border-left: 3px solid var(--score);
+      border-radius: 0 4px 4px 0; font-size: 0.85rem;
+      color: var(--ink-soft); line-height: 1.55; max-width: 900px; margin-inline: auto;
+    }
+    .classifier-note strong { color: var(--ink); font-weight: 600; }
+
+    /* ---------- CONNECT ---------- */
+    .connect-head { text-align: center; max-width: 42rem; margin: 0 auto clamp(2.5rem, 5vw, 3.5rem); }
+    .connect-head .eyebrow { margin-bottom: 1rem; }
+    .connect-head h2 { margin-bottom: 1rem; }
+    .connect-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1.15rem; }
+    @media (max-width: 980px) { .connect-grid { grid-template-columns: repeat(2, 1fr); } }
+    @media (max-width: 520px) { .connect-grid { grid-template-columns: 1fr; } }
+    .connect-card {
+      padding: 1.75rem 1.5rem; background: #fff;
+      border: 1px solid var(--rule); border-radius: 12px;
+    }
+    .connect-card .eyebrow { color: var(--ink-mute); margin-bottom: 0.85rem; }
+    .connect-card h3 { font-size: 1.1rem; margin-bottom: 0.75rem; }
+    .connect-card p { font-size: 0.88rem; line-height: 1.55; color: var(--ink-mute); }
+
     /* ---------- AUTHORITY CREDENTIALS STRIP ---------- */
     .creds {
       background: var(--parchment); border-top: 1px solid var(--rule); border-bottom: 1px solid var(--rule);
-      padding: 2.25rem clamp(1.25rem, 3vw, 2.25rem);
+      padding: 2.5rem clamp(1.25rem, 3vw, 2.25rem);
     }
     .creds-inner { max-width: 1180px; margin: 0 auto; text-align: center; }
     .creds .eyebrow { color: var(--authority); margin-bottom: 1rem; letter-spacing: 0.14em; }
@@ -263,7 +461,7 @@
     /* ---------- FOOTER ---------- */
     footer {
       background: var(--ink); color: rgba(245,241,234,0.7);
-      padding: 3rem 0 2rem; margin-top: 2rem;
+      padding: 3rem 0 2rem; margin-top: 0; border-top: 1px solid var(--ink);
     }
     .footer-inner { max-width: 1180px; margin: 0 auto; padding: 0 clamp(1.25rem, 3vw, 2.25rem); }
     .footer-grid {
@@ -299,33 +497,35 @@
 </head>
 <body>
 
+  <div id="progress-bar"></div>
+
   <!-- ============ TOP NAV ============ -->
   <header class="top">
     <div class="top-inner">
       <a href="/" class="brand">TOJ Campaign <span>&mdash; Trail of Joy</span></a>
       <nav class="primary">
         <a href="#verticals">Verticals</a>
-        <a href="#foundation-score">Foundation Score</a>
-        <a href="#tiers">How we engage</a>
-        <a href="/letters.html">Weekly letter</a>
+        <a href="#what-is-toj">What is TOJ</a>
+        <a href="#standard">The Standard</a>
+        <a href="#classifier">Find your lane</a>
         <a href="/foundation-score.html" class="nav-cta">Get your score</a>
       </nav>
     </div>
   </header>
 
   <!-- ============ HERO ============ -->
-  <section class="hero">
+  <section class="hero" id="hero">
     <div class="container">
-      <div class="eyebrow">Trail of Joy Player Management Group, LLC</div>
-      <h1>Build the business that doesn't collapse the day you step away.</h1>
-      <p class="lede">
+      <div class="eyebrow reveal">Trail of Joy Player Management Group, LLC</div>
+      <h1 class="reveal">Build the business that doesn't collapse the day you step away.</h1>
+      <p class="lede reveal">
         Whether you're building a personal brand, a nonprofit, or a career in sport &mdash;
         we build the operating system underneath it. Start with your Foundation Score,
         delivered as your <em>Operational Transcript</em>&trade;.
       </p>
-      <div class="hero-cta">
+      <div class="hero-cta reveal">
         <a href="/foundation-score.html" class="btn score-btn">Get your Foundation Score <span class="arrow">→</span></a>
-        <a href="#how-it-works" class="btn ghost">See how it works</a>
+        <a href="#what-is-toj" class="btn ghost">See how it works</a>
         <a href="#" class="btn ghost" onclick="event.preventDefault(); document.getElementById('ideas-modal').classList.add('open');">3 free ideas</a>
       </div>
     </div>
@@ -335,7 +535,7 @@
   <div class="score-bar">
     <div class="score-bar-inner">
       <div class="score-badge"><span class="score-dot"></span>Foundation Score</div>
-      <div class="pillars">
+      <div class="pillars-label">
         Scored across <strong>five pillars</strong>: Brand Identity &middot; Operational Health &middot; Revenue Architecture &middot; Content &amp; Credibility &middot; Growth Readiness
       </div>
       <a href="/foundation-score.html" style="color: var(--score); font-weight: 600; font-size: 0.82rem;">Start yours &rarr;</a>
@@ -345,7 +545,7 @@
   <!-- ============ VERTICAL DOORS ============ -->
   <section id="verticals">
     <div class="container">
-      <div class="verticals-head">
+      <div class="verticals-head reveal">
         <div class="eyebrow">Three doors. One operating system.</div>
         <h2>Which one describes what you're building?</h2>
         <p class="lede" style="margin: 0 auto;">
@@ -355,7 +555,7 @@
       </div>
 
       <div class="verticals">
-        <a href="/personal-brand.html" class="door d-personal">
+        <a href="/personal-brand.html" class="door d-personal reveal">
           <div class="door-eyebrow">Personal Brand</div>
           <h3>Your business runs on your reputation.</h3>
           <p>
@@ -367,7 +567,7 @@
           <span class="door-link">Open the Personal Brand door <span class="arrow">→</span></span>
         </a>
 
-        <a href="/nonprofit.html" class="door d-nonprofit">
+        <a href="/nonprofit.html" class="door d-nonprofit reveal">
           <div class="door-eyebrow">Nonprofit</div>
           <h3>Your mission needs an operating system.</h3>
           <p>
@@ -379,7 +579,7 @@
           <span class="door-link">Open the Nonprofit door <span class="arrow">→</span></span>
         </a>
 
-        <a href="/authority.html" class="door d-authority">
+        <a href="/authority.html" class="door d-authority reveal">
           <div class="door-eyebrow">Authority</div>
           <h3>Your growth depends on documented performance.</h3>
           <p>
@@ -394,64 +594,232 @@
     </div>
   </section>
 
-  <!-- ============ SYSTEMS NOT SITES ============ -->
-  <section class="systems" id="how-it-works">
+  <!-- ============ WHAT IS TRAIL OF JOY ============ -->
+  <section class="wit" id="what-is-toj">
     <div class="container">
-      <div>
-        <div class="eyebrow">What we actually do</div>
-        <h2>We build operating systems, not websites.</h2>
-        <p>
-          A website is a face. An operating system is what happens the day a customer
-          walks in, the day a lead comes through, the day something breaks, and the day
-          you're not in the room.
+      <div class="wit-intro reveal">
+        <div class="eyebrow">What is Trail of Joy</div>
+        <h2>Not an agency. <em>An operating system</em> with ownership built in.</h2>
+        <p class="lede">
+          Trail of Joy is an AI-powered business operating system that gives operators,
+          organizations, and athletes the infrastructure to launch, automate, and scale.
         </p>
-        <p>
-          We install the system underneath: the intake, the delivery, the follow-up, the
-          reporting rhythm, the way the work gets documented. Then we hand you the keys.
+        <p class="wit-def">
+          Every business deployed on Trail of Joy inherits four built-in layers &mdash; and every
+          client who works with us <strong>joins the trail.</strong> The route below isn't a
+          r&eacute;sum&eacute;. It's the path any operation walks from raw work to a running system.
         </p>
-        <div class="pull">
-          &ldquo;Master the basics, then become prime. Nobody skips the fundamentals on their way to elite.&rdquo;
+      </div>
+
+      <div class="trail-wrap reveal">
+        <div class="eyebrow trail-head" style="color: var(--ink-mute);">The route every client walks</div>
+        <div class="trail-sub">From the field to the system &mdash; the stages an operation passes through once it's on the Trail of Joy.</div>
+        <svg class="trail-svg" viewBox="0 0 900 340" role="img" aria-label="A dotted trail rising left to right through client-journey stages, ending at the Trail of Joy node.">
+          <defs>
+            <linearGradient id="trailGrad" x1="0" y1="1" x2="1" y2="0">
+              <stop offset="0%" stop-color="#A85F26"/>
+              <stop offset="70%" stop-color="#A85F26"/>
+              <stop offset="100%" stop-color="#2F5D4E"/>
+            </linearGradient>
+          </defs>
+          <path d="M 70 288 C 170 278, 200 250, 280 226 C 355 204, 380 176, 470 156 C 545 140, 585 116, 660 96 C 718 80, 758 74, 812 64"
+                fill="none" stroke="url(#trailGrad)" stroke-width="3" stroke-linecap="round" stroke-dasharray="1.5 9"/>
+          <g>
+            <circle cx="70" cy="288" r="9" fill="#FBF9F4" stroke="#A85F26" stroke-width="3"/>
+            <text x="70" y="316" text-anchor="middle" font-family="Inter,sans-serif" font-size="14.5" font-weight="600" fill="#1A1613">Raw operation</text>
+            <text x="70" y="333" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="10.5" fill="#6E655C">the field</text>
+          </g>
+          <g>
+            <circle cx="280" cy="226" r="9" fill="#FBF9F4" stroke="#A85F26" stroke-width="3"/>
+            <text x="280" y="254" text-anchor="middle" font-family="Inter,sans-serif" font-size="14.5" font-weight="600" fill="#1A1613">Foundation Score</text>
+            <text x="280" y="271" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="10.5" fill="#6E655C">graded in</text>
+          </g>
+          <g>
+            <circle cx="470" cy="156" r="9" fill="#FBF9F4" stroke="#A85F26" stroke-width="3"/>
+            <text x="470" y="184" text-anchor="middle" font-family="Inter,sans-serif" font-size="14.5" font-weight="600" fill="#1A1613">The Standard</text>
+            <text x="470" y="201" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="10.5" fill="#6E655C">five pillars</text>
+          </g>
+          <g>
+            <circle cx="660" cy="96" r="9" fill="#FBF9F4" stroke="#A85F26" stroke-width="3"/>
+            <text x="660" y="124" text-anchor="middle" font-family="Inter,sans-serif" font-size="14.5" font-weight="600" fill="#1A1613">Systemized</text>
+            <text x="660" y="141" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="10.5" fill="#6E655C">automated</text>
+          </g>
+          <g>
+            <circle cx="812" cy="64" r="13" fill="#2F5D4E"/>
+            <text x="812" y="38" text-anchor="middle" font-family="Fraunces,serif" font-size="17" font-weight="600" fill="#2F5D4E">Trail of Joy</text>
+            <text x="812" y="88" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="10.5" fill="#2F5D4E">the system</text>
+          </g>
+        </svg>
+        <div class="trail-legend">
+          <span><span class="tl-dot way"></span> Client-journey stage</span>
+          <span><span class="tl-dot end"></span> On the Trail &mdash; running system, ownership inherited</span>
         </div>
       </div>
-      <div class="systems-right">
-        <h4>What the system includes</h4>
-        <ul>
-          <li>Foundation Score baseline across the five pillars</li>
-          <li>A branded, client-facing environment that reads as inevitable</li>
-          <li>Intake, delivery, and follow-up rhythms your team can hold</li>
-          <li>An Operational Transcript your work compounds inside of</li>
-          <li>A path from where you are today to something repeatable</li>
-        </ul>
+
+      <div class="layers-head reveal">
+        <div class="eyebrow">Inherited from day one</div>
+        <h3>Four layers, built in. Not bolted on.</h3>
+        <p>Every business deployed on the Trail inherits these automatically &mdash; no client assembles them by hand.</p>
+      </div>
+      <div class="layers">
+        <div class="layer l-automation reveal">
+          <span class="l-num">01</span>
+          <div class="layer-ico">
+            <svg viewBox="0 0 24 24" fill="none" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 2v4M12 18v4M22 12h-4M6 12H2M19.07 4.93l-2.83 2.83M7.76 16.24l-2.83 2.83M19.07 19.07l-2.83-2.83M7.76 7.76L4.93 4.93"/></svg>
+          </div>
+          <h4>Automation</h4>
+          <p>AI agents and repeatable workflows that run the operational work &mdash; intake, follow-up, delivery, reporting &mdash; without the founder in the loop.</p>
+        </div>
+        <div class="layer l-ownership reveal">
+          <span class="l-num">02</span>
+          <div class="layer-ico">
+            <svg viewBox="0 0 24 24" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l8 4v6c0 5-3.5 8-8 10-4.5-2-8-5-8-10V6z"/><path d="M9 12l2 2 4-4"/></svg>
+          </div>
+          <h4>Ownership</h4>
+          <p>Verifiable provenance for every record of value the business produces &mdash; so the work, and the credit for it, provably belongs to the operator.</p>
+        </div>
+        <div class="layer l-economy reveal">
+          <span class="l-num">03</span>
+          <div class="layer-ico">
+            <svg viewBox="0 0 24 24" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M7 14l3-4 3 3 5-6"/></svg>
+          </div>
+          <h4>Economy</h4>
+          <p>A value layer that quantifies and routes worth across every interaction &mdash; revenue splits, referrals, and contribution tracked, not guessed.</p>
+        </div>
+        <div class="layer l-credibility reveal">
+          <span class="l-num">04</span>
+          <div class="layer-ico">
+            <svg viewBox="0 0 24 24" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a7 7 0 0 0-4 12.7V17a2 2 0 0 0 2 2h4a2 2 0 0 0 2-2v-2.3A7 7 0 0 0 12 2z"/><path d="M9 22h6M10 19v3M14 19v3"/></svg>
+          </div>
+          <h4>Credibility</h4>
+          <p>Physical-to-digital anchoring that bridges real-world events &mdash; games, shoots, deliveries &mdash; to records that can be verified, not just claimed.</p>
+        </div>
+      </div>
+
+      <div class="wit-close reveal">
+        <p>You don't buy a website. You get put on a system &mdash; and the further down the trail you go, the more the four layers do for you.</p>
+        <a href="#verticals" class="btn-light">See where you fall on the trail &rarr;</a>
       </div>
     </div>
   </section>
 
-  <!-- ============ FOUNDATION SCORE EXPLAINER ============ -->
-  <section id="foundation-score">
+  <!-- ============ THE PRINCIPLE ============ -->
+  <section id="principle">
     <div class="container">
-      <div class="score-explain-head">
-        <div class="eyebrow">The Entry offer</div>
-        <h2>Start with your Foundation Score.</h2>
-        <p class="lede" style="margin: 0 auto;">
-          Not an audit &mdash; a starting point. We score your business across the five
-          pillars, deliver a written Operational Transcript, and hand you the specific
-          gaps to close first. Whether you're pre-revenue or ten years in.
+      <div class="principle-grid">
+        <div class="principle-copy reveal">
+          <div class="eyebrow">The principle</div>
+          <h2>One product. Three front doors.</h2>
+          <p>
+            Underneath every vertical, the same shared infrastructure &mdash; the Standard, the
+            Transcript template, the intake system &mdash; serves every client. Verticals route to
+            different downstream engagements; they don't represent different brands.
+          </p>
+          <p>
+            The Operational Transcript&trade; is the universal artifact. Every client, every
+            vertical, same structure, same rigor. The color of the side tab changes. The terminology
+            adapts to your lane. Everything else is identical.
+          </p>
+        </div>
+        <div class="arch-diagram reveal" aria-hidden="true">
+          <div class="arch-node">
+            <span class="label">Parent Brand</span>
+            <span class="value">Trail of Joy</span>
+          </div>
+          <div class="arch-connector"></div>
+          <div class="arch-node">
+            <span class="label">Universal Artifact</span>
+            <span class="value">TOJ Operational Transcript&trade;</span>
+          </div>
+          <div class="arch-connector"></div>
+          <div class="arch-fanout">
+            <div class="arch-leaf leaf-personal">Personal Brand<span class="tier">Solo operators</span></div>
+            <div class="arch-leaf leaf-nonprofit">Nonprofit<span class="tier">501(c)(3) vendor</span></div>
+            <div class="arch-leaf leaf-authority">Authority<span class="tier">Athletes &amp; programs</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ THE STANDARD (5 pillars) ============ -->
+  <section id="standard">
+    <div class="container">
+      <div class="standard-head reveal">
+        <div class="eyebrow">The Standard</div>
+        <h2>Five pillars. Taught once. Applied everywhere.</h2>
+        <p class="lede">
+          The Standard is the same on every vertical. What changes downstream is the terminology
+          and the tier &mdash; never the rigor, never the structure, never the pillars themselves.
         </p>
       </div>
-
       <div class="pillar-grid">
-        <div class="pillar"><span class="num">01</span><h4>Brand Identity</h4><p>How clearly you signal who you are, who you're for, and what happens on the other side of the transaction.</p></div>
-        <div class="pillar"><span class="num">02</span><h4>Operational Health</h4><p>Whether the day-to-day runs on documented systems or on your memory and your hours.</p></div>
-        <div class="pillar"><span class="num">03</span><h4>Revenue Architecture</h4><p>How money enters, how it repeats, and whether the ladder from first touch to top offer is intact.</p></div>
-        <div class="pillar"><span class="num">04</span><h4>Content &amp; Credibility</h4><p>The evidence trail that lets a stranger trust you before they've met you.</p></div>
-        <div class="pillar"><span class="num">05</span><h4>Growth Readiness</h4><p>Whether your operation could take another wave of demand without breaking.</p></div>
+        <div class="pillar reveal">
+          <span class="num">Pillar 01</span>
+          <h4>Brand Identity</h4>
+          <p>How clearly the client has defined who they are, who they serve, and what differentiates them. Graded on clarity, consistency, and positioning.</p>
+        </div>
+        <div class="pillar reveal">
+          <span class="num">Pillar 02</span>
+          <h4>Operational Health</h4>
+          <p>The infrastructure running the business &mdash; intake, delivery, fulfillment, communication. Graded on systematization and repeatable process.</p>
+        </div>
+        <div class="pillar reveal">
+          <span class="num">Pillar 03</span>
+          <h4>Revenue Architecture</h4>
+          <p>How the client earns &mdash; service lines, pricing structure, revenue recovery. Graded on diversification, pricing integrity, and leakage.</p>
+        </div>
+        <div class="pillar reveal">
+          <span class="num">Pillar 04</span>
+          <h4>Content &amp; Credibility</h4>
+          <p>The media, proof, and public presence that earns trust before a conversation starts. Graded on consistency, verification, and alignment.</p>
+        </div>
+        <div class="pillar reveal">
+          <span class="num">Pillar 05</span>
+          <h4>Growth Readiness</h4>
+          <p>Whether the operation can absorb increased demand without breaking. Graded on capacity, delegation, and infrastructure scalability.</p>
+        </div>
       </div>
-
-      <div class="score-cta-row">
+      <div class="pillar-note reveal">
+        <strong>Note:</strong> Pillar names are canonical. Terminology adapts per lane (&ldquo;Athlete Brand Identity&rdquo; in Authority, &ldquo;Service Line Clarity&rdquo; in Personal Brand, &ldquo;Program Standard&rdquo; in Nonprofit). The five pillars themselves do not change.
+      </div>
+      <div class="standard-cta">
         <a href="/foundation-score.html" class="btn score-btn">Start your Foundation Score <span class="arrow">→</span></a>
-        <p style="font-size: 0.82rem; color: var(--ink-mute); margin-top: 0.85rem;">
-          Intake takes 8&ndash;12 minutes. Written report returned within 72 business hours.
-        </p>
+        <p>Intake takes 8&ndash;12 minutes. Written report returned within 72 business hours.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ THE OPERATIONAL TRANSCRIPT ============ -->
+  <section id="transcript">
+    <div class="container">
+      <div class="transcript-grid">
+        <div class="transcript-copy reveal">
+          <div class="eyebrow">The universal artifact</div>
+          <h2>The Operational Transcript&trade;.</h2>
+          <p>
+            Same template across all three verticals. The structure does not differ. Every
+            transcript follows the same sequence, whether it's for a trainer, a nonprofit
+            director, a youth athlete, or a creator building a career.
+          </p>
+          <p>
+            The lane treatment differs &mdash; the color of the side tab, the terminology in the
+            text (&ldquo;service line&rdquo; for Personal Brand, &ldquo;program&rdquo; for Nonprofit,
+            &ldquo;athlete brand&rdquo; for Authority). The structure is identical.
+          </p>
+        </div>
+        <div class="transcript-structure reveal">
+          <div class="eyebrow">Transcript structure</div>
+          <div class="flow">
+            <div class="flow-step"><span class="label">Executive summary</span></div>
+            <div class="flow-step"><span class="label">Five-pillar radar</span></div>
+            <div class="flow-step"><span class="label">Service-line health</span></div>
+            <div class="flow-step"><span class="label">Revenue recovery opportunities</span></div>
+            <div class="flow-step"><span class="label">Roster / portfolio</span></div>
+            <div class="flow-step"><span class="label">Path forward</span></div>
+            <div class="flow-step"><span class="label">Ranked action plan</span></div>
+          </div>
+        </div>
       </div>
     </div>
   </section>
@@ -459,7 +827,7 @@
   <!-- ============ TIERS ============ -->
   <section class="tiers" id="tiers">
     <div class="container">
-      <div class="tiers-head">
+      <div class="tiers-head reveal">
         <div class="eyebrow">How we engage</div>
         <h2>Three tiers. One ladder.</h2>
         <p class="lede" style="margin: 0 auto;">
@@ -469,7 +837,7 @@
       </div>
 
       <div class="tier-grid">
-        <div class="tier">
+        <div class="tier reveal">
           <div class="tier-eyebrow">Entry</div>
           <h3>Foundation Score</h3>
           <p class="tier-what">
@@ -485,7 +853,7 @@
           <div class="tier-meta">Delivered within 72 business hours</div>
         </div>
 
-        <div class="tier featured">
+        <div class="tier featured reveal">
           <div class="tier-eyebrow">Core &middot; Most engagements</div>
           <h3>One complete system</h3>
           <p class="tier-what">
@@ -501,7 +869,7 @@
           <div class="tier-meta">Delivered by proposal &middot; scoped to your Foundation Score</div>
         </div>
 
-        <div class="tier">
+        <div class="tier reveal">
           <div class="tier-eyebrow">Premium</div>
           <h3>Core + managed growth</h3>
           <p class="tier-what">
@@ -516,6 +884,34 @@
           </ul>
           <div class="tier-meta">Recurring &middot; base + per goal</div>
         </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ CLASSIFIER ============ -->
+  <section id="classifier">
+    <div class="container">
+      <div class="classifier-head reveal">
+        <div class="eyebrow">Which lane are you?</div>
+        <h2>Three questions. One answer.</h2>
+        <p>Not sure which door to open first? Read the three questions below and stop at the first one that describes you.</p>
+      </div>
+      <div class="classifier reveal">
+        <div class="classifier-row">
+          <div class="classifier-q">Are you a solo operator whose revenue depends on personal reputation and 1-to-1 client trust?</div>
+          <a href="/personal-brand.html" class="classifier-a cls-personal">Personal Brand &rarr;</a>
+        </div>
+        <div class="classifier-row">
+          <div class="classifier-q">Are you a 501(c)(3) organization with a program, campaign, or operational need TOJ can fulfill as a paid vendor?</div>
+          <a href="/nonprofit.html" class="classifier-a cls-nonprofit">Nonprofit &rarr;</a>
+        </div>
+        <div class="classifier-row">
+          <div class="classifier-q">Are you a youth athlete, program, or creator whose growth depends on documented performance and public credibility?</div>
+          <a href="/authority.html" class="classifier-a cls-authority">Authority &rarr;</a>
+        </div>
+      </div>
+      <div class="classifier-note reveal">
+        <strong>If none of the three describe you exactly:</strong> start with the Foundation Score. The intake sorts the vertical for you, and the report tells you which lane your operation actually belongs in.
       </div>
     </div>
   </section>
@@ -540,6 +936,38 @@
       </div>
     </div>
   </div>
+
+  <!-- ============ HOW THE THREE CONNECT ============ -->
+  <section id="connect">
+    <div class="container">
+      <div class="connect-head reveal">
+        <div class="eyebrow">How the three connect</div>
+        <h2>Three front doors. One nervous system underneath.</h2>
+      </div>
+      <div class="connect-grid">
+        <div class="connect-card reveal">
+          <div class="eyebrow">Brand level</div>
+          <h3>Equal visual weight.</h3>
+          <p>All three verticals are visible on this homepage with equal weight. The Standard is taught once, on the hub &mdash; not re-explained on every vertical page.</p>
+        </div>
+        <div class="connect-card reveal">
+          <div class="eyebrow">Intake level</div>
+          <h3>One Foundation Score.</h3>
+          <p>The same intake runs for a Trainer, a nonprofit director, and a youth-sport parent. Only the pillar-level questions and the Core proposal vary by vertical.</p>
+        </div>
+        <div class="connect-card reveal">
+          <div class="eyebrow">Product level</div>
+          <h3>Same transcript. Every time.</h3>
+          <p>Same Operational Transcript template across all three verticals. Lane color and terminology adapt. The structure &mdash; every section, every pillar, every action plan &mdash; stays identical.</p>
+        </div>
+        <div class="connect-card reveal">
+          <div class="eyebrow">Credibility level</div>
+          <h3>Authority feeds the other two.</h3>
+          <p>Authority is the credibility engine. Its proof strip appears on the Personal Brand and Nonprofit vertical pages &mdash; the same operating systems supporting athlete clients power the other verticals.</p>
+        </div>
+      </div>
+    </div>
+  </section>
 
   <!-- ============ WEEKLY LETTER ============ -->
   <section class="letter">
@@ -574,20 +1002,25 @@
           </ul>
         </div>
         <div class="footer-col">
+          <h5>The System</h5>
+          <ul>
+            <li><a href="#what-is-toj">What is Trail of Joy</a></li>
+            <li><a href="#principle">The principle</a></li>
+            <li><a href="#standard">The Standard</a></li>
+            <li><a href="#transcript">The Transcript</a></li>
+            <li><a href="#classifier">Find your lane</a></li>
+            <li><a href="#connect">How the three connect</a></li>
+          </ul>
+        </div>
+        <div class="footer-col">
           <h5>Start here</h5>
           <ul>
             <li><a href="/foundation-score.html">Foundation Score</a></li>
             <li><a href="/how-we-work.html">How we work</a></li>
             <li><a href="/letters.html">Weekly letter</a></li>
             <li><a href="/sample-transcript.html">Sample transcript</a></li>
-          </ul>
-        </div>
-        <div class="footer-col">
-          <h5>Company</h5>
-          <ul>
             <li><a href="/mission.html">The mission</a></li>
             <li><a href="mailto:hello@tojcampaign.com">Contact</a></li>
-            <li><a href="/client.html">Client login</a></li>
           </ul>
         </div>
       </div>
@@ -623,6 +1056,45 @@
       </div>
     </div>
   </div>
+
+  <script>
+    (function () {
+      const bar = document.getElementById('progress-bar');
+      const sectionColors = [
+        { id: 'hero',        color: '#1A1613' },
+        { id: 'verticals',   color: '#B8843B' },
+        { id: 'what-is-toj', color: '#B8843B' },
+        { id: 'principle',   color: '#A85F26' },
+        { id: 'standard',    color: '#B8843B' },
+        { id: 'transcript',  color: '#2F5D4E' },
+        { id: 'tiers',       color: '#1E3A5F' },
+        { id: 'classifier',  color: '#A85F26' },
+        { id: 'connect',     color: '#2F5D4E' }
+      ];
+
+      function currentColor() {
+        let c = '#1A1613';
+        const y = window.scrollY + 120;
+        for (const s of sectionColors) {
+          const el = document.getElementById(s.id);
+          if (el && el.offsetTop <= y) c = s.color;
+        }
+        return c;
+      }
+
+      window.addEventListener('scroll', () => {
+        const t = document.documentElement.scrollTop;
+        const h = document.documentElement.scrollHeight - window.innerHeight;
+        bar.style.width = (h > 0 ? (t / h) * 100 : 0) + '%';
+        bar.style.background = currentColor();
+      }, { passive: true });
+
+      const obs = new IntersectionObserver((entries) => {
+        entries.forEach(e => { if (e.isIntersecting) e.target.classList.add('visible'); });
+      }, { threshold: 0.08, rootMargin: '0px 0px -40px 0px' });
+      document.querySelectorAll('.reveal').forEach(el => obs.observe(el));
+    })();
+  </script>
 
 </body>
 </html>

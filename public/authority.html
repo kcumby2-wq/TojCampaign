@@ -87,9 +87,13 @@
 
     footer { padding: 1.5rem clamp(1.25rem, 3vw, 2.5rem); background: var(--ink); color: rgba(245,241,234,0.65); text-align: center; font-size: 0.78rem; }
     footer a { color: rgba(245,241,234,0.75); }
+    #progress-bar { position: fixed; top: 0; left: 0; height: 3px; width: 0%; z-index: 100; background: var(--accent); transition: width 0.1s linear; pointer-events: none; }
+    .reveal { opacity: 0; transform: translateY(18px); transition: opacity 0.55s ease, transform 0.55s ease; }
+    .reveal.visible { opacity: 1; transform: translateY(0); }
   </style>
 </head>
 <body>
+  <div id="progress-bar"></div>
   <div class="top-bar">
     <a href="/" class="brand" style="text-decoration: none;">TOJ Campaign <span>&mdash; Authority</span></a>
     <a href="/foundation-score.html" class="nav-cta">Get your score</a>
@@ -275,5 +279,34 @@
     <a href="/nonprofit.html">Nonprofit</a> &middot;
     <a href="/how-we-work.html">How we work</a>
   </footer>
+
+  <script>
+    (function () {
+      const bar = document.getElementById('progress-bar');
+      window.addEventListener('scroll', () => {
+        const t = document.documentElement.scrollTop;
+        const h = document.documentElement.scrollHeight - window.innerHeight;
+        bar.style.width = (h > 0 ? (t / h) * 100 : 0) + '%';
+      }, { passive: true });
+
+      const revealSelectors = [
+        '.hero > .container > *',
+        'section > .container > .eyebrow',
+        'section > .container > h2',
+        'section > .container > .lede',
+        'section > .container > div > .eyebrow',
+        'section > .container > div > h2',
+        '.niche', '.archetype', '.surface-item',
+        '.promise .container > div', '.philosophy .container > div',
+        '.score-block .container > *'
+      ];
+      document.querySelectorAll(revealSelectors.join(',')).forEach(el => el.classList.add('reveal'));
+
+      const obs = new IntersectionObserver((entries) => {
+        entries.forEach(e => { if (e.isIntersecting) e.target.classList.add('visible'); });
+      }, { threshold: 0.08, rootMargin: '0px 0px -40px 0px' });
+      document.querySelectorAll('.reveal').forEach(el => obs.observe(el));
+    })();
+  </script>
 </body>
 </html>
