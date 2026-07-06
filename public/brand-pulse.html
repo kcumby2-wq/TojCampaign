@@ -92,48 +92,48 @@
       </div>
 
       <!-- Pillar 1: Brand -->
-      <div class="pillar" data-pillar="brand">
-        <div class="count">Pillar 01 · Brand</div>
-        <h2>How <em>clear</em> is your positioning to a stranger?</h2>
-        <p class="prompt">If someone new landed on your website or your storefront today, could they say back what you do, who it's for, and why you're different — in one sentence?</p>
+      <div class="pillar" data-pillar="identity">
+        <div class="count">Pillar 01 · Brand Identity</div>
+        <h2>How <em>clearly</em> do you signal who you are?</h2>
+        <p class="prompt">If a stranger landed on your top surface today, could they say back what you do, who it's for, and why you're different — in one sentence?</p>
         <div class="rating"></div>
-        <div class="rating-labels"><span>Not at all</span><span>Very clear</span></div>
+        <div class="rating-labels"><span>Fog</span><span>Instantly clear</span></div>
       </div>
 
-      <!-- Pillar 2: Delivery -->
-      <div class="pillar" data-pillar="delivery">
-        <div class="count">Pillar 02 · Delivery</div>
-        <h2>How <em>consistent</em> is what customers actually receive?</h2>
-        <p class="prompt">Does every customer get the same experience — on-time, on-standard, on-brand? Or does quality dip when you're busy?</p>
+      <!-- Pillar 2: Operational Health -->
+      <div class="pillar" data-pillar="ops">
+        <div class="count">Pillar 02 · Operational Health</div>
+        <h2>Can the day-to-day <em>run without you</em>?</h2>
+        <p class="prompt">If you took two weeks off tomorrow, would the operation continue on documented systems — or collapse because you're the system?</p>
         <div class="rating"></div>
-        <div class="rating-labels"><span>Chaotic</span><span>Rock-steady</span></div>
+        <div class="rating-labels"><span>It collapses</span><span>It runs</span></div>
       </div>
 
-      <!-- Pillar 3: Retention -->
-      <div class="pillar" data-pillar="retention">
-        <div class="count">Pillar 03 · Retention</div>
-        <h2>How well do you <em>hold onto</em> the customers you have?</h2>
-        <p class="prompt">Are you actively cultivating repeat customers, renewals, or referrals — or hoping they come back on their own?</p>
+      <!-- Pillar 3: Revenue Architecture -->
+      <div class="pillar" data-pillar="revenue">
+        <div class="count">Pillar 03 · Revenue Architecture</div>
+        <h2>Is there a real <em>ladder</em> from first touch to top offer?</h2>
+        <p class="prompt">Do you have distinct entry, core, and premium offers with clear on-ramps — or does everyone pay the same for the same thing?</p>
         <div class="rating"></div>
-        <div class="rating-labels"><span>They drift</span><span>They stay</span></div>
+        <div class="rating-labels"><span>Flat</span><span>Real ladder</span></div>
       </div>
 
-      <!-- Pillar 4: Financial -->
-      <div class="pillar" data-pillar="financial">
-        <div class="count">Pillar 04 · Financial</div>
-        <h2>How <em>strong</em> is the economic engine?</h2>
-        <p class="prompt">Do you know your margins per service line? Are you pricing at market? Is money being left on the table you could recover this quarter?</p>
+      <!-- Pillar 4: Content & Credibility -->
+      <div class="pillar" data-pillar="content">
+        <div class="count">Pillar 04 · Content &amp; Credibility</div>
+        <h2>Would a Google search <em>earn trust</em> before you spoke?</h2>
+        <p class="prompt">If a decision-maker looked you up tonight, would the evidence trail — content, receipts, documentation — do the persuading for you?</p>
         <div class="rating"></div>
-        <div class="rating-labels"><span>Blurry</span><span>Dialed in</span></div>
+        <div class="rating-labels"><span>Empty</span><span>Documented</span></div>
       </div>
 
-      <!-- Pillar 5: Demand -->
-      <div class="pillar" data-pillar="demand">
-        <div class="count">Pillar 05 · Demand</div>
-        <h2>How well is the <em>top of the funnel</em> being fed?</h2>
-        <p class="prompt">Are you actively generating new leads, or are you fully dependent on referrals and repeat customers?</p>
+      <!-- Pillar 5: Growth Readiness -->
+      <div class="pillar" data-pillar="growth">
+        <div class="count">Pillar 05 · Growth Readiness</div>
+        <h2>If demand doubled, would you <em>compound or break</em>?</h2>
+        <p class="prompt">Could the operation absorb another wave of customers next month — or would delivery, quality, and follow-through collapse under the load?</p>
         <div class="rating"></div>
-        <div class="rating-labels"><span>Nothing structured</span><span>Steady flow</span></div>
+        <div class="rating-labels"><span>Breaks</span><span>Compounds</span></div>
       </div>
 
       <div class="nav-row" id="navRow" style="display:none;">
@@ -156,7 +156,7 @@
         </div>
 
         <div class="result-actions">
-          <a href="/intake.html" class="btn primary">Start intake →</a>
+          <a href="/foundation-score.html" class="btn primary">Get your Foundation Score →</a>
           <button class="btn ghost" onclick="restart()">Start over</button>
         </div>
       </div>
@@ -171,7 +171,7 @@
   <footer>© 2026 Trail of Joy Player Management Group, LLC. · <a href="/">TOJ Campaign</a></footer>
 
   <script>
-    const PILLARS = ['brand', 'delivery', 'retention', 'financial', 'demand'];
+    const PILLARS = ['identity', 'ops', 'revenue', 'content', 'growth'];
     const scores = {};
     let currentIdx = 0;
 
@@ -244,7 +244,7 @@
     }
 
     function renderRadar() {
-      const labels = ['Brand', 'Delivery', 'Retention', 'Financial', 'Demand'];
+      const labels = ['Brand Identity', 'Operational Health', 'Revenue Architecture', 'Content & Credibility', 'Growth Readiness'];
       const vals = PILLARS.map(k => scores[k] || 0);
       const cx = 160, cy = 160;
       const scale = 24;   // 5 * 24 = 120 max radius
@@ -275,13 +275,13 @@
       const weakestScore = entries[0][1];
 
       const D = {
-        brand:     { head: 'Your positioning is the bottleneck.', body: 'When brand is the low pillar, everything else has to work harder — every ad costs more, every sale takes longer, and referrals suffer because word-of-mouth needs a clear sentence to pass along. Fixing brand doesn\'t just raise brand; it lifts every pillar above it.', next: 'The move: rewrite your one-sentence positioning. TOJ can facilitate that in a 90-minute working session.' },
-        delivery:  { head: 'Delivery consistency is the bottleneck.', body: 'When delivery slips, every downstream pillar breaks — retention drops because customers don\'t come back to inconsistent service, financials break because rework eats margin, and demand can\'t grow because reviews suffer. Fix delivery first; everything else follows.', next: 'The move: install a service standard your team can execute on your worst day. That\'s TOJ\'s core deliverable.' },
-        retention: { head: 'Retention is the bottleneck.', body: 'Losing customers you already earned is the most expensive form of leakage. When retention lags, you\'re paying full customer-acquisition cost twice — once to win them, once to win them back. Every dollar spent here compounds.', next: 'The move: install a monthly rhythm of follow-up, review captures, and referral prompts. TOJ builds the trail.' },
-        financial: { head: 'Financial hygiene is the bottleneck.', body: 'When financials are blurry, you can\'t make the pricing, hiring, or investment decisions that scale the business. Every operator we\'ve worked with has 15-25% margin recoverable this quarter — they just can\'t see it.', next: 'The move: get a quarterly Operational Transcript so the numbers guide the decisions, not the other way around.' },
-        demand:    { head: 'Demand generation is the bottleneck.', body: 'When top-of-funnel is broken, everything else is fighting a shrinking audience. Referrals and repeat customers alone can\'t compound past a certain point — you need a repeatable engine feeding it.', next: 'The move: install one demand-generation cadence that ships weekly. TOJ Small Business is built around this.' },
+        identity: { head: 'Your Brand Identity is the bottleneck.', body: 'When identity is unclear, every pillar above it has to work harder — every ad costs more, every conversation takes longer, and referrals leak because word-of-mouth needs a clear sentence to pass along. Fixing identity lifts every pillar behind it.', next: 'The move: get your Foundation Score. The written report names the specific gap and the specific next step.' },
+        ops:      { head: 'Your Operational Health is the bottleneck.', body: 'When the day-to-day runs on your memory and your hours, growth means fewer hours, not more. Every new customer becomes an administrative task. Fix the operation first; everything else compounds behind it.', next: 'The move: get your Foundation Score. A Core engagement installs the system underneath so the operation runs whether you\'re in the room or not.' },
+        revenue:  { head: 'Your Revenue Architecture is the bottleneck.', body: 'A flat offer stack traps you in one price point. Without a ladder from entry to top offer, you can\'t serve the customer who wants more or ramp the customer who\'s not ready yet. Every dollar of demand hits the same ceiling.', next: 'The move: get your Foundation Score. The report maps the ladder to your actual customer, not a generic template.' },
+        content:  { head: 'Your Content & Credibility is the bottleneck.', body: 'If a Google search doesn\'t earn trust before you speak, every conversation starts uphill. Content and credibility are what let a stranger decide about you before you\'re in the room — and what let the room already know who you are.', next: 'The move: get your Foundation Score. We diagnose the credibility surface a decision-maker actually sees, not the one you think they see.' },
+        growth:   { head: 'Your Growth Readiness is the bottleneck.', body: 'A wave of demand you can\'t absorb costs more than a wave you never got. When the system can\'t compound, growth becomes the thing that breaks you. Fix the readiness before you fire the next demand cycle.', next: 'The move: get your Foundation Score. Growth Readiness is the pillar we build for last — because the other four have to be true first.' },
       };
-      const map = { brand: 'Brand', delivery: 'Delivery', retention: 'Retention', financial: 'Financial', demand: 'Demand' };
+      const map = { identity: 'Brand Identity', ops: 'Operational Health', revenue: 'Revenue Architecture', content: 'Content & Credibility', growth: 'Growth Readiness' };
       document.getElementById('diagHead').textContent = D[weakest].head;
       document.getElementById('diagBody').textContent = D[weakest].body;
       document.getElementById('diagNext').textContent = D[weakest].next;
