@@ -1,17 +1,19 @@
 # /archive
 
-Legacy avenue pages from the pre-v2 architecture. Not served by the site.
+Legacy pages from the pre-v2 architecture. Not served by the site.
 Preserved here so their content can be edited and eventually redirected
 into the three-vertical hierarchy per Strategy Memo v1.1.
 
-## Files and their target vertical
+## Files and their redirect target
 
-| Legacy page          | Redirect target when re-published        |
-|----------------------|------------------------------------------|
-| `sports.html`        | `/authority.html` (Youth Programs, Individual Athletes, sport-adjacent Creators) |
-| `smallbusiness.html` | `/personal-brand.html` (Trainers, Creators, Solo Entrepreneurs) |
-| `bigbusiness.html`   | Split between `/nonprofit.html` (multi-program orgs) and internal-only Advisory routing |
-| `advisory.html`      | Split between `/personal-brand.html` (individuals building a brand) and `/authority.html` (NIL / athlete education) |
+| Legacy page          | Redirect target                          | Reason archived |
+|----------------------|------------------------------------------|-----------------|
+| `sports.html`        | `/authority.html`                        | Four-avenue architecture retired |
+| `smallbusiness.html` | `/personal-brand.html`                   | Four-avenue architecture retired |
+| `bigbusiness.html`   | `/nonprofit.html` (Advisory kept internal per §5) | TOJ Big Business department retired per Memo §5 |
+| `advisory.html`      | `/personal-brand.html` (individuals) or `/authority.html` (NIL / athlete education) | TOJ Advisory as a public door retired; residual work sourced by referral per §5 |
+| `intake.html`        | `/foundation-score.html`                 | Foundation Score is the Entry offer per Memo §3.2 |
+| `instructors.html`   | `/how-we-work.html`                      | TOJ Advisory as a public door retired per §5 |
 
 ## Notes for the copy edit
 
@@ -25,19 +27,13 @@ Strongest ideas already carried forward into the v2 vertical pages:
 - **Big Business → Nonprofit** — "Every new program was supposed to feel like the
   first one", "Mission preserved. At scale.", the phased rollout (Baseline →
   Standardize → Install → Extend).
-- **Advisory** — "Master the basics. Then become prime." (now on `/how-we-work.html`),
-  the small-cohort quality signal, the ecosystem framing (SubjectSkillz / TOJ /
+- **Advisory → How We Work** — "Master the basics. Then become prime.", the
+  small-cohort quality signal, the ecosystem framing (SubjectSkillz / TOJ /
   SubjectMedia — kept internal per Memo §6 legal separation).
+- **Intake → Foundation Score** — the branching intake logic collapses into
+  the vertical-picker + five-pillar rating flow on `/foundation-score.html`.
 
-## When you're ready to re-publish
+## How the redirects are wired
 
-Move a file from `archive/` back into `public/` and add either:
-
-1. A meta refresh in the `<head>`:
-   `<meta http-equiv="refresh" content="0; url=/authority.html" />`
-
-2. Or an Express route in `server.js`:
-   `app.get('/sports.html', (req, res) => res.redirect(301, '/authority.html'));`
-
-Option 2 is cleaner (301 for SEO) and doesn't require the file to exist in
-`public/` at all.
+Express 301 routes in `server.js`. The files in `archive/` are not served —
+they only exist so the copy can be mined for future v2 iterations.

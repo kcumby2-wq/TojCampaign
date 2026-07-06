@@ -35,6 +35,19 @@ app.use("/api/email", require("./routes/email"));
 app.use("/api/intake", require("./routes/intake"));
 app.use("/api", require("./routes/phase1"));
 
+// 301 redirects: legacy avenue pages → v2 verticals (see archive/README.md)
+const legacyRedirects = {
+  "/sports.html": "/authority.html",
+  "/smallbusiness.html": "/personal-brand.html",
+  "/bigbusiness.html": "/nonprofit.html",
+  "/advisory.html": "/personal-brand.html",
+  "/intake.html": "/foundation-score.html",
+  "/instructors.html": "/how-we-work.html",
+};
+Object.entries(legacyRedirects).forEach(([from, to]) => {
+  app.get(from, (req, res) => res.redirect(301, to));
+});
+
 // Serve static frontend
 app.use(express.static(path.join(__dirname, "public")));
 

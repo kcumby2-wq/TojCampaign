@@ -13,9 +13,14 @@
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     html { scroll-behavior: smooth; }
     body { font-family: 'Inter', -apple-system, sans-serif; background: #F5F1EA; color: #1A1613; line-height: 1.65; }
-    :root { --parchment: #F5F1EA; --parchment-2: #EBE4D6; --ink: #1A1613; --ink-soft: #3B3530; --ink-mute: #6E655C; --rule: rgba(26,22,19,0.12); --sports: #1E3A5F; --smallbiz: #A85F26; --bigbiz: #2F5D4E; --advisory: #B8843B; }
+    :root {
+      --parchment: #F5F1EA; --parchment-2: #EBE4D6;
+      --ink: #1A1613; --ink-soft: #3B3530; --ink-mute: #6E655C;
+      --rule: rgba(26,22,19,0.12);
+      --personal: #A85F26; --nonprofit: #2F5D4E; --authority: #1E3A5F; --score: #B8843B;
+    }
     h1, h2, h3, h4 { font-family: 'Fraunces', 'Georgia', serif; font-weight: 600; letter-spacing: -0.015em; color: var(--ink); }
-    a { color: var(--sports); text-decoration: none; }
+    a { color: var(--authority); text-decoration: none; }
     a:hover { text-decoration: underline; }
     .container { max-width: 780px; margin: 0 auto; padding: 0 clamp(1.25rem, 3vw, 2.5rem); }
     .top-bar { padding: 1rem 0; border-bottom: 1px solid var(--rule); background: rgba(245,241,234,0.94); backdrop-filter: blur(10px); position: sticky; top: 0; z-index: 40; }
@@ -27,24 +32,23 @@
     .hero { padding: clamp(4rem, 8vw, 5.5rem) 0 clamp(2rem, 4vw, 3rem); }
     .hero .eyebrow { font-size: 0.72rem; font-weight: 600; letter-spacing: 0.18em; text-transform: uppercase; color: var(--ink-mute); margin-bottom: 1rem; }
     .hero h1 { font-size: clamp(2.2rem, 4vw, 3rem); line-height: 1.05; margin-bottom: 1rem; max-width: 22ch; }
-    .hero h1 em { font-style: italic; font-weight: 500; color: var(--sports); }
+    .hero h1 em { font-style: italic; font-weight: 500; color: var(--authority); }
     .hero .lede { font-size: 1.1rem; color: var(--ink-soft); max-width: 42rem; }
 
     article.entry { padding: clamp(2.25rem, 5vw, 3.5rem) 0; border-top: 1px solid var(--rule); }
     article.entry .meta { display: flex; gap: 0.5rem; align-items: center; margin-bottom: 0.75rem; flex-wrap: wrap; }
     article.entry .date { font-family: 'Inter', monospace; font-size: 0.72rem; color: var(--ink-mute); letter-spacing: 0.04em; }
-    article.entry .avenue { font-size: 0.66rem; padding: 0.2rem 0.55rem; border-radius: 4px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; color: #fff; }
-    article.entry .avenue.sports { background: var(--sports); }
-    article.entry .avenue.smallbiz { background: var(--smallbiz); }
-    article.entry .avenue.bigbiz { background: var(--bigbiz); }
-    article.entry .avenue.advisory { background: var(--advisory); }
-    article.entry .avenue.cross { background: var(--ink); }
+    article.entry .vertical { font-size: 0.66rem; padding: 0.2rem 0.55rem; border-radius: 4px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; color: #fff; }
+    article.entry .vertical.personal { background: var(--personal); }
+    article.entry .vertical.nonprofit { background: var(--nonprofit); }
+    article.entry .vertical.authority { background: var(--authority); }
+    article.entry .vertical.cross { background: var(--ink); }
     article.entry h2 { font-size: clamp(1.4rem, 2.5vw, 1.75rem); margin-bottom: 1rem; line-height: 1.15; }
-    article.entry h2 em { font-style: italic; font-weight: 500; color: var(--sports); }
+    article.entry h2 em { font-style: italic; font-weight: 500; color: var(--authority); }
     article.entry p { color: var(--ink-soft); margin-bottom: 1rem; font-size: 0.98rem; }
     article.entry p strong { color: var(--ink); font-weight: 600; }
     article.entry blockquote {
-      border-left: 3px solid var(--smallbiz); padding: 0.6rem 1.1rem;
+      border-left: 3px solid var(--personal); padding: 0.6rem 1.1rem;
       margin: 1.25rem 0; background: var(--parchment-2); border-radius: 0 8px 8px 0;
       font-style: italic; color: var(--ink); font-family: 'Fraunces', serif; font-size: 1.02rem;
     }
@@ -57,7 +61,7 @@
 
     .note {
       max-width: 42rem; margin: 3rem auto 1rem; padding: 1.15rem 1.35rem;
-      background: rgba(30,58,95,0.05); border-left: 3px solid var(--sports);
+      background: rgba(30,58,95,0.05); border-left: 3px solid var(--authority);
       border-radius: 4px; font-size: 0.85rem; color: var(--ink-soft);
     }
     .note strong { color: var(--ink); }
@@ -90,18 +94,18 @@
     <div class="container">
       <div class="meta">
         <span class="date">2026&middot;07&middot;01</span>
-        <span class="avenue smallbiz">Small Business</span>
+        <span class="vertical personal">Personal Brand</span>
       </div>
       <h2>Ship on cadence beats ship on inspiration <em>every single time</em>.</h2>
       <p>
-        A yoga studio that ships a workshop calendar three months out fills 40% more seats
-        than one that announces &ldquo;a workshop next weekend.&rdquo; The reason isn&rsquo;t
+        A trainer who ships a workshop calendar three months out fills 40% more seats
+        than one who announces &ldquo;a workshop next weekend.&rdquo; The reason isn&rsquo;t
         the workshops. It&rsquo;s the trust that the calendar keeps going.
       </p>
       <p>
-        When we watched Sarah&rsquo;s June go dark on workshops, three memberships lapsed
-        within thirty days. When we replaced the cadence with a locked-in fall calendar in
-        early July, the same three &mdash; two of them &mdash; came back on the win-back sequence.
+        When we watched an operator&rsquo;s June go dark on workshops, three memberships
+        lapsed within thirty days. When we replaced the cadence with a locked-in fall
+        calendar in early July, two of those three came back on the win-back sequence.
       </p>
       <div class="takeaway">
         <div class="lbl">The takeaway</div>
@@ -114,13 +118,13 @@
     <div class="container">
       <div class="meta">
         <span class="date">2026&middot;06&middot;24</span>
-        <span class="avenue sports">Sports</span>
+        <span class="vertical authority">Authority</span>
       </div>
       <h2>The offer sheet that closes fast is the one <em>already documented</em>.</h2>
       <p>
-        Two athletes at the same position tier, same GPA, similar film. One had a Player
-        Transcript, an on-file Prospect Edge grading, and a Subject Report drop from the
-        prior season. The other had a highlight reel and a coach&rsquo;s email.
+        Two athletes at the same position tier, same GPA, similar film. One had a
+        Player Transcript, an on-file Prospect Edge grading, and a SubjectReport drop
+        from the prior season. The other had a highlight reel and a coach&rsquo;s email.
       </p>
       <p>
         Both got the same first offer within a week of each other. The documented athlete
@@ -140,19 +144,19 @@
     <div class="container">
       <div class="meta">
         <span class="date">2026&middot;06&middot;17</span>
-        <span class="avenue bigbiz">Big Business</span>
+        <span class="vertical nonprofit">Nonprofit</span>
       </div>
-      <h2>Cross-division reporting is worth more than the reports it produces.</h2>
+      <h2>Cross-program reporting is worth more than the reports it produces.</h2>
       <p>
-        A multi-location HVAC operator switched from three separate spreadsheets to one
+        A multi-program nonprofit switched from three separate spreadsheets to one
         rollup dashboard. Total reporting time dropped from ~9 hours a week to ~40 minutes.
         The interesting number wasn&rsquo;t the time saved.
       </p>
       <p>
         The interesting number was the <strong>eight decisions</strong> that got made in
         the first month that would previously have waited two weeks for the leadership
-        team to align. A slow dispatch queue at one location got a helper reassigned from
-        another location the same day it surfaced &mdash; not two weekly meetings later.
+        team to align. A slow intake queue at one program got a staffer reassigned from
+        another program the same day it surfaced &mdash; not two weekly meetings later.
       </p>
       <div class="takeaway">
         <div class="lbl">The takeaway</div>
@@ -165,13 +169,13 @@
     <div class="container">
       <div class="meta">
         <span class="date">2026&middot;06&middot;10</span>
-        <span class="avenue advisory">Advisory</span>
+        <span class="vertical authority">Authority</span>
       </div>
       <h2>Parents show up for cohorts. <em>Not for programs.</em></h2>
       <p>
-        Advisory conversion doubled when we stopped calling the offering &ldquo;the
-        SubjectSkillz program&rdquo; and started calling it &ldquo;the fall cohort.&rdquo;
-        Same curriculum, same instructors, same price. Different word.
+        Youth-program conversion doubled when an operator stopped calling the offering
+        &ldquo;the summer program&rdquo; and started calling it &ldquo;the summer
+        cohort.&rdquo; Same curriculum, same instructors, same price. Different word.
       </p>
       <p>
         A program feels like a self-serve download. A cohort feels like a room. Parents
@@ -188,7 +192,7 @@
     <div class="container">
       <div class="meta">
         <span class="date">2026&middot;06&middot;03</span>
-        <span class="avenue cross">Cross-network</span>
+        <span class="vertical cross">Cross-network</span>
       </div>
       <h2>The 90 / 10 threshold isn&rsquo;t &ldquo;90% automated.&rdquo; It&rsquo;s <em>90% same-standard</em>.</h2>
       <p>
