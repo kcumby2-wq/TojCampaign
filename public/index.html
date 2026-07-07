@@ -103,6 +103,44 @@
     .btn .arrow { transition: transform 0.18s ease; }
     .btn:hover .arrow { transform: translateX(3px); }
 
+    /* Hero sub-lede (plain-English one-liner under the h1 title) */
+    .hero .subhead {
+      font-size: clamp(1rem, 1.4vw, 1.1rem); color: var(--ink); font-weight: 500;
+      max-width: 44rem; margin-bottom: 1.35rem; line-height: 1.45;
+    }
+
+    /* Hero text-link — smaller secondary CTAs so the primary dominates */
+    .hero-text-link {
+      display: inline-flex; align-items: center; gap: 0.3rem;
+      font-size: 0.9rem; font-weight: 500; color: var(--ink-soft);
+      text-decoration: underline; text-underline-offset: 3px;
+      text-decoration-color: var(--rule-strong);
+      transition: color 0.15s ease, text-decoration-color 0.15s ease;
+      background: transparent; border: 0; cursor: pointer; font-family: inherit;
+      padding: 0.85rem 0.25rem;
+    }
+    .hero-text-link:hover { color: var(--ink); text-decoration-color: var(--ink); }
+    .hero-cta .sep {
+      color: var(--ink-mute); opacity: 0.4; padding: 0 0.15rem;
+      align-self: center; font-size: 0.9rem;
+    }
+
+    /* Hero facts chip — three concrete Foundation Score facts under the CTAs */
+    .hero-facts {
+      display: flex; flex-wrap: wrap; gap: clamp(0.85rem, 2vw, 1.75rem);
+      margin-top: 1.75rem; padding-top: 1.35rem;
+      border-top: 1px solid var(--rule); max-width: 44rem;
+    }
+    .hero-facts .fact {
+      display: inline-flex; align-items: center; gap: 0.5rem;
+      font-size: 0.82rem; color: var(--ink-mute);
+    }
+    .hero-facts .fact strong { color: var(--ink); font-weight: 600; }
+    .hero-facts .fact::before {
+      content: ''; width: 6px; height: 6px; border-radius: 999px;
+      background: var(--score); flex-shrink: 0;
+    }
+
     /* ---------- FOUNDATION SCORE PROMISE BAR ---------- */
     .score-bar {
       padding: 1rem clamp(1.25rem, 3vw, 2.25rem);
@@ -518,15 +556,26 @@
     <div class="container">
       <div class="eyebrow reveal">Trail of Joy Player Management Group, LLC</div>
       <h1 class="reveal">Build the business that doesn't collapse the day you step away.</h1>
+      <p class="subhead reveal">
+        We install the intake, delivery, and follow-up systems your business runs on &mdash;
+        so the work keeps moving when you're not the one holding it up.
+      </p>
       <p class="lede reveal">
-        Whether you're building a personal brand, a nonprofit, or a career in sport &mdash;
-        we build the operating system underneath it. Start with your Foundation Score,
-        delivered as your <em>Operational Transcript</em>&trade;.
+        Whether you're building a personal brand, a nonprofit, or a career in sport, we start
+        with your Foundation Score &mdash; a written report on the five things that make or
+        break the business, delivered as your <em>Operational Transcript</em>&trade;
+        <span style="color: var(--ink-mute); font-weight: 400;">(the graded document you can hand a partner, an investor, or your future self).</span>
       </p>
       <div class="hero-cta reveal">
         <a href="/foundation-score.html" class="btn score-btn">Get your Foundation Score <span class="arrow">→</span></a>
-        <a href="#what-is-toj" class="btn ghost">See how it works</a>
-        <a href="#" class="btn ghost" onclick="event.preventDefault(); document.getElementById('ideas-modal').classList.add('open');">3 free ideas</a>
+        <a href="#what-is-toj" class="hero-text-link">See how it works &rarr;</a>
+        <span class="sep">&middot;</span>
+        <button type="button" class="hero-text-link" onclick="document.getElementById('ideas-modal').classList.add('open');">3 free ideas &rarr;</button>
+      </div>
+      <div class="hero-facts reveal">
+        <span class="fact"><strong>8&ndash;12 min</strong> intake</span>
+        <span class="fact"><strong>72 business hours</strong> to written report</span>
+        <span class="fact">Delivered <strong>by proposal</strong> &mdash; no obligation</span>
       </div>
     </div>
   </section>
