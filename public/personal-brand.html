@@ -51,8 +51,8 @@
 
     .niche-head { max-width: 44rem; margin: 0 auto clamp(2rem, 4vw, 3rem); text-align: center; }
     .niche-head .eyebrow { margin-bottom: 1rem; }
-    .niche-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1.25rem; }
-    @media (max-width: 780px) { .niche-grid { grid-template-columns: 1fr; } }
+    .niche-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1.25rem; }
+    @media (max-width: 980px) { .niche-grid { grid-template-columns: 1fr; } }
     .niche {
       background: #fff; border: 1px solid var(--rule); border-radius: 14px;
       padding: 1.75rem;
@@ -269,7 +269,7 @@
     <div class="container">
       <div class="niche-head">
         <div class="eyebrow">Where the vertical is live</div>
-        <h2>Two niches shipped. More on the way as proof lands.</h2>
+        <h2>Three niches shipped. More on the way as proof lands.</h2>
         <p style="color: var(--ink-soft); font-size: 0.95rem;">
           We only publish a niche when we have real client work behind it &mdash;
           delivered systems, named operators, documented results. No speculation on the site.
@@ -302,10 +302,26 @@
           <a href="/foundation-score.html" class="cta">Get your Foundation Score &rarr;</a>
         </div>
 
+        <div class="niche">
+          <div class="eyebrow">Niche &middot; Live</div>
+          <h3>Solo Brands</h3>
+          <p class="desc">
+            One person, one chair, one calendar &mdash; yoga instructors, solo realtors,
+            barbers, independent service pros. The reputation is already there. What's
+            missing is the operating system that turns walk-ins, referrals, and word of
+            mouth into a business that runs when you're not the one holding it up.
+          </p>
+          <div class="proof-tag">Yoga instructor</div>
+          <div class="proof-tag">Solo realtor</div>
+          <div class="proof-tag">Barber &mdash; and more</div>
+          <a href="/foundation-score.html" class="cta">Get your Foundation Score &rarr;</a>
+        </div>
+
       </div>
       <p style="text-align: center; color: var(--ink-mute); font-size: 0.85rem; margin-top: 2rem;">
-        Also serving Yoga instructors and Solo Entrepreneurs &mdash; niches ship publicly
-        once a named client and delivered artifact land. If that's you, open an intake and we'll route you directly.
+        Building something else solo? Niches ship publicly once a named client and
+        delivered artifact land. If that's you, get your Foundation Score and we'll route
+        you directly.
       </p>
     </div>
   </section>
