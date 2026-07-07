@@ -1,6 +1,6 @@
 # TOJ Campaign — Six-Week Foundational Playbook
 
-**Author:** Kyron Cumby, Trail of Joy Player Management Group, LLC
+**Author:** Kyron Cumby, Trail of Joy Management Group, LLC
 **Status:** Internal reference — mirrors the Foundation Score's five pillars
 **Purpose:** Do the six-week curriculum once, on TOJ itself, so the Standard
 we sell has already been walked. Every deliverable below is a real TOJ
