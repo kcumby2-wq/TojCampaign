@@ -1,14 +1,9 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": null,
-  "installCommand": "npm install @vercel/edge@1 --no-save --no-audit --no-fund",
   "outputDirectory": "public",
   "redirects": [
-    {
-      "source": "/app.html",
-      "destination": "https://app.tojcampaign.com/",
-      "permanent": false
-    },
+    { "source": "/app.html", "destination": "https://app.tojcampaign.com/", "permanent": false },
     { "source": "/sports.html", "destination": "/authority.html", "permanent": true },
     { "source": "/smallbusiness.html", "destination": "/personal-brand.html", "permanent": true },
     { "source": "/bigbusiness.html", "destination": "/nonprofit.html", "permanent": true },
