@@ -16,6 +16,7 @@ import { mkdir } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { createRequire } from "node:module";
 import path from "node:path";
+import { fontFaceCss } from "./font-css.mjs";
 
 // Playwright is installed globally (not a project dependency). Resolve it from
 // the global node_modules so this build script needs nothing added to package.json.
@@ -28,6 +29,10 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const OUT_DIR = path.join(__dirname, "..", "public", "og");
 
 const GOLD = "#B8843B";
+
+// Embedded @font-face rules (scripts/fonts/*.woff2 via font-css.mjs); filled at
+// startup so card renders never depend on fetching Google Fonts at run time.
+let FONT_CSS = "";
 
 const cards = [
   {
@@ -84,10 +89,8 @@ function cardHtml(c) {
   const label = c.labelSub ? `${c.labelMain}<br>${c.labelSub}` : c.labelMain;
   const subhead = c.subhead ? `<div class="subhead">${c.subhead}</div>` : "";
   return `<!doctype html><html lang="en"><head><meta charset="utf-8">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Anton&family=Fraunces:opsz,wght@9..144,600;9..144,700&family=JetBrains+Mono:wght@500;600&family=Manrope:wght@500;600;700&display=swap" rel="stylesheet">
 <style>
+${FONT_CSS}
   *{margin:0;padding:0;box-sizing:border-box}
   html,body{width:1200px;height:630px}
   .card{width:1200px;height:630px;display:flex;background:#F5F1EA;font-family:'Manrope',sans-serif;overflow:hidden}
@@ -131,6 +134,7 @@ function cardHtml(c) {
 }
 
 async function main() {
+  FONT_CSS = await fontFaceCss();
   await mkdir(OUT_DIR, { recursive: true });
 
   const launchOpts = {
