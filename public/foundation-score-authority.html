@@ -1,0 +1,687 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Foundation Score — Authority · TOJ Campaign</title>
+<meta name="description" content="For athletes, programs, and creators building a documented record. Four steps · roughly 12 minutes · autosaves as you go.">
+<meta name="theme-color" content="#050810">
+<meta name="robots" content="noindex">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Anton&family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;1,9..144,400&family=Manrope:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect fill='%231E3A5F' width='100' height='100' rx='10'/%3E%3Ctext x='50' y='68' font-family='Impact,Arial Black,sans-serif' font-size='38' font-weight='900' fill='%23B8843B' text-anchor='middle' letter-spacing='-1'%3ETOJ%3C/text%3E%3C/svg%3E">
+<style>
+:root{
+  --paper:#F5F1E8;--paper-2:#EDE7D8;--card:#FFFFFF;
+  --ink:#14202E;--ink-2:#1E2A3E;--ink-3:#334155;
+  --line:#DCD5C4;--line-2:#C8BEA8;
+  --text-dim:#5A6376;--text-mute:#8A8570;
+  --navy:#1E3A5F;
+  --gold:#B8843B;--gold-soft:rgba(184,132,59,.10);
+  --sage:#5A6E5A;
+  --primary:var(--gold);--primary-dark:#8f6d33;
+  --accent:var(--gold);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth}
+body{background:var(--paper);color:var(--ink);font-family:'Manrope',-apple-system,sans-serif;font-size:15.5px;line-height:1.6;-webkit-font-smoothing:antialiased;min-height:100vh}
+a{color:inherit;text-decoration:none}
+button{font-family:inherit;cursor:pointer}
+.shell{max-width:960px;margin:0 auto;padding:0 24px}
+@media(min-width:900px){.shell{padding:0 40px}}
+body::before{content:'';position:fixed;inset:0;background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2'/%3E%3CfeColorMatrix values='0 0 0 0 0.1 0 0 0 0 0.1 0 0 0 0 0.15 0 0 0 0.03 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");pointer-events:none;z-index:1;opacity:.4}
+main,nav,section,footer{position:relative;z-index:2}
+
+.demo-ribbon{position:fixed;top:0;left:0;right:0;z-index:100;background:var(--ink);color:var(--gold);font-family:'JetBrains Mono',monospace;font-size:10px;font-weight:600;letter-spacing:.18em;text-transform:uppercase;text-align:center;padding:6px}
+
+nav.top{position:sticky;top:26px;z-index:50;background:rgba(245,241,232,.92);backdrop-filter:blur(10px);border-bottom:1px solid var(--line)}
+nav.top .shell{display:flex;align-items:center;justify-content:space-between;height:64px;max-width:1200px}
+.brand{display:flex;align-items:center;gap:12px}
+.brand-mark{width:38px;height:38px;background:var(--ink);color:var(--gold);border-radius:2px;display:flex;align-items:center;justify-content:center;font-family:'Anton',sans-serif;font-size:12px;letter-spacing:.02em;border:1px solid var(--gold)}
+.brand-name .b1{font-family:'Anton',sans-serif;font-size:15px;text-transform:uppercase;color:var(--ink);letter-spacing:.02em}
+.brand-name .b2{font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--primary-dark);letter-spacing:.14em;text-transform:uppercase;margin-top:2px;font-weight:600}
+.back-link{font-family:'JetBrains Mono',monospace;font-size:10.5px;color:var(--ink-3);letter-spacing:.14em;text-transform:uppercase;font-weight:600}
+.back-link:hover{color:var(--gold)}
+
+.intake-hero{padding:0 0 0;background:linear-gradient(180deg,#050810,#1E3A5F);color:var(--paper);position:relative;overflow:hidden}
+.intake-hero::before{content:'';position:absolute;inset:0;background-image:linear-gradient(rgba(184,132,59,.05) 1px,transparent 1px),linear-gradient(90deg,rgba(184,132,59,.05) 1px,transparent 1px);background-size:60px 60px;opacity:.5;pointer-events:none;mask-image:linear-gradient(180deg,transparent,black,transparent)}
+.intake-hero-inner{padding:64px 0 44px;position:relative;z-index:2}
+.kicker-hero{font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:600;letter-spacing:.24em;text-transform:uppercase;color:var(--gold);margin-bottom:20px;display:flex;align-items:center;gap:14px}
+.kicker-hero::before{content:'';width:24px;height:1px;background:var(--gold)}
+.hero-h1{font-family:'Anton',sans-serif;font-weight:400;font-size:clamp(40px,7vw,72px);line-height:.98;letter-spacing:-.005em;text-transform:uppercase;color:var(--paper);margin-bottom:16px}
+.hero-h1 .italic{font-family:'Fraunces',serif;font-style:italic;color:var(--gold);text-transform:lowercase;font-weight:400}
+.hero-sub{font-family:'Fraunces',serif;font-style:italic;font-size:clamp(16px,2vw,22px);color:rgba(245,241,232,.8);line-height:1.5;max-width:720px;margin-bottom:24px}
+.hero-sub b{color:var(--paper);font-weight:400;font-style:normal;font-family:'Anton',sans-serif;text-transform:uppercase;font-size:1.05em;letter-spacing:-.005em}
+.meta-row{display:flex;flex-wrap:wrap;gap:20px;font-family:'JetBrains Mono',monospace;font-size:10.5px;color:rgba(245,241,232,.6);letter-spacing:.14em;text-transform:uppercase;font-weight:600}
+.meta-row span{display:flex;align-items:center;gap:6px}
+.meta-row span::before{content:'●';color:var(--gold)}
+
+.form-section{padding:44px 0 96px;background:var(--paper)}
+.form-card{background:var(--card);border:1px solid var(--line);border-radius:2px;padding:36px 32px;position:relative}
+.form-card::before{content:'';position:absolute;top:0;left:32px;right:32px;height:3px;background:linear-gradient(90deg,var(--gold),var(--navy))}
+@media(min-width:640px){.form-card{padding:44px 40px}}
+
+.progress-bar{display:flex;gap:6px;margin-bottom:32px}
+.progress-dot{flex:1;height:4px;background:var(--line);position:relative;cursor:pointer;transition:background .3s;border-radius:2px}
+.progress-dot.active{background:var(--gold)}
+.progress-dot.done{background:var(--sage)}
+.progress-dot span{position:absolute;bottom:-22px;left:0;font-family:'JetBrains Mono',monospace;font-size:9.5px;color:var(--text-mute);letter-spacing:.14em;text-transform:uppercase;white-space:nowrap;font-weight:600}
+.progress-dot.active span{color:var(--primary-dark)}
+.progress-dot.done span{color:var(--sage)}
+@media(max-width:640px){.progress-dot span{display:none}}
+
+.autosave-status{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--text-mute);letter-spacing:.1em;text-transform:uppercase;margin-bottom:20px;display:flex;align-items:center;gap:8px;padding-top:24px}
+.autosave-status .as-dot{width:8px;height:8px;border-radius:50%;background:var(--sage);animation:aspulse 2s ease-in-out infinite}
+@keyframes aspulse{0%,100%{opacity:1}50%{opacity:.4}}
+.autosave-status.saving .as-dot{background:var(--gold);animation-duration:.6s}
+
+.step{display:none}
+.step.active{display:block;animation:stepIn .35s cubic-bezier(.16,1,.3,1)}
+@keyframes stepIn{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
+.step-head{margin-bottom:24px}
+.step-num{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--primary-dark);letter-spacing:.24em;text-transform:uppercase;font-weight:700;margin-bottom:8px}
+.step-title{font-family:'Anton',sans-serif;font-size:clamp(28px,3.5vw,40px);line-height:.98;letter-spacing:-.005em;text-transform:uppercase;color:var(--ink);margin-bottom:10px}
+.step-title .italic{font-family:'Fraunces',serif;font-style:italic;color:var(--primary-dark);text-transform:lowercase}
+.step-desc{font-family:'Fraunces',serif;font-style:italic;font-size:15.5px;color:var(--ink-3);line-height:1.5;max-width:680px}
+
+.field{margin-bottom:20px}
+.field label{display:block;font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--ink-3);letter-spacing:.14em;text-transform:uppercase;margin-bottom:8px;font-weight:600}
+.field label .req{color:var(--gold)}
+.field input,.field select,.field textarea{width:100%;background:var(--paper);border:1px solid var(--line);color:var(--ink);font-family:inherit;font-size:14.5px;padding:12px 14px;transition:border-color .12s;border-radius:2px}
+.field input:focus,.field select:focus,.field textarea:focus{outline:none;border-color:var(--gold)}
+.field textarea{min-height:110px;resize:vertical;line-height:1.5}
+.field-hint{font-size:12px;color:var(--text-mute);margin-top:5px;line-height:1.4;font-style:italic}
+.field-row{display:grid;grid-template-columns:1fr;gap:14px}
+@media(min-width:520px){.field-row{grid-template-columns:1fr 1fr}}
+.field-row.triple{grid-template-columns:1fr}
+@media(min-width:640px){.field-row.triple{grid-template-columns:1fr 1fr 1fr}}
+
+.portfolio-grid{display:grid;grid-template-columns:1fr;gap:12px;margin-bottom:20px}
+@media(min-width:640px){.portfolio-grid{grid-template-columns:1fr 1fr}}
+@media(min-width:900px){.portfolio-grid{grid-template-columns:repeat(3,1fr)}}
+.portfolio-input{background:var(--paper-2);border:1px solid var(--line);padding:14px 16px;border-radius:2px;display:flex;align-items:baseline;gap:12px}
+.portfolio-input input{background:transparent;border:none;padding:0;font-family:'Anton',sans-serif;font-size:28px;color:var(--ink);width:80px;letter-spacing:-.01em}
+.portfolio-input input:focus{outline:none;border-bottom:1px solid var(--gold)}
+.portfolio-input .pi-label{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--text-mute);letter-spacing:.14em;text-transform:uppercase;font-weight:600;line-height:1.35}
+.portfolio-input .pi-label b{color:var(--ink);font-weight:700;display:block;font-family:'Anton',sans-serif;font-size:11px;letter-spacing:-.005em;margin-bottom:2px;text-transform:uppercase}
+
+.check-grid{display:grid;grid-template-columns:1fr;gap:8px}
+@media(min-width:520px){.check-grid{grid-template-columns:1fr 1fr}}
+.check-item{display:flex;align-items:flex-start;gap:10px;padding:11px 14px;background:var(--paper);border:1.5px solid var(--line);border-radius:2px;cursor:pointer;transition:all .15s;font-size:13.5px;color:var(--ink-3);line-height:1.4}
+.check-item:hover{border-color:var(--line-2)}
+.check-item input{margin-top:2px;accent-color:var(--gold);flex-shrink:0}
+.check-item.selected{background:var(--gold-soft);border-color:var(--gold);color:var(--ink)}
+.check-item strong{display:block;color:var(--ink);font-weight:600;font-size:13.5px}
+
+.pill-group{display:flex;flex-wrap:wrap;gap:8px}
+.pill{background:var(--paper);border:1.5px solid var(--line);padding:10px 16px;font-family:'JetBrains Mono',monospace;font-size:10.5px;color:var(--ink-3);letter-spacing:.12em;text-transform:uppercase;font-weight:600;cursor:pointer;border-radius:2px;transition:all .15s;display:inline-block}
+.pill input{display:none}
+.pill:hover{border-color:var(--gold);color:var(--ink)}
+.pill.selected{background:var(--ink);color:var(--gold);border-color:var(--ink)}
+
+.step-nav{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-top:28px;padding-top:24px;border-top:1px solid var(--line);flex-wrap:wrap}
+.btn{display:inline-flex;align-items:center;gap:10px;padding:13px 24px;border-radius:2px;font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;cursor:pointer;border:none;transition:all .15s}
+.btn:hover{transform:translateY(-1px)}
+.btn-primary{background:var(--ink);color:var(--gold);border:1px solid var(--gold)}
+.btn-primary:hover{background:var(--gold);color:var(--ink)}
+.btn-gold{background:var(--gold);color:var(--ink)}
+.btn-gold:hover{background:var(--primary-dark);color:var(--paper)}
+.btn-ghost{background:transparent;border:1px solid var(--line);color:var(--ink-3)}
+.btn-ghost:hover{background:var(--paper-2);border-color:var(--ink);color:var(--ink);transform:none}
+.btn:disabled{opacity:.35;cursor:not-allowed;transform:none}
+
+.step-indicator{font-family:'JetBrains Mono',monospace;font-size:10.5px;color:var(--text-mute);letter-spacing:.14em;text-transform:uppercase}
+.step-indicator b{color:var(--ink);font-weight:700}
+
+.review-block{background:var(--paper-2);border:1px solid var(--line);padding:22px 24px;margin-bottom:16px;border-radius:2px}
+.review-block .rb-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-wrap:wrap;gap:8px}
+.review-block h3{font-family:'Anton',sans-serif;font-size:16px;color:var(--ink);text-transform:uppercase;letter-spacing:-.005em}
+.rb-edit{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--gold);letter-spacing:.14em;text-transform:uppercase;font-weight:700;background:transparent;border:none;cursor:pointer;padding:4px}
+.rb-edit:hover{text-decoration:underline;text-underline-offset:3px}
+.review-line{display:grid;grid-template-columns:1fr;gap:4px;padding:8px 0;border-bottom:1px solid rgba(220,213,196,.6);font-size:13.5px}
+@media(min-width:520px){.review-line{grid-template-columns:180px 1fr}}
+.review-line:last-child{border-bottom:none}
+.review-line .rl-label{color:var(--text-mute);font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.1em;text-transform:uppercase;font-weight:600;padding-top:2px}
+.review-line .rl-value{color:var(--ink);line-height:1.5}
+.review-line .rl-value em{color:var(--text-mute);font-style:italic}
+
+.success{text-align:center;padding:60px 20px}
+.success-mark{font-family:'Anton',sans-serif;font-size:52px;color:var(--gold);letter-spacing:.05em;margin-bottom:16px}
+.success h2{font-family:'Anton',sans-serif;font-size:clamp(30px,4.5vw,48px);color:var(--ink);text-transform:uppercase;letter-spacing:-.005em;margin-bottom:14px;line-height:1}
+.success h2 .italic{font-family:'Fraunces',serif;font-style:italic;color:var(--gold);text-transform:lowercase}
+.success p{font-size:15.5px;color:var(--ink-3);line-height:1.6;margin-bottom:14px;max-width:600px;margin-left:auto;margin-right:auto}
+.next-steps{background:var(--ink);color:var(--paper);padding:28px 30px;text-align:left;max-width:600px;margin:24px auto 0;border-radius:2px;position:relative;overflow:hidden}
+.next-steps::before{content:'';position:absolute;inset:0;background-image:repeating-linear-gradient(90deg,transparent,transparent 40px,rgba(184,132,59,.04) 40px,rgba(184,132,59,.04) 41px);pointer-events:none}
+.next-steps h4{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--gold);letter-spacing:.18em;text-transform:uppercase;font-weight:600;margin-bottom:14px;position:relative;z-index:2}
+.next-steps ul{list-style:none;position:relative;z-index:2}
+.next-steps li{padding:9px 0;font-size:13.5px;color:rgba(245,241,232,.85);display:grid;grid-template-columns:auto 1fr;gap:12px;align-items:baseline;line-height:1.5;border-bottom:1px solid rgba(255,255,255,.08)}
+.next-steps li:last-child{border-bottom:none}
+.next-steps li::before{content:'→';color:var(--gold);font-family:'Anton',sans-serif;font-size:14px}
+.next-steps li b{color:var(--gold);font-weight:600}
+
+footer{background:var(--ink);color:var(--paper);padding:36px 0 24px}
+.foot-inner{display:flex;flex-direction:column;gap:16px;justify-content:space-between;align-items:center;text-align:center}
+@media(min-width:640px){.foot-inner{flex-direction:row;text-align:left}}
+.foot-brand{font-family:'Anton',sans-serif;font-size:13px;color:var(--paper);text-transform:uppercase;letter-spacing:.02em}
+.foot-brand span{color:var(--gold)}
+.foot-note{font-family:'JetBrains Mono',monospace;font-size:10px;color:rgba(245,241,232,.5);letter-spacing:.14em;text-transform:uppercase}
+</style>
+</head>
+<body>
+
+<div class="demo-ribbon">TOJ Campaign · Foundation Score · Authority</div>
+
+<nav class="top">
+  <div class="shell">
+    <a href="/" class="brand">
+      <span class="brand-mark">TOJ</span>
+      <span class="brand-name"><span class="b1">TOJ Campaign</span><span class="b2">Foundation Score · Authority</span></span>
+    </a>
+    <a href="/foundation-score.html" class="back-link">← Wrong vertical?</a>
+  </div>
+</nav>
+
+<main>
+
+<section class="intake-hero">
+  <div class="shell intake-hero-inner">
+    <div class="kicker-hero">Foundation Score · Authority</div>
+    <h1 class="hero-h1">Show us the <span class="italic">record.</span></h1>
+    <p class="hero-sub">Authority is a portfolio play. Youth athletes, youth programs, sport-adjacent creators — anyone whose next level requires evidence a decision-maker can trust. <b>Coaches don't act on hype.</b> Answer honestly. We'll score the record you've actually built.</p>
+    <div class="meta-row">
+      <span>Four steps</span>
+      <span>~12 minutes</span>
+      <span>Autosaves as you go</span>
+      <span>Written report in 72 business hours</span>
+    </div>
+  </div>
+</section>
+
+<section class="form-section">
+  <div class="shell">
+    <div class="form-card">
+      <div class="progress-bar" id="progressBar">
+        <div class="progress-dot active" data-goto="1"><span>01 · Record</span></div>
+        <div class="progress-dot" data-goto="2"><span>02 · Ambition</span></div>
+        <div class="progress-dot" data-goto="3"><span>03 · Platform</span></div>
+        <div class="progress-dot" data-goto="4"><span>04 · Review</span></div>
+      </div>
+      <div class="autosave-status" id="autosaveStatus">
+        <span class="as-dot"></span>
+        <span id="asText">Autosaved</span>
+      </div>
+
+      <!-- STEP 1 · RECORD -->
+      <div class="step active" data-step="1">
+        <div class="step-head">
+          <div class="step-num">Step 01 · Record · Who are you?</div>
+          <div class="step-title">Show us the <span class="italic">record.</span></div>
+          <p class="step-desc">The receipts — the athletes, the outcomes, the years, the methodology. This is the strongest evidence we score against Pillar 04 — Content &amp; Credibility.</p>
+        </div>
+
+        <div class="field-row">
+          <div class="field">
+            <label>Your name <span class="req">*</span></label>
+            <input type="text" placeholder="First and last" data-key="brand_name">
+          </div>
+          <div class="field">
+            <label>Program / athlete / brand name <span class="req">*</span></label>
+            <input type="text" placeholder="e.g. Sky's The Limit or [Athlete name]" data-key="business_name">
+          </div>
+        </div>
+
+        <div class="field">
+          <label>Which describes you? <span class="req">*</span></label>
+          <div class="check-grid" data-check="archetype">
+            <label class="check-item"><input type="checkbox" value="prospect"><strong>Individual athlete or family — recruiting-track</strong></label>
+            <label class="check-item"><input type="checkbox" value="nil"><strong>NIL earner or aspiring NIL athlete</strong></label>
+            <label class="check-item"><input type="checkbox" value="program"><strong>Youth program / league / academy director</strong></label>
+            <label class="check-item"><input type="checkbox" value="creator"><strong>Sport-adjacent creator (media, coaching content, film)</strong></label>
+            <label class="check-item"><input type="checkbox" value="trainer"><strong>Trainer / coach with a documented program</strong></label>
+          </div>
+        </div>
+
+        <div class="field">
+          <label>Sport(s) / position(s)</label>
+          <input type="text" placeholder="e.g. Football · WR/CB · or 'multi-sport'" data-key="sport_position">
+        </div>
+
+        <div class="field">
+          <label>The Portfolio · fill what applies <span class="req">*</span></label>
+          <div class="portfolio-grid">
+            <div class="portfolio-input"><input type="text" placeholder="0" data-key="p_years"><div class="pi-label"><b>Years</b>Running / competing</div></div>
+            <div class="portfolio-input"><input type="text" placeholder="0" data-key="p_athletes_total"><div class="pi-label"><b>Athletes</b>Served (lifetime)</div></div>
+            <div class="portfolio-input"><input type="text" placeholder="0" data-key="p_active"><div class="pi-label"><b>Active</b>Current roster</div></div>
+            <div class="portfolio-input"><input type="text" placeholder="0" data-key="p_hs_aa"><div class="pi-label"><b>HS</b>All-Americans</div></div>
+            <div class="portfolio-input"><input type="text" placeholder="0" data-key="p_college_aa"><div class="pi-label"><b>College</b>All-Americans</div></div>
+            <div class="portfolio-input"><input type="text" placeholder="0" data-key="p_d1"><div class="pi-label"><b>D1</b>Athletes signed</div></div>
+            <div class="portfolio-input"><input type="text" placeholder="0" data-key="p_pros"><div class="pi-label"><b>Pros</b>NFL/CFL/Pro leagues</div></div>
+            <div class="portfolio-input"><input type="text" placeholder="0" data-key="p_stars"><div class="pi-label"><b>4-5★</b>Recruits</div></div>
+            <div class="portfolio-input"><input type="text" placeholder="0" data-key="p_recognitions"><div class="pi-label"><b>Team</b>Recognitions / titles</div></div>
+          </div>
+          <div class="field-hint">Zero is fine on any field. Individual athletes — put your own numbers where they fit.</div>
+        </div>
+
+        <div class="field">
+          <label>Named athletes / programs / results you'd flex <span class="req">*</span></label>
+          <textarea placeholder="Individual athletes: your own timeline of achievements. Programs / trainers: 5-10 athletes with level (e.g. Marvin Mims Jr — NFL All-Pro, Denver Broncos). Creators: notable subjects or partnerships." data-key="named_athletes"></textarea>
+          <div class="field-hint">These become the case studies, the database, the roster.</div>
+        </div>
+
+        <div class="field">
+          <label>Background — playing, coaching, or creator <span class="req">*</span></label>
+          <textarea placeholder="Your journey. HS, college, pro if applicable. If you're a program director or creator — how you got here." data-key="playing_bg"></textarea>
+        </div>
+
+        <div class="field">
+          <label>Signature methodology · do you have one?</label>
+          <textarea placeholder="Named framework you use? e.g. 'Five-pillar Prospect Edge system' or 'Optimum Grading™' or 'The XYZ Method'. Individual athletes can skip." data-key="methodology"></textarea>
+          <div class="field-hint">Authority clients with a methodology score higher on Brand Identity. If yours doesn't have a name yet, we help you build one.</div>
+        </div>
+
+        <div class="field">
+          <label>Media, partnerships, notable recognition</label>
+          <textarea placeholder="Nike Opening invites, media features (ESPN, MaxPreps, 247, Rivals), corporate partnerships, coaching networks, formal certifications, camp invites, anything worth flexing." data-key="media"></textarea>
+        </div>
+
+        <div class="field-row">
+          <div class="field">
+            <label>Home base city / state <span class="req">*</span></label>
+            <input type="text" placeholder="e.g. Plano, TX" data-key="location">
+          </div>
+          <div class="field">
+            <label>Serving reach <span class="req">*</span></label>
+            <select data-key="reach">
+              <option value="">Choose one</option>
+              <option>Local / metro only</option>
+              <option>Regional (multiple cities in state)</option>
+              <option>National (US-wide)</option>
+              <option>International</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="field-row">
+          <div class="field">
+            <label>Instagram handle · followers <span class="req">*</span></label>
+            <input type="text" placeholder="@yourhandle · 10K" data-key="ig">
+          </div>
+          <div class="field">
+            <label>Existing website</label>
+            <input type="url" placeholder="https:// · or 'none'" data-key="website">
+          </div>
+        </div>
+
+        <div class="step-nav">
+          <span class="step-indicator">Step <b>1</b> of 4</span>
+          <button class="btn btn-primary" onclick="next()">Next · Your ambition →</button>
+        </div>
+      </div>
+
+      <!-- STEP 2 · AMBITION -->
+      <div class="step" data-step="2">
+        <div class="step-head">
+          <div class="step-num">Step 02 · Ambition · What are you building?</div>
+          <div class="step-title">Where does it <span class="italic">actually go?</span></div>
+          <p class="step-desc">Authority is engineered to compound. The bigger and clearer the ambition, the sharper the platform we can score against and build for.</p>
+        </div>
+
+        <div class="field-row">
+          <div class="field">
+            <label>Current annual revenue <span class="req">*</span></label>
+            <select data-key="current_revenue">
+              <option value="">Choose range</option>
+              <option>Pre-revenue / individual athlete</option>
+              <option>Under $100K</option>
+              <option>$100K – $250K</option>
+              <option>$250K – $500K</option>
+              <option>$500K – $1M</option>
+              <option>$1M – $2.5M</option>
+              <option>$2.5M+</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>Revenue / opportunity target 12 months <span class="req">*</span></label>
+            <select data-key="target_revenue">
+              <option value="">Choose range</option>
+              <option>Recruiting offers / commitments (individual athletes)</option>
+              <option>$100K – $250K</option>
+              <option>$250K – $500K</option>
+              <option>$500K – $1M</option>
+              <option>$1M – $2M</option>
+              <option>$2M – $5M</option>
+              <option>$5M+</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="field">
+          <label>Revenue streams to build / expand <span class="req">*</span></label>
+          <div class="check-grid" data-check="revenue_streams">
+            <label class="check-item"><input type="checkbox" value="private"><strong>Private 1-on-1 training</strong></label>
+            <label class="check-item"><input type="checkbox" value="cohort"><strong>Group cohorts / camps</strong></label>
+            <label class="check-item"><input type="checkbox" value="membership"><strong>Membership library (video lessons)</strong></label>
+            <label class="check-item"><input type="checkbox" value="evaluation"><strong>Evaluation transcripts</strong></label>
+            <label class="check-item"><input type="checkbox" value="apex"><strong>Apex / high-ticket advocacy tier</strong></label>
+            <label class="check-item"><input type="checkbox" value="licensing"><strong>Licensing methodology to other coaches</strong></label>
+            <label class="check-item"><input type="checkbox" value="community"><strong>Paid community / mentorship</strong></label>
+            <label class="check-item"><input type="checkbox" value="events"><strong>Events / clinics</strong></label>
+            <label class="check-item"><input type="checkbox" value="partnerships"><strong>Corporate / brand partnerships</strong></label>
+            <label class="check-item"><input type="checkbox" value="pipeline"><strong>Recruiting pipeline (CFR-style)</strong></label>
+            <label class="check-item"><input type="checkbox" value="nil"><strong>NIL deals / brand endorsements</strong></label>
+            <label class="check-item"><input type="checkbox" value="media"><strong>Media rights / content licensing</strong></label>
+          </div>
+        </div>
+
+        <div class="field">
+          <label>The big vision · Year 3 <span class="req">*</span></label>
+          <textarea placeholder="What does this look like in three years if it goes right? Roster size, revenue, geography, team, media, industry status — describe the outcome, not the tactics." data-key="year_3_vision"></textarea>
+          <div class="field-hint">The clearer your vision, the sharper we can score against it.</div>
+        </div>
+
+        <div class="field-row">
+          <div class="field">
+            <label>Community-building interest <span class="req">*</span></label>
+            <select data-key="community_interest">
+              <option value="">Choose one</option>
+              <option>Yes — private athlete/parent/coach community is core</option>
+              <option>Yes — but light-touch, not a big lift</option>
+              <option>Neutral</option>
+              <option>Not for me — training/record-only focus</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>Licensing / Blueprint interest <span class="req">*</span></label>
+            <select data-key="licensing_interest">
+              <option value="">Choose one</option>
+              <option>Yes — I want to license my methodology</option>
+              <option>Maybe eventually — build the foundation now</option>
+              <option>No — I'm the only one delivering my methodology</option>
+              <option>Not applicable (individual athlete)</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="field-row">
+          <div class="field">
+            <label>Recruiting-pipeline interest <span class="req">*</span></label>
+            <select data-key="pipeline_interest">
+              <option value="">Choose one</option>
+              <option>Yes — formal partnership with a recruiting service</option>
+              <option>Yes — build my own recruiting pipeline / database</option>
+              <option>Include recruiting help without formal pipeline</option>
+              <option>No — training / performance only</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>Timeline to launch platform <span class="req">*</span></label>
+            <select data-key="timeline">
+              <option value="">Choose one</option>
+              <option>ASAP (within 4 weeks)</option>
+              <option>1–2 months</option>
+              <option>2–4 months</option>
+              <option>Season-driven (matching recruiting cycle)</option>
+              <option>Longer-term (4-6 months)</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="field">
+          <label>What are you willing to be known for?</label>
+          <textarea placeholder="Optional but powerful — the one thing in your world you want your name associated with. The methodology flex. The athlete flex. The advocacy flex. What's yours going to be?" data-key="known_for"></textarea>
+        </div>
+
+        <div class="step-nav">
+          <button class="btn btn-ghost" onclick="prev()">← Back</button>
+          <span class="step-indicator">Step <b>2</b> of 4</span>
+          <button class="btn btn-primary" onclick="next()">Next · Platform needs →</button>
+        </div>
+      </div>
+
+      <!-- STEP 3 · PLATFORM -->
+      <div class="step" data-step="3">
+        <div class="step-head">
+          <div class="step-num">Step 03 · Platform · What do you need?</div>
+          <div class="step-title">The systems you <span class="italic">actually need.</span></div>
+          <p class="step-desc">Which infrastructure layers matter most, what you already have, and which pillars we should weight heaviest in the Score.</p>
+        </div>
+
+        <div class="field">
+          <label>Platform modules you want <span class="req">*</span></label>
+          <div class="check-grid" data-check="modules">
+            <label class="check-item"><input type="checkbox" value="cinema_site"><strong>Cinematic marketing site</strong></label>
+            <label class="check-item"><input type="checkbox" value="tier_ladder"><strong>Tier ladder (Basic / Core / Premium)</strong></label>
+            <label class="check-item"><input type="checkbox" value="database"><strong>Athlete database + grading</strong></label>
+            <label class="check-item"><input type="checkbox" value="filmroom"><strong>Free film room preview</strong></label>
+            <label class="check-item"><input type="checkbox" value="membership"><strong>Multi-tier membership</strong></label>
+            <label class="check-item"><input type="checkbox" value="lesson_library"><strong>Lesson library + video hosting</strong></label>
+            <label class="check-item"><input type="checkbox" value="cohort"><strong>Cohort / group coaching platform</strong></label>
+            <label class="check-item"><input type="checkbox" value="transcript"><strong>Evaluation transcript system</strong></label>
+            <label class="check-item"><input type="checkbox" value="advocacy"><strong>Advocacy log / relationships CRM</strong></label>
+            <label class="check-item"><input type="checkbox" value="community"><strong>Community forum</strong></label>
+            <label class="check-item"><input type="checkbox" value="coach_admin"><strong>Coach admin CMS</strong></label>
+            <label class="check-item"><input type="checkbox" value="blueprint"><strong>Methodology licensing surface</strong></label>
+            <label class="check-item"><input type="checkbox" value="events"><strong>Events / clinics landing</strong></label>
+            <label class="check-item"><input type="checkbox" value="pipeline"><strong>Recruiting pipeline integration</strong></label>
+          </div>
+        </div>
+
+        <div class="field">
+          <label>Which pillars need the most work? <span class="req">*</span></label>
+          <div class="check-grid" data-check="pillars">
+            <label class="check-item"><input type="checkbox" value="brand_identity"><strong>Brand Identity — the record's positioning</strong></label>
+            <label class="check-item"><input type="checkbox" value="operational_health"><strong>Operational Health — intake, evaluation, delivery</strong></label>
+            <label class="check-item"><input type="checkbox" value="revenue_architecture"><strong>Revenue Architecture — tier ladder &amp; recovery</strong></label>
+            <label class="check-item"><input type="checkbox" value="content_credibility"><strong>Content &amp; Credibility — the transcript, media, proof</strong></label>
+            <label class="check-item"><input type="checkbox" value="growth_readiness"><strong>Growth Readiness — team, capacity, licensing</strong></label>
+          </div>
+          <div class="field-hint">Pick 1–3. Authority clients almost always weight Content &amp; Credibility highest.</div>
+        </div>
+
+        <div class="field-row triple">
+          <div class="field">
+            <label>Athlete photos</label>
+            <select data-key="ready_photos">
+              <option value="">Choose</option>
+              <option>Deep library</option>
+              <option>Some coverage</option>
+              <option>Almost none</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>Video / film</label>
+            <select data-key="ready_video">
+              <option value="">Choose</option>
+              <option>Ready to import — full library</option>
+              <option>Some clips to start</option>
+              <option>Need to film everything</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>Testimonials</label>
+            <select data-key="ready_testimonials">
+              <option value="">Choose</option>
+              <option>Multiple with photos</option>
+              <option>Written only</option>
+              <option>None yet</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="field">
+          <label>Team you already have</label>
+          <div class="check-grid" data-check="team">
+            <label class="check-item"><input type="checkbox" value="videographer"><span>Videographer on staff/retainer</span></label>
+            <label class="check-item"><input type="checkbox" value="photographer"><span>Photographer</span></label>
+            <label class="check-item"><input type="checkbox" value="editor"><span>Video editor</span></label>
+            <label class="check-item"><input type="checkbox" value="assistant"><span>Assistant / operations manager</span></label>
+            <label class="check-item"><input type="checkbox" value="marketing"><span>Marketing / social media help</span></label>
+            <label class="check-item"><input type="checkbox" value="ads"><span>Ads / paid media specialist</span></label>
+            <label class="check-item"><input type="checkbox" value="dev"><span>Web dev / tech help</span></label>
+            <label class="check-item"><input type="checkbox" value="solo"><span>Solo operator — no team yet</span></label>
+          </div>
+        </div>
+
+        <div class="field-row">
+          <div class="field">
+            <label>If it becomes a Core engagement, ballpark budget</label>
+            <select data-key="core_budget">
+              <option value="">Choose range</option>
+              <option>$10K – $25K</option>
+              <option>$25K – $50K</option>
+              <option>$50K – $100K</option>
+              <option>$100K+</option>
+              <option>Need pricing recommendation</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>Ongoing monthly ops budget</label>
+            <select data-key="ops_budget">
+              <option value="">Choose range</option>
+              <option>Under $500/mo</option>
+              <option>$500 – $2K/mo</option>
+              <option>$2K – $5K/mo</option>
+              <option>$5K – $10K/mo</option>
+              <option>$10K+/mo</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="field">
+          <label>Custom features / partnerships to consider</label>
+          <textarea placeholder="e.g. CollegeFootballRecruiting.com partnership, 4D/spatial intelligence positioning, custom evaluation, specific integrations (Hudl, MaxPreps, 247), NIL platform, agent/rep network..." data-key="custom_features"></textarea>
+        </div>
+
+        <div class="step-nav">
+          <button class="btn btn-ghost" onclick="prev()">← Back</button>
+          <span class="step-indicator">Step <b>3</b> of 4</span>
+          <button class="btn btn-primary" onclick="next()">Next · Review →</button>
+        </div>
+      </div>
+
+      <!-- STEP 4 · REVIEW -->
+      <div class="step" data-step="4">
+        <div class="step-head">
+          <div class="step-num">Step 04 · Review &amp; submit</div>
+          <div class="step-title">Ready for us <span class="italic">to look at this?</span></div>
+          <p class="step-desc">Kyron reads every Authority intake personally. Written report returned within 72 business hours.</p>
+        </div>
+
+        <div id="reviewOutput"></div>
+
+        <h3 style="font-family:'Anton',sans-serif;font-size:20px;color:var(--ink);text-transform:uppercase;letter-spacing:-.005em;margin:24px 0 14px">Contact info</h3>
+
+        <div class="field-row">
+          <div class="field"><label>Best email <span class="req">*</span></label><input type="email" placeholder="you@example.com" data-key="contact_email" required></div>
+          <div class="field"><label>Best phone <span class="req">*</span></label><input type="tel" placeholder="(xxx) xxx-xxxx" data-key="contact_phone" required></div>
+        </div>
+
+        <div class="field">
+          <label>Preferred first contact <span class="req">*</span></label>
+          <div class="pill-group">
+            <label class="pill"><input type="radio" name="contact_method" value="email"><span>Email me first</span></label>
+            <label class="pill"><input type="radio" name="contact_method" value="text"><span>Text me</span></label>
+            <label class="pill"><input type="radio" name="contact_method" value="call"><span>Call me</span></label>
+            <label class="pill"><input type="radio" name="contact_method" value="video"><span>Book a video call</span></label>
+          </div>
+        </div>
+
+        <div class="field">
+          <label>Anything else Kyron should know?</label>
+          <textarea placeholder="Optional — deals in flight, partnerships being courted, deadlines that shape timeline, anything sensitive we should hold in confidence, or the direct question you want answered on the first call." data-key="notes"></textarea>
+        </div>
+
+        <div class="step-nav">
+          <button class="btn btn-ghost" onclick="prev()">← Back</button>
+          <span class="step-indicator">Step <b>4</b> of 4</span>
+          <button class="btn btn-gold" onclick="submitIntake()">Submit intake →</button>
+        </div>
+      </div>
+
+      <!-- SUCCESS -->
+      <div class="step" data-step="success">
+        <div class="success">
+          <div class="success-mark">RECEIVED</div>
+          <h2>Got it. <span class="italic">now we go to work.</span></h2>
+          <p>Your Foundation Score intake is in. Kyron reads every response personally. You'll get your written Operational Transcript within 72 business hours — scored across the five pillars, with a Core recommendation referencing your two lowest scores by name.</p>
+          <div class="next-steps">
+            <h4>What happens next</h4>
+            <ul>
+              <li><b>Within 15 min:</b> Confirmation email lands with your expected delivery date</li>
+              <li><b>Within 24 business hours:</b> Kyron reads your intake end-to-end; flags any missing input</li>
+              <li><b>Within 72 business hours:</b> Written Operational Transcript delivered with embedded 15-min consult booking</li>
+              <li><b>If we're not a fit:</b> Direct answer with a referral to someone who is</li>
+            </ul>
+          </div>
+          <div style="margin-top:32px"><button class="btn btn-ghost" onclick="restartIntake()">← Submit another intake</button></div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+</main>
+
+<footer>
+  <div class="shell">
+    <div class="foot-inner">
+      <div class="foot-brand">TOJ Campaign · <span>Foundation Score</span></div>
+      <div class="foot-note">Authority Vertical · © 2026</div>
+    </div>
+  </div>
+</footer>
+
+<script>
+const STORAGE_KEY='toj-fs-authority';
+let currentStep=1;
+let data=JSON.parse(sessionStorage.getItem(STORAGE_KEY)||'{}');
+
+function saveData(){document.getElementById('asText').textContent='Saving…';document.getElementById('autosaveStatus').classList.add('saving');sessionStorage.setItem(STORAGE_KEY,JSON.stringify(data));setTimeout(()=>{document.getElementById('asText').textContent='Autosaved · '+new Date().toLocaleTimeString([],{hour:'numeric',minute:'2-digit'});document.getElementById('autosaveStatus').classList.remove('saving');},300);}
+function loadData(){
+  document.querySelectorAll('[data-key]').forEach(el=>{if(data[el.dataset.key])el.value=data[el.dataset.key];});
+  document.querySelectorAll('[data-check]').forEach(group=>{
+    const values=data[group.dataset.check]||[];
+    group.querySelectorAll('input[type=checkbox]').forEach(cb=>{if(values.includes(cb.value)){cb.checked=true;cb.closest('.check-item').classList.add('selected');}});
+  });
+  document.querySelectorAll('[name=contact_method]').forEach(radio=>{if(data.contact_method===radio.value){radio.checked=true;radio.closest('.pill').classList.add('selected');}});
+}
+document.addEventListener('input',e=>{if(e.target.dataset.key){data[e.target.dataset.key]=e.target.value;saveData();}});
+document.addEventListener('change',e=>{
+  const el=e.target;
+  if(el.type==='checkbox'){const group=el.closest('[data-check]');if(group){data[group.dataset.check]=Array.from(group.querySelectorAll('input:checked')).map(x=>x.value);el.closest('.check-item').classList.toggle('selected',el.checked);saveData();}}
+  if(el.name==='contact_method'){data.contact_method=el.value;document.querySelectorAll('[name=contact_method]').forEach(r=>r.closest('.pill').classList.toggle('selected',r.checked));saveData();}
+});
+function showStep(n){document.querySelectorAll('.step').forEach(s=>s.classList.remove('active'));const step=document.querySelector(`.step[data-step="${n}"]`);if(step)step.classList.add('active');document.querySelectorAll('.progress-dot').forEach((d,i)=>{d.classList.remove('active','done');if(i+1===n)d.classList.add('active');else if(i+1<n)d.classList.add('done');});currentStep=n;window.scrollTo({top:document.querySelector('.form-card').offsetTop-80,behavior:'smooth'});if(n===4)renderReview();}
+function next(){if(currentStep<4)showStep(currentStep+1);}
+function prev(){if(currentStep>1)showStep(currentStep-1);}
+document.querySelectorAll('.progress-dot').forEach(dot=>{dot.addEventListener('click',()=>{const t=parseInt(dot.dataset.goto);if(t)showStep(t);});});
+function renderReview(){
+  const labels={
+    brand_name:'Name',business_name:'Program/brand',archetype:'Archetype',sport_position:'Sport/position',
+    p_years:'Years',p_athletes_total:'Athletes total',p_active:'Active',p_hs_aa:'HS All-Am',p_college_aa:'College All-Am',p_d1:'D1 signed',p_pros:'Pros',p_stars:'4-5★ recruits',p_recognitions:'Team titles',
+    named_athletes:'Named / results',playing_bg:'Background',methodology:'Methodology',media:'Media/partners',
+    location:'Location',reach:'Reach',ig:'Instagram',website:'Website',
+    current_revenue:'Current rev',target_revenue:'Target rev',revenue_streams:'Revenue streams',year_3_vision:'Year 3 vision',community_interest:'Community',licensing_interest:'Licensing',pipeline_interest:'Pipeline',timeline:'Timeline',known_for:'Known for',
+    modules:'Modules',pillars:'Weight these pillars',ready_photos:'Photos',ready_video:'Video',ready_testimonials:'Testimonials',team:'Team',core_budget:'Core budget',ops_budget:'Ops budget',custom_features:'Custom features'
+  };
+  const groups={
+    'Step 01 · Record':['brand_name','business_name','archetype','sport_position','p_years','p_athletes_total','p_active','p_hs_aa','p_college_aa','p_d1','p_pros','p_stars','p_recognitions','named_athletes','playing_bg','methodology','media','location','reach','ig','website'],
+    'Step 02 · Ambition':['current_revenue','target_revenue','revenue_streams','year_3_vision','community_interest','licensing_interest','pipeline_interest','timeline','known_for'],
+    'Step 03 · Platform':['modules','pillars','ready_photos','ready_video','ready_testimonials','team','core_budget','ops_budget','custom_features']
+  };
+  const step={'Step 01 · Record':1,'Step 02 · Ambition':2,'Step 03 · Platform':3};
+  const html=Object.entries(groups).map(([title,keys])=>{
+    const rows=keys.map(k=>{const v=data[k];const val=Array.isArray(v)?v.join(', '):v;return `<div class="review-line"><span class="rl-label">${labels[k]||k}</span><span class="rl-value">${val?val:'<em>—</em>'}</span></div>`;}).join('');
+    return `<div class="review-block"><div class="rb-head"><h3>${title}</h3><button class="rb-edit" onclick="showStep(${step[title]})">Edit</button></div>${rows}</div>`;
+  }).join('');
+  document.getElementById('reviewOutput').innerHTML=html;
+}
+function submitIntake(){if(!data.contact_email||!data.contact_phone){alert('Please add your email and phone before submitting.');return;}showStep('success');document.getElementById('autosaveStatus').style.display='none';document.querySelector('.progress-bar').style.display='none';console.log('FOUNDATION SCORE INTAKE · AUTHORITY:',data);}
+function restartIntake(){if(confirm('Clear this intake and start fresh?')){sessionStorage.removeItem(STORAGE_KEY);data={};document.querySelectorAll('input,select,textarea').forEach(el=>{if(el.type==='checkbox'||el.type==='radio')el.checked=false;else el.value='';});document.querySelectorAll('.check-item,.pill').forEach(el=>el.classList.remove('selected'));document.querySelector('.progress-bar').style.display='flex';document.getElementById('autosaveStatus').style.display='flex';showStep(1);}}
+loadData();
+if(Object.keys(data).length>0)document.getElementById('asText').textContent='Loaded saved answers';
+</script>
+</body>
+</html>

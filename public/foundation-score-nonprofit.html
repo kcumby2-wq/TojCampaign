@@ -1,0 +1,657 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Foundation Score — Nonprofit · TOJ Campaign</title>
+<meta name="description" content="Four steps · roughly 10 minutes · autosaves as you go. Written report returned within 72 business hours.">
+<meta name="theme-color" content="#F5F1E8">
+<meta name="robots" content="noindex">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Anton&family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;1,9..144,400&family=Manrope:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect fill='%232F5D4E' width='100' height='100' rx='10'/%3E%3Ctext x='50' y='68' font-family='Impact,Arial Black,sans-serif' font-size='38' font-weight='900' fill='%23F5F1E8' text-anchor='middle' letter-spacing='-1'%3ETOJ%3C/text%3E%3C/svg%3E">
+<style>
+:root{
+  --paper:#F5F1E8;--paper-2:#EDE7D8;--card:#FFFFFF;
+  --ink:#1A1613;--ink-2:#2A241E;--ink-3:#3B3530;
+  --line:#DCD5C4;--line-2:#C8BEA8;
+  --text-dim:#5A5148;--text-mute:#8A8570;
+  --pine:#2F5D4E;--pine-soft:rgba(47,93,78,.08);
+  --gold:#B8843B;--gold-soft:rgba(184,132,59,.10);
+  --clay:#A85F26;
+  --accent:var(--pine);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth}
+body{background:var(--paper);color:var(--ink);font-family:'Manrope',-apple-system,sans-serif;font-size:15.5px;line-height:1.6;-webkit-font-smoothing:antialiased;min-height:100vh}
+a{color:inherit;text-decoration:none}
+button{font-family:inherit;cursor:pointer}
+.shell{max-width:900px;margin:0 auto;padding:0 24px}
+@media(min-width:900px){.shell{padding:0 40px}}
+body::before{content:'';position:fixed;inset:0;background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2'/%3E%3CfeColorMatrix values='0 0 0 0 0.1 0 0 0 0 0.1 0 0 0 0 0.15 0 0 0 0.03 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");pointer-events:none;z-index:1;opacity:.4}
+main,nav,section,footer{position:relative;z-index:2}
+
+.demo-ribbon{position:fixed;top:0;left:0;right:0;z-index:100;background:var(--ink);color:var(--accent);font-family:'JetBrains Mono',monospace;font-size:10px;font-weight:600;letter-spacing:.18em;text-transform:uppercase;text-align:center;padding:6px}
+
+nav.top{position:sticky;top:26px;z-index:50;background:rgba(245,241,232,.92);backdrop-filter:blur(10px);border-bottom:1px solid var(--line)}
+nav.top .shell{display:flex;align-items:center;justify-content:space-between;height:64px;max-width:1200px}
+.brand{display:flex;align-items:center;gap:12px}
+.brand-mark{width:38px;height:38px;background:var(--ink);color:var(--paper);border-radius:2px;display:flex;align-items:center;justify-content:center;font-family:'Anton',sans-serif;font-size:12px;letter-spacing:.02em}
+.brand-name .b1{font-family:'Anton',sans-serif;font-size:15px;text-transform:uppercase;color:var(--ink);letter-spacing:.02em}
+.brand-name .b2{font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--text-mute);letter-spacing:.14em;text-transform:uppercase;margin-top:2px}
+.back-link{font-family:'JetBrains Mono',monospace;font-size:10.5px;color:var(--ink-3);letter-spacing:.14em;text-transform:uppercase;font-weight:600}
+.back-link:hover{color:var(--accent)}
+
+.intake-hero{padding:56px 0 32px;background:var(--paper);border-bottom:1px solid var(--line)}
+.kicker{font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:500;letter-spacing:.24em;text-transform:uppercase;color:var(--accent);margin-bottom:16px;display:flex;align-items:center;gap:14px}
+.kicker::before{content:'';width:24px;height:1px;background:var(--accent)}
+h1{font-family:'Anton',sans-serif;font-weight:400;font-size:clamp(38px,6vw,64px);line-height:.98;letter-spacing:-.005em;text-transform:uppercase;color:var(--ink);margin-bottom:14px}
+h1 .italic{font-family:'Fraunces',serif;font-style:italic;color:var(--accent);text-transform:lowercase;font-weight:400}
+.hero-sub{font-family:'Fraunces',serif;font-style:italic;font-size:clamp(16px,2vw,20px);color:var(--ink-3);line-height:1.5;max-width:640px;margin-bottom:20px}
+.meta-row{display:flex;flex-wrap:wrap;gap:20px;font-family:'JetBrains Mono',monospace;font-size:10.5px;color:var(--text-mute);letter-spacing:.14em;text-transform:uppercase;font-weight:600}
+.meta-row span{display:flex;align-items:center;gap:6px}
+.meta-row span::before{content:'●';color:var(--accent)}
+
+.form-section{padding:44px 0 96px;background:var(--paper)}
+.form-card{background:var(--card);border:1px solid var(--line);border-radius:2px;padding:36px 32px;position:relative}
+.form-card::before{content:'';position:absolute;top:0;left:32px;right:32px;height:3px;background:var(--accent)}
+@media(min-width:640px){.form-card{padding:44px 40px}}
+
+.progress-bar{display:flex;gap:6px;margin-bottom:32px}
+.progress-dot{flex:1;height:4px;background:var(--line);position:relative;cursor:pointer;transition:background .3s;border-radius:2px}
+.progress-dot.active{background:var(--accent)}
+.progress-dot.done{background:var(--gold)}
+.progress-dot span{position:absolute;bottom:-22px;left:0;font-family:'JetBrains Mono',monospace;font-size:9.5px;color:var(--text-mute);letter-spacing:.14em;text-transform:uppercase;white-space:nowrap;font-weight:600}
+.progress-dot.active span{color:var(--accent)}
+.progress-dot.done span{color:var(--gold)}
+@media(max-width:640px){.progress-dot span{display:none}}
+
+.autosave-status{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--text-mute);letter-spacing:.1em;text-transform:uppercase;margin-bottom:20px;display:flex;align-items:center;gap:8px;padding-top:24px}
+.autosave-status .as-dot{width:8px;height:8px;border-radius:50%;background:var(--accent);animation:aspulse 2s ease-in-out infinite}
+@keyframes aspulse{0%,100%{opacity:1}50%{opacity:.4}}
+.autosave-status.saving .as-dot{background:var(--gold);animation-duration:.6s}
+
+.step{display:none}
+.step.active{display:block;animation:stepIn .35s cubic-bezier(.16,1,.3,1)}
+@keyframes stepIn{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
+.step-head{margin-bottom:24px}
+.step-num{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--accent);letter-spacing:.24em;text-transform:uppercase;font-weight:700;margin-bottom:8px}
+.step-title{font-family:'Anton',sans-serif;font-size:clamp(28px,3.5vw,40px);line-height:.98;letter-spacing:-.005em;text-transform:uppercase;color:var(--ink);margin-bottom:10px}
+.step-title .italic{font-family:'Fraunces',serif;font-style:italic;color:var(--accent);text-transform:lowercase}
+.step-desc{font-family:'Fraunces',serif;font-style:italic;font-size:15.5px;color:var(--ink-3);line-height:1.5;max-width:640px}
+
+.field{margin-bottom:20px}
+.field label{display:block;font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--ink-3);letter-spacing:.14em;text-transform:uppercase;margin-bottom:8px;font-weight:600}
+.field label .req{color:var(--accent)}
+.field input,.field select,.field textarea{width:100%;background:var(--paper);border:1px solid var(--line);color:var(--ink);font-family:inherit;font-size:14.5px;padding:12px 14px;transition:border-color .12s;border-radius:2px}
+.field input:focus,.field select:focus,.field textarea:focus{outline:none;border-color:var(--accent)}
+.field textarea{min-height:100px;resize:vertical;line-height:1.5}
+.field-hint{font-size:12px;color:var(--text-mute);margin-top:5px;line-height:1.4;font-style:italic}
+.field-row{display:grid;grid-template-columns:1fr;gap:14px}
+@media(min-width:520px){.field-row{grid-template-columns:1fr 1fr}}
+.field-row.triple{grid-template-columns:1fr}
+@media(min-width:640px){.field-row.triple{grid-template-columns:1fr 1fr 1fr}}
+
+.check-grid{display:grid;grid-template-columns:1fr;gap:8px}
+@media(min-width:520px){.check-grid{grid-template-columns:1fr 1fr}}
+.check-item{display:flex;align-items:flex-start;gap:10px;padding:11px 14px;background:var(--paper);border:1.5px solid var(--line);border-radius:2px;cursor:pointer;transition:all .15s;font-size:13.5px;color:var(--ink-3);line-height:1.4}
+.check-item:hover{border-color:var(--line-2)}
+.check-item input{margin-top:2px;accent-color:var(--accent);flex-shrink:0}
+.check-item.selected{background:var(--pine-soft);border-color:var(--accent);color:var(--ink)}
+.check-item strong{display:block;color:var(--ink);font-weight:600;font-size:13.5px}
+
+.pill-group{display:flex;flex-wrap:wrap;gap:8px}
+.pill{background:var(--paper);border:1.5px solid var(--line);padding:10px 16px;font-family:'JetBrains Mono',monospace;font-size:10.5px;color:var(--ink-3);letter-spacing:.12em;text-transform:uppercase;font-weight:600;cursor:pointer;border-radius:2px;transition:all .15s;display:inline-block}
+.pill input{display:none}
+.pill:hover{border-color:var(--accent);color:var(--ink)}
+.pill.selected{background:var(--ink);color:var(--paper);border-color:var(--ink)}
+
+.step-nav{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-top:28px;padding-top:24px;border-top:1px solid var(--line);flex-wrap:wrap}
+.btn{display:inline-flex;align-items:center;gap:10px;padding:13px 24px;border-radius:2px;font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;cursor:pointer;border:none;transition:all .15s}
+.btn:hover{transform:translateY(-1px)}
+.btn-primary{background:var(--ink);color:var(--paper)}
+.btn-primary:hover{background:var(--accent)}
+.btn-accent{background:var(--accent);color:var(--paper)}
+.btn-accent:hover{background:#254a3e}
+.btn-ghost{background:transparent;border:1px solid var(--line);color:var(--ink-3)}
+.btn-ghost:hover{background:var(--paper-2);border-color:var(--ink);color:var(--ink);transform:none}
+.btn:disabled{opacity:.35;cursor:not-allowed;transform:none}
+
+.step-indicator{font-family:'JetBrains Mono',monospace;font-size:10.5px;color:var(--text-mute);letter-spacing:.14em;text-transform:uppercase}
+.step-indicator b{color:var(--ink);font-weight:700}
+
+.review-block{background:var(--paper-2);border:1px solid var(--line);padding:22px 24px;margin-bottom:16px;border-radius:2px}
+.review-block .rb-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-wrap:wrap;gap:8px}
+.review-block h3{font-family:'Anton',sans-serif;font-size:16px;color:var(--ink);text-transform:uppercase;letter-spacing:-.005em}
+.rb-edit{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--accent);letter-spacing:.14em;text-transform:uppercase;font-weight:600;background:transparent;border:none;cursor:pointer;padding:4px}
+.rb-edit:hover{text-decoration:underline;text-underline-offset:3px}
+.review-line{display:grid;grid-template-columns:1fr;gap:4px;padding:8px 0;border-bottom:1px solid rgba(220,213,196,.6);font-size:13.5px}
+@media(min-width:520px){.review-line{grid-template-columns:180px 1fr}}
+.review-line:last-child{border-bottom:none}
+.review-line .rl-label{color:var(--text-mute);font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.1em;text-transform:uppercase;font-weight:600;padding-top:2px}
+.review-line .rl-value{color:var(--ink);line-height:1.5}
+.review-line .rl-value em{color:var(--text-mute);font-style:italic}
+
+.success{text-align:center;padding:60px 20px}
+.success-mark{font-family:'Anton',sans-serif;font-size:48px;color:var(--accent);letter-spacing:.05em;margin-bottom:16px}
+.success h2{font-family:'Anton',sans-serif;font-size:clamp(28px,4vw,44px);color:var(--ink);text-transform:uppercase;letter-spacing:-.005em;margin-bottom:14px;line-height:1}
+.success h2 .italic{font-family:'Fraunces',serif;font-style:italic;color:var(--accent);text-transform:lowercase}
+.success p{font-size:15px;color:var(--ink-3);line-height:1.6;margin-bottom:14px;max-width:560px;margin-left:auto;margin-right:auto}
+.next-steps{background:var(--paper-2);border:1px solid var(--line);padding:24px 26px;text-align:left;max-width:560px;margin:24px auto 0;border-radius:2px}
+.next-steps h4{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--accent);letter-spacing:.18em;text-transform:uppercase;font-weight:600;margin-bottom:12px}
+.next-steps ul{list-style:none}
+.next-steps li{padding:8px 0;font-size:13.5px;color:var(--ink-3);display:grid;grid-template-columns:auto 1fr;gap:12px;align-items:baseline;line-height:1.5;border-bottom:1px solid var(--line)}
+.next-steps li:last-child{border-bottom:none}
+.next-steps li::before{content:'→';color:var(--accent);font-family:'Anton',sans-serif;font-size:14px}
+.next-steps li b{color:var(--ink);font-weight:600}
+
+footer{background:var(--ink);color:var(--paper);padding:36px 0 24px}
+.foot-inner{display:flex;flex-direction:column;gap:16px;justify-content:space-between;align-items:center;text-align:center}
+@media(min-width:640px){.foot-inner{flex-direction:row;text-align:left}}
+.foot-brand{font-family:'Anton',sans-serif;font-size:13px;color:var(--paper);text-transform:uppercase;letter-spacing:.02em}
+.foot-brand span{color:var(--accent)}
+.foot-note{font-family:'JetBrains Mono',monospace;font-size:10px;color:rgba(245,241,232,.5);letter-spacing:.14em;text-transform:uppercase}
+</style>
+</head>
+<body>
+
+<div class="demo-ribbon">TOJ Campaign · Foundation Score · Nonprofit</div>
+
+<nav class="top">
+  <div class="shell">
+    <a href="/" class="brand">
+      <span class="brand-mark">TOJ</span>
+      <span class="brand-name"><span class="b1">TOJ Campaign</span><span class="b2">Foundation Score · Nonprofit</span></span>
+    </a>
+    <a href="/foundation-score.html" class="back-link">← Wrong vertical?</a>
+  </div>
+</nav>
+
+<main>
+
+<section class="intake-hero">
+  <div class="shell">
+    <div class="kicker">Foundation Score · Nonprofit</div>
+    <h1>Tell us about <span class="italic">the mission.</span></h1>
+    <p class="hero-sub">Three questions before we score: <b style="color:var(--ink);font-weight:600">Who are you?</b> <b style="color:var(--ink);font-weight:600">What are you building?</b> <b style="color:var(--ink);font-weight:600">What do you need first?</b> TOJ Campaign invoices 501(c)(3)s as a commercial vendor — no donor-dollar language, no tax-deductibility claims.</p>
+    <div class="meta-row">
+      <span>Four steps</span>
+      <span>~10 minutes</span>
+      <span>Autosaves as you go</span>
+      <span>Written report in 72 business hours</span>
+    </div>
+  </div>
+</section>
+
+<section class="form-section">
+  <div class="shell">
+    <div class="form-card">
+      <div class="progress-bar" id="progressBar">
+        <div class="progress-dot active" data-goto="1"><span>01 · Org</span></div>
+        <div class="progress-dot" data-goto="2"><span>02 · Programs</span></div>
+        <div class="progress-dot" data-goto="3"><span>03 · Needs</span></div>
+        <div class="progress-dot" data-goto="4"><span>04 · Review</span></div>
+      </div>
+      <div class="autosave-status" id="autosaveStatus">
+        <span class="as-dot"></span>
+        <span id="asText">Autosaved</span>
+      </div>
+
+      <!-- STEP 1 · ORG -->
+      <div class="step active" data-step="1">
+        <div class="step-head">
+          <div class="step-num">Step 01 · Org</div>
+          <div class="step-title">Who <span class="italic">is the organization?</span></div>
+          <p class="step-desc">The basics of your 501(c)(3) — mission, size, governance, reach. Everything here feeds Pillar 01 — Brand Identity, scored for nonprofits as "mission clarity."</p>
+        </div>
+
+        <div class="field-row">
+          <div class="field">
+            <label>Your name <span class="req">*</span></label>
+            <input type="text" placeholder="First and last" data-key="brand_name">
+          </div>
+          <div class="field">
+            <label>Your role <span class="req">*</span></label>
+            <select data-key="role">
+              <option value="">Choose one</option>
+              <option>Executive Director / CEO</option>
+              <option>Program Director</option>
+              <option>Development Director</option>
+              <option>Operations / COO</option>
+              <option>Board Chair / Member</option>
+              <option>Founder</option>
+              <option>Other</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="field-row">
+          <div class="field">
+            <label>Organization name <span class="req">*</span></label>
+            <input type="text" placeholder="Legal name" data-key="business_name">
+          </div>
+          <div class="field">
+            <label>EIN (optional)</label>
+            <input type="text" placeholder="xx-xxxxxxx" data-key="ein">
+          </div>
+        </div>
+
+        <div class="field">
+          <label>What the org does <span class="req">*</span></label>
+          <div class="check-grid" data-check="what_you_do">
+            <label class="check-item"><input type="checkbox" value="youth"><span>Youth programming / mentorship</span></label>
+            <label class="check-item"><input type="checkbox" value="sports"><span>Sports organization / league</span></label>
+            <label class="check-item"><input type="checkbox" value="community_events"><span>Community events</span></label>
+            <label class="check-item"><input type="checkbox" value="religious"><span>Religious / faith services</span></label>
+            <label class="check-item"><input type="checkbox" value="education"><span>Education / tutoring</span></label>
+            <label class="check-item"><input type="checkbox" value="health"><span>Health / mental health</span></label>
+            <label class="check-item"><input type="checkbox" value="arts"><span>Arts / culture</span></label>
+            <label class="check-item"><input type="checkbox" value="fiscal_sponsor"><span>Fiscal sponsor / management</span></label>
+            <label class="check-item"><input type="checkbox" value="advocacy"><span>Advocacy / policy</span></label>
+            <label class="check-item"><input type="checkbox" value="other"><span>Other mission focus</span></label>
+          </div>
+        </div>
+
+        <div class="field-row">
+          <div class="field">
+            <label>Year founded <span class="req">*</span></label>
+            <input type="text" placeholder="e.g. 2018" data-key="year_founded">
+          </div>
+          <div class="field">
+            <label>Staff FTE <span class="req">*</span></label>
+            <select data-key="staff_fte">
+              <option value="">Choose one</option>
+              <option>0 — volunteer-run</option>
+              <option>1–2 FTE</option>
+              <option>3–5 FTE</option>
+              <option>6–10 FTE</option>
+              <option>11–25 FTE</option>
+              <option>25+ FTE</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="field-row">
+          <div class="field">
+            <label>Board size <span class="req">*</span></label>
+            <select data-key="board_size">
+              <option value="">Choose one</option>
+              <option>1–4 members</option>
+              <option>5–8 members</option>
+              <option>9–14 members</option>
+              <option>15+ members</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>Serving reach <span class="req">*</span></label>
+            <select data-key="reach">
+              <option value="">Choose one</option>
+              <option>Single city / neighborhood</option>
+              <option>Multi-city / county</option>
+              <option>Statewide</option>
+              <option>Multi-state / regional</option>
+              <option>National</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="field-row">
+          <div class="field">
+            <label>Home city <span class="req">*</span></label>
+            <input type="text" placeholder="e.g. Fort Worth" data-key="city">
+          </div>
+          <div class="field">
+            <label>State <span class="req">*</span></label>
+            <input type="text" placeholder="e.g. TX" data-key="state">
+          </div>
+        </div>
+
+        <div class="field">
+          <label>Current website (if any)</label>
+          <input type="url" placeholder="https:// · or 'none'" data-key="website">
+        </div>
+
+        <div class="field">
+          <label>Mission statement — one paragraph <span class="req">*</span></label>
+          <textarea placeholder="In your own words. If the current statement feels stiff, write it the way you'd explain it to a friend." data-key="mission_statement"></textarea>
+          <div class="field-hint">This is where mission clarity gets scored. Rewrite if you need to.</div>
+        </div>
+
+        <div class="step-nav">
+          <span class="step-indicator">Step <b>1</b> of 4</span>
+          <button class="btn btn-primary" onclick="next()">Next · Programs &amp; funding →</button>
+        </div>
+      </div>
+
+      <!-- STEP 2 · PROGRAMS -->
+      <div class="step" data-step="2">
+        <div class="step-head">
+          <div class="step-num">Step 02 · Programs</div>
+          <div class="step-title">What are you <span class="italic">actually running?</span></div>
+          <p class="step-desc">Programs, participants, funding mix, and where you want the organization in 12 months. Feeds Pillar 02 (Operational Health) and Pillar 03 (Revenue Architecture — "funding architecture" for nonprofits).</p>
+        </div>
+
+        <div class="field-row">
+          <div class="field">
+            <label>Annual budget <span class="req">*</span></label>
+            <select data-key="annual_budget">
+              <option value="">Choose range</option>
+              <option>Under $50K</option>
+              <option>$50K – $150K</option>
+              <option>$150K – $500K</option>
+              <option>$500K – $1.5M</option>
+              <option>$1.5M – $5M</option>
+              <option>$5M+</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>Number of active programs <span class="req">*</span></label>
+            <select data-key="num_programs">
+              <option value="">Choose one</option>
+              <option>1 program</option>
+              <option>2–3 programs</option>
+              <option>4–6 programs</option>
+              <option>7+ programs</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="field-row">
+          <div class="field">
+            <label>Program participants served annually <span class="req">*</span></label>
+            <select data-key="participants">
+              <option value="">Choose one</option>
+              <option>Under 100</option>
+              <option>100 – 500</option>
+              <option>500 – 2,000</option>
+              <option>2,000 – 10,000</option>
+              <option>10,000+</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>Timeline for the engagement <span class="req">*</span></label>
+            <select data-key="timeline">
+              <option value="">Choose one</option>
+              <option>ASAP (within 2 weeks)</option>
+              <option>2–4 weeks</option>
+              <option>1–3 months</option>
+              <option>3–6 months</option>
+              <option>Grant cycle-driven</option>
+              <option>Longer-term planning</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="field">
+          <label>Funding mix <span class="req">*</span></label>
+          <div class="check-grid" data-check="funding_mix">
+            <label class="check-item"><input type="checkbox" value="individual"><span>Individual donors</span></label>
+            <label class="check-item"><input type="checkbox" value="foundation"><span>Foundation grants</span></label>
+            <label class="check-item"><input type="checkbox" value="government"><span>Government grants / contracts</span></label>
+            <label class="check-item"><input type="checkbox" value="fee_for_service"><span>Fee-for-service / earned revenue</span></label>
+            <label class="check-item"><input type="checkbox" value="events"><span>Special events / galas</span></label>
+            <label class="check-item"><input type="checkbox" value="corporate"><span>Corporate sponsors</span></label>
+            <label class="check-item"><input type="checkbox" value="fiscal_sponsor"><span>Fiscal sponsor arrangement</span></label>
+            <label class="check-item"><input type="checkbox" value="reserves"><span>Reserves / endowment draw</span></label>
+          </div>
+        </div>
+
+        <div class="field-row">
+          <div class="field">
+            <label>Biggest 12-month goal <span class="req">*</span></label>
+            <select data-key="biggest_goal">
+              <option value="">Choose one</option>
+              <option>Stabilize operations — build the foundation</option>
+              <option>Scale one flagship program</option>
+              <option>Launch a new program</option>
+              <option>Hire ED / key staff role</option>
+              <option>Grow operating reserves</option>
+              <option>Land first / next foundation grant</option>
+              <option>Board expansion or restructure</option>
+              <option>Prepare for capital campaign</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>Board expectations for next 12 months</label>
+            <select data-key="board_expectations">
+              <option value="">Choose one</option>
+              <option>Growth — scale programs / budget</option>
+              <option>Sustainability — stabilize what exists</option>
+              <option>Turnaround — fix specific issues</option>
+              <option>Merger / partnership exploration</option>
+              <option>Not clear yet</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="field">
+          <label>What does success in 12 months look like? <span class="req">*</span></label>
+          <textarea placeholder="Be concrete. Program outcomes, staff hired, dollars raised, board decisions made, participants served — what would you point at and say 'this worked'?" data-key="success_vision"></textarea>
+        </div>
+
+        <div class="field">
+          <label>Biggest operational bottleneck right now</label>
+          <textarea placeholder="Optional but useful. Grant reporting, program intake, volunteer coordination, board reporting, staff turnover, financial visibility — the honest answer." data-key="blockers"></textarea>
+        </div>
+
+        <div class="step-nav">
+          <button class="btn btn-ghost" onclick="prev()">← Back</button>
+          <span class="step-indicator">Step <b>2</b> of 4</span>
+          <button class="btn btn-primary" onclick="next()">Next · What you need →</button>
+        </div>
+      </div>
+
+      <!-- STEP 3 · NEEDS -->
+      <div class="step" data-step="3">
+        <div class="step-head">
+          <div class="step-num">Step 03 · Needs</div>
+          <div class="step-title">What do you <span class="italic">need from us?</span></div>
+          <p class="step-desc">The systems and evidence you already have, and which of the five pillars you want us to weight heaviest in the report.</p>
+        </div>
+
+        <div class="field">
+          <label>What you already have in place <span class="req">*</span></label>
+          <div class="check-grid" data-check="have">
+            <label class="check-item"><input type="checkbox" value="donor_crm"><span>Donor CRM / database</span></label>
+            <label class="check-item"><input type="checkbox" value="program_registration"><span>Program registration system</span></label>
+            <label class="check-item"><input type="checkbox" value="financial_reporting"><span>Regular financial reporting rhythm</span></label>
+            <label class="check-item"><input type="checkbox" value="staff_handbook"><span>Staff handbook</span></label>
+            <label class="check-item"><input type="checkbox" value="program_manuals"><span>Written program manuals</span></label>
+            <label class="check-item"><input type="checkbox" value="sops"><span>Written SOPs for core ops</span></label>
+            <label class="check-item"><input type="checkbox" value="annual_report"><span>Published annual report</span></label>
+            <label class="check-item"><input type="checkbox" value="case_for_support"><span>Case-for-support / pitch doc</span></label>
+            <label class="check-item"><input type="checkbox" value="theory_of_change"><span>Theory of change / logic model</span></label>
+            <label class="check-item"><input type="checkbox" value="outcomes_tracking"><span>Outcomes tracking system</span></label>
+          </div>
+        </div>
+
+        <div class="field">
+          <label>Which pillars need the most work? <span class="req">*</span></label>
+          <div class="check-grid" data-check="pillars">
+            <label class="check-item"><input type="checkbox" value="brand_identity"><strong>Brand Identity — mission clarity &amp; positioning</strong></label>
+            <label class="check-item"><input type="checkbox" value="operational_health"><strong>Operational Health — program delivery &amp; reporting</strong></label>
+            <label class="check-item"><input type="checkbox" value="revenue_architecture"><strong>Funding Architecture — donor pipeline &amp; earned rev</strong></label>
+            <label class="check-item"><input type="checkbox" value="content_credibility"><strong>Content &amp; Credibility — proof, outcomes, funder trust</strong></label>
+            <label class="check-item"><input type="checkbox" value="growth_readiness"><strong>Growth Readiness — staff, board, capacity to scale</strong></label>
+          </div>
+          <div class="field-hint">Pick 1–3. If you check all five, we score all five — but tell us where to weight.</div>
+        </div>
+
+        <div class="field-row triple">
+          <div class="field">
+            <label>Donor data readiness</label>
+            <select data-key="donor_data">
+              <option value="">Choose</option>
+              <option>Clean CRM · segmented</option>
+              <option>Some data · needs cleaning</option>
+              <option>Almost none captured</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>Program outcomes readiness</label>
+            <select data-key="outcomes_readiness">
+              <option value="">Choose</option>
+              <option>Systematically tracked</option>
+              <option>Anecdotal / partial</option>
+              <option>Not yet measured</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>Financial reporting readiness</label>
+            <select data-key="financial_reporting">
+              <option value="">Choose</option>
+              <option>Monthly financials, board-ready</option>
+              <option>Quarterly / lagging</option>
+              <option>Bookkeeping only</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="field">
+          <label>If it becomes a Core engagement, ballpark budget</label>
+          <select data-key="core_budget">
+            <option value="">Choose range</option>
+            <option>Under $10K</option>
+            <option>$10K – $20K</option>
+            <option>$20K – $40K</option>
+            <option>$40K+</option>
+            <option>Need pricing recommendation</option>
+          </select>
+          <div class="field-hint">Delivered by proposal. This just tells us what fit you're expecting.</div>
+        </div>
+
+        <div class="field">
+          <label>Governance / compliance notes we should know</label>
+          <textarea placeholder="Optional. Grant restrictions, board-approval requirements, fiscal-year alignment needs, upcoming audit, capital campaign in flight, anything that shapes timing or scope." data-key="governance_notes"></textarea>
+        </div>
+
+        <div class="step-nav">
+          <button class="btn btn-ghost" onclick="prev()">← Back</button>
+          <span class="step-indicator">Step <b>3</b> of 4</span>
+          <button class="btn btn-primary" onclick="next()">Next · Review →</button>
+        </div>
+      </div>
+
+      <!-- STEP 4 · REVIEW -->
+      <div class="step" data-step="4">
+        <div class="step-head">
+          <div class="step-num">Step 04 · Review &amp; submit</div>
+          <div class="step-title">One last look. <span class="italic">then we take it from here.</span></div>
+          <p class="step-desc">Kyron reads every intake personally. Written report returned within 72 business hours.</p>
+        </div>
+
+        <div id="reviewOutput"></div>
+
+        <h3 style="font-family:'Anton',sans-serif;font-size:20px;color:var(--ink);text-transform:uppercase;letter-spacing:-.005em;margin:24px 0 14px">Contact info</h3>
+
+        <div class="field-row">
+          <div class="field"><label>Best email <span class="req">*</span></label><input type="email" placeholder="you@org.org" data-key="contact_email" required></div>
+          <div class="field"><label>Best phone <span class="req">*</span></label><input type="tel" placeholder="(xxx) xxx-xxxx" data-key="contact_phone" required></div>
+        </div>
+
+        <div class="field">
+          <label>Preferred first contact <span class="req">*</span></label>
+          <div class="pill-group">
+            <label class="pill"><input type="radio" name="contact_method" value="email"><span>Email me first</span></label>
+            <label class="pill"><input type="radio" name="contact_method" value="text"><span>Text me</span></label>
+            <label class="pill"><input type="radio" name="contact_method" value="call"><span>Call me</span></label>
+            <label class="pill"><input type="radio" name="contact_method" value="video"><span>Book a video call</span></label>
+          </div>
+        </div>
+
+        <div class="field">
+          <label>Anything else we should know?</label>
+          <textarea placeholder="Optional — anything that didn't fit above. Board dynamics, sensitive issues, funder relationships in play, the direct question you want answered on the first call." data-key="notes"></textarea>
+        </div>
+
+        <div class="step-nav">
+          <button class="btn btn-ghost" onclick="prev()">← Back</button>
+          <span class="step-indicator">Step <b>4</b> of 4</span>
+          <button class="btn btn-accent" onclick="submitIntake()">Submit intake →</button>
+        </div>
+      </div>
+
+      <!-- SUCCESS -->
+      <div class="step" data-step="success">
+        <div class="success">
+          <div class="success-mark">RECEIVED</div>
+          <h2>Got it. <span class="italic">now we go to work.</span></h2>
+          <p>Your Foundation Score intake is in. Kyron reads every response personally. You'll get your written Operational Transcript within 72 business hours — scored across the five pillars, with a Core recommendation referencing your two lowest scores by name.</p>
+          <div class="next-steps">
+            <h4>What happens next</h4>
+            <ul>
+              <li><b>Within 15 min:</b> Confirmation email lands with your expected delivery date</li>
+              <li><b>Within 24 business hours:</b> Kyron reads your intake end-to-end; flags any missing input</li>
+              <li><b>Within 72 business hours:</b> Written Operational Transcript delivered with embedded 15-min consult booking</li>
+              <li><b>If we're not a fit:</b> We say so — and route you to someone who is</li>
+            </ul>
+          </div>
+          <div style="margin-top:32px"><button class="btn btn-ghost" onclick="restartIntake()">← Submit another intake</button></div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+</main>
+
+<footer>
+  <div class="shell">
+    <div class="foot-inner">
+      <div class="foot-brand">TOJ Campaign · <span>Foundation Score</span></div>
+      <div class="foot-note">Nonprofit Vertical · © 2026</div>
+    </div>
+  </div>
+</footer>
+
+<script>
+const STORAGE_KEY='toj-fs-nonprofit';
+let currentStep=1;
+let data=JSON.parse(sessionStorage.getItem(STORAGE_KEY)||'{}');
+
+function saveData(){document.getElementById('asText').textContent='Saving…';document.getElementById('autosaveStatus').classList.add('saving');sessionStorage.setItem(STORAGE_KEY,JSON.stringify(data));setTimeout(()=>{document.getElementById('asText').textContent='Autosaved · '+new Date().toLocaleTimeString([],{hour:'numeric',minute:'2-digit'});document.getElementById('autosaveStatus').classList.remove('saving');},300);}
+function loadData(){
+  document.querySelectorAll('[data-key]').forEach(el=>{if(data[el.dataset.key])el.value=data[el.dataset.key];});
+  document.querySelectorAll('[data-check]').forEach(group=>{
+    const values=data[group.dataset.check]||[];
+    group.querySelectorAll('input[type=checkbox]').forEach(cb=>{if(values.includes(cb.value)){cb.checked=true;cb.closest('.check-item').classList.add('selected');}});
+  });
+  document.querySelectorAll('[name=contact_method]').forEach(radio=>{if(data.contact_method===radio.value){radio.checked=true;radio.closest('.pill').classList.add('selected');}});
+}
+document.addEventListener('input',e=>{if(e.target.dataset.key){data[e.target.dataset.key]=e.target.value;saveData();}});
+document.addEventListener('change',e=>{
+  const el=e.target;
+  if(el.type==='checkbox'){const group=el.closest('[data-check]');if(group){data[group.dataset.check]=Array.from(group.querySelectorAll('input:checked')).map(x=>x.value);el.closest('.check-item').classList.toggle('selected',el.checked);saveData();}}
+  if(el.name==='contact_method'){data.contact_method=el.value;document.querySelectorAll('[name=contact_method]').forEach(r=>r.closest('.pill').classList.toggle('selected',r.checked));saveData();}
+});
+function showStep(n){document.querySelectorAll('.step').forEach(s=>s.classList.remove('active'));const step=document.querySelector(`.step[data-step="${n}"]`);if(step)step.classList.add('active');document.querySelectorAll('.progress-dot').forEach((d,i)=>{d.classList.remove('active','done');if(i+1===n)d.classList.add('active');else if(i+1<n)d.classList.add('done');});currentStep=n;window.scrollTo({top:document.querySelector('.form-card').offsetTop-80,behavior:'smooth'});if(n===4)renderReview();}
+function next(){if(currentStep<4)showStep(currentStep+1);}
+function prev(){if(currentStep>1)showStep(currentStep-1);}
+document.querySelectorAll('.progress-dot').forEach(dot=>{dot.addEventListener('click',()=>{const t=parseInt(dot.dataset.goto);if(t)showStep(t);});});
+function renderReview(){
+  const labels={
+    brand_name:'Name',role:'Role',business_name:'Organization',ein:'EIN',what_you_do:'What org does',year_founded:'Founded',staff_fte:'Staff FTE',board_size:'Board size',reach:'Reach',city:'City',state:'State',website:'Website',mission_statement:'Mission',
+    annual_budget:'Annual budget',num_programs:'# programs',participants:'Participants/yr',timeline:'Timeline',funding_mix:'Funding mix',biggest_goal:'Biggest goal',board_expectations:'Board expectations',success_vision:'Success vision',blockers:'Bottleneck',
+    have:'Already in place',pillars:'Weight these pillars',donor_data:'Donor data',outcomes_readiness:'Outcomes',financial_reporting:'Financials',core_budget:'Core budget',governance_notes:'Governance'
+  };
+  const groups={
+    'Step 01 · Org':['brand_name','role','business_name','ein','what_you_do','year_founded','staff_fte','board_size','reach','city','state','website','mission_statement'],
+    'Step 02 · Programs':['annual_budget','num_programs','participants','timeline','funding_mix','biggest_goal','board_expectations','success_vision','blockers'],
+    'Step 03 · Needs':['have','pillars','donor_data','outcomes_readiness','financial_reporting','core_budget','governance_notes']
+  };
+  const step={'Step 01 · Org':1,'Step 02 · Programs':2,'Step 03 · Needs':3};
+  const html=Object.entries(groups).map(([title,keys])=>{
+    const rows=keys.map(k=>{const v=data[k];const val=Array.isArray(v)?v.join(', '):v;return `<div class="review-line"><span class="rl-label">${labels[k]||k}</span><span class="rl-value">${val?val:'<em>—</em>'}</span></div>`;}).join('');
+    return `<div class="review-block"><div class="rb-head"><h3>${title}</h3><button class="rb-edit" onclick="showStep(${step[title]})">Edit</button></div>${rows}</div>`;
+  }).join('');
+  document.getElementById('reviewOutput').innerHTML=html;
+}
+function submitIntake(){if(!data.contact_email||!data.contact_phone){alert('Please add your email and phone before submitting.');return;}showStep('success');document.getElementById('autosaveStatus').style.display='none';document.querySelector('.progress-bar').style.display='none';console.log('FOUNDATION SCORE INTAKE · NONPROFIT:',data);}
+function restartIntake(){if(confirm('Clear this intake and start fresh?')){sessionStorage.removeItem(STORAGE_KEY);data={};document.querySelectorAll('input,select,textarea').forEach(el=>{if(el.type==='checkbox'||el.type==='radio')el.checked=false;else el.value='';});document.querySelectorAll('.check-item,.pill').forEach(el=>el.classList.remove('selected'));document.querySelector('.progress-bar').style.display='flex';document.getElementById('autosaveStatus').style.display='flex';showStep(1);}}
+loadData();
+if(Object.keys(data).length>0)document.getElementById('asText').textContent='Loaded saved answers';
+</script>
+</body>
+</html>
