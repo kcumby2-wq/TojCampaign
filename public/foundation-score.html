@@ -6,6 +6,14 @@
 <title>Foundation Score — TOJ Campaign</title>
 <meta name="description" content="Pick the vertical that fits. The intake takes 8–12 minutes. Written Operational Transcript returned within 72 business hours.">
 <meta name="theme-color" content="#F5F1E8">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="TOJ Campaign">
+<meta property="og:url" content="https://tojcampaign.com/foundation-score.html">
+<meta property="og:title" content="Foundation Score — Pick the vertical that fits.">
+<meta property="og:description" content="Personal Brand · Nonprofit · Authority — one standard, one written Operational Transcript inside 72 business hours.">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="Foundation Score — Pick your vertical.">
+<meta name="twitter:description" content="Three doors, one standard. Written Operational Transcript in 72 business hours.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Anton&family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;1,9..144,400&family=Manrope:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
@@ -32,7 +40,7 @@ nav.top{position:sticky;top:0;z-index:50;background:rgba(245,241,232,.92);backdr
 nav.top .shell{display:flex;align-items:center;justify-content:space-between;height:64px}
 .brand{display:flex;align-items:center;gap:12px}
 .brand-mark{width:38px;height:38px;background:var(--ink);color:var(--paper);border-radius:2px;display:flex;align-items:center;justify-content:center;font-family:'Anton',sans-serif;font-size:12px;letter-spacing:.02em}
-.brand-name .b1{font-family:'Anton',sans-serif;font-size:15px;text-transform:uppercase;color:var(--ink);letter-spacing:.02em}
+.brand-name .b1{font-family:'Fraunces','Georgia',serif;font-weight:600;font-size:16px;color:var(--ink);letter-spacing:-0.01em}
 .brand-name .b2{font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--text-mute);letter-spacing:.14em;text-transform:uppercase;margin-top:2px}
 .back-link{font-family:'JetBrains Mono',monospace;font-size:10.5px;color:var(--ink-3);letter-spacing:.14em;text-transform:uppercase;font-weight:600}
 .back-link:hover{color:var(--score)}
@@ -179,6 +187,30 @@ footer{background:var(--ink);color:var(--paper);padding:36px 0 24px;margin-top:4
     </div>
   </div>
 </footer>
+
+<script>
+  (function(){
+    var params = new URLSearchParams(location.search);
+    var v = (params.get('v') || '').toLowerCase().trim();
+    var map = {
+      'personal':'/foundation-score-personal-brand.html',
+      'personal-brand':'/foundation-score-personal-brand.html',
+      'personalbrand':'/foundation-score-personal-brand.html',
+      'pb':'/foundation-score-personal-brand.html',
+      'nonprofit':'/foundation-score-nonprofit.html',
+      'np':'/foundation-score-nonprofit.html',
+      '501c3':'/foundation-score-nonprofit.html',
+      'authority':'/foundation-score-authority.html',
+      'auth':'/foundation-score-authority.html',
+      'athlete':'/foundation-score-authority.html'
+    };
+    if (map[v]) {
+      params.delete('v');
+      var qs = params.toString();
+      location.replace(map[v] + (qs ? ('?' + qs) : ''));
+    }
+  })();
+</script>
 
 </body>
 </html>

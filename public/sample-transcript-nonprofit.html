@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Sample Operational Transcript — Nonprofit · TOJ Campaign</title>
+  <meta name="description" content="A redacted sample TOJ Operational Transcript for a 501(c)(3). Real structure, composite subject. Graded on the same five pillars every TOJ client receives." />
+  <meta property="og:type" content="website" />
+  <meta property="og:site_name" content="TOJ Campaign" />
+  <meta property="og:url" content="https://tojcampaign.com/sample-transcript-nonprofit.html" />
+  <meta property="og:title" content="Sample Operational Transcript — Nonprofit" />
+  <meta property="og:description" content="Composite 501(c)(3) sample. Same structure every TOJ client receives." />
+  <meta name="twitter:card" content="summary" />
+  <meta name="twitter:title" content="Sample Transcript — Nonprofit" />
+  <link rel="icon" href='data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect width="100" height="100" rx="20" fill="%232F5D4E"/><text x="50" y="66" font-family="Georgia" font-size="52" font-weight="600" fill="%23F5F1EA" text-anchor="middle">T</text></svg>' />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; }
+    body { font-family: 'Inter', -apple-system, sans-serif; background: #F5F1EA; color: #1A1613; line-height: 1.6; -webkit-font-smoothing: antialiased; }
+    :root {
+      --parchment: #F5F1EA; --parchment-2: #EBE4D6; --ink: #1A1613;
+      --ink-soft: #3B3530; --ink-mute: #6E655C;
+      --rule: rgba(26,22,19,0.12);
+      --accent: #2F5D4E; --accent-2: #B8843B;
+    }
+    h1, h2, h3, h4 { font-family: 'Fraunces', 'Georgia', serif; font-weight: 600; letter-spacing: -0.015em; color: var(--ink); }
+    a { color: var(--accent); }
+    .doc-wrap { max-width: 900px; margin: 0 auto; padding: clamp(2rem, 5vw, 4rem) clamp(1.25rem, 3vw, 2.5rem); background: #fff; box-shadow: 0 40px 80px -50px rgba(26,22,19,0.25); min-height: 100vh; position: relative; border-left: 6px solid var(--accent); }
+    .doc-header { display: flex; justify-content: space-between; align-items: flex-start; padding-bottom: 1.5rem; border-bottom: 2px solid var(--ink); margin-bottom: 2rem; gap: 1rem; flex-wrap: wrap; }
+    .doc-brand { font-family: 'Fraunces', serif; font-size: 1.25rem; color: var(--ink); }
+    .doc-brand span { color: var(--ink-mute); font-weight: 400; }
+    .doc-meta { text-align: right; font-family: 'Inter', monospace; font-size: 0.72rem; color: var(--ink-mute); }
+    .doc-meta div { margin-bottom: 0.15rem; letter-spacing: 0.04em; }
+    .doc-title h1 { font-size: clamp(2rem, 4vw, 2.75rem); line-height: 1.05; margin-bottom: 0.5rem; }
+    .doc-title h1 em { font-style: italic; font-weight: 500; color: var(--accent); }
+    .doc-subject { font-family: 'Inter', sans-serif; font-size: 0.9rem; color: var(--ink-mute); margin-bottom: 2.5rem; padding-bottom: 1rem; border-bottom: 1px solid var(--rule); }
+    .disclaimer { background: rgba(47,93,78,0.08); border-left: 3px solid var(--accent); padding: 0.85rem 1.15rem; margin-bottom: 2.5rem; font-size: 0.82rem; color: var(--ink-soft); border-radius: 4px; }
+    .disclaimer strong { color: var(--ink); }
+    .section-num { display: inline-block; font-family: 'Fraunces', serif; font-size: 0.85rem; color: var(--accent); letter-spacing: 0.06em; margin-bottom: 0.5rem; font-weight: 500; }
+    section.tr-section { margin-bottom: 2.75rem; padding-bottom: 2rem; border-bottom: 1px solid var(--rule); }
+    section.tr-section:last-of-type { border-bottom: 0; }
+    section.tr-section h2 { font-size: 1.6rem; margin-bottom: 1.25rem; }
+    section.tr-section p { color: var(--ink-soft); margin-bottom: 1rem; font-size: 0.95rem; }
+    section.tr-section p:last-child { margin-bottom: 0; }
+    .exec-summary { background: var(--parchment-2); padding: 1.5rem 1.35rem; border-radius: 8px; margin-bottom: 1.25rem; }
+    .exec-summary p { color: var(--ink); font-family: 'Fraunces', serif; font-size: 1.05rem; line-height: 1.5; }
+    .radar-wrap { display: grid; grid-template-columns: 1fr 1fr; gap: 2rem; align-items: center; margin: 1.5rem 0; }
+    @media (max-width: 720px) { .radar-wrap { grid-template-columns: 1fr; } }
+    .radar-svg { width: 100%; max-width: 340px; margin: 0 auto; }
+    .radar-legend { display: flex; flex-direction: column; gap: 0.6rem; }
+    .radar-legend .row { display: grid; grid-template-columns: 1fr auto auto; gap: 0.75rem; align-items: center; padding: 0.5rem 0.75rem; background: var(--parchment-2); border-radius: 6px; font-size: 0.85rem; }
+    .radar-legend .row .name { font-weight: 600; color: var(--ink); }
+    .radar-legend .row .score { font-family: 'Inter', monospace; color: var(--accent); font-weight: 600; }
+    .radar-legend .row .grade { font-family: 'Fraunces', serif; font-weight: 700; }
+    .radar-legend .row .grade.a { color: var(--accent); }
+    .radar-legend .row .grade.b { color: var(--accent-2); }
+    .radar-legend .row .grade.c { color: #A85F26; }
+    .tr-table { width: 100%; border-collapse: collapse; margin: 1rem 0; font-size: 0.86rem; }
+    .tr-table th { text-align: left; background: var(--parchment-2); padding: 0.7rem 0.9rem; font-family: 'Inter', sans-serif; font-size: 0.72rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink); font-weight: 700; border-bottom: 1px solid var(--rule); }
+    .tr-table td { padding: 0.85rem 0.9rem; color: var(--ink-soft); border-bottom: 1px solid var(--rule); }
+    .tr-table td:first-child { font-weight: 600; color: var(--ink); }
+    .tr-table .pill { display: inline-block; padding: 0.15rem 0.55rem; border-radius: 4px; font-size: 0.7rem; font-weight: 700; letter-spacing: 0.06em; }
+    .tr-table .pill.good { background: rgba(47,93,78,0.15); color: var(--accent); }
+    .tr-table .pill.warn { background: rgba(184,132,59,0.18); color: #A46F26; }
+    .tr-table .pill.crit { background: rgba(168,95,38,0.18); color: #A85F26; }
+    .action-list { list-style: none; }
+    .action-list li { display: grid; grid-template-columns: 2.5rem 1fr auto; gap: 1rem; padding: 1rem 0; border-bottom: 1px solid var(--rule); align-items: center; }
+    .action-list li:last-child { border-bottom: 0; }
+    .action-list .rank { font-family: 'Fraunces', serif; font-size: 1.75rem; font-weight: 600; color: var(--accent); line-height: 1; }
+    .action-list .action-body { display: flex; flex-direction: column; gap: 0.2rem; }
+    .action-list .action-body strong { color: var(--ink); font-size: 0.95rem; }
+    .action-list .action-body span { font-size: 0.8rem; color: var(--ink-mute); }
+    .action-list .owner { font-family: 'Inter', monospace; font-size: 0.72rem; padding: 0.3rem 0.55rem; background: var(--parchment-2); border-radius: 4px; color: var(--ink-soft); letter-spacing: 0.04em; white-space: nowrap; }
+    .doc-footer { margin-top: 3rem; padding-top: 1.5rem; border-top: 2px solid var(--ink); display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem; font-size: 0.78rem; color: var(--ink-mute); }
+    .doc-footer a { color: var(--accent); text-decoration: none; font-weight: 500; }
+    .back-bar { position: sticky; top: 0; z-index: 10; background: rgba(245,241,234,0.94); backdrop-filter: blur(10px); padding: 0.85rem clamp(1.25rem, 3vw, 2.5rem); border-bottom: 1px solid var(--rule); display: flex; justify-content: space-between; align-items: center; max-width: 900px; margin: 0 auto; }
+    .back-bar a { color: var(--ink-soft); text-decoration: none; font-size: 0.85rem; font-weight: 500; display: inline-flex; align-items: center; gap: 0.4rem; }
+    .back-bar a:hover { color: var(--ink); }
+    .back-bar .sample-tag { font-family: 'Inter', monospace; font-size: 0.7rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--accent); font-weight: 700; padding: 0.25rem 0.55rem; background: rgba(47,93,78,0.12); border-radius: 4px; }
+  </style>
+</head>
+<body>
+
+  <div class="back-bar">
+    <a href="/"><span>&larr;</span> TOJ Campaign</a>
+    <span class="sample-tag">Sample &middot; Nonprofit &middot; Composite</span>
+  </div>
+
+  <article class="doc-wrap">
+
+    <header class="doc-header">
+      <div class="doc-brand">TOJ <span>Operational Transcript&trade;</span></div>
+      <div class="doc-meta">
+        <div>Report ID: OT-NP-0407</div>
+        <div>Issued: 2026-07-01</div>
+        <div>Quarter: Q3 2026</div>
+      </div>
+    </header>
+
+    <div class="doc-title">
+      <h1>Standing of the <em>organization</em></h1>
+      <div class="doc-subject">
+        <strong style="color:var(--ink);font-weight:600;">Riverbend Youth Foundation</strong> &middot; 501(c)(3) &middot; After-school &amp; summer programming &middot; ED + 2 FTE + 8 seasonal staff &middot; 5-member board
+      </div>
+    </div>
+
+    <div class="disclaimer">
+      <strong>This is a public sample.</strong> The subject is a composite drawn from anonymized
+      501(c)(3) intake data. Real transcripts include the client&rsquo;s actual numbers, program
+      names, and board priorities. TOJ Campaign engages nonprofits as a paid commercial vendor;
+      this document does not reflect donor advisory or fundraising counsel.
+    </div>
+
+    <section class="tr-section">
+      <div class="section-num">01 &middot; Executive summary</div>
+      <h2>The one-paragraph read.</h2>
+      <div class="exec-summary">
+        <p>
+          Riverbend has a program that works and a story that lands &mdash; brand identity and
+          program delivery both grade strong. The gap is on the funding architecture: the org
+          is over-reliant on one legacy foundation grant (44% of Q2 revenue) and the reporting
+          rhythm that would earn a second-year renewal from newer funders isn&rsquo;t built.
+          Diversifying the funding base and installing quarterly impact reporting are the two
+          moves that de-risk everything else.
+        </p>
+      </div>
+    </section>
+
+    <section class="tr-section">
+      <div class="section-num">02 &middot; Five-pillar radar</div>
+      <h2>Where the organization grades against the standard.</h2>
+      <div class="radar-wrap">
+        <svg class="radar-svg" viewBox="-160 -160 320 320">
+          <polygon points="0,-120 114,-37 70,97 -70,97 -114,-37" fill="none" stroke="rgba(26,22,19,0.15)"/>
+          <polygon points="0,-90 86,-28 53,73 -53,73 -86,-28" fill="none" stroke="rgba(26,22,19,0.15)"/>
+          <polygon points="0,-60 57,-19 35,49 -35,49 -57,-19" fill="none" stroke="rgba(26,22,19,0.15)"/>
+          <polygon points="0,-30 28,-9 18,24 -18,24 -28,-9" fill="none" stroke="rgba(26,22,19,0.15)"/>
+          <line x1="0" y1="0" x2="0" y2="-120" stroke="rgba(26,22,19,0.2)"/>
+          <line x1="0" y1="0" x2="114" y2="-37" stroke="rgba(26,22,19,0.2)"/>
+          <line x1="0" y1="0" x2="70" y2="97" stroke="rgba(26,22,19,0.2)"/>
+          <line x1="0" y1="0" x2="-70" y2="97" stroke="rgba(26,22,19,0.2)"/>
+          <line x1="0" y1="0" x2="-114" y2="-37" stroke="rgba(26,22,19,0.2)"/>
+          <polygon points="0,-104 95,-31 42,58 -49,68 -55,-18" fill="rgba(47,93,78,0.25)" stroke="#2F5D4E" stroke-width="2"/>
+          <circle cx="0" cy="-104" r="4" fill="#2F5D4E"/>
+          <circle cx="95" cy="-31" r="4" fill="#2F5D4E"/>
+          <circle cx="42" cy="58" r="4" fill="#2F5D4E"/>
+          <circle cx="-49" cy="68" r="4" fill="#2F5D4E"/>
+          <circle cx="-55" cy="-18" r="4" fill="#2F5D4E"/>
+          <text x="0" y="-135" text-anchor="middle" font-family="Inter,sans-serif" font-size="11" font-weight="600" fill="#1A1613">Brand Identity</text>
+          <text x="128" y="-30" text-anchor="start" font-family="Inter,sans-serif" font-size="11" font-weight="600" fill="#1A1613">Operational Health</text>
+          <text x="78" y="115" text-anchor="middle" font-family="Inter,sans-serif" font-size="11" font-weight="600" fill="#1A1613">Content &amp; Cred.</text>
+          <text x="-78" y="115" text-anchor="middle" font-family="Inter,sans-serif" font-size="11" font-weight="600" fill="#1A1613">Growth Readiness</text>
+          <text x="-128" y="-30" text-anchor="end" font-family="Inter,sans-serif" font-size="11" font-weight="600" fill="#1A1613">Funding Arch.</text>
+        </svg>
+        <div class="radar-legend">
+          <div class="row"><span class="name">Brand Identity</span><span class="score">87 / 100</span><span class="grade a">A&minus;</span></div>
+          <div class="row"><span class="name">Operational Health</span><span class="score">82 / 100</span><span class="grade a">A&minus;</span></div>
+          <div class="row"><span class="name">Funding Architecture</span><span class="score">48 / 100</span><span class="grade c">C</span></div>
+          <div class="row"><span class="name">Content &amp; Credibility</span><span class="score">71 / 100</span><span class="grade b">B</span></div>
+          <div class="row"><span class="name">Growth Readiness</span><span class="score">63 / 100</span><span class="grade b">B&minus;</span></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="tr-section">
+      <div class="section-num">03 &middot; Program-line health</div>
+      <h2>Each program line, evaluated against the standard.</h2>
+      <table class="tr-table">
+        <thead>
+          <tr><th>Program</th><th>Participants / qtr</th><th>Retention</th><th>Cost per served</th><th>Standing</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>After-school (K&ndash;5)</td><td>84 kids</td><td>92%</td><td>$118</td><td><span class="pill good">Healthy</span></td></tr>
+          <tr><td>After-school (6&ndash;8)</td><td>36 kids</td><td>78%</td><td>$142</td><td><span class="pill good">Healthy</span></td></tr>
+          <tr><td>Summer camp (2 weeks)</td><td>Deferred to Q3</td><td>&mdash;</td><td>&mdash;</td><td><span class="pill warn">Under-shipped</span></td></tr>
+          <tr><td>Family workshops</td><td>3 workshops</td><td>&mdash;</td><td>$46</td><td><span class="pill crit">Under-attended</span></td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section class="tr-section">
+      <div class="section-num">04 &middot; Funding architecture</div>
+      <h2>Revenue mix &amp; concentration risk.</h2>
+      <p>Q2 revenue $184,200. Concentration flag: the Corning Family Foundation legacy grant provided $81,000 (44% of the quarter). Renewal is not guaranteed for FY27 &mdash; the program officer rotated in May.</p>
+      <table class="tr-table">
+        <thead>
+          <tr><th>Funding source</th><th>Q2 amount</th><th>% of quarter</th><th>Risk</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>Corning Family Foundation (legacy)</td><td>$81,000</td><td>44%</td><td><span class="pill crit">High &middot; officer change</span></td></tr>
+          <tr><td>State DOE after-school block</td><td>$44,500</td><td>24%</td><td><span class="pill good">Renewed</span></td></tr>
+          <tr><td>Individual giving (recurring)</td><td>$28,700</td><td>16%</td><td><span class="pill good">Growing</span></td></tr>
+          <tr><td>Program fees (sliding scale)</td><td>$18,900</td><td>10%</td><td><span class="pill good">Stable</span></td></tr>
+          <tr><td>Corporate sponsorship</td><td>$11,100</td><td>6%</td><td><span class="pill warn">One-off</span></td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section class="tr-section">
+      <div class="section-num">05 &middot; Participants &amp; community reach</div>
+      <h2>Who the org actually serves.</h2>
+      <p>120 unduplicated children served across after-school programming in Q2 &mdash; up 14 vs. Q1. Family reach (siblings + guardians engaged) est. 340 people. Program-day retention 89% (kids attending &ge; 80% of enrolled days). This retention number is the strongest asset the org is not yet putting in front of funders.</p>
+      <p>Board composition: 5 members (ED-adjacent nonvoting seat, plus 4 voting). Two board seats have been vacant for 5 months; one is legally required to be a person served by the org.</p>
+    </section>
+
+    <section class="tr-section">
+      <div class="section-num">06 &middot; Path forward</div>
+      <h2>Next quarter&rsquo;s build order.</h2>
+      <p>Three moves this quarter, in order of leverage:</p>
+      <p><strong>Q3 focus:</strong> Ship the FY26 Q1&ndash;Q2 impact report to the board and to the top three prospective funders on the pipeline. The 89% program-day retention is the headline; the report unlocks the two most winnable RFPs (Woodard Trust and the county block grant).</p>
+      <p><strong>Q3 secondary:</strong> Recruit and seat the two open board seats &mdash; one served-community seat, one finance-fluent seat. Governance grade lifts materially and de-risks the FY27 audit.</p>
+      <p><strong>Q3 backburner:</strong> Redesign the family workshops as pay-what-you-can Saturday sessions. Low priority; can wait until Q4 planning.</p>
+    </section>
+
+    <section class="tr-section">
+      <div class="section-num">07 &middot; Ranked action plan</div>
+      <h2>This month&rsquo;s priority list.</h2>
+      <ol class="action-list">
+        <li><span class="rank">1</span><div class="action-body"><strong>Ship the FY26 mid-year impact report</strong><span>Board draft by Aug 15, funder version by Sep 1. Retention headline + participant story spread.</span></div><span class="owner">Owner: ED + TOJ</span></li>
+        <li><span class="rank">2</span><div class="action-body"><strong>Submit Woodard Trust &amp; county block LOIs</strong><span>Both windows close before Sep 30. Pipeline value: $67,000 combined ceiling.</span></div><span class="owner">Owner: ED</span></li>
+        <li><span class="rank">3</span><div class="action-body"><strong>Seat board vacancy &middot; served-community seat</strong><span>Ship recruitment ask through parent network by Aug 30. Elect at Sept board meeting.</span></div><span class="owner">Owner: Board Chair</span></li>
+        <li><span class="rank">4</span><div class="action-body"><strong>Stand up quarterly funder briefing cadence</strong><span>Written 1-page briefing to top 5 funders each quarter. First edition drops with the mid-year report.</span></div><span class="owner">Owner: System</span></li>
+        <li><span class="rank">5</span><div class="action-body"><strong>Book the Q4 review call</strong><span>30-min touchpoint on Oct 1 to review progress against these four priorities.</span></div><span class="owner">Owner: TOJ</span></li>
+      </ol>
+    </section>
+
+    <div class="doc-footer">
+      <div>&copy; 2026 Trail of Joy Player Management Group, LLC &middot; All rights reserved.</div>
+      <a href="/">Back to TOJ Campaign &rarr;</a>
+    </div>
+
+  </article>
+
+</body>
+</html>

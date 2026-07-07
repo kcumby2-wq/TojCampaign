@@ -4,341 +4,117 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Sample Operational Transcript — TOJ Campaign</title>
-  <meta name="description" content="A redacted sample TOJ Operational Transcript. Real structure, composite subject. What every TOJ client receives, graded on the same five pillars." />
+  <meta name="description" content="Three redacted Operational Transcript samples — one per vertical. Personal Brand, Nonprofit, Authority. Real structure, composite subjects." />
+  <meta property="og:type" content="website" />
+  <meta property="og:site_name" content="TOJ Campaign" />
+  <meta property="og:url" content="https://tojcampaign.com/sample-transcript.html" />
+  <meta property="og:title" content="Sample Operational Transcript — TOJ Campaign" />
+  <meta property="og:description" content="Three samples — one per vertical. Same structure every client receives." />
+  <meta name="twitter:card" content="summary" />
+  <meta name="twitter:title" content="Sample Operational Transcript" />
   <link rel="icon" href='data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect width="100" height="100" rx="20" fill="%231A1613"/><text x="50" y="66" font-family="Georgia" font-size="52" font-weight="600" fill="%23F5F1EA" text-anchor="middle">T</text></svg>' />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-    html { scroll-behavior: smooth; }
-    body {
-      font-family: 'Inter', -apple-system, sans-serif;
-      background: #F5F1EA; color: #1A1613; line-height: 1.6;
-      -webkit-font-smoothing: antialiased;
-    }
     :root {
       --parchment: #F5F1EA; --parchment-2: #EBE4D6; --ink: #1A1613;
       --ink-soft: #3B3530; --ink-mute: #6E655C;
       --rule: rgba(26,22,19,0.12); --rule-strong: rgba(26,22,19,0.35);
-      --sports: #1E3A5F; --smallbiz: #A85F26; --bigbiz: #2F5D4E; --advisory: #B8843B;
+      --personal: #A85F26; --nonprofit: #2F5D4E; --authority: #1E3A5F;
+      --score: #B8843B;
     }
-    h1, h2, h3, h4 { font-family: 'Fraunces', 'Georgia', serif; font-weight: 600; letter-spacing: -0.015em; color: var(--ink); }
-    a { color: var(--smallbiz); }
-
-    .doc-wrap {
-      max-width: 900px; margin: 0 auto; padding: clamp(2rem, 5vw, 4rem) clamp(1.25rem, 3vw, 2.5rem);
-      background: #fff; box-shadow: 0 40px 80px -50px rgba(26,22,19,0.25);
-      min-height: 100vh; position: relative; border-left: 6px solid var(--smallbiz);
-    }
-    .doc-header { display: flex; justify-content: space-between; align-items: flex-start; padding-bottom: 1.5rem; border-bottom: 2px solid var(--ink); margin-bottom: 2rem; gap: 1rem; flex-wrap: wrap; }
-    .doc-brand { font-family: 'Fraunces', serif; font-size: 1.25rem; color: var(--ink); }
-    .doc-brand span { color: var(--ink-mute); font-weight: 400; }
-    .doc-meta { text-align: right; font-family: 'Inter', monospace; font-size: 0.72rem; color: var(--ink-mute); }
-    .doc-meta div { margin-bottom: 0.15rem; letter-spacing: 0.04em; }
-
-    .doc-title { margin-bottom: 0.5rem; }
-    .doc-title h1 { font-size: clamp(2rem, 4vw, 2.75rem); line-height: 1.05; margin-bottom: 0.5rem; }
-    .doc-title h1 em { font-style: italic; font-weight: 500; color: var(--smallbiz); }
-    .doc-subject { font-family: 'Inter', sans-serif; font-size: 0.9rem; color: var(--ink-mute); margin-bottom: 2.5rem; padding-bottom: 1rem; border-bottom: 1px solid var(--rule); }
-
-    .disclaimer { background: rgba(168,95,38,0.08); border-left: 3px solid var(--smallbiz); padding: 0.85rem 1.15rem; margin-bottom: 2.5rem; font-size: 0.82rem; color: var(--ink-soft); border-radius: 4px; }
-    .disclaimer strong { color: var(--ink); }
-
-    .section-num { display: inline-block; font-family: 'Fraunces', serif; font-size: 0.85rem; color: var(--smallbiz); letter-spacing: 0.06em; margin-bottom: 0.5rem; font-weight: 500; }
-    section.tr-section { margin-bottom: 2.75rem; padding-bottom: 2rem; border-bottom: 1px solid var(--rule); }
-    section.tr-section:last-of-type { border-bottom: 0; }
-    section.tr-section h2 { font-size: 1.6rem; margin-bottom: 1.25rem; }
-    section.tr-section p { color: var(--ink-soft); margin-bottom: 1rem; font-size: 0.95rem; }
-    section.tr-section p:last-child { margin-bottom: 0; }
-
-    /* Executive summary highlight box */
-    .exec-summary {
-      background: var(--parchment-2); padding: 1.5rem 1.35rem; border-radius: 8px;
-      margin-bottom: 1.25rem;
-    }
-    .exec-summary p { color: var(--ink); font-family: 'Fraunces', serif; font-size: 1.05rem; line-height: 1.5; }
-
-    /* Radar */
-    .radar-wrap { display: grid; grid-template-columns: 1fr 1fr; gap: 2rem; align-items: center; margin: 1.5rem 0; }
-    @media (max-width: 720px) { .radar-wrap { grid-template-columns: 1fr; } }
-    .radar-svg { width: 100%; max-width: 340px; margin: 0 auto; }
-    .radar-legend { display: flex; flex-direction: column; gap: 0.6rem; }
-    .radar-legend .row { display: grid; grid-template-columns: 1fr auto auto; gap: 0.75rem; align-items: center; padding: 0.5rem 0.75rem; background: var(--parchment-2); border-radius: 6px; font-size: 0.85rem; }
-    .radar-legend .row .name { font-weight: 600; color: var(--ink); }
-    .radar-legend .row .score { font-family: 'Inter', monospace; color: var(--smallbiz); font-weight: 600; }
-    .radar-legend .row .grade { font-family: 'Fraunces', serif; font-weight: 700; }
-    .radar-legend .row .grade.a { color: #2F5D4E; }
-    .radar-legend .row .grade.b { color: var(--smallbiz); }
-    .radar-legend .row .grade.c { color: #B8843B; }
-
-    /* Table */
-    .tr-table { width: 100%; border-collapse: collapse; margin: 1rem 0; font-size: 0.86rem; }
-    .tr-table th { text-align: left; background: var(--parchment-2); padding: 0.7rem 0.9rem; font-family: 'Inter', sans-serif; font-size: 0.72rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink); font-weight: 700; border-bottom: 1px solid var(--rule); }
-    .tr-table td { padding: 0.85rem 0.9rem; color: var(--ink-soft); border-bottom: 1px solid var(--rule); }
-    .tr-table td:first-child { font-weight: 600; color: var(--ink); }
-    .tr-table .pill { display: inline-block; padding: 0.15rem 0.55rem; border-radius: 4px; font-size: 0.7rem; font-weight: 700; letter-spacing: 0.06em; }
-    .tr-table .pill.good { background: rgba(47,93,78,0.15); color: #2F5D4E; }
-    .tr-table .pill.warn { background: rgba(184,132,59,0.18); color: #A46F26; }
-    .tr-table .pill.crit { background: rgba(168,95,38,0.18); color: var(--smallbiz); }
-
-    /* Action plan */
-    .action-list { list-style: none; }
-    .action-list li {
-      display: grid; grid-template-columns: 2.5rem 1fr auto; gap: 1rem;
-      padding: 1rem 0; border-bottom: 1px solid var(--rule);
-      align-items: center;
-    }
-    .action-list li:last-child { border-bottom: 0; }
-    .action-list .rank { font-family: 'Fraunces', serif; font-size: 1.75rem; font-weight: 600; color: var(--smallbiz); line-height: 1; }
-    .action-list .action-body { display: flex; flex-direction: column; gap: 0.2rem; }
-    .action-list .action-body strong { color: var(--ink); font-size: 0.95rem; }
-    .action-list .action-body span { font-size: 0.8rem; color: var(--ink-mute); }
-    .action-list .owner { font-family: 'Inter', monospace; font-size: 0.72rem; padding: 0.3rem 0.55rem; background: var(--parchment-2); border-radius: 4px; color: var(--ink-soft); letter-spacing: 0.04em; white-space: nowrap; }
-
-    .doc-footer { margin-top: 3rem; padding-top: 1.5rem; border-top: 2px solid var(--ink); display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem; font-size: 0.78rem; color: var(--ink-mute); }
-    .doc-footer a { color: var(--smallbiz); text-decoration: none; font-weight: 500; }
-
-    .back-bar {
-      position: sticky; top: 0; z-index: 10;
-      background: rgba(245,241,234,0.94); backdrop-filter: blur(10px);
-      padding: 0.85rem clamp(1.25rem, 3vw, 2.5rem); border-bottom: 1px solid var(--rule);
-      display: flex; justify-content: space-between; align-items: center; max-width: 900px; margin: 0 auto;
-    }
-    .back-bar a { color: var(--ink-soft); text-decoration: none; font-size: 0.85rem; font-weight: 500; display: inline-flex; align-items: center; gap: 0.4rem; }
-    .back-bar a:hover { color: var(--ink); }
-    .back-bar .sample-tag { font-family: 'Inter', monospace; font-size: 0.7rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--smallbiz); font-weight: 700; padding: 0.25rem 0.55rem; background: rgba(168,95,38,0.12); border-radius: 4px; }
+    body { font-family: 'Inter', -apple-system, sans-serif; background: var(--parchment); color: var(--ink); line-height: 1.55; -webkit-font-smoothing: antialiased; min-height: 100vh; }
+    a { color: inherit; text-decoration: none; }
+    h1, h2, h3 { font-family: 'Fraunces', 'Georgia', serif; font-weight: 600; letter-spacing: -0.015em; color: var(--ink); }
+    .eyebrow { font-family: 'JetBrains Mono', monospace; font-size: 0.72rem; font-weight: 600; letter-spacing: 0.18em; text-transform: uppercase; color: var(--score); }
+    header.top { position: sticky; top: 0; z-index: 40; background: rgba(245,241,234,0.92); backdrop-filter: blur(10px); border-bottom: 1px solid var(--rule); }
+    .top-inner { display: flex; align-items: center; justify-content: space-between; padding: 0.85rem clamp(1.25rem, 3vw, 2.25rem); max-width: 1180px; margin: 0 auto; }
+    .brand { font-family: 'Fraunces', serif; font-weight: 600; font-size: 1.1rem; color: var(--ink); letter-spacing: -0.01em; }
+    .brand span { color: var(--ink-mute); font-weight: 400; }
+    .back-link { font-family: 'JetBrains Mono', monospace; font-size: 0.75rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink-soft); font-weight: 500; }
+    .back-link:hover { color: var(--ink); }
+    .shell { max-width: 1120px; margin: 0 auto; padding: 0 clamp(1.25rem, 3vw, 2.25rem); }
+    .hero { padding: clamp(3rem, 6vw, 5rem) 0 clamp(1.5rem, 3vw, 2.5rem); }
+    .hero h1 { font-size: clamp(2rem, 4.5vw, 3.4rem); line-height: 1.05; margin: 0.8rem 0 1rem; max-width: 22ch; }
+    .hero h1 em { font-style: italic; font-weight: 500; color: var(--score); }
+    .hero p { color: var(--ink-soft); font-size: clamp(1rem, 1.4vw, 1.1rem); max-width: 44rem; font-family: 'Fraunces', serif; font-style: italic; }
+    .doors { display: grid; grid-template-columns: 1fr; gap: 1rem; padding: 1rem 0 clamp(3rem, 6vw, 5rem); }
+    @media (min-width: 820px) { .doors { grid-template-columns: repeat(3, 1fr); } }
+    .door { background: #fff; border: 1px solid var(--rule); border-radius: 4px; padding: 1.6rem 1.5rem; position: relative; overflow: hidden; transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease; display: flex; flex-direction: column; }
+    .door::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 4px; background: var(--accent); }
+    .door:hover { transform: translateY(-3px); box-shadow: 0 30px 50px -30px rgba(26,22,19,0.35); border-color: var(--accent); }
+    .door.personal { --accent: var(--personal); }
+    .door.nonprofit { --accent: var(--nonprofit); }
+    .door.authority { --accent: var(--authority); }
+    .door .lbl { font-family: 'JetBrains Mono', monospace; font-size: 0.7rem; letter-spacing: 0.16em; text-transform: uppercase; color: var(--accent); font-weight: 700; margin-top: 0.4rem; margin-bottom: 0.5rem; }
+    .door h3 { font-size: 1.3rem; margin-bottom: 0.4rem; }
+    .door .who { font-size: 0.85rem; color: var(--ink-soft); margin-bottom: 1rem; font-family: 'Fraunces', serif; font-style: italic; }
+    .door .cta-row { margin-top: auto; padding-top: 0.85rem; border-top: 1px solid var(--rule); display: flex; align-items: center; justify-content: space-between; font-family: 'JetBrains Mono', monospace; font-size: 0.75rem; letter-spacing: 0.1em; text-transform: uppercase; font-weight: 600; }
+    .door .cta-row .arrow { color: var(--accent); font-family: 'Fraunces', serif; font-style: normal; font-size: 1.05rem; transition: transform 0.15s ease; }
+    .door:hover .cta-row .arrow { transform: translateX(3px); }
+    .note { max-width: 780px; margin-top: 1.5rem; padding: 1rem 1.15rem; background: var(--parchment-2); border-left: 3px solid var(--score); border-radius: 4px; font-family: 'Fraunces', serif; font-style: italic; font-size: 0.9rem; color: var(--ink-soft); }
+    footer { padding: 2rem 0 2.5rem; border-top: 1px solid var(--rule); margin-top: 2rem; font-size: 0.78rem; color: var(--ink-mute); font-family: 'JetBrains Mono', monospace; letter-spacing: 0.08em; }
+    footer a { color: var(--score); font-weight: 600; }
   </style>
 </head>
 <body>
 
-  <div class="back-bar">
-    <a href="/"><span>&larr;</span> TOJ Campaign</a>
-    <span class="sample-tag">Sample &middot; Composite subject</span>
-  </div>
+  <header class="top">
+    <div class="top-inner">
+      <a href="/" class="brand">TOJ Campaign <span>— Sample transcripts</span></a>
+      <a href="/" class="back-link">← Back to home</a>
+    </div>
+  </header>
 
-  <article class="doc-wrap">
-
-    <header class="doc-header">
-      <div class="doc-brand">TOJ <span>Operational Transcript&trade;</span></div>
-      <div class="doc-meta">
-        <div>Report ID: OT-SB-0407</div>
-        <div>Issued: 2026-07-01</div>
-        <div>Quarter: Q3 2026</div>
+  <main>
+    <section class="hero">
+      <div class="shell">
+        <div class="eyebrow">Public samples · composite subjects</div>
+        <h1>See what <em>we send back.</em></h1>
+        <p>Three samples — one per vertical. Same structure every TOJ client receives inside 72 business hours. The composite subjects protect real client data; the format is what lands in your inbox.</p>
       </div>
-    </header>
+    </section>
 
-    <div class="doc-title">
-      <h1>Standing of the <em>operation</em></h1>
-      <div class="doc-subject">
-        <strong style="color:var(--ink);font-weight:600;">Sarah Reyes</strong> &middot; Yoga &amp; Breathwork Studio &middot; Growing lane composite &middot; Solo operator, one venue, one part-time contractor
+    <div class="shell">
+      <div class="doors">
+
+        <a href="/sample-transcript-personal-brand.html" class="door personal">
+          <div class="lbl">Vertical 01</div>
+          <h3>Personal Brand</h3>
+          <div class="who">Composite yoga &amp; breathwork studio. Solo operator, one venue, growing lane.</div>
+          <div class="cta-row"><span>Open sample</span><span class="arrow">→</span></div>
+        </a>
+
+        <a href="/sample-transcript-nonprofit.html" class="door nonprofit">
+          <div class="lbl">Vertical 02</div>
+          <h3>Nonprofit</h3>
+          <div class="who">Composite 501(c)(3). After-school &amp; summer programming, 3 FTE, 5-member board.</div>
+          <div class="cta-row"><span>Open sample</span><span class="arrow">→</span></div>
+        </a>
+
+        <a href="/sample-transcript-authority.html" class="door authority">
+          <div class="lbl">Vertical 03</div>
+          <h3>Authority</h3>
+          <div class="who">Composite youth athlete. QB class of 2027, two-sport, pre-recruiting-cycle portfolio.</div>
+          <div class="cta-row"><span>Open sample</span><span class="arrow">→</span></div>
+        </a>
+
+      </div>
+
+      <div class="note">
+        Every real transcript is scored per pillar (Brand Identity · Operational Health · Revenue Architecture · Content &amp; Credibility · Growth Readiness) with a specific-not-generic narrative and a ranked action plan. The Core proposal at the end references your two lowest pillars by name.
       </div>
     </div>
+  </main>
 
-    <div class="disclaimer">
-      <strong>This is a public sample.</strong> The subject is a composite drawn from anonymized
-      operator data. Real transcripts include the client&rsquo;s actual numbers and named
-      priorities. Structure and format are identical to what every TOJ client receives.
+  <footer>
+    <div class="shell">
+      &copy; 2026 Trail of Joy Player Management Group, LLC &middot;
+      <a href="/foundation-score.html">Start your Foundation Score →</a>
     </div>
-
-    <!-- 1. Executive summary -->
-    <section class="tr-section">
-      <div class="section-num">01 &middot; Executive summary</div>
-      <h2>The one-paragraph read.</h2>
-      <div class="exec-summary">
-        <p>
-          Sarah&rsquo;s operation stands solid: brand is strong, delivery is consistent, retention
-          is above the growing-lane benchmark. The gap is on the demand side &mdash; the funnel
-          is under-fed because outreach is inconsistent and referral asks are still manual.
-          Solving the top of funnel unlocks the whole ladder; nothing else is broken enough to
-          need attention first.
-        </p>
-      </div>
-    </section>
-
-    <!-- 2. Five-pillar radar -->
-    <section class="tr-section">
-      <div class="section-num">02 &middot; Five-pillar radar</div>
-      <h2>Where the operation grades against the standard.</h2>
-      <div class="radar-wrap">
-        <svg class="radar-svg" viewBox="-160 -160 320 320">
-          <!-- Radar rings -->
-          <polygon points="0,-120 114,-37 70,97 -70,97 -114,-37" fill="none" stroke="rgba(26,22,19,0.15)"/>
-          <polygon points="0,-90 86,-28 53,73 -53,73 -86,-28" fill="none" stroke="rgba(26,22,19,0.15)"/>
-          <polygon points="0,-60 57,-19 35,49 -35,49 -57,-19" fill="none" stroke="rgba(26,22,19,0.15)"/>
-          <polygon points="0,-30 28,-9 18,24 -18,24 -28,-9" fill="none" stroke="rgba(26,22,19,0.15)"/>
-          <!-- Axes -->
-          <line x1="0" y1="0" x2="0" y2="-120" stroke="rgba(26,22,19,0.2)"/>
-          <line x1="0" y1="0" x2="114" y2="-37" stroke="rgba(26,22,19,0.2)"/>
-          <line x1="0" y1="0" x2="70" y2="97" stroke="rgba(26,22,19,0.2)"/>
-          <line x1="0" y1="0" x2="-70" y2="97" stroke="rgba(26,22,19,0.2)"/>
-          <line x1="0" y1="0" x2="-114" y2="-37" stroke="rgba(26,22,19,0.2)"/>
-          <!-- Data (Brand 92, Delivery 88, Retention 84, Financial 76, Demand 54) -->
-          <polygon points="0,-110 100,-32 59,82 -45,63 -62,-20" fill="rgba(168,95,38,0.25)" stroke="#A85F26" stroke-width="2"/>
-          <circle cx="0" cy="-110" r="4" fill="#A85F26"/>
-          <circle cx="100" cy="-32" r="4" fill="#A85F26"/>
-          <circle cx="59" cy="82" r="4" fill="#A85F26"/>
-          <circle cx="-45" cy="63" r="4" fill="#A85F26"/>
-          <circle cx="-62" cy="-20" r="4" fill="#A85F26"/>
-          <!-- Labels -->
-          <text x="0" y="-135" text-anchor="middle" font-family="Inter,sans-serif" font-size="12" font-weight="600" fill="#1A1613">Brand</text>
-          <text x="128" y="-32" text-anchor="start" font-family="Inter,sans-serif" font-size="12" font-weight="600" fill="#1A1613">Delivery</text>
-          <text x="78" y="115" text-anchor="middle" font-family="Inter,sans-serif" font-size="12" font-weight="600" fill="#1A1613">Retention</text>
-          <text x="-78" y="115" text-anchor="middle" font-family="Inter,sans-serif" font-size="12" font-weight="600" fill="#1A1613">Financial</text>
-          <text x="-128" y="-32" text-anchor="end" font-family="Inter,sans-serif" font-size="12" font-weight="600" fill="#1A1613">Demand</text>
-        </svg>
-        <div class="radar-legend">
-          <div class="row"><span class="name">Brand</span><span class="score">92 / 100</span><span class="grade a">A</span></div>
-          <div class="row"><span class="name">Delivery</span><span class="score">88 / 100</span><span class="grade a">A&minus;</span></div>
-          <div class="row"><span class="name">Retention</span><span class="score">84 / 100</span><span class="grade a">A&minus;</span></div>
-          <div class="row"><span class="name">Financial</span><span class="score">76 / 100</span><span class="grade b">B</span></div>
-          <div class="row"><span class="name">Demand</span><span class="score">54 / 100</span><span class="grade c">C+</span></div>
-        </div>
-      </div>
-    </section>
-
-    <!-- 3. Service-line health -->
-    <section class="tr-section">
-      <div class="section-num">03 &middot; Service-line health</div>
-      <h2>Each service line, evaluated against the standard.</h2>
-      <table class="tr-table">
-        <thead>
-          <tr><th>Service line</th><th>Volume / mo</th><th>Retention</th><th>Margin</th><th>Standing</th></tr>
-        </thead>
-        <tbody>
-          <tr>
-            <td>Group Yoga (drop-in)</td>
-            <td>112 sessions</td>
-            <td>68%</td>
-            <td>44%</td>
-            <td><span class="pill good">Healthy</span></td>
-          </tr>
-          <tr>
-            <td>Group Yoga (membership)</td>
-            <td>34 members</td>
-            <td>91%</td>
-            <td>62%</td>
-            <td><span class="pill good">Healthy</span></td>
-          </tr>
-          <tr>
-            <td>Breathwork Workshops</td>
-            <td>2 workshops</td>
-            <td>&mdash;</td>
-            <td>78%</td>
-            <td><span class="pill warn">Under-shipped</span></td>
-          </tr>
-          <tr>
-            <td>1:1 Private Sessions</td>
-            <td>6 sessions</td>
-            <td>50%</td>
-            <td>85%</td>
-            <td><span class="pill crit">Priced too low</span></td>
-          </tr>
-        </tbody>
-      </table>
-    </section>
-
-    <!-- 4. Revenue recovery -->
-    <section class="tr-section">
-      <div class="section-num">04 &middot; Revenue recovery opportunities</div>
-      <h2>Money already on the table, not yet claimed.</h2>
-      <p>Three opportunities surface this quarter, ranked by ease-of-capture:</p>
-      <table class="tr-table">
-        <thead>
-          <tr><th>Opportunity</th><th>Est. quarterly value</th><th>Ease</th></tr>
-        </thead>
-        <tbody>
-          <tr>
-            <td>Ship breathwork workshops on cadence (2&rarr;4 / mo)</td>
-            <td>+ $1,840</td>
-            <td><span class="pill good">Easy</span></td>
-          </tr>
-          <tr>
-            <td>Reprice 1:1 privates to market ($95 &rarr; $135)</td>
-            <td>+ $720</td>
-            <td><span class="pill good">Easy</span></td>
-          </tr>
-          <tr>
-            <td>Win-back sequence to lapsed members (24 contacts)</td>
-            <td>+ $1,290</td>
-            <td><span class="pill warn">Medium</span></td>
-          </tr>
-        </tbody>
-      </table>
-    </section>
-
-    <!-- 5. Roster / portfolio -->
-    <section class="tr-section">
-      <div class="section-num">05 &middot; Roster / portfolio</div>
-      <h2>Regulars &amp; recurring bookings.</h2>
-      <p>34 members active this quarter (+ 4 net vs. Q2). Membership retention 91% quarter-over-quarter — the top of that number is drop-in students converting to membership; the bottom is 3 members who lapsed after the workshop calendar went dark in June.</p>
-      <p>Top 5 referrers this quarter drove 11 new drop-ins between them. Nothing structured yet in the referral engine — currently a hand-thanks-a-hand thing.</p>
-    </section>
-
-    <!-- 6. Path forward -->
-    <section class="tr-section">
-      <div class="section-num">06 &middot; Path forward</div>
-      <h2>Next quarter&rsquo;s build order.</h2>
-      <p>Three moves this quarter, in order of leverage:</p>
-      <p><strong>Q3 focus:</strong> Restart the workshop calendar with 4 workshops booked before September. This alone lifts the demand pillar 12–15 points on the radar and captures the largest of the three revenue-recovery opportunities.</p>
-      <p><strong>Q3 secondary:</strong> Roll out the referral prompt sequence to the 34 members. Members who refer stay longer — retention pillar will lift as a downstream effect.</p>
-      <p><strong>Q3 backburner:</strong> Reprice 1:1 privates alongside a positioning refresh. Not urgent; can wait until Q4.</p>
-    </section>
-
-    <!-- 7. Ranked action plan -->
-    <section class="tr-section">
-      <div class="section-num">07 &middot; Ranked action plan</div>
-      <h2>This month&rsquo;s priority list.</h2>
-      <ol class="action-list">
-        <li>
-          <span class="rank">1</span>
-          <div class="action-body">
-            <strong>Draft the workshop calendar &middot; Aug &ndash; Sep</strong>
-            <span>Pick dates, set pricing, confirm room availability. Announce via newsletter + IG.</span>
-          </div>
-          <span class="owner">Owner: Sarah</span>
-        </li>
-        <li>
-          <span class="rank">2</span>
-          <div class="action-body">
-            <strong>Ship the referral prompt sequence</strong>
-            <span>Enable the referral module, seed with the current top-5 referrer list, launch by Aug 15.</span>
-          </div>
-          <span class="owner">Owner: System</span>
-        </li>
-        <li>
-          <span class="rank">3</span>
-          <div class="action-body">
-            <strong>Rebuild the win-back list</strong>
-            <span>Segment the 24 lapsed members, draft 3-touch win-back email, ship in first week of September.</span>
-          </div>
-          <span class="owner">Owner: System</span>
-        </li>
-        <li>
-          <span class="rank">4</span>
-          <div class="action-body">
-            <strong>Price-refresh workshop for 1:1 privates</strong>
-            <span>Set new $135 price, update landing page, quiet-launch to new inquiries only.</span>
-          </div>
-          <span class="owner">Owner: Sarah</span>
-        </li>
-        <li>
-          <span class="rank">5</span>
-          <div class="action-body">
-            <strong>Book the Q4 review call</strong>
-            <span>30-min touchpoint on Oct 1 to review progress against these four priorities.</span>
-          </div>
-          <span class="owner">Owner: TOJ</span>
-        </li>
-      </ol>
-    </section>
-
-    <div class="doc-footer">
-      <div>&copy; 2026 Trail of Joy Player Management Group, LLC &middot; All rights reserved.</div>
-      <a href="/">Back to TOJ Campaign &rarr;</a>
-    </div>
-
-  </article>
+  </footer>
 
 </body>
 </html>
