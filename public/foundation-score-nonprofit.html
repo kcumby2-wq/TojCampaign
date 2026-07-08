@@ -3,21 +3,21 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Foundation Score — Nonprofit · TOJ Campaign</title>
+<title>Foundation Score — Non-profit · TOJ Campaign</title>
 <meta name="description" content="Four steps · roughly 10 minutes · autosaves as you go. Written report returned within 72 business hours.">
 <meta name="theme-color" content="#F5F1E8">
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="TOJ Campaign">
 <meta property="og:url" content="https://tojcampaign.com/foundation-score-nonprofit.html">
-<meta property="og:title" content="Foundation Score — Nonprofit · TOJ Campaign">
+<meta property="og:title" content="Foundation Score — Non-profit · TOJ Campaign">
 <meta property="og:description" content="For 501(c)(3) directors: mission, staff, board, funding mix, programs. TOJ Campaign invoices as a commercial vendor — no donor-dollar language. Written report in 72 business hours.">
 <meta property="og:image" content="https://tojcampaign.com/og/og-nonprofit.png">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
-<meta property="og:image:alt" content="TOJ Campaign — Nonprofit Foundation Score.">
+<meta property="og:image:alt" content="TOJ Campaign — Non-profit Foundation Score.">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:image" content="https://tojcampaign.com/og/og-nonprofit.png">
-<meta name="twitter:title" content="Foundation Score — Nonprofit">
+<meta name="twitter:title" content="Foundation Score — Non-profit">
 <meta name="twitter:description" content="501(c)(3) — funding architecture and program delivery, scored. Written report in 72 business hours.">
 <meta name="robots" content="noindex">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -172,13 +172,13 @@ footer{background:var(--ink);color:var(--paper);padding:36px 0 24px}
 </head>
 <body>
 
-<div class="demo-ribbon">TOJ Campaign · Foundation Score · Nonprofit</div>
+<div class="demo-ribbon">TOJ Campaign · Foundation Score · Non-profit</div>
 
 <nav class="top">
   <div class="shell">
     <a href="/" class="brand">
       <span class="brand-mark">TOJ</span>
-      <span class="brand-name"><span class="b1">TOJ Campaign</span><span class="b2">Foundation Score · Nonprofit</span></span>
+      <span class="brand-name"><span class="b1">TOJ Campaign</span><span class="b2">Foundation Score · Non-profit</span></span>
     </a>
     <a href="/foundation-score.html" class="back-link">← Wrong vertical?</a>
   </div>
@@ -188,7 +188,7 @@ footer{background:var(--ink);color:var(--paper);padding:36px 0 24px}
 
 <section class="intake-hero">
   <div class="shell">
-    <div class="kicker">Foundation Score · Nonprofit</div>
+    <div class="kicker">Foundation Score · Non-profit</div>
     <h1>Tell us about <span class="italic">the mission.</span></h1>
     <p class="hero-sub">Three questions before we score: <b style="color:var(--ink);font-weight:600">Who are you?</b> <b style="color:var(--ink);font-weight:600">What are you building?</b> <b style="color:var(--ink);font-weight:600">What do you need first?</b> TOJ Campaign invoices 501(c)(3)s as a commercial vendor — no donor-dollar language, no tax-deductibility claims.</p>
     <div class="meta-row">
@@ -223,7 +223,7 @@ footer{background:var(--ink);color:var(--paper);padding:36px 0 24px}
         <div class="step-head">
           <div class="step-num">Step 01 · Org</div>
           <div class="step-title">Who <span class="italic">is the organization?</span></div>
-          <p class="step-desc">The basics of your 501(c)(3) — mission, size, governance, reach. Everything here feeds Pillar 01 — Brand Identity, scored for nonprofits as "mission clarity."</p>
+          <p class="step-desc">The basics of your 501(c)(3) — mission, size, governance, reach. Everything here feeds Pillar 01 — Brand Identity, scored for non-profits as "mission clarity."</p>
         </div>
 
         <div class="field-row">
@@ -349,7 +349,7 @@ footer{background:var(--ink);color:var(--paper);padding:36px 0 24px}
         <div class="step-head">
           <div class="step-num">Step 02 · Programs</div>
           <div class="step-title">What are you <span class="italic">actually running?</span></div>
-          <p class="step-desc">Programs, participants, funding mix, and where you want the organization in 12 months. Feeds Pillar 02 (Operational Health) and Pillar 03 (Revenue Architecture — "funding architecture" for nonprofits).</p>
+          <p class="step-desc">Programs, participants, funding mix, and where you want the organization in 12 months. Feeds Pillar 02 (Operational Health) and Pillar 03 (Revenue Architecture — "funding architecture" for non-profits).</p>
         </div>
 
         <div class="field-row">
@@ -621,7 +621,7 @@ footer{background:var(--ink);color:var(--paper);padding:36px 0 24px}
   <div class="shell">
     <div class="foot-inner">
       <div class="foot-brand">TOJ Campaign · <span>Foundation Score</span></div>
-      <div class="foot-note">Nonprofit Vertical · © 2026</div>
+      <div class="foot-note">Non-profit Vertical · © 2026</div>
     </div>
   </div>
 </footer>
@@ -668,7 +668,7 @@ function renderReview(){
   }).join('');
   document.getElementById('reviewOutput').innerHTML=html;
 }
-function submitIntake(){if(!data.contact_email||!data.contact_phone){alert('Please add your email and phone before submitting.');return;}showStep('success');document.getElementById('autosaveStatus').style.display='none';document.querySelector('.progress-bar').style.display='none';console.log('FOUNDATION SCORE INTAKE · NONPROFIT:',data);}
+function submitIntake(){if(!data.contact_email||!data.contact_phone){alert('Please add your email and phone before submitting.');return;}showStep('success');document.getElementById('autosaveStatus').style.display='none';document.querySelector('.progress-bar').style.display='none';console.log('FOUNDATION SCORE INTAKE · NON-PROFIT:',data);}
 function restartIntake(){if(confirm('Clear this intake and start fresh?')){sessionStorage.removeItem(STORAGE_KEY);data={};document.querySelectorAll('input,select,textarea').forEach(el=>{if(el.type==='checkbox'||el.type==='radio')el.checked=false;else el.value='';});document.querySelectorAll('.check-item,.pill').forEach(el=>el.classList.remove('selected'));document.querySelector('.progress-bar').style.display='flex';document.getElementById('autosaveStatus').style.display='flex';showStep(1);}}
 loadData();
 if(Object.keys(data).length>0)document.getElementById('asText').textContent='Loaded saved answers';

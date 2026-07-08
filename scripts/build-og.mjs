@@ -63,7 +63,7 @@ const cards = [
     key: "nonprofit",
     panel: "#2F5D4E",
     eyebrowLeft: "VERTICAL 02",
-    labelMain: "NONPROFIT",
+    labelMain: "NON-PROFIT",
     labelSub: "",
     eyebrowRight: "FOUNDATION SCORE",
     headline: "The system underneath the mission.",
