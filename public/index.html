@@ -558,7 +558,6 @@
         <a href="#verticals">Verticals</a>
         <a href="#what-is-toj">What is TOJ</a>
         <a href="#standard">The Standard</a>
-        <a href="#classifier">Find your lane</a>
         <a href="/foundation-score.html" class="nav-cta">Get your score</a>
       </nav>
     </div>
@@ -581,7 +580,7 @@
       </p>
       <div class="hero-cta reveal">
         <a href="/foundation-score.html" class="btn score-btn">Get your Foundation Score <span class="arrow">→</span></a>
-        <a href="#what-is-toj" class="hero-text-link">See how it works &rarr;</a>
+        <a href="/sample-transcript.html" class="hero-text-link">See a sample Operational Transcript &rarr;</a>
         <span class="sep">&middot;</span>
         <button type="button" class="hero-text-link" onclick="document.getElementById('ideas-modal').classList.add('open');">3 free ideas &rarr;</button>
       </div>
@@ -653,6 +652,9 @@
           <span class="door-link">Open the Authority door <span class="arrow">→</span></span>
         </a>
       </div>
+      <p class="verticals-note reveal" style="text-align:center; max-width:44rem; margin:1.75rem auto 0; color:var(--ink-mute); font-size:0.95rem;">
+        <strong style="color:var(--ink);">Not sure which door is yours?</strong> Start with the Foundation Score &mdash; the intake sorts the vertical for you, and the report tells you which lane your operation actually belongs in. <a href="/foundation-score.html" style="color:var(--score); font-weight:600;">Get your score &rarr;</a>
+      </p>
     </div>
   </section>
 
@@ -761,26 +763,6 @@
       <div class="wit-close reveal">
         <p>You don't buy a website. You get put on a system &mdash; and the further down the trail you go, the more the four layers do for you.</p>
         <a href="#verticals" class="btn-light">See where you fall on the trail &rarr;</a>
-      </div>
-    </div>
-  </section>
-
-  <!-- ============ THE PRINCIPLE ============ -->
-  <section id="principle">
-    <div class="container">
-      <div class="principle-copy reveal">
-        <div class="eyebrow">The principle</div>
-        <h2>One product. Three front doors.</h2>
-        <p>
-          Underneath every vertical, the same shared infrastructure &mdash; the Standard, the
-          Transcript template, the intake system &mdash; serves every client. Verticals route to
-          different downstream engagements; they don't represent different brands.
-        </p>
-        <p>
-          The Operational Transcript&trade; is the universal artifact. Every client, every
-          vertical, same structure, same rigor. The color of the side tab changes. The terminology
-          adapts to your lane. Everything else is identical.
-        </p>
       </div>
     </div>
   </section>
@@ -931,34 +913,6 @@
     </div>
   </section>
 
-  <!-- ============ CLASSIFIER ============ -->
-  <section id="classifier">
-    <div class="container">
-      <div class="classifier-head reveal">
-        <div class="eyebrow">Which lane are you?</div>
-        <h2>Three questions. One answer.</h2>
-        <p>Not sure which door to open first? Read the three questions below and stop at the first one that describes you.</p>
-      </div>
-      <div class="classifier reveal">
-        <div class="classifier-row">
-          <div class="classifier-q">Are you a solo operator whose revenue depends on personal reputation and 1-to-1 client trust?</div>
-          <a href="/personal-brand.html" class="classifier-a cls-personal">Personal Brand &rarr;</a>
-        </div>
-        <div class="classifier-row">
-          <div class="classifier-q">Are you a 501(c)(3) organization with a program, campaign, or operational need TOJ can fulfill as a paid vendor?</div>
-          <a href="/nonprofit.html" class="classifier-a cls-nonprofit">Nonprofit &rarr;</a>
-        </div>
-        <div class="classifier-row">
-          <div class="classifier-q">Are you a youth athlete, program, or creator whose growth depends on documented performance and public credibility?</div>
-          <a href="/authority.html" class="classifier-a cls-authority">Authority &rarr;</a>
-        </div>
-      </div>
-      <div class="classifier-note reveal">
-        <strong>If none of the three describe you exactly:</strong> start with the Foundation Score. The intake sorts the vertical for you, and the report tells you which lane your operation actually belongs in.
-      </div>
-    </div>
-  </section>
-
   <!-- ============ AUTHORITY CREDENTIALS STRIP ============ -->
   <div class="creds">
     <div class="creds-inner">
@@ -1048,10 +1002,9 @@
           <h5>The System</h5>
           <ul>
             <li><a href="#what-is-toj">What is Trail of Joy</a></li>
-            <li><a href="#principle">The principle</a></li>
+            <li><a href="#verticals">The three verticals</a></li>
             <li><a href="#standard">The Standard</a></li>
             <li><a href="#transcript">The Transcript</a></li>
-            <li><a href="#classifier">Find your lane</a></li>
             <li><a href="#connect">How the three connect</a></li>
           </ul>
         </div>
@@ -1100,6 +1053,22 @@
     </div>
   </div>
 
+  <!-- ============ STICKY CTA ============ -->
+  <div id="sticky-cta" aria-hidden="true">
+    <div class="sticky-inner">
+      <span class="sticky-label">Ready to see the five things that make or break your business?</span>
+      <a href="/foundation-score.html" class="btn score-btn">Get your Foundation Score <span class="arrow">→</span></a>
+    </div>
+  </div>
+  <style>
+    #sticky-cta { position: fixed; left: 0; right: 0; bottom: 0; z-index: 60; background: rgba(26,22,19,0.97); -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px); border-top: 1px solid rgba(245,241,234,0.12); transform: translateY(110%); transition: transform 0.3s ease; padding: 0.7rem clamp(1rem, 3vw, 2rem); }
+    #sticky-cta.show { transform: translateY(0); }
+    #sticky-cta .sticky-inner { max-width: 1120px; margin: 0 auto; display: flex; align-items: center; justify-content: space-between; gap: 1.25rem; }
+    #sticky-cta .sticky-label { color: rgba(245,241,234,0.9); font-size: 0.92rem; font-weight: 500; }
+    #sticky-cta .btn.score-btn { white-space: nowrap; }
+    @media (max-width: 680px) { #sticky-cta .sticky-label { display: none; } #sticky-cta .sticky-inner { justify-content: center; } }
+  </style>
+
   <script>
     (function () {
       const bar = document.getElementById('progress-bar');
@@ -1107,11 +1076,9 @@
         { id: 'hero',        color: '#1A1613' },
         { id: 'verticals',   color: '#B8843B' },
         { id: 'what-is-toj', color: '#B8843B' },
-        { id: 'principle',   color: '#A85F26' },
         { id: 'standard',    color: '#B8843B' },
         { id: 'transcript',  color: '#2F5D4E' },
         { id: 'tiers',       color: '#1E3A5F' },
-        { id: 'classifier',  color: '#A85F26' },
         { id: 'connect',     color: '#2F5D4E' }
       ];
 
@@ -1136,6 +1103,15 @@
         entries.forEach(e => { if (e.isIntersecting) e.target.classList.add('visible'); });
       }, { threshold: 0.08, rootMargin: '0px 0px -40px 0px' });
       document.querySelectorAll('.reveal').forEach(el => obs.observe(el));
+
+      const sticky = document.getElementById('sticky-cta');
+      const heroEl = document.getElementById('hero');
+      if (sticky && heroEl) {
+        const heroObs = new IntersectionObserver((entries) => {
+          entries.forEach(e => sticky.classList.toggle('show', !e.isIntersecting));
+        }, { threshold: 0 });
+        heroObs.observe(heroEl);
+      }
     })();
   </script>
 
