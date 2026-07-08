@@ -98,6 +98,42 @@
     .arch h4 { font-size: 0.98rem; margin-bottom: 0.45rem; }
     .arch p { color: var(--ink-mute); font-size: 0.82rem; line-height: 1.5; }
 
+    /* ---- Premium Partners ---- */
+    .partners { background: var(--ink); color: var(--parchment); padding: clamp(3.5rem, 6vw, 5rem) 0; border-top: 0; }
+    .partners-head { max-width: 44rem; margin: 0 auto clamp(2rem, 4vw, 3rem); text-align: center; }
+    .partners-head .eyebrow { color: var(--score); margin-bottom: 1rem; }
+    .partners-head h2 { color: var(--parchment); margin-bottom: 1.15rem; }
+    .partners-head p { color: rgba(245,241,234,0.7); font-size: 0.98rem; max-width: 40rem; margin: 0 auto; }
+    .partners-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 1rem; margin-top: 2rem; }
+    @media (min-width: 900px) { .partners-grid { grid-template-columns: repeat(4, 1fr); } }
+    @media (max-width: 520px) { .partners-grid { grid-template-columns: 1fr; } }
+    .partner {
+      background: rgba(245,241,234,0.05); border: 1px solid rgba(245,241,234,0.12);
+      border-radius: 12px; padding: 1.35rem 1.15rem 1.15rem;
+      text-decoration: none; color: inherit; display: block;
+      transition: transform 0.2s ease, background 0.2s ease, border-color 0.2s ease;
+      position: relative; overflow: hidden;
+    }
+    .partner::before {
+      content: ''; position: absolute; top: 0; left: 0; height: 2px; width: 40%;
+      background: var(--score); transition: width 0.3s ease;
+    }
+    .partner:hover { background: rgba(245,241,234,0.09); border-color: rgba(184,132,59,0.4); transform: translateY(-2px); }
+    .partner:hover::before { width: 100%; }
+    .partner-name {
+      font-family: 'Fraunces', 'Georgia', serif; font-weight: 600; font-size: 1.15rem;
+      color: var(--parchment); letter-spacing: -0.015em; margin-bottom: 0.5rem; line-height: 1.15;
+    }
+    .partner-name em { font-style: italic; font-weight: 500; color: var(--score); }
+    .partner-role {
+      font-size: 0.72rem; font-weight: 600; letter-spacing: 0.06em;
+      color: rgba(245,241,234,0.55); text-transform: none;
+    }
+    .partners-note {
+      text-align: center; margin-top: 1.85rem; font-size: 0.82rem;
+      color: rgba(245,241,234,0.5); font-style: italic;
+    }
+
     footer { padding: 1.5rem clamp(1.25rem, 3vw, 2.5rem); background: var(--ink); color: rgba(245,241,234,0.65); text-align: center; font-size: 0.78rem; }
     footer a { color: rgba(245,241,234,0.75); }
     #progress-bar { position: fixed; top: 0; left: 0; height: 3px; width: 0%; z-index: 100; background: var(--accent); transition: width 0.1s linear; pointer-events: none; }
@@ -268,6 +304,36 @@
           <p>Creator whose audience lives in sport and whose credibility surface needs to match the reach.</p>
         </div>
       </div>
+    </div>
+  </section>
+
+  <!-- ============ PREMIUM PARTNERS ============ -->
+  <section class="partners" id="partners">
+    <div class="container">
+      <div class="partners-head">
+        <div class="eyebrow">Premium partners &middot; Authority</div>
+        <h2>The operators building the record with us.</h2>
+        <p>Trail of Joy Authority is built alongside people already trusted in the space &mdash; trainers, platforms, graders, and recruiting authorities whose work already crosses a decision-maker's desk. The partnership is on the record, not on a slide deck.</p>
+      </div>
+      <div class="partners-grid">
+        <a href="#" class="partner" data-partner="skysthelimitwr">
+          <div class="partner-name">Sky&rsquo;s The Limit <em>WR</em></div>
+          <div class="partner-role">Wide-receiver development</div>
+        </a>
+        <a href="#" class="partner" data-partner="xpandsports">
+          <div class="partner-name">Xpand<em>Sports</em></div>
+          <div class="partner-role">Sports platform &amp; media</div>
+        </a>
+        <a href="#" class="partner" data-partner="optimumgrading">
+          <div class="partner-name">Optimum <em>Grading</em></div>
+          <div class="partner-role">Performance grading system</div>
+        </a>
+        <a href="https://collegefootballrecruiting.com" class="partner" target="_blank" rel="noopener" data-partner="cfr">
+          <div class="partner-name">CollegeFootball<em>Recruiting.com</em></div>
+          <div class="partner-role">Recruiting authority</div>
+        </a>
+      </div>
+      <p class="partners-note">More Authority partners naming publicly through 2026. Personal Brand and Non-profit partners announce in their own strip.</p>
     </div>
   </section>
 
