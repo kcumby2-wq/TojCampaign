@@ -44,8 +44,8 @@ const cards = [
     eyebrowRight: "ONE STANDARD · THREE VERTICALS",
     headline: "Build the business that doesn’t collapse when you step away.",
     headlineSize: 50,
-    subhead: "Personal brand · Nonprofit · A career in sport.",
-    footerTag: "TRAIL OF JOY PMG",
+    subhead: "Personal brands · Non-profits · A career in sports.",
+    footerTag: "TRAIL OF JOY MGMT",
   },
   {
     key: "personal",
