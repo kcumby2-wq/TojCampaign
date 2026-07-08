@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>The Team — TOJ Campaign</title>
+  <meta name="description" content="The four principals building Trail of Joy Management Group — one operator, one legal officer, one revenue leader, one product architect." />
+  <meta property="og:type" content="website" />
+  <meta property="og:site_name" content="TOJ Campaign" />
+  <meta property="og:url" content="https://tojcampaign.com/team.html" />
+  <meta property="og:title" content="The Team — TOJ Campaign" />
+  <meta property="og:description" content="Four principals. One standard. The people building Trail of Joy Management Group." />
+  <meta property="og:image" content="https://tojcampaign.com/og/og-master.png" />
+  <meta property="og:image:width" content="1200" />
+  <meta property="og:image:height" content="630" />
+  <meta property="og:image:alt" content="TOJ Campaign — one standard, three verticals." />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="The Team — TOJ Campaign" />
+  <meta name="twitter:description" content="Four principals. One standard." />
+  <meta name="twitter:image" content="https://tojcampaign.com/og/og-master.png" />
+  <link rel="icon" href='data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect width="100" height="100" rx="20" fill="%231A1613"/><text x="50" y="66" font-family="Georgia" font-size="52" font-weight="600" fill="%23F5F1EA" text-anchor="middle">T</text></svg>' />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; }
+    body { font-family: 'Inter', -apple-system, sans-serif; background: #F5F1EA; color: #1A1613; line-height: 1.6; }
+    :root {
+      --parchment: #F5F1EA; --parchment-2: #EBE4D6;
+      --ink: #1A1613; --ink-soft: #3B3530; --ink-mute: #6E655C;
+      --rule: rgba(26,22,19,0.12); --rule-strong: rgba(26,22,19,0.35);
+      --personal: #A85F26; --nonprofit: #2F5D4E; --authority: #1E3A5F; --score: #B8843B;
+    }
+    h1, h2, h3, h4 { font-family: 'Fraunces', 'Georgia', serif; font-weight: 600; letter-spacing: -0.015em; color: var(--ink); }
+    a { color: var(--authority); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+
+    .top-bar { padding: 1rem 0; border-bottom: 1px solid var(--rule); background: rgba(245,241,234,0.94); backdrop-filter: blur(10px); position: sticky; top: 0; z-index: 40; }
+    .top-inner { display: flex; justify-content: space-between; align-items: center; max-width: 1120px; margin: 0 auto; padding: 0 clamp(1.25rem, 3vw, 2.5rem); }
+    .brand { font-family: 'Fraunces', serif; font-weight: 600; font-size: 1.05rem; color: var(--ink); text-decoration: none; }
+    .brand span { color: var(--ink-mute); font-weight: 400; }
+    .back-link { color: var(--ink-soft); font-size: 0.85rem; font-weight: 500; }
+
+    .container { max-width: 1120px; margin: 0 auto; padding: 0 clamp(1.25rem, 3vw, 2.5rem); }
+
+    .hero { padding: clamp(4rem, 8vw, 6rem) 0 clamp(2rem, 4vw, 3rem); }
+    .hero .eyebrow { font-size: 0.72rem; font-weight: 700; letter-spacing: 0.18em; text-transform: uppercase; color: var(--ink-mute); margin-bottom: 1rem; }
+    .hero h1 { font-size: clamp(2.4rem, 5vw, 3.6rem); line-height: 1.05; margin-bottom: 1.25rem; max-width: 24ch; }
+    .hero h1 em { font-style: italic; font-weight: 500; color: var(--authority); }
+    .hero .lede { font-size: 1.15rem; color: var(--ink-soft); max-width: 42rem; }
+
+    section { padding: clamp(2rem, 4vw, 3rem) 0; }
+    section.principals { padding-top: 0; }
+
+    .principal-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 1.5rem; }
+    @media (max-width: 800px) { .principal-grid { grid-template-columns: 1fr; } }
+
+    .principal {
+      background: #fff; border: 1px solid var(--rule); border-radius: 14px;
+      padding: 2rem 1.85rem 1.85rem; position: relative; overflow: hidden;
+      display: flex; flex-direction: column;
+    }
+    .principal::before {
+      content: ''; position: absolute; top: 0; left: 0; right: 0; height: 4px;
+      background: var(--accent);
+    }
+    .principal.op        { --accent: var(--ink); }
+    .principal.legal     { --accent: var(--nonprofit); }
+    .principal.revenue   { --accent: var(--personal); }
+    .principal.product   { --accent: var(--authority); }
+
+    .role-tag {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.68rem; font-weight: 600; letter-spacing: 0.16em;
+      text-transform: uppercase; color: var(--accent); margin-bottom: 0.75rem;
+    }
+    .principal h2 {
+      font-size: 1.65rem; line-height: 1.1; margin-bottom: 0.5rem;
+    }
+    .principal .title {
+      font-family: 'Fraunces', serif; font-size: 1.05rem; font-style: italic;
+      color: var(--ink-mute); margin-bottom: 1.15rem;
+    }
+    .principal .creds {
+      display: flex; flex-wrap: wrap; gap: 0.4rem; margin-bottom: 1.15rem;
+    }
+    .cred {
+      font-size: 0.72rem; font-weight: 600; padding: 0.3rem 0.7rem;
+      background: var(--parchment-2); color: var(--ink);
+      border-radius: 999px; letter-spacing: 0.02em;
+    }
+    .principal .bio { color: var(--ink-soft); font-size: 0.98rem; margin-bottom: 1.25rem; flex: 1; }
+    .principal .bio p + p { margin-top: 0.75rem; }
+    .principal .placeholder-note {
+      font-size: 0.75rem; font-style: italic; color: var(--ink-mute);
+      background: var(--parchment); padding: 0.6rem 0.8rem; border-radius: 6px;
+      border-left: 3px solid var(--rule-strong); margin-bottom: 1.1rem;
+    }
+    .principal .links {
+      margin-top: auto; padding-top: 1rem; border-top: 1px solid var(--rule);
+      display: flex; gap: 1rem; align-items: center; flex-wrap: wrap;
+      font-size: 0.85rem; font-weight: 500;
+    }
+    .principal .links a { color: var(--accent); }
+
+    .cta {
+      background: var(--ink); color: var(--parchment);
+      padding: clamp(3rem, 6vw, 4.5rem) 0; margin-top: clamp(3rem, 6vw, 4.5rem);
+      text-align: center;
+    }
+    .cta h2 { color: var(--parchment); margin-bottom: 1rem; font-size: clamp(1.6rem, 2.6vw, 2.1rem); }
+    .cta p { color: rgba(245,241,234,0.75); max-width: 42rem; margin: 0 auto 1.75rem; font-size: 1rem; }
+    .btn { display: inline-block; padding: 0.85rem 1.5rem; background: var(--score); color: #fff; border-radius: 999px; font-size: 0.92rem; font-weight: 600; }
+    .btn:hover { background: #a3742d; text-decoration: none; }
+
+    footer { padding: 1.75rem clamp(1.25rem, 3vw, 2.5rem); background: var(--ink); color: rgba(245,241,234,0.65); text-align: center; font-size: 0.78rem; }
+    footer a { color: rgba(245,241,234,0.75); }
+  </style>
+</head>
+<body>
+  <div class="top-bar">
+    <div class="top-inner">
+      <a href="/" class="brand">TOJ Campaign <span>&mdash; Trail of Joy</span></a>
+      <a href="/" class="back-link">&larr; Back to home</a>
+    </div>
+  </div>
+
+  <section class="hero">
+    <div class="container">
+      <div class="eyebrow">The team</div>
+      <h1>Four principals. <em>One standard.</em></h1>
+      <p class="lede">
+        Trail of Joy Management Group is led by four principals &mdash; one operator, one legal
+        officer, one revenue leader, one product architect. Each owns a functional area.
+        The operator sits on top and holds the standard.
+      </p>
+    </div>
+  </section>
+
+  <section class="principals">
+    <div class="container">
+      <div class="principal-grid">
+
+        <!-- ===== Kyron Cumby ===== -->
+        <article class="principal op">
+          <div class="role-tag">Operator &middot; Founder</div>
+          <h2>Kyron Cumby</h2>
+          <div class="title">Founder &amp; Principal</div>
+          <div class="creds">
+            <span class="cred">Trail of Joy</span>
+            <span class="cred">SubjectMedia</span>
+            <span class="cred">Operator</span>
+          </div>
+          <div class="bio">
+            <p>
+              Kyron owns the standard, the positioning, and the client-facing brand of every
+              TOJ deliverable. The Foundation Score&trade;, the Operational Transcript&trade;,
+              and the seven-phase learning loop that runs underneath every engagement all
+              route through him.
+            </p>
+            <p>
+              His background is deep operator work across youth sports, personal-brand
+              coaching, and creator infrastructure &mdash; the same three doors Trail of Joy
+              now runs as verticals.
+            </p>
+          </div>
+          <div class="links">
+            <a href="/mission.html">The mission &rarr;</a>
+            <a href="mailto:kyron@tojcampaign.com">kyron@tojcampaign.com</a>
+          </div>
+        </article>
+
+        <!-- ===== Legal Officer ===== -->
+        <article class="principal legal">
+          <div class="role-tag">Legal &middot; Structure</div>
+          <h2>[Name]</h2>
+          <div class="title">Chief Legal Officer</div>
+          <div class="creds">
+            <span class="cred">Northwestern Law</span>
+            <span class="cred">Corporate</span>
+            <span class="cred">IP</span>
+          </div>
+          <div class="placeholder-note">
+            Placeholder card. Bio pending &mdash; Kyron to fill.
+          </div>
+          <div class="bio">
+            <p>
+              Owns the legal foundation of Trail of Joy Management Group &mdash; corporate
+              structure, agreements, IP, commercial MSAs, trademark posture, and platform
+              compliance. Every foundational contract, from the Operating Agreement to the
+              first SaaS subscription terms, ships under her review.
+            </p>
+            <p>
+              [Add: 2&ndash;3 sentences of professional history, notable engagements, and
+              why she chose to build Trail of Joy alongside a partner instead of practice
+              alone.]
+            </p>
+          </div>
+          <div class="links">
+            <a href="#" aria-label="LinkedIn placeholder">LinkedIn &rarr;</a>
+          </div>
+        </article>
+
+        <!-- ===== Revenue Officer ===== -->
+        <article class="principal revenue">
+          <div class="role-tag">Revenue &middot; Enterprise</div>
+          <h2>[Name]</h2>
+          <div class="title">Chief Revenue Officer</div>
+          <div class="creds">
+            <span class="cred">20+ years enterprise sales</span>
+            <span class="cred">$5M+ in commissions</span>
+            <span class="cred">Hospitality</span>
+          </div>
+          <div class="placeholder-note">
+            Placeholder card. Bio pending &mdash; Kyron to fill.
+          </div>
+          <div class="bio">
+            <p>
+              Owns Trail of Joy&rsquo;s revenue motion &mdash; pipeline, enterprise accounts,
+              MSA negotiation, and the sales playbook for each vertical. She built her
+              career selling Time Warner Cable into hospitality, closing more than $5M in
+              personal commissions across 20-plus years of enterprise B2B relationships.
+            </p>
+            <p>
+              [Add: 2&ndash;3 sentences of career arc, largest accounts closed, and how
+              her network positions Trail of Joy&rsquo;s SaaS motion for the vertical she
+              leads out of the gate.]
+            </p>
+          </div>
+          <div class="links">
+            <a href="#" aria-label="LinkedIn placeholder">LinkedIn &rarr;</a>
+          </div>
+        </article>
+
+        <!-- ===== Product Officer ===== -->
+        <article class="principal product">
+          <div class="role-tag">Product &middot; Platform</div>
+          <h2>[Name]</h2>
+          <div class="title">Chief Product Officer</div>
+          <div class="creds">
+            <span class="cred">AI / SaaS</span>
+            <span class="cred">Platform architect</span>
+            <span class="cred">LMS &amp; workflow</span>
+          </div>
+          <div class="placeholder-note">
+            Placeholder card. Bio pending &mdash; Kyron to fill.
+          </div>
+          <div class="bio">
+            <p>
+              Owns Trail of Joy&rsquo;s platform &mdash; the universal LMS, SOP library, and
+              workflow automation layer that all three verticals ride on. Currently builds
+              SaaS at an AI company; brings that architecture, that discipline, and that
+              engineering rhythm into TOJ.
+            </p>
+            <p>
+              [Add: 2&ndash;3 sentences on background, notable products shipped, and how
+              she thinks about the LMS + SOP + operating-system spine that every TOJ
+              vertical runs on.]
+            </p>
+          </div>
+          <div class="links">
+            <a href="#" aria-label="LinkedIn placeholder">LinkedIn &rarr;</a>
+          </div>
+        </article>
+
+      </div>
+    </div>
+  </section>
+
+  <section class="cta">
+    <div class="container">
+      <h2>The standard is one document.</h2>
+      <p>
+        Every Trail of Joy client &mdash; solo operator, 501(c)(3) director, or youth
+        athlete &mdash; receives the same artifact, graded on the same five pillars. Start
+        with your Foundation Score&trade;.
+      </p>
+      <a href="/foundation-score.html" class="btn">Get your Foundation Score &rarr;</a>
+    </div>
+  </section>
+
+  <footer>
+    &copy; 2026 Trail of Joy Management Group, LLC. &middot;
+    <a href="/">Home</a> &middot;
+    <a href="/mission.html">Mission</a> &middot;
+    <a href="/how-we-work.html">How we work</a> &middot;
+    <a href="/terms.html">Terms</a> &middot;
+    <a href="/privacy.html">Privacy</a>
+  </footer>
+</body>
+</html>

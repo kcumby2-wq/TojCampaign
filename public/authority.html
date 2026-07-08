@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Authority — Documented performance. Documented credibility. — TOJ Campaign</title>
-  <meta name="description" content="TOJ Campaign for athletes, programs, and creators whose next step depends on documented performance. Youth Programs, Individual Athletes, Creators — with the Operational Transcript underneath." />
+  <meta name="description" content="TOJ Campaign for athletes, programs, and creators whose next step depends on documented performance. Youth Programs, Individual Athletes, Creators — with the Operational Transcript&trade; underneath." />
   <meta property="og:type" content="website" />
   <meta property="og:site_name" content="TOJ Campaign" />
   <meta property="og:url" content="https://tojcampaign.com/authority.html" />
@@ -17,7 +17,7 @@
   <meta name="twitter:card" content="summary_large_image" />
   <meta name="twitter:image" content="https://tojcampaign.com/og/og-authority.png" />
   <meta name="twitter:title" content="Authority — TOJ Campaign" />
-  <meta name="twitter:description" content="Athletes, programs, creators — the receipts underneath the reputation. Foundation Score in ~12 minutes." />
+  <meta name="twitter:description" content="Athletes, programs, creators — the receipts underneath the reputation. Foundation Score&trade; in ~12 minutes." />
   <link rel="icon" href='data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect width="100" height="100" rx="20" fill="%231E3A5F"/><text x="50" y="66" font-family="Georgia" font-size="52" font-weight="600" fill="%23F5F1EA" text-anchor="middle">T</text></svg>' />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -239,6 +239,57 @@
       </div>
     </div>
   </section>
+
+  <!-- ============ SAAS WAITLIST ============ -->
+  <section class="waitlist" id="waitlist" aria-labelledby="waitlist-h">
+    <div class="container">
+      <div class="waitlist-inner">
+        <div class="waitlist-copy">
+          <div class="waitlist-eyebrow">Platform coming &middot; August 2026</div>
+          <h3 id="waitlist-h">The Authority operating system launches in August.</h3>
+          <p>Founding athletes, programs, and creators get first access &mdash; the LMS, the SOP library, and the workflow automations that build the record. The paperwork done before the moment to move.</p>
+        </div>
+        <form class="waitlist-form" onsubmit="event.preventDefault(); this.querySelector('.ok').classList.add('show'); this.querySelector('.field-row').style.display='none'; return false;">
+          <div class="field-row">
+            <input type="email" required placeholder="you@youroperation.com" aria-label="Your email" />
+            <button type="submit">Join waitlist <span class="arrow">&rarr;</span></button>
+          </div>
+          <div class="ok" role="status" aria-live="polite"><strong>You&rsquo;re on the list.</strong> First access opens in August &mdash; watch for a note from <em>hello@tojcampaign.com</em>.</div>
+          <div class="note">No drip sequence. No sales calls before you ask. Read our <a href="/privacy.html">privacy note</a>.</div>
+        </form>
+      </div>
+    </div>
+  </section>
+  <style>
+    .waitlist { padding: clamp(2.5rem, 5vw, 3.5rem) 0; background: var(--parchment-2); border-top: 1px solid var(--rule); border-bottom: 1px solid var(--rule); }
+    .waitlist-inner { display: grid; grid-template-columns: 1.1fr 1fr; gap: 2rem; align-items: center; }
+    @media (max-width: 820px) { .waitlist-inner { grid-template-columns: 1fr; gap: 1.5rem; } }
+    .waitlist-eyebrow { font-family: 'JetBrains Mono', monospace; font-size: 0.72rem; font-weight: 600; letter-spacing: 0.18em; text-transform: uppercase; color: var(--accent); margin-bottom: 0.65rem; }
+    .waitlist-copy h3 { font-family: 'Fraunces', serif; font-size: clamp(1.25rem, 2.2vw, 1.65rem); line-height: 1.15; color: var(--ink); margin-bottom: 0.65rem; }
+    .waitlist-copy p { color: var(--ink-soft); font-size: 0.95rem; margin: 0; }
+    .waitlist-form .field-row { display: flex; gap: 0.6rem; flex-wrap: wrap; }
+    .waitlist-form input[type=email] {
+      flex: 1 1 220px; padding: 0.85rem 1rem; font-size: 0.98rem;
+      border: 1px solid var(--rule-strong); border-radius: 999px;
+      background: #fff; color: var(--ink); font-family: inherit;
+    }
+    .waitlist-form input[type=email]:focus { outline: none; border-color: var(--accent); }
+    .waitlist-form button {
+      padding: 0.85rem 1.4rem; background: var(--accent); color: #fff;
+      border: 0; border-radius: 999px; font-weight: 600; cursor: pointer;
+      font-family: inherit; font-size: 0.92rem; display: inline-flex; align-items: center; gap: 0.5rem;
+    }
+    .waitlist-form button:hover { filter: brightness(0.92); }
+    .waitlist-form .note { margin-top: 0.65rem; font-size: 0.78rem; color: var(--ink-mute); }
+    .waitlist-form .note a { color: var(--accent); }
+    .waitlist-form .ok {
+      display: none; padding: 0.85rem 1rem; background: #fff;
+      border-left: 3px solid var(--accent); border-radius: 6px;
+      font-size: 0.9rem; color: var(--ink);
+    }
+    .waitlist-form .ok.show { display: block; }
+    .waitlist-form .ok em { color: var(--ink-soft); font-style: italic; }
+  </style>
 
   <!-- ============ THE RECORD ============ -->
   <section class="record">
