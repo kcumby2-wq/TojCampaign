@@ -668,10 +668,13 @@ function renderReview(){
   }).join('');
   document.getElementById('reviewOutput').innerHTML=html;
 }
-function submitIntake(){if(!data.contact_email||!data.contact_phone){alert('Please add your email and phone before submitting.');return;}showStep('success');document.getElementById('autosaveStatus').style.display='none';document.querySelector('.progress-bar').style.display='none';console.log('FOUNDATION SCORE INTAKE · NON-PROFIT:',data);}
+function showSuccessScreen(){showStep('success');document.getElementById('autosaveStatus').style.display='none';document.querySelector('.progress-bar').style.display='none';}
+window.TOJ_INTAKE={vertical:'nonprofit',storageKey:STORAGE_KEY,showSuccess:showSuccessScreen};
+function submitIntake(){saveData();console.log('FOUNDATION SCORE INTAKE · NON-PROFIT:',data);window.TOJ_INTAKE.submit();}
 function restartIntake(){if(confirm('Clear this intake and start fresh?')){sessionStorage.removeItem(STORAGE_KEY);data={};document.querySelectorAll('input,select,textarea').forEach(el=>{if(el.type==='checkbox'||el.type==='radio')el.checked=false;else el.value='';});document.querySelectorAll('.check-item,.pill').forEach(el=>el.classList.remove('selected'));document.querySelector('.progress-bar').style.display='flex';document.getElementById('autosaveStatus').style.display='flex';showStep(1);}}
 loadData();
 if(Object.keys(data).length>0)document.getElementById('asText').textContent='Loaded saved answers';
 </script>
+<script src="/js/intake-submit.js" defer></script>
 </body>
 </html>

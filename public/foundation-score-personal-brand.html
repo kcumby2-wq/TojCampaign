@@ -650,12 +650,20 @@ function renderReview(){
   }).join('');
   document.getElementById('reviewOutput').innerHTML=html;
 }
-function submitIntake(){
-  if(!data.contact_email||!data.contact_phone){alert('Please add your email and phone before submitting.');return;}
+function showSuccessScreen(){
   showStep('success');
   document.getElementById('autosaveStatus').style.display='none';
   document.querySelector('.progress-bar').style.display='none';
-  console.log('FOUNDATION SCORE INTAKE · PERSONAL BRAND:',data);
+}
+window.TOJ_INTAKE = {
+  vertical: 'personal-brand',
+  storageKey: STORAGE_KEY,
+  showSuccess: showSuccessScreen,
+};
+function submitIntake(){
+  saveData();
+  console.log('FOUNDATION SCORE INTAKE · PERSONAL BRAND:', data);
+  window.TOJ_INTAKE.submit();
 }
 function restartIntake(){
   if(confirm('Clear this intake and start fresh?')){
@@ -670,5 +678,6 @@ function restartIntake(){
 loadData();
 if(Object.keys(data).length>0)document.getElementById('asText').textContent='Loaded saved answers';
 </script>
+<script src="/js/intake-submit.js" defer></script>
 </body>
 </html>
