@@ -70,38 +70,33 @@ Free tier is plenty for Phase 1 pilots. Pro tier ($25/mo) kicks in when we cross
 
 ## Step 5 — Verify (1 min)
 
-From your terminal, with the anon key:
+Instead of running curls by hand, use the bundled verify script — it
+checks all five tables, confirms RLS is doing its job, hits the Render
+backend, and tells you exactly what's wrong if something isn't wired.
 
 ```bash
-curl "https://<project-ref>.supabase.co/rest/v1/waitlist?select=count" \
-  -H "apikey: <anon key>"
+export SUPABASE_URL=https://xxxxxxxxxxxx.supabase.co
+export SUPABASE_ANON_KEY=eyJ...
+export SUPABASE_SERVICE_ROLE_KEY=eyJ...
+node scripts/verify-supabase.mjs
 ```
 
-Should return `[{"count":0}]`. That means the DB is reachable and the RLS
-policy for `anon` allows the read.
+Green checks across the board = you're done. Add `SKIP_RENDER=1` in front
+if Render hasn't redeployed yet.
 
-Then verify the waitlist endpoint on Render:
+If any check fails, the script tells you exactly what to fix — usually a
+mistyped key or a table you missed running the migration on.
 
-```bash
-curl https://app.tojcampaign.com/api/waitlist/stats
-```
+## Step 6 — Migrate the JSON waitlist
 
-Should return `{"total":0,"byVertical":{},"firstAt":null,"lastAt":null}`.
+**Current state (as of 2026-07-09):** `db/waitlists.json`, `db/clients.json`,
+`db/foundation_scores.json`, `db/pilots.json` are all committed as empty
+arrays. **Nothing to migrate.** Skip this step.
 
-## Step 6 — Migrate the JSON waitlist (only if we have entries)
-
-If any waitlist submissions came in before Supabase was hooked up, they're
-in `db/waitlists.json` on the Render server. Migrate them:
-
-1. SSH into Render or use their web console → `cat db/waitlists.json > /tmp/wl.json`
-2. Paste each entry into the Supabase SQL Editor:
-   ```sql
-   insert into public.waitlist (email, vertical, source, meta, created_at)
-   values
-     ('a@example.com', 'personal-brand', '/personal-brand.html', '{}'::jsonb, '2026-07-08T12:00:00Z'),
-     ('b@example.com', 'authority',      '/authority.html',       '{}'::jsonb, '2026-07-08T12:15:00Z');
-   ```
-3. Delete `db/waitlists.json` on Render to avoid double-writing.
+If waitlist / intake submissions land on Render *before* you finish the
+Supabase setup, you'll want to bring them across. Ping me and I'll write
+the migration script — one-shot, reads the JSON files, inserts to
+Postgres, then deletes the local files. Takes 5 minutes.
 
 ## Once done
 
