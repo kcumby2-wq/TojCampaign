@@ -11,6 +11,29 @@ const PORT = process.env.PORT || 3000;
 app.use(express.json({ limit: "5mb" }));
 app.use(express.urlencoded({ extended: true, limit: "5mb" }));
 
+// CORS for the public marketing site (tojcampaign.com, hosted on Vercel) that
+// posts to app.tojcampaign.com (this Express app on Render). Scoped to a
+// small allowlist of trusted origins — the SaaS waitlist and any future
+// public POST endpoints from the marketing site will use this.
+const CORS_ALLOWED_ORIGINS = new Set([
+  "https://tojcampaign.com",
+  "https://www.tojcampaign.com",
+  "http://localhost:3000",
+  "http://localhost:5173",
+]);
+app.use((req, res, next) => {
+  const origin = req.headers.origin;
+  if (origin && CORS_ALLOWED_ORIGINS.has(origin)) {
+    res.setHeader("Access-Control-Allow-Origin", origin);
+    res.setHeader("Vary", "Origin");
+    res.setHeader("Access-Control-Allow-Methods", "GET,POST,OPTIONS");
+    res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+    res.setHeader("Access-Control-Max-Age", "600");
+  }
+  if (req.method === "OPTIONS") return res.status(204).end();
+  next();
+});
+
 app.use(
   session({
     secret: process.env.SESSION_SECRET || "toj-dev-secret-change-me",
@@ -33,6 +56,7 @@ app.use("/api/auth", require("./routes/auth"));
 app.use("/api/analytics", require("./routes/analytics"));
 app.use("/api/email", require("./routes/email"));
 app.use("/api/intake", require("./routes/intake"));
+app.use("/api/waitlist", require("./routes/waitlist"));
 app.use("/api", require("./routes/phase1"));
 
 // 301 redirects: legacy avenue pages → v2 verticals (see archive/README.md)

@@ -183,12 +183,13 @@
           <h3 id="waitlist-h">The Non-profit operating system launches in August.</h3>
           <p>Founding organizations get first access &mdash; the LMS, the SOP library, and the workflow automations that run every Non-profit engagement. Program hours back to program work.</p>
         </div>
-        <form class="waitlist-form" onsubmit="event.preventDefault(); this.querySelector('.ok').classList.add('show'); this.querySelector('.field-row').style.display='none'; return false;">
+        <form class="waitlist-form" data-vertical="nonprofit">
           <div class="field-row">
             <input type="email" required placeholder="director@yourorg.org" aria-label="Your email" />
             <button type="submit">Join waitlist <span class="arrow">&rarr;</span></button>
           </div>
           <div class="ok" role="status" aria-live="polite"><strong>You&rsquo;re on the list.</strong> First access opens in August &mdash; watch for a note from <em>hello@tojcampaign.com</em>.</div>
+          <div class="err" role="alert"></div>
           <div class="note">No drip sequence. No sales calls before you ask. Read our <a href="/privacy.html">privacy note</a>.</div>
         </form>
       </div>
@@ -435,5 +436,10 @@
       document.querySelectorAll('.reveal').forEach(el => obs.observe(el));
     })();
   </script>
+  <style>
+    .waitlist-form .err { display: none; margin-top: 0.5rem; font-size: 0.82rem; color: #b3261e; }
+    .waitlist-form .err:not(:empty) { display: block; }
+  </style>
+  <script src="/js/waitlist.js" defer></script>
 </body>
 </html>

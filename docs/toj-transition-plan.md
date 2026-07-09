@@ -26,6 +26,62 @@ Each principal owns a functional area. The operator sits on top and holds the st
 
 Roles above are the *intent*. The structural decision — co-founder (equity + upside), executive (salary + option pool), or advisor (small equity, low commitment) — must be settled in Week 1 because it drives every legal agreement downstream.
 
+## Ownership posture: we own the stack
+
+**TOJ builds and owns the SaaS platform.** We are not reselling GoHighLevel, whitelabeling someone else's product, or wrapping a third party. The Chief Product Officer builds; the platform code, the data model, the customer relationship, and the IP all belong to Trail of Joy Management Group.
+
+Rationale:
+
+- Owned SaaS trades at 5–15× ARR at exit; whitelabel-reseller shops trade at 2–4× profit. The valuation delta is the difference between a lifestyle business and a company.
+- "The operating system underneath your business" is only a defensible story if we actually built the OS.
+- The e-commerce / self-serve motion (v0.1 by Q1 2027) requires a product we can iterate on our own timeline. Vendor platforms can't be shipped on our roadmap.
+- Existing tools we already own (routes/csv.js, the Foundation Score intake system) are Module 01 of the platform. We're not starting from zero.
+
+Standard modern owned-SaaS stack (CPO refines):
+
+| Layer | Choice | Notes |
+|-------|--------|-------|
+| App | Next.js | Modern React framework, hireable, fast |
+| Database | Supabase (Postgres) | Owned data, no vendor lock, generous free tier |
+| Auth | Clerk or Supabase Auth | Replaceable |
+| Payments | Stripe | Industry standard, replaceable |
+| Email | Resend or Postmark | Simple owned integrations |
+| AI | Anthropic + OpenAI | CPO already fluent |
+| Hosting | Vercel + Render | Where we already are |
+
+Existing GHL usage stays scoped to **internal ops** (managing our own funnel, comms, campaigns) — never rebranded to clients as "the platform."
+
+## Runway to v0.1 SaaS: concierge → semi-auto → real
+
+Pilots cannot wait until Q1 2027. Three-phase model that keeps revenue flowing while the platform gets built:
+
+**Phase 1 — Concierge MVP (August–October 2026).** Deliver what the SaaS *will* deliver, but manually behind the scenes. Notion + Airtable + Zapier + the CSV builder + human labor. Charge like a subscription ($99–299/mo per pilot). Cash flows in, product hypotheses get validated, CPO gains a real spec. This is the Airbnb / DoorDash / Stripe pattern at same stage.
+
+**Phase 2 — Semi-automated (October 2026 – January 2027).** CPO ships the first real modules, replacing the most painful manual work — CRM, campaign tracking, follow-up automation, the CSV builder extended into a proper pipeline tool. Existing clients migrate piece by piece. Waitlist emails invited into a private beta.
+
+**Phase 3 — Real self-serve SaaS (Q1 2027).** Platform is real. Self-serve onboarding. E-commerce-style checkout. Freemium tier. New clients start on the platform, not manual. CRO's enterprise motion + self-serve motion both fire at once.
+
+## Personal Brand ICP unlock: the modern network marketer
+
+TOJ's founding thesis — replace door-to-door with modern social/network marketing — is a live positioning we haven't fully claimed yet. The addressable ICP if we do:
+
+- MLM leaders (Amway, Herbalife, Primerica et al. — ~4M active reps in the U.S.)
+- Insurance agents (~2M)
+- Financial advisors and RIAs (~500K)
+- Real estate agents (~1.5M solo/small-team)
+- Coaches building downlines
+- Fitness / wellness professionals selling programs and supplements
+
+Roughly **8–12 million U.S. operators** running the modern personal-brand + network-marketing motion, whose tooling today is garbage (WhatsApp broadcast, Google Sheets pipelines, copy-pasted DM scripts, no follow-up automation, no analytics). Positioning TOJ Personal Brand as the operating system for this market:
+
+- Doesn't exist elsewhere (no competitor with a real platform for this ICP)
+- Matches the founding thesis exactly
+- Fits self-serve SaaS pricing ($50–200/mo)
+- Sells itself through their networks (this ICP *is* how word spreads)
+- Public copy shift: "Network builders, insurance agents, financial advisors, real-estate teams — if your next customer comes through your own network, the Personal Brand operating system was built for you."
+
+Ships on the site as an ICP expansion in the Personal Brand vertical page, not a new vertical. The vertical count stays at three.
+
 ## Three verticals, one spine
 
 The product architecture stays exactly as the site describes it: **three doors, one operating system**. The SaaS is the operating system.
@@ -106,3 +162,4 @@ None of these commit the business to a particular SaaS scope. They set the stage
 ## Change log
 
 - **2026-07-08** — Initial draft written. Structure, timeline, and risks laid out for four-principal review.
+- **2026-07-08 (rev.)** — Ownership posture decided: TOJ builds and owns the SaaS platform; no GHL / whitelabel dependence. Concierge → semi-auto → real-SaaS runway added. Personal Brand ICP explicitly expanded to include the modern network-marketing operator (~8–12M U.S. addressable). Waitlist forms wired to owned Express backend at app.tojcampaign.com/api/waitlist.

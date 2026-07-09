@@ -4,12 +4,12 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Personal Brand — Build the system underneath your reputation. — TOJ Campaign</title>
-  <meta name="description" content="TOJ Campaign for personal brand operators. Trainers, creators, and solo operators building a business on personal trust — with the operating system underneath." />
+  <meta name="description" content="TOJ Campaign for personal brand operators. Trainers, creators, network builders, insurance agents, and solo operators building a business on personal trust — with the operating system underneath." />
   <meta property="og:type" content="website" />
   <meta property="og:site_name" content="TOJ Campaign" />
   <meta property="og:url" content="https://tojcampaign.com/personal-brand.html" />
   <meta property="og:title" content="Personal Brand — TOJ Campaign" />
-  <meta property="og:description" content="For trainers, creators, yoga instructors, realtors, barbers, consultants. The operating system that keeps you visible, referable, and running with room to breathe." />
+  <meta property="og:description" content="For trainers, creators, network builders, insurance agents, financial advisors, yoga instructors, realtors, barbers, consultants. The operating system that keeps you visible, referable, and running with room to breathe." />
   <meta property="og:image" content="https://tojcampaign.com/og/og-personal.png" />
   <meta property="og:image:width" content="1200" />
   <meta property="og:image:height" content="630" />
@@ -145,9 +145,11 @@
       <div class="eyebrow">Personal Brand vertical</div>
       <h1>Your reputation is the business. Build the system underneath it.</h1>
       <p class="lede">
-        Solo operators &mdash; trainers, creators, and independents &mdash; whose revenue
-        depends on personal trust and 1-to-1 client relationships. We install the
-        operating system that keeps you visible, referable, and running with room to breathe.
+        Solo operators whose revenue depends on personal trust &mdash; trainers, creators,
+        independent professionals, and network builders whose next customer comes
+        through their own network. We install the operating system that keeps you
+        visible, referable, and running with room to breathe &mdash; the modern
+        replacement for door-to-door.
       </p>
       <div class="hero-cta">
         <a href="/foundation-score-personal-brand.html" class="btn accent">Start with your Foundation Score <span class="arrow">→</span></a>
@@ -186,12 +188,13 @@
           <h3 id="waitlist-h">The Personal Brand operating system launches in August.</h3>
           <p>Founding operators get first access &mdash; the LMS, the SOP library, and the workflow automations that run every Personal Brand engagement. Reserve your spot before the waves fill.</p>
         </div>
-        <form class="waitlist-form" onsubmit="event.preventDefault(); this.querySelector('.ok').classList.add('show'); this.querySelector('.field-row').style.display='none'; return false;">
+        <form class="waitlist-form" data-vertical="personal-brand">
           <div class="field-row">
             <input type="email" required placeholder="you@yourbusiness.com" aria-label="Your email" />
             <button type="submit">Join waitlist <span class="arrow">&rarr;</span></button>
           </div>
           <div class="ok" role="status" aria-live="polite"><strong>You&rsquo;re on the list.</strong> First access opens in August &mdash; watch for a note from <em>hello@tojcampaign.com</em>.</div>
+          <div class="err" role="alert"></div>
           <div class="note">No drip sequence. No sales calls before you ask. Read our <a href="/privacy.html">privacy note</a>.</div>
         </form>
       </div>
@@ -383,9 +386,11 @@
 
       </div>
       <p style="text-align: center; color: var(--ink-mute); font-size: 0.85rem; margin-top: 2rem;">
-        Building something else solo? Niches ship publicly once a named client and
-        delivered artifact land. If that's you, get your Foundation Score and we'll route
-        you directly.
+        <strong style="color: var(--ink);">Network builders, insurance agents, financial advisors, real-estate teams &mdash;</strong>
+        if your next customer comes through your own network, the Personal Brand
+        operating system was built for you. Get your Foundation Score and we&rsquo;ll
+        route you into the right niche as it ships. Building something else solo?
+        Same rule &mdash; niches ship publicly once a named client and delivered artifact land.
       </p>
     </div>
   </section>
@@ -457,5 +462,10 @@
       document.querySelectorAll('.reveal').forEach(el => obs.observe(el));
     })();
   </script>
+  <style>
+    .waitlist-form .err { display: none; margin-top: 0.5rem; font-size: 0.82rem; color: #b3261e; }
+    .waitlist-form .err:not(:empty) { display: block; }
+  </style>
+  <script src="/js/waitlist.js" defer></script>
 </body>
 </html>
