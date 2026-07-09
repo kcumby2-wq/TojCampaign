@@ -17,14 +17,35 @@ The Foundation Score™ + written 72-hour Operational Transcript™ remain the E
 
 Each principal owns a functional area. The operator sits on top and holds the standard.
 
-| Role | Owner | Scope |
-|------|-------|-------|
-| Operator / Founder | Kyron Cumby | Standard, positioning, client-facing brand, top-level product direction |
-| Chief Legal Officer | TBD | Structure, agreements, IP, MSAs, ToS/Privacy, trademark, compliance |
-| Chief Revenue Officer | TBD | Sales motion, pipeline, enterprise accounts, MSA negotiation, comp |
-| Chief Product Officer | TBD | LMS backbone, SOPs library, SaaS product, engineering choices |
+| Role | Owner | Commitment | Scope |
+|------|-------|------------|-------|
+| Operator / Founder | Kyron Cumby | Full-time | Standard, positioning, client-facing brand, top-level product direction |
+| Chief Legal Officer | TBD | TBD | Structure, agreements, IP, MSAs, ToS/Privacy, trademark, compliance |
+| Chief Revenue Officer | TBD | TBD | Sales motion, pipeline, enterprise accounts, MSA negotiation, comp |
+| Chief Product Officer | TBD | Part-time | LMS backbone, SOPs library, SaaS product, engineering choices |
 
-Roles above are the *intent*. The structural decision — co-founder (equity + upside), executive (salary + option pool), or advisor (small equity, low commitment) — must be settled in Week 1 because it drives every legal agreement downstream.
+Kyron works full-time. CPO joins part-time (30 days of product spec before writing code). Legal and Revenue commitments TBD.
+
+The structural decision — co-founder (equity + upside), executive (salary + option pool), or advisor (small equity, low commitment) — must be settled in Week 1 because it drives every legal agreement downstream.
+
+## Concierge pricing: three tiers ($99 / $199 / $499)
+
+Phase 1 pilots run August–October at three concierge-MVP price points:
+
+| Tier | Price/mo | What the client gets |
+|------|----------|----------------------|
+| **Founding** | **$99** | Foundation Score™ + Operational Transcript™ delivered once, monthly check-in, access to the LMS/SOP library as it ships, waitlist priority for the SaaS. Loss-leader that puts real operators inside the tent. |
+| **Core** | **$199** | Everything in Founding + weekly deliverable (CSV/campaign/pipeline drop), TOJ team runs one workflow module for them (chosen from CRM cadence, content calendar, or intake automation), quarterly pillar re-score. The sweet spot for the modern network marketer / solo operator ICP. |
+| **Premium** | **$499** | Everything in Core + custom SOP build for one operation, monthly working session with Kyron, first-in-line for the full self-serve SaaS with lifetime founding-operator pricing when it ships Q1 2027. |
+
+Price anchors the value story before self-serve SaaS. All three tiers are "concierge" — TOJ runs it manually while the platform gets built. Pilots who upgrade to the real SaaS in Q1 2027 keep their tier pricing for life.
+
+## Launch sequence: Personal Brand + Authority in parallel, Non-profit October
+
+- **August 1**: Personal Brand and Authority go live together as the two proving verticals. Both have committed pilots and existing partners (Sky's The Limit WR, XpandSports, Optimum Grading, CollegeFootballRecruiting.com for Authority; the modern-network-marketer ICP for Personal Brand).
+- **October**: Non-profit vertical kicks off — pilots enrolled, engagement rhythm starts, funding-architecture SOPs go live.
+
+Running two verticals from day one is aggressive but justified: the platform underneath is the same, so the marginal cost of the second vertical is copy + a few workflow variations, not a second product build. The risk to name: split attention on operator-facing communication. Kyron holds the standard across both; the CRO owns the pipeline motion of whichever vertical has enterprise-shaped buyers she's closest to.
 
 ## Ownership posture: we own the stack
 
@@ -163,3 +184,4 @@ None of these commit the business to a particular SaaS scope. They set the stage
 
 - **2026-07-08** — Initial draft written. Structure, timeline, and risks laid out for four-principal review.
 - **2026-07-08 (rev.)** — Ownership posture decided: TOJ builds and owns the SaaS platform; no GHL / whitelabel dependence. Concierge → semi-auto → real-SaaS runway added. Personal Brand ICP explicitly expanded to include the modern network-marketing operator (~8–12M U.S. addressable). Waitlist forms wired to owned Express backend at app.tojcampaign.com/api/waitlist.
+- **2026-07-08 (rev. 2)** — Locked: **Supabase from day 1** as the SaaS DB (waitlist migrates from JSON to Postgres). **Three-tier concierge pricing** ($99 / $199 / $499). **Dual launch** August 1: Personal Brand + Authority in parallel; Non-profit October. **Kyron full-time; CPO part-time.** Kyron gets first 5 pilots in writing by end of week; 4 more by August 1 target. Personal Brand copy sharpened to name "network marketers building a downline" alongside insurance agents, financial advisors, real-estate teams. Admin dashboard for waitlist + pilots and concierge client portal skeleton shipped. Foundation Score Supabase migration spec written for the CPO.

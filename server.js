@@ -57,6 +57,7 @@ app.use("/api/analytics", require("./routes/analytics"));
 app.use("/api/email", require("./routes/email"));
 app.use("/api/intake", require("./routes/intake"));
 app.use("/api/waitlist", require("./routes/waitlist"));
+app.use("/api/admin", require("./routes/admin"));
 app.use("/api", require("./routes/phase1"));
 
 // 301 redirects: legacy avenue pages → v2 verticals (see archive/README.md)

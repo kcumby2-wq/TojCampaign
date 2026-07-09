@@ -1,0 +1,346 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Admin · Waitlist &amp; Pilots — TOJ Campaign</title>
+<meta name="robots" content="noindex" />
+<link rel="icon" href='data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect width="100" height="100" rx="20" fill="%231A1613"/><text x="50" y="66" font-family="Georgia" font-size="52" font-weight="600" fill="%23B8843B" text-anchor="middle">T</text></svg>' />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Fraunces:opsz,wght@9..144,500;9..144,600&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet" />
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root { --ink:#1A1613; --ink-soft:#3B3530; --ink-mute:#6E655C; --parchment:#F5F1EA; --parchment-2:#EBE4D6; --rule:rgba(26,22,19,0.12); --rule-strong:rgba(26,22,19,0.35); --score:#B8843B; --personal:#A85F26; --nonprofit:#2F5D4E; --authority:#1E3A5F; }
+  body { font-family: 'Inter', -apple-system, sans-serif; background: var(--parchment); color: var(--ink); line-height: 1.55; }
+  h1, h2, h3 { font-family: 'Fraunces', Georgia, serif; font-weight: 600; letter-spacing: -0.015em; }
+  a { color: var(--authority); text-decoration: none; }
+
+  .top { padding: 0.9rem 1.5rem; border-bottom: 1px solid var(--rule); background: rgba(245,241,234,0.94); display: flex; align-items: center; justify-content: space-between; }
+  .brand { font-family: 'Fraunces', serif; font-weight: 600; }
+  .brand span { color: var(--score); }
+  .top .who { font-family: 'JetBrains Mono', monospace; font-size: 0.75rem; color: var(--ink-mute); letter-spacing: 0.12em; text-transform: uppercase; }
+  .top .who a { margin-left: 1rem; color: var(--ink-soft); }
+
+  main { max-width: 1280px; margin: 0 auto; padding: 2rem 1.5rem 4rem; }
+  h1 { font-size: 2rem; margin-bottom: 0.4rem; }
+  h1 em { color: var(--score); font-style: italic; font-weight: 500; }
+  .lede { color: var(--ink-mute); margin-bottom: 2rem; font-size: 0.95rem; }
+
+  .stat-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem; margin-bottom: 2rem; }
+  @media (max-width: 720px) { .stat-row { grid-template-columns: repeat(2, 1fr); } }
+  .stat { background: #fff; border: 1px solid var(--rule); border-radius: 10px; padding: 1rem 1.15rem; position: relative; overflow: hidden; }
+  .stat::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px; background: var(--score); }
+  .stat.pb::before { background: var(--personal); }
+  .stat.np::before { background: var(--nonprofit); }
+  .stat.au::before { background: var(--authority); }
+  .stat .lbl { font-family: 'JetBrains Mono', monospace; font-size: 0.68rem; font-weight: 600; letter-spacing: 0.14em; text-transform: uppercase; color: var(--ink-mute); margin-bottom: 0.4rem; }
+  .stat .num { font-family: 'Fraunces', serif; font-size: 2.25rem; line-height: 1; color: var(--ink); }
+  .stat .sub { font-size: 0.75rem; color: var(--ink-mute); margin-top: 0.4rem; }
+
+  section { margin-bottom: 3rem; }
+  section h2 { font-size: 1.35rem; margin-bottom: 1rem; display: flex; align-items: baseline; gap: 0.75rem; }
+  section h2 .count { font-family: 'JetBrains Mono', monospace; font-size: 0.75rem; font-weight: 500; letter-spacing: 0.14em; color: var(--ink-mute); text-transform: uppercase; }
+  .toolbar { display: flex; gap: 0.6rem; align-items: center; margin-bottom: 0.75rem; flex-wrap: wrap; }
+  .filter-btn, .btn {
+    font-family: 'JetBrains Mono', monospace; font-size: 0.72rem; font-weight: 600;
+    letter-spacing: 0.1em; text-transform: uppercase;
+    padding: 0.5rem 0.9rem; border-radius: 999px; border: 1px solid var(--rule-strong);
+    background: #fff; color: var(--ink-soft); cursor: pointer;
+  }
+  .filter-btn.active { background: var(--ink); color: var(--parchment); border-color: var(--ink); }
+  .btn.primary { background: var(--ink); color: var(--parchment); border-color: var(--ink); }
+  .btn:hover, .filter-btn:hover { filter: brightness(0.95); }
+
+  table { width: 100%; border-collapse: collapse; background: #fff; border: 1px solid var(--rule); border-radius: 10px; overflow: hidden; }
+  th, td { text-align: left; padding: 0.7rem 0.85rem; font-size: 0.88rem; }
+  th { background: var(--parchment-2); font-family: 'JetBrains Mono', monospace; font-size: 0.7rem; font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink-mute); border-bottom: 1px solid var(--rule); }
+  tbody tr { border-top: 1px solid var(--rule); }
+  tbody tr:hover { background: var(--parchment); }
+  td.mono { font-family: 'JetBrains Mono', monospace; font-size: 0.78rem; color: var(--ink-soft); }
+
+  .chip { display: inline-block; padding: 0.15rem 0.5rem; border-radius: 999px; font-size: 0.7rem; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: #fff; }
+  .chip.pb { background: var(--personal); }
+  .chip.np { background: var(--nonprofit); }
+  .chip.au { background: var(--authority); }
+  .chip.un { background: var(--ink-mute); }
+  .chip.prospect  { background: #999; }
+  .chip.committed { background: #6b7280; }
+  .chip.signed    { background: var(--score); }
+  .chip.onboarded { background: var(--nonprofit); }
+  .chip.declined  { background: #b3261e; }
+  .chip.sunset    { background: var(--ink-mute); }
+
+  .empty { padding: 2rem; text-align: center; color: var(--ink-mute); font-style: italic; background: #fff; border: 1px dashed var(--rule-strong); border-radius: 10px; }
+  .backend-tag { font-family: 'JetBrains Mono', monospace; font-size: 0.7rem; color: var(--ink-mute); letter-spacing: 0.1em; text-transform: uppercase; }
+
+  /* New pilot form */
+  form.new-pilot { background: #fff; border: 1px solid var(--rule); border-radius: 10px; padding: 1.15rem; display: none; grid-template-columns: repeat(6, 1fr); gap: 0.6rem; margin-bottom: 1rem; }
+  form.new-pilot.open { display: grid; }
+  form.new-pilot input, form.new-pilot select { padding: 0.55rem 0.7rem; font-size: 0.85rem; font-family: inherit; border: 1px solid var(--rule-strong); border-radius: 6px; background: var(--parchment); }
+  form.new-pilot .full { grid-column: 1 / -1; }
+  form.new-pilot button[type=submit] { grid-column: 5 / 7; }
+
+  /* Login gate */
+  #gate { display: none; max-width: 420px; margin: 5rem auto; background: #fff; border: 1px solid var(--rule); border-radius: 12px; padding: 2rem; text-align: center; }
+  #gate.on { display: block; }
+  #gate h1 { font-size: 1.4rem; margin-bottom: 0.5rem; }
+  #gate p { color: var(--ink-mute); margin-bottom: 1.25rem; }
+</style>
+</head>
+<body>
+<div class="top">
+  <a href="/" class="brand" style="color:var(--ink);">TOJ <span>Admin</span></a>
+  <div class="who">
+    <span id="who">…</span>
+    <a href="#" id="logout">Log out</a>
+  </div>
+</div>
+
+<main id="app" style="display:none;">
+  <h1>Waitlist &amp; pilot <em>rollup</em>.</h1>
+  <p class="lede">
+    Snapshot for the founder sync. Waitlist entries come from the public site;
+    pilots are the concierge MVP roster tracked internally.
+    <span class="backend-tag" id="backend-tag"></span>
+  </p>
+
+  <div class="stat-row">
+    <div class="stat">
+      <div class="lbl">Waitlist total</div>
+      <div class="num" id="wl-total">—</div>
+      <div class="sub">Across all three verticals</div>
+    </div>
+    <div class="stat pb">
+      <div class="lbl">Personal Brand</div>
+      <div class="num" id="wl-pb">—</div>
+      <div class="sub">Modern network operators</div>
+    </div>
+    <div class="stat np">
+      <div class="lbl">Non-profit</div>
+      <div class="num" id="wl-np">—</div>
+      <div class="sub">501(c)(3) directors</div>
+    </div>
+    <div class="stat au">
+      <div class="lbl">Authority</div>
+      <div class="num" id="wl-au">—</div>
+      <div class="sub">Athletes &amp; programs</div>
+    </div>
+  </div>
+
+  <section>
+    <h2>Pilots <span class="count" id="pilots-count">0 total</span></h2>
+    <div class="toolbar">
+      <button class="filter-btn active" data-pf="">All</button>
+      <button class="filter-btn" data-pf="prospect">Prospect</button>
+      <button class="filter-btn" data-pf="committed">Committed</button>
+      <button class="filter-btn" data-pf="signed">Signed</button>
+      <button class="filter-btn" data-pf="onboarded">Onboarded</button>
+      <button class="btn primary" id="new-pilot-btn" style="margin-left:auto;">+ Add pilot</button>
+    </div>
+    <form class="new-pilot" id="new-pilot-form">
+      <input type="text" name="operator_name" placeholder="Operator name" />
+      <input type="text" name="business_name" placeholder="Business name" />
+      <input type="email" name="contact_email" placeholder="Email *" required />
+      <select name="vertical">
+        <option value="">Vertical…</option>
+        <option value="personal-brand">Personal Brand</option>
+        <option value="nonprofit">Non-profit</option>
+        <option value="authority">Authority</option>
+      </select>
+      <select name="intended_tier">
+        <option value="">Tier…</option>
+        <option value="founding">Founding · $99</option>
+        <option value="core">Core · $199</option>
+        <option value="premium">Premium · $499</option>
+      </select>
+      <select name="status">
+        <option value="prospect">Prospect</option>
+        <option value="committed">Committed</option>
+        <option value="signed">Signed</option>
+        <option value="onboarded">Onboarded</option>
+      </select>
+      <input class="full" type="text" name="notes" placeholder="Notes…" />
+      <button class="btn primary" type="submit">Add pilot</button>
+    </form>
+    <div id="pilots-body"></div>
+  </section>
+
+  <section>
+    <h2>Waitlist entries <span class="count" id="wl-count">0 total</span></h2>
+    <div class="toolbar">
+      <button class="filter-btn active" data-wf="">All</button>
+      <button class="filter-btn" data-wf="personal-brand">Personal Brand</button>
+      <button class="filter-btn" data-wf="nonprofit">Non-profit</button>
+      <button class="filter-btn" data-wf="authority">Authority</button>
+      <button class="btn" id="export-csv" style="margin-left:auto;">Export CSV</button>
+    </div>
+    <div id="waitlist-body"></div>
+  </section>
+</main>
+
+<div id="gate">
+  <h1>Admin sign-in required.</h1>
+  <p>Sign in with your TOJ admin account to see the rollup.</p>
+  <a href="/app.html" class="btn primary" style="text-decoration:none; display:inline-block;">Go to sign-in →</a>
+</div>
+
+<script>
+(function () {
+  var vLabel = { 'personal-brand':'Personal Brand', 'nonprofit':'Non-profit', 'authority':'Authority', 'unknown':'Unknown' };
+  var vChip  = { 'personal-brand':'pb', 'nonprofit':'np', 'authority':'au', 'unknown':'un' };
+  var pilotFilter = '', waitlistFilter = '';
+  var pilotsCache = [], waitlistCache = [];
+
+  function fmt(d) {
+    if (!d) return '—';
+    var dt = new Date(d);
+    return dt.toISOString().slice(0,10) + ' ' + dt.toTimeString().slice(0,5);
+  }
+  function chip(v) { return '<span class="chip '+vChip[v]+'">'+vLabel[v]+'</span>'; }
+  function pchip(s) { return '<span class="chip '+s+'">'+s+'</span>'; }
+
+  function renderStats(dash) {
+    document.getElementById('wl-total').textContent = dash.waitlist.total || 0;
+    document.getElementById('wl-pb').textContent = dash.waitlist.byVertical['personal-brand'] || 0;
+    document.getElementById('wl-np').textContent = dash.waitlist.byVertical['nonprofit']       || 0;
+    document.getElementById('wl-au').textContent = dash.waitlist.byVertical['authority']       || 0;
+    document.getElementById('backend-tag').textContent = 'Backend: ' + dash.backend;
+    document.getElementById('pilots-count').textContent = dash.pilots.total + ' total';
+    document.getElementById('wl-count').textContent = dash.waitlist.total + ' total';
+  }
+  function renderPilots() {
+    var rows = pilotsCache.filter(function (r) { return !pilotFilter || r.status === pilotFilter; });
+    var box = document.getElementById('pilots-body');
+    if (!rows.length) { box.innerHTML = '<div class="empty">No pilots match this filter yet.</div>'; return; }
+    var html = '<table><thead><tr><th>Operator</th><th>Business</th><th>Vertical</th><th>Tier</th><th>Status</th><th>Notes</th><th>Added</th></tr></thead><tbody>';
+    rows.forEach(function (r) {
+      html += '<tr>' +
+        '<td>'+ (r.operator_name || '—') +'</td>' +
+        '<td>'+ (r.business_name || '—') +'</td>' +
+        '<td>'+ (r.vertical ? chip(r.vertical) : '—') +'</td>' +
+        '<td>'+ (r.intended_tier || '—') +'</td>' +
+        '<td>'+ pchip(r.status) +'</td>' +
+        '<td>'+ (r.notes ? r.notes.replace(/</g,'&lt;') : '—') +'</td>' +
+        '<td class="mono">'+ fmt(r.created_at) +'</td>' +
+        '</tr>';
+    });
+    box.innerHTML = html + '</tbody></table>';
+  }
+  function renderWaitlist() {
+    var rows = waitlistCache.filter(function (r) { return !waitlistFilter || r.vertical === waitlistFilter; });
+    var box = document.getElementById('waitlist-body');
+    if (!rows.length) { box.innerHTML = '<div class="empty">No waitlist entries yet. When the site captures emails, they show here.</div>'; return; }
+    var html = '<table><thead><tr><th>Email</th><th>Vertical</th><th>Source</th><th>Signed up</th></tr></thead><tbody>';
+    rows.forEach(function (r) {
+      html += '<tr>' +
+        '<td class="mono">'+ r.email +'</td>' +
+        '<td>'+ chip(r.vertical) +'</td>' +
+        '<td class="mono">'+ (r.source || '—') +'</td>' +
+        '<td class="mono">'+ fmt(r.created_at || r.createdAt) +'</td>' +
+        '</tr>';
+    });
+    box.innerHTML = html + '</tbody></table>';
+  }
+
+  function csvEscape(s) {
+    s = (s == null ? '' : String(s));
+    return /["\n,]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+  }
+  function exportCsv() {
+    var header = ['email', 'vertical', 'source', 'created_at'];
+    var lines = [header.join(',')];
+    waitlistCache.forEach(function (r) {
+      lines.push([r.email, r.vertical, r.source, r.created_at || r.createdAt].map(csvEscape).join(','));
+    });
+    var blob = new Blob([lines.join('\n')], { type: 'text/csv' });
+    var a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'toj-waitlist-' + new Date().toISOString().slice(0,10) + '.csv';
+    a.click();
+  }
+
+  function fetchAll() {
+    return Promise.all([
+      fetch('/api/admin/dashboard', { credentials: 'same-origin' }).then(function (r) { return r.json(); }),
+      fetch('/api/admin/pilots',    { credentials: 'same-origin' }).then(function (r) { return r.json(); }),
+      fetch('/api/waitlist/list?limit=500', { credentials: 'same-origin' }).then(function (r) { return r.json(); }),
+    ]);
+  }
+
+  function boot() {
+    fetch('/api/me', { credentials: 'same-origin' })
+      .then(function (r) { return r.json(); })
+      .then(function (me) {
+        if (!me.authenticated) {
+          document.getElementById('gate').classList.add('on');
+          return;
+        }
+        document.getElementById('app').style.display = 'block';
+        document.getElementById('who').textContent = me.email;
+
+        return fetchAll().then(function (out) {
+          var dash = out[0], pilots = out[1], wl = out[2];
+          renderStats(dash);
+          pilotsCache = pilots.pilots || [];
+          waitlistCache = wl.entries || [];
+          renderPilots(); renderWaitlist();
+        });
+      })
+      .catch(function () { document.getElementById('gate').classList.add('on'); });
+  }
+  boot();
+
+  document.getElementById('logout').addEventListener('click', function (e) {
+    e.preventDefault();
+    fetch('/api/auth/logout', { method: 'POST', credentials: 'same-origin' })
+      .finally(function () { location.href = '/'; });
+  });
+
+  document.querySelectorAll('[data-pf]').forEach(function (b) {
+    b.addEventListener('click', function () {
+      document.querySelectorAll('[data-pf]').forEach(function (x) { x.classList.remove('active'); });
+      b.classList.add('active');
+      pilotFilter = b.getAttribute('data-pf');
+      renderPilots();
+    });
+  });
+  document.querySelectorAll('[data-wf]').forEach(function (b) {
+    b.addEventListener('click', function () {
+      document.querySelectorAll('[data-wf]').forEach(function (x) { x.classList.remove('active'); });
+      b.classList.add('active');
+      waitlistFilter = b.getAttribute('data-wf');
+      renderWaitlist();
+    });
+  });
+  document.getElementById('export-csv').addEventListener('click', exportCsv);
+
+  var newBtn = document.getElementById('new-pilot-btn');
+  var newForm = document.getElementById('new-pilot-form');
+  newBtn.addEventListener('click', function () { newForm.classList.toggle('open'); });
+  newForm.addEventListener('submit', function (e) {
+    e.preventDefault();
+    var fd = new FormData(newForm);
+    var body = {};
+    fd.forEach(function (v, k) { if (v) body[k] = v; });
+    fetch('/api/admin/pilots', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'same-origin',
+      body: JSON.stringify(body),
+    })
+      .then(function (r) { return r.json(); })
+      .then(function (out) {
+        if (out.error) { alert('Error: ' + out.error); return; }
+        pilotsCache.unshift(out.pilot);
+        renderPilots();
+        newForm.reset();
+        newForm.classList.remove('open');
+        // refresh stats
+        fetch('/api/admin/dashboard').then(function (r) { return r.json(); }).then(renderStats);
+      });
+  });
+})();
+</script>
+</body>
+</html>

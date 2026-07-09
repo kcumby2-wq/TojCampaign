@@ -1,101 +1,259 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Client Login — TOJ Campaign</title>
-  <meta name="description" content="Client login for the TOJ operator portal. Existing clients access their branded environment, transcripts, and dashboards." />
-  <link rel="icon" href='data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect width="100" height="100" rx="20" fill="%231A1613"/><text x="50" y="66" font-family="Georgia" font-size="52" font-weight="600" fill="%23F5F1EA" text-anchor="middle">T</text></svg>' />
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&display=swap" rel="stylesheet" />
-  <style>
-    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: 'Inter', -apple-system, sans-serif; background: #F5F1EA; color: #1A1613; line-height: 1.5; min-height: 100vh; display: flex; flex-direction: column; }
-    :root { --parchment: #F5F1EA; --parchment-2: #EBE4D6; --ink: #1A1613; --ink-soft: #3B3530; --ink-mute: #6E655C; --rule: rgba(26,22,19,0.12); --sports: #1E3A5F; }
-    h1, h2, h3 { font-family: 'Fraunces', 'Georgia', serif; font-weight: 600; letter-spacing: -0.015em; color: var(--ink); }
-    a { color: var(--sports); text-decoration: none; }
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Client Portal — TOJ Campaign</title>
+<meta name="description" content="Your Trail of Joy operating system — Operational Transcript, weekly deliverables, and tier status." />
+<meta name="robots" content="noindex" />
+<link rel="icon" href='data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect width="100" height="100" rx="20" fill="%231A1613"/><text x="50" y="66" font-family="Georgia" font-size="52" font-weight="600" fill="%23B8843B" text-anchor="middle">T</text></svg>' />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Fraunces:opsz,wght@9..144,500;9..144,600&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet" />
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root { --ink:#1A1613; --ink-soft:#3B3530; --ink-mute:#6E655C; --parchment:#F5F1EA; --parchment-2:#EBE4D6; --rule:rgba(26,22,19,0.12); --rule-strong:rgba(26,22,19,0.35); --score:#B8843B; --personal:#A85F26; --nonprofit:#2F5D4E; --authority:#1E3A5F; }
+  body { font-family: 'Inter', -apple-system, sans-serif; background: var(--parchment); color: var(--ink); line-height: 1.55; min-height: 100vh; }
+  h1, h2, h3 { font-family: 'Fraunces', Georgia, serif; font-weight: 600; letter-spacing: -0.015em; }
+  a { color: var(--authority); text-decoration: none; }
 
-    .top-bar { padding: 1rem clamp(1.25rem, 3vw, 2.5rem); border-bottom: 1px solid var(--rule); display: flex; justify-content: space-between; align-items: center; background: rgba(245,241,234,0.94); }
-    .brand { font-family: 'Fraunces', serif; font-weight: 600; font-size: 1.05rem; color: var(--ink); }
-    .brand span { color: var(--ink-mute); font-weight: 400; }
-    .back-link { color: var(--ink-soft); font-size: 0.85rem; font-weight: 500; }
+  .top { padding: 0.9rem 1.5rem; border-bottom: 1px solid var(--rule); background: rgba(245,241,234,0.94); display: flex; align-items: center; justify-content: space-between; }
+  .top .brand { font-family: 'Fraunces', serif; font-weight: 600; color: var(--ink); }
+  .top .brand span { color: var(--ink-mute); font-weight: 400; }
+  .top .who { font-family: 'JetBrains Mono', monospace; font-size: 0.75rem; color: var(--ink-mute); letter-spacing: 0.12em; text-transform: uppercase; }
+  .top .who a { margin-left: 1rem; color: var(--ink-soft); }
 
-    main { flex: 1; display: flex; align-items: center; justify-content: center; padding: 3rem 1.5rem; }
-    .login-card {
-      width: 100%; max-width: 420px; background: #fff; padding: 2.5rem 2rem;
-      border-radius: 14px; box-shadow: 0 40px 80px -50px rgba(26,22,19,0.25);
-      border: 1px solid var(--rule);
-    }
-    .login-card .eyebrow { font-size: 0.7rem; font-weight: 700; letter-spacing: 0.16em; text-transform: uppercase; color: var(--sports); margin-bottom: 0.85rem; text-align: center; }
-    .login-card h1 { font-size: 1.65rem; margin-bottom: 0.5rem; text-align: center; }
-    .login-card .sub { text-align: center; color: var(--ink-mute); font-size: 0.9rem; margin-bottom: 1.75rem; }
+  main { max-width: 1120px; margin: 0 auto; padding: 2.5rem 1.5rem 5rem; }
+  .greeting { margin-bottom: 2rem; }
+  .greeting .eyebrow { font-family: 'JetBrains Mono', monospace; font-size: 0.72rem; font-weight: 600; letter-spacing: 0.18em; text-transform: uppercase; color: var(--ink-mute); margin-bottom: 0.6rem; }
+  .greeting h1 { font-size: 2.1rem; line-height: 1.1; margin-bottom: 0.35rem; }
+  .greeting h1 em { color: var(--score); font-style: italic; font-weight: 500; }
+  .greeting p { color: var(--ink-soft); font-size: 1rem; max-width: 46rem; }
 
-    form { display: flex; flex-direction: column; gap: 1rem; }
-    label { display: flex; flex-direction: column; gap: 0.35rem; font-size: 0.82rem; color: var(--ink-soft); font-weight: 500; }
-    input {
-      padding: 0.75rem 0.85rem; font-size: 0.95rem; border: 1px solid var(--rule);
-      border-radius: 8px; font-family: inherit; background: var(--parchment); color: var(--ink);
-      transition: border-color 0.15s;
-    }
-    input:focus { outline: none; border-color: var(--sports); background: #fff; }
-    button {
-      padding: 0.85rem 1rem; background: var(--ink); color: var(--parchment);
-      border: 0; border-radius: 8px; font-size: 0.95rem; font-weight: 600;
-      cursor: pointer; font-family: inherit; transition: background 0.15s; margin-top: 0.5rem;
-    }
-    button:hover { background: var(--ink-soft); }
-    .altlinks { margin-top: 1.15rem; padding-top: 1.15rem; border-top: 1px solid var(--rule); display: flex; justify-content: space-between; font-size: 0.82rem; }
+  .grid { display: grid; grid-template-columns: 2fr 1fr; gap: 1.5rem; }
+  @media (max-width: 900px) { .grid { grid-template-columns: 1fr; } }
 
-    .notice {
-      max-width: 420px; margin: 1.5rem auto 0; padding: 1rem 1.15rem;
-      background: rgba(30,58,95,0.06); border-left: 3px solid var(--sports);
-      border-radius: 4px; font-size: 0.82rem; color: var(--ink-soft);
-    }
-    .notice strong { color: var(--ink); }
+  .card { background: #fff; border: 1px solid var(--rule); border-radius: 12px; padding: 1.5rem 1.65rem; }
+  .card h2 { font-size: 1.15rem; margin-bottom: 0.75rem; }
+  .card h2 .badge { font-family: 'JetBrains Mono', monospace; font-size: 0.68rem; letter-spacing: 0.14em; text-transform: uppercase; color: var(--ink-mute); font-weight: 500; margin-left: 0.6rem; }
+  .card + .card { margin-top: 1rem; }
 
-    footer { padding: 1.5rem clamp(1.25rem, 3vw, 2.5rem); background: var(--ink); color: rgba(245,241,234,0.65); text-align: center; font-size: 0.78rem; }
-    footer a { color: rgba(245,241,234,0.75); }
-  </style>
+  .tier {
+    padding: 1.25rem 1.5rem; border-radius: 10px;
+    background: var(--parchment-2); border-left: 4px solid var(--accent, var(--score));
+    display: flex; align-items: baseline; justify-content: space-between; gap: 1rem; flex-wrap: wrap;
+  }
+  .tier .name { font-family: 'Fraunces', serif; font-weight: 600; font-size: 1.35rem; }
+  .tier .price { font-family: 'JetBrains Mono', monospace; font-size: 0.85rem; color: var(--ink-soft); }
+  .tier .status { font-family: 'JetBrains Mono', monospace; font-size: 0.7rem; letter-spacing: 0.14em; text-transform: uppercase; color: var(--ink); padding: 0.35rem 0.75rem; background: #fff; border: 1px solid var(--rule-strong); border-radius: 999px; }
+
+  .transcript {
+    padding: 1.5rem; border-radius: 10px; background: var(--ink); color: var(--parchment);
+    margin: 1rem 0; display: grid; grid-template-columns: 1fr auto; gap: 1rem; align-items: center;
+  }
+  .transcript .lbl { font-family: 'JetBrains Mono', monospace; font-size: 0.7rem; font-weight: 600; letter-spacing: 0.14em; text-transform: uppercase; color: var(--score); margin-bottom: 0.35rem; }
+  .transcript h3 { font-family: 'Fraunces', serif; color: var(--parchment); font-size: 1.15rem; margin-bottom: 0.25rem; }
+  .transcript p { color: rgba(245,241,234,0.7); font-size: 0.88rem; margin: 0; }
+  .transcript .btn {
+    display: inline-block; padding: 0.7rem 1.15rem; background: var(--score); color: #fff;
+    border-radius: 999px; font-weight: 600; font-size: 0.85rem;
+  }
+
+  .pillars { display: grid; grid-template-columns: repeat(5, 1fr); gap: 0.6rem; margin: 1rem 0 0.5rem; }
+  @media (max-width: 720px) { .pillars { grid-template-columns: repeat(2, 1fr); } }
+  .pillar { background: var(--parchment); border: 1px solid var(--rule); border-radius: 8px; padding: 0.6rem 0.75rem; text-align: center; }
+  .pillar .p-lbl { font-family: 'JetBrains Mono', monospace; font-size: 0.6rem; font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink-mute); margin-bottom: 0.3rem; line-height: 1.1; }
+  .pillar .p-score { font-family: 'Fraunces', serif; font-size: 1.35rem; color: var(--ink); font-weight: 600; }
+
+  .deliverables ul { list-style: none; padding: 0; margin: 0.5rem 0 0; }
+  .deliverables li { padding: 0.85rem 1rem; border-radius: 8px; background: var(--parchment); border: 1px solid var(--rule); margin-bottom: 0.5rem; display: grid; grid-template-columns: auto 1fr auto; gap: 0.85rem; align-items: center; }
+  .deliverables .kind { font-family: 'JetBrains Mono', monospace; font-size: 0.66rem; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; padding: 0.3rem 0.6rem; border-radius: 999px; background: #fff; color: var(--ink); border: 1px solid var(--rule-strong); }
+  .deliverables .title { font-weight: 500; }
+  .deliverables .date { font-family: 'JetBrains Mono', monospace; font-size: 0.75rem; color: var(--ink-mute); }
+  .deliverables .empty { padding: 1.5rem; text-align: center; color: var(--ink-mute); font-style: italic; background: var(--parchment); border: 1px dashed var(--rule-strong); border-radius: 8px; }
+
+  .side .card h2 { margin-bottom: 0.5rem; }
+  .side .card p { font-size: 0.9rem; color: var(--ink-soft); }
+  .side .card + .card { margin-top: 1rem; }
+
+  .contact { padding: 1.15rem 1.35rem; background: var(--parchment-2); border-radius: 10px; margin-top: 2rem; font-size: 0.9rem; }
+  .contact strong { color: var(--ink); }
+  .contact a { font-weight: 600; }
+
+  /* Login gate */
+  #gate { display: none; max-width: 480px; margin: 5rem auto; background: #fff; border: 1px solid var(--rule); border-radius: 12px; padding: 2.5rem; text-align: center; }
+  #gate.on { display: block; }
+  #gate .eyebrow { font-family: 'JetBrains Mono', monospace; font-size: 0.7rem; font-weight: 600; letter-spacing: 0.16em; text-transform: uppercase; color: var(--score); margin-bottom: 0.75rem; }
+  #gate h1 { font-size: 1.55rem; margin-bottom: 0.75rem; }
+  #gate p { color: var(--ink-mute); margin-bottom: 1.5rem; }
+  #gate .btn { display: inline-block; padding: 0.85rem 1.35rem; background: var(--ink); color: var(--parchment); border-radius: 999px; font-weight: 600; text-decoration: none; }
+
+  footer { padding: 1.5rem; background: var(--ink); color: rgba(245,241,234,0.6); text-align: center; font-size: 0.78rem; }
+  footer a { color: rgba(245,241,234,0.75); }
+</style>
 </head>
 <body>
-  <div class="top-bar">
-    <a href="/" class="brand">TOJ Campaign <span>&mdash; Trail of Joy</span></a>
-    <a href="/" class="back-link">&larr; Home</a>
+
+<div class="top">
+  <a href="/" class="brand">TOJ Campaign <span>&mdash; Client portal</span></a>
+  <div class="who">
+    <span id="who">…</span>
+    <a href="#" id="logout">Log out</a>
+  </div>
+</div>
+
+<main id="app" style="display:none;">
+  <div class="greeting">
+    <div class="eyebrow">Client portal &middot; Concierge tier</div>
+    <h1>Welcome back, <em id="op-name">operator</em>.</h1>
+    <p id="greet-sub">Your Trail of Joy operating system — your Operational Transcript, your weekly deliverables, and everything the team is running for you this week.</p>
   </div>
 
-  <main>
-    <div>
-      <div class="login-card">
-        <div class="eyebrow">Client portal</div>
-        <h1>Sign in</h1>
-        <div class="sub">Access your branded environment, transcripts, and dashboards.</div>
-        <form onsubmit="event.preventDefault(); document.getElementById('note').style.display='block'; return false;">
-          <label>Email
-            <input type="email" required placeholder="you@yourbusiness.com" />
-          </label>
-          <label>Password
-            <input type="password" required placeholder="&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;" />
-          </label>
-          <button type="submit">Continue &rarr;</button>
-        </form>
-        <div class="altlinks">
-          <a href="/">Forgot password?</a>
-          <a href="/">Not a client yet?</a>
+  <div class="grid">
+    <div class="main">
+
+      <div class="card">
+        <h2>Your tier</h2>
+        <div class="tier" id="tier-card" style="--accent: var(--score);">
+          <div>
+            <div class="name" id="tier-name">Founding</div>
+            <div class="price" id="tier-price">$99 / month · concierge MVP</div>
+          </div>
+          <div class="status" id="tier-status">Active</div>
         </div>
       </div>
 
-      <div class="notice" id="note" style="display:none;">
-        <strong>Portal setup underway.</strong> The client portal is being provisioned for
-        each vertical&rsquo;s deployment. If you&rsquo;re an existing TOJ client and need to
-        access your environment right now, reach out at
-        <a href="mailto:hello@tojcampaign.com" style="color:var(--sports);font-weight:600;">hello@tojcampaign.com</a>.
+      <div class="card">
+        <h2>Your Operational Transcript&trade;</h2>
+        <div class="transcript" id="transcript-card">
+          <div>
+            <div class="lbl">Latest delivery</div>
+            <h3 id="transcript-title">Operational Transcript pending</h3>
+            <p id="transcript-sub">Once your Foundation Score is graded, your Transcript lands here.</p>
+          </div>
+          <a href="#" class="btn" id="transcript-link" style="display:none;">Open →</a>
+        </div>
+        <div class="pillars" id="pillars">
+          <div class="pillar"><div class="p-lbl">Brand Identity</div><div class="p-score">—</div></div>
+          <div class="pillar"><div class="p-lbl">Ops Health</div><div class="p-score">—</div></div>
+          <div class="pillar"><div class="p-lbl">Revenue Arch.</div><div class="p-score">—</div></div>
+          <div class="pillar"><div class="p-lbl">Content &amp; Cred.</div><div class="p-score">—</div></div>
+          <div class="pillar"><div class="p-lbl">Growth Ready.</div><div class="p-score">—</div></div>
+        </div>
+      </div>
+
+      <div class="card deliverables">
+        <h2>This week&rsquo;s deliverables <span class="badge" id="del-count"></span></h2>
+        <ul id="deliverables-list">
+          <li class="empty">No deliverables yet. Your first one lands within a week of onboarding.</li>
+        </ul>
       </div>
     </div>
-  </main>
 
-  <footer>
-    &copy; 2026 Trail of Joy Management Group, LLC. &middot; <a href="/">TOJ Campaign</a>
-  </footer>
+    <div class="side">
+      <div class="card">
+        <h2>Next check-in</h2>
+        <p id="next-checkin">Your weekly working session is scheduled inside 1Password → TOJ shared calendar.</p>
+      </div>
+      <div class="card">
+        <h2>Founding operator perks</h2>
+        <p>You&rsquo;re on lifetime founding-operator pricing when the full self-serve SaaS ships Q1 2027. Your tier locks at today&rsquo;s rate forever.</p>
+      </div>
+      <div class="card">
+        <h2>Need something?</h2>
+        <p>Email <a href="mailto:hello@tojcampaign.com">hello@tojcampaign.com</a> and Kyron reads it before it hits any team channel.</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="contact">
+    <strong>Under construction.</strong> The client portal is in v0.1 — deliverables, comms, and file drops all live here as the concierge MVP runs. The full self-serve platform ships Q1 2027; today&rsquo;s founding operators keep their pricing when it does.
+  </div>
+</main>
+
+<div id="gate">
+  <div class="eyebrow">Client portal</div>
+  <h1>Sign in to see your operating system.</h1>
+  <p>If you&rsquo;re a Trail of Joy pilot operator, use the credentials Kyron sent you. Not a client yet? <a href="/foundation-score.html">Start with your Foundation Score</a> &mdash; the intake sorts the vertical for you.</p>
+  <a href="/app.html" class="btn">Sign in →</a>
+</div>
+
+<footer>
+  &copy; 2026 Trail of Joy Management Group, LLC. &middot;
+  <a href="/">Home</a> &middot;
+  <a href="/terms.html">Terms</a> &middot;
+  <a href="/privacy.html">Privacy</a>
+</footer>
+
+<script>
+(function () {
+  function boot() {
+    fetch('/api/me', { credentials: 'same-origin' })
+      .then(function (r) { return r.json(); })
+      .then(function (me) {
+        if (!me.authenticated) {
+          document.getElementById('gate').classList.add('on');
+          return;
+        }
+        document.getElementById('app').style.display = 'block';
+        document.getElementById('who').textContent = me.email;
+
+        // Try to hydrate real client data. Endpoint may not exist yet in
+        // this repo state — that's fine; the placeholder greeting stays.
+        return fetch('/api/client/me', { credentials: 'same-origin' })
+          .then(function (r) { return r.ok ? r.json() : null; })
+          .then(function (client) {
+            if (!client) return;
+            if (client.operator_name) document.getElementById('op-name').textContent = client.operator_name;
+            if (client.tier) {
+              document.getElementById('tier-name').textContent = client.tier[0].toUpperCase() + client.tier.slice(1);
+              var accent = client.vertical === 'personal-brand' ? 'var(--personal)' :
+                           client.vertical === 'nonprofit'      ? 'var(--nonprofit)' :
+                           client.vertical === 'authority'      ? 'var(--authority)' : 'var(--score)';
+              document.getElementById('tier-card').style.setProperty('--accent', accent);
+              var price = client.tier === 'core' ? '$199' : client.tier === 'premium' ? '$499' : '$99';
+              document.getElementById('tier-price').textContent = price + ' / month · concierge MVP';
+            }
+            if (client.transcript && client.transcript.transcript_url) {
+              document.getElementById('transcript-title').textContent = 'Operational Transcript · delivered';
+              document.getElementById('transcript-sub').textContent = 'Read the full report and each pillar recommendation.';
+              var link = document.getElementById('transcript-link');
+              link.href = client.transcript.transcript_url;
+              link.style.display = 'inline-block';
+              if (client.transcript.pillar_scores) {
+                var order = ['brand_identity','operational_health','revenue_architecture','content_credibility','growth_readiness'];
+                var boxes = document.querySelectorAll('#pillars .p-score');
+                order.forEach(function (k, i) {
+                  if (boxes[i] && client.transcript.pillar_scores[k] != null) {
+                    boxes[i].textContent = client.transcript.pillar_scores[k];
+                  }
+                });
+              }
+            }
+            if (client.deliverables && client.deliverables.length) {
+              var ul = document.getElementById('deliverables-list');
+              ul.innerHTML = '';
+              client.deliverables.forEach(function (d) {
+                var li = document.createElement('li');
+                li.innerHTML = '<span class="kind">'+d.kind+'</span>' +
+                               '<span class="title">'+d.title+'</span>' +
+                               '<span class="date">'+new Date(d.delivered_at).toISOString().slice(0,10)+'</span>';
+                ul.appendChild(li);
+              });
+              document.getElementById('del-count').textContent = client.deliverables.length + ' recent';
+            }
+          });
+      })
+      .catch(function () { document.getElementById('gate').classList.add('on'); });
+  }
+  boot();
+
+  document.getElementById('logout').addEventListener('click', function (e) {
+    e.preventDefault();
+    fetch('/api/auth/logout', { method: 'POST', credentials: 'same-origin' })
+      .finally(function () { location.href = '/'; });
+  });
+})();
+</script>
 </body>
 </html>
