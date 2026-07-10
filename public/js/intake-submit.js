@@ -14,13 +14,9 @@
 // its old inline submitIntake().
 
 (function () {
-  var ENDPOINT = "https://app.tojcampaign.com/api/intake/foundation-score";
-  if (
-    typeof window !== "undefined" &&
-    /^(localhost|127\.0\.0\.1)$/.test(window.location.hostname)
-  ) {
-    ENDPOINT = window.location.origin + "/api/intake/foundation-score";
-  }
+  // Relative endpoint. Production: Vercel rewrites /api/* to the Render
+  // backend (vercel.json). Dev: Express serves page + API same-origin.
+  var ENDPOINT = "/api/intake/foundation-score";
 
   function readSessionData(key) {
     try {

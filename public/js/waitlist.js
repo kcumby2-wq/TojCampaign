@@ -1,18 +1,15 @@
 // TOJ SaaS waitlist — client script.
 // Attaches to every <form class="waitlist-form" data-vertical="...">, POSTs
-// to the owned Express backend at app.tojcampaign.com, and swaps the field
-// row for the success message on ack. Preserves the same UX the previous
-// client-side stub had, but every submission is now stored in TOJ's database.
+// to /api/waitlist (same-origin), and swaps the field row for the success
+// message on ack. Every submission is stored in TOJ's database.
+//
+// The endpoint is RELATIVE. In production, Vercel rewrites /api/* to the
+// Render backend (see vercel.json), so the browser makes a same-origin
+// request to tojcampaign.com/api/waitlist — no CORS, session cookies work.
+// In local dev, the Express server serves both the page and the API on the
+// same origin. One relative path works everywhere.
 (function () {
-  var ENDPOINT = "https://app.tojcampaign.com/api/waitlist";
-  // Local dev fallback: if the page itself is served from localhost, target
-  // localhost. Otherwise use the Render backend at app.tojcampaign.com.
-  if (
-    typeof window !== "undefined" &&
-    /^(localhost|127\.0\.0\.1)$/.test(window.location.hostname)
-  ) {
-    ENDPOINT = window.location.origin + "/api/waitlist";
-  }
+  var ENDPOINT = "/api/waitlist";
 
   document
     .querySelectorAll('form.waitlist-form[data-vertical]')

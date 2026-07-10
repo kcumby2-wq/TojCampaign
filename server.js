@@ -11,10 +11,10 @@ const PORT = process.env.PORT || 3000;
 app.use(express.json({ limit: "5mb" }));
 app.use(express.urlencoded({ extended: true, limit: "5mb" }));
 
-// CORS for the public marketing site (tojcampaign.com, hosted on Vercel) that
-// posts to app.tojcampaign.com (this Express app on Render). Scoped to a
-// small allowlist of trusted origins — the SaaS waitlist and any future
-// public POST endpoints from the marketing site will use this.
+// CORS allowlist. In production the marketing site (tojcampaign.com on Vercel)
+// reaches this backend via a Vercel rewrite of /api/* → the Render URL, so
+// requests are same-origin and don't need CORS. This allowlist is a safety net
+// for any direct cross-origin call (e.g. hitting the Render URL from a browser).
 const CORS_ALLOWED_ORIGINS = new Set([
   "https://tojcampaign.com",
   "https://www.tojcampaign.com",
