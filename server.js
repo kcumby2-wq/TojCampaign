@@ -87,6 +87,7 @@ app.use("/api/pages", requireAuth, require("./routes/pages"));
 app.use("/api/billing", requireAuth, require("./routes/billing"));
 app.use("/api/reports", requireAuth, require("./routes/reports"));
 app.use("/api/marketplace", requireAuth, require("./routes/marketplace"));
+app.use("/api/rag", requireAuth, require("./routes/rag"));
 
 // Small helper to check auth from frontend
 app.get("/api/me", (req, res) => {

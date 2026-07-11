@@ -14,6 +14,7 @@
 const express = require("express");
 const fs = require("fs");
 const path = require("path");
+const { ingestClientDocument, payloadToProse } = require("../utils/embed");
 const router = express.Router();
 
 const DB_DIR = path.join(__dirname, "..", "db");
@@ -181,6 +182,31 @@ router.post("/foundation-score", async (req, res) => {
     console.log(
       `[INTAKE v2] Supabase · ${vertical} · ${contact_email} · fs=${fsRow.id}`
     );
+
+    // Fire-and-forget: embed the intake so agents can retrieve it later.
+    // Failure logs but does not affect the intake response.
+    setImmediate(() => {
+      const prose =
+        `Vertical: ${vertical}\n` +
+        `Operator: ${operator_name || "n/a"}\n` +
+        `Business: ${business_name || "n/a"}\n\n` +
+        payloadToProse(payload);
+      ingestClientDocument(sb, {
+        client_id: clientRow.id,
+        source_type: "foundation_score",
+        source_ref: fsRow.id,
+        title: `Foundation Score intake — ${business_name || operator_name || contact_email}`,
+        content: prose,
+        metadata: { vertical, intake_version },
+      })
+        .then((r) =>
+          console.log(
+            `[RAG] ingest fs=${fsRow.id} → ${r.ok ? `${r.chunks} chunks` : `FAIL ${r.error}`}`
+          )
+        )
+        .catch((e) => console.error("[RAG] ingest crashed:", e.message));
+    });
+
     return res.json({
       ok: true,
       foundation_score_id: fsRow.id,
