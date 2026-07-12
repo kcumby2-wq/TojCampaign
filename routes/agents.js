@@ -1,11 +1,37 @@
-// Agent orchestrator API.
-//   GET  /api/agents/roles   → list role definitions (public — metadata only)
-//   GET  /api/agents/skills  → list skill IDs (public)
-//   POST /api/agents/run     → run a role on a task (auth-gated)
+// Agent orchestrator API — async pattern.
+//
+//   GET  /api/agents/roles          → list role definitions (public)
+//   GET  /api/agents/skills         → list skill IDs (public)
+//   POST /api/agents/run            → { role, task, client_id? } → { run_id }
+//                                     Agent runs in background; store row in agent_runs
+//   GET  /api/agents/runs/:id       → poll for status/result
+//
+// Why async: Opus 4.8 + tool_runner + RAG can take 60–120s per run, and
+// Vercel's rewrite proxy times out around ~30s. Submitting synchronously
+// meant the browser saw "Unexpected token '<'" (Vercel's HTML timeout page)
+// even though the backend was still working. Now the browser gets a run_id
+// immediately and polls until done.
 
 const express = require("express");
 const { runAgent, listRoles, listSkills, ROLES } = require("../agents/orchestrator");
 const router = express.Router();
+
+let supabase = null;
+function getSupabase() {
+  if (supabase !== null) return supabase;
+  const url = process.env.SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!url || !key) return (supabase = false);
+  try {
+    const { createClient } = require("@supabase/supabase-js");
+    supabase = createClient(url, key, {
+      auth: { persistSession: false, autoRefreshToken: false },
+    });
+    return supabase;
+  } catch {
+    return (supabase = false);
+  }
+}
 
 function requireAuth(req, res, next) {
   if (req.session && req.session.userEmail) return next();
@@ -15,6 +41,7 @@ function requireAuth(req, res, next) {
 router.get("/roles", (_req, res) => res.json({ roles: listRoles() }));
 router.get("/skills", (_req, res) => res.json({ skills: listSkills() }));
 
+// Submit a task — returns immediately with run_id
 router.post("/run", requireAuth, async (req, res) => {
   const { role, task, client_id } = req.body || {};
   if (!role || !ROLES[role])
@@ -22,13 +49,68 @@ router.post("/run", requireAuth, async (req, res) => {
   if (!task || typeof task !== "string" || task.length < 5)
     return res.status(400).json({ error: "missing_task" });
 
-  try {
-    const result = await runAgent({ role, task, client_id });
-    res.json({ ok: true, ...result });
-  } catch (e) {
-    console.error("[agents] run failed:", e);
-    res.status(500).json({ error: e.message });
-  }
+  const sb = getSupabase();
+  if (!sb) return res.status(503).json({ error: "supabase_unavailable" });
+
+  const { data: runRow, error: insErr } = await sb
+    .from("agent_runs")
+    .insert({
+      role,
+      client_id: client_id || null,
+      task,
+      status: "running",
+    })
+    .select()
+    .single();
+  if (insErr) return res.status(500).json({ error: insErr.message });
+
+  // Fire the agent in the background; do NOT await
+  setImmediate(async () => {
+    const startedAt = Date.now();
+    try {
+      const result = await runAgent({ role, task, client_id: client_id || null });
+      await sb
+        .from("agent_runs")
+        .update({
+          status: "completed",
+          output: result.output,
+          trace: result.trace,
+          usage: result.usage,
+          completed_at: new Date().toISOString(),
+        })
+        .eq("id", runRow.id);
+      console.log(
+        `[agents] run ${runRow.id} done · ${role} · ${Date.now() - startedAt}ms · ${result.usage?.input_tokens || 0}→${result.usage?.output_tokens || 0} tok`
+      );
+    } catch (e) {
+      console.error(`[agents] run ${runRow.id} failed:`, e.message);
+      await sb
+        .from("agent_runs")
+        .update({
+          status: "failed",
+          error: e.message,
+          completed_at: new Date().toISOString(),
+        })
+        .eq("id", runRow.id);
+    }
+  });
+
+  res.json({ ok: true, run_id: runRow.id });
+});
+
+// Poll for run result
+router.get("/runs/:id", requireAuth, async (req, res) => {
+  const sb = getSupabase();
+  if (!sb) return res.status(503).json({ error: "supabase_unavailable" });
+
+  const { data, error } = await sb
+    .from("agent_runs")
+    .select("id,role,client_id,task,status,output,trace,usage,error,created_at,completed_at")
+    .eq("id", req.params.id)
+    .maybeSingle();
+  if (error) return res.status(500).json({ error: error.message });
+  if (!data) return res.status(404).json({ error: "not_found" });
+  res.json(data);
 });
 
 module.exports = router;

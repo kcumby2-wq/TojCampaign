@@ -110,6 +110,32 @@ function renderRoles(roles) {
   c.querySelector(".role-card")?.click();
 }
 
+async function fetchJSON(url, opts) {
+  const r = await fetch(url, opts);
+  const text = await r.text();
+  let d;
+  try { d = JSON.parse(text); } catch {
+    throw new Error("Server returned non-JSON (" + r.status + "): " + text.slice(0, 120));
+  }
+  if (!r.ok) throw new Error(d.error || ("HTTP " + r.status));
+  return d;
+}
+
+async function pollUntilDone(runId, out, startedAt) {
+  const started = startedAt || Date.now();
+  while (true) {
+    await new Promise(r => setTimeout(r, 2000));
+    const d = await fetchJSON("/api/agents/runs/" + runId);
+    const elapsed = Math.round((Date.now() - started) / 1000);
+    if (d.status === "running") {
+      out.textContent = "Agent working… " + elapsed + "s elapsed. (Opus 4.8 with tool calls typically finishes in 30–120s.)";
+      continue;
+    }
+    if (d.status === "failed") throw new Error(d.error || "run failed");
+    if (d.status === "completed") return d;
+  }
+}
+
 document.getElementById("run").addEventListener("click", async () => {
   if (!selectedRole) return alert("Pick a role first");
   const btn = document.getElementById("run");
@@ -117,22 +143,31 @@ document.getElementById("run").addEventListener("click", async () => {
   const task = document.getElementById("task").value.trim();
   const client_id = document.getElementById("client_id").value.trim() || null;
   if (!task) return alert("Task is required");
-  btn.disabled = true; btn.textContent = "Running (30–90s)…";
-  out.className = "show"; out.textContent = "Working…";
+  btn.disabled = true; btn.textContent = "Running…";
+  out.className = "show"; out.textContent = "Submitting…";
+  const startedAt = Date.now();
   try {
-    const r = await fetch("/api/agents/run", {
+    const submitted = await fetchJSON("/api/agents/run", {
       method:"POST", headers:{"Content-Type":"application/json"},
       body: JSON.stringify({ role: selectedRole, task, client_id })
     });
-    const d = await r.json();
-    if (!r.ok) throw new Error(d.error || "failed");
-    const toolCalls = d.trace.filter(t=>t.type==="tool_use");
-    out.innerHTML = `<b>${d.label} Agent</b>\n\n${d.output}` +
-      `<div class="trace"><b>Trace</b> — ${toolCalls.length} tool calls · stop=${d.stop_reason} · ${d.usage.input_tokens} in / ${d.usage.output_tokens} out` +
-      (toolCalls.length ? `<details style="margin-top:8px;"><summary>tool calls</summary>${toolCalls.map(t=>`<div>→ ${t.name}(${JSON.stringify(t.input).slice(0,140)})</div>`).join("")}</details>` : "") +
-      `</div>`;
+    if (!submitted.run_id) throw new Error("no run_id returned");
+    out.textContent = "Queued. Agent working…";
+    const d = await pollUntilDone(submitted.run_id, out, startedAt);
+    const trace = Array.isArray(d.trace) ? d.trace : [];
+    const toolCalls = trace.filter(t => t.type === "tool_use");
+    const roleLabel = document.querySelector('.role-card.selected h3')?.textContent || selectedRole;
+    const usage = d.usage || {};
+    out.innerHTML = "<b>" + roleLabel + " · Agent output</b>\n\n" + d.output +
+      "<div class=\"trace\"><b>Trace</b> — " + toolCalls.length + " tool calls · " +
+      (usage.input_tokens || 0) + " in / " + (usage.output_tokens || 0) + " out · " +
+      Math.round((new Date(d.completed_at) - new Date(d.created_at)) / 1000) + "s wall" +
+      (toolCalls.length ? "<details style=\"margin-top:8px;\"><summary>tool calls</summary>" +
+        toolCalls.map(t => "<div>→ " + t.name + "(" + JSON.stringify(t.input).slice(0,140) + ")</div>").join("") +
+      "</details>" : "") +
+      "</div>";
   } catch (e) {
-    out.innerHTML = `<span class="err">Error: ${e.message}</span>`;
+    out.innerHTML = "<span class=\"err\">Error: " + e.message + "</span>";
   } finally {
     btn.disabled = false; btn.textContent = "Run agent";
   }
