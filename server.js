@@ -5,6 +5,26 @@ const path = require("path");
 // Initialize report schedulers
 const { initializeSchedulers } = require("./utils/reportScheduler");
 
+// Boot-time env diagnostic — logs which critical vars are present without
+// exposing values. Read this on Render at deploy time to debug fallback bugs.
+(function envDiag() {
+  const check = (k) => {
+    const v = process.env[k];
+    if (!v) return `${k}=MISSING`;
+    return `${k}=SET(len=${v.length})`;
+  };
+  console.log(
+    "[env]",
+    [
+      check("SUPABASE_URL"),
+      check("SUPABASE_SERVICE_ROLE_KEY"),
+      check("VOYAGE_API_KEY"),
+      check("BASE_URL"),
+      check("SESSION_SECRET"),
+    ].join(" · ")
+  );
+})();
+
 const app = express();
 const PORT = process.env.PORT || 3000;
 
