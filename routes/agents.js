@@ -1,17 +1,14 @@
-// POST /api/agents/run { role, task, client_id? }
-//
-// Admin-only. Fires the multi-agent orchestrator and returns the final
-// output plus a compact trace of tool calls the agent made.
+// Agent orchestrator API.
+//   GET  /api/agents/roles   → list role definitions
+//   GET  /api/agents/skills  → list skill IDs
+//   POST /api/agents/run     → run a role on a task
 
 const express = require("express");
-const { runAgent, ROLES } = require("../agents/orchestrator");
+const { runAgent, listRoles, listSkills, ROLES } = require("../agents/orchestrator");
 const router = express.Router();
 
-router.get("/roles", (_req, res) => {
-  res.json({
-    roles: Object.entries(ROLES).map(([id, r]) => ({ id, label: r.label })),
-  });
-});
+router.get("/roles", (_req, res) => res.json({ roles: listRoles() }));
+router.get("/skills", (_req, res) => res.json({ skills: listSkills() }));
 
 router.post("/run", async (req, res) => {
   const { role, task, client_id } = req.body || {};

@@ -1,15 +1,15 @@
 // Multi-agent orchestrator (pillar 4).
 //
-// One manager, three role modes. All modes share the same tool set —
-// list_clients, get_foundation_score, retrieve_client_context — but the
-// system prompt shapes what they DO with those tools.
+// Loads role personas from agents/roles/*.js and skills from
+// agents/skills/*.md. Each role's system prompt is composed as:
+//   role.persona + "\n\n---\n\n" + skills[role.skills[]].join("\n\n---\n\n")
 //
-// This is the internal orchestrator; unlike mcp/toj-server.js (which
-// exposes tools to external agents), this file IS the agent, running
-// server-side with the Anthropic SDK's tool_runner beta helper.
-//
-// Requires ANTHROPIC_API_KEY in env.
+// This is the internal orchestrator (server-side, uses ANTHROPIC_API_KEY).
+// The external MCP server (mcp/toj-server.js) exposes the same tools to
+// any client that wires it in.
 
+const fs = require("fs");
+const path = require("path");
 const Anthropic = require("@anthropic-ai/sdk").default;
 const {
   listClients,
@@ -20,57 +20,58 @@ const {
 const MODEL = "claude-opus-4-8";
 const MAX_ITERATIONS = 20;
 
-const ROLES = {
-  research: {
-    label: "Research",
-    system: `You are TOJ's Research Agent. Your job is to gather facts about clients from the database and their per-client RAG memory, then report what you found.
+// ---- Load roles + skills at boot ----
+const ROLES = {};
+const SKILLS = {};
 
-Rules:
-- Use list_clients to survey the client base
-- Use get_foundation_score to pull full intake details
-- Use retrieve_client_context to pull semantically-relevant chunks in the client's own words
-- Report findings as a concise, factual brief — no rewriting, no persuasion
-- Cite the source (client_id + source_type) for every claim
-- Do NOT invent client details. If retrieval returns nothing, say so.`,
-  },
-  copy: {
-    label: "Copy",
-    system: `You are TOJ's Copy Agent. Your job is to draft outbound copy (emails, posts, one-pagers) in each client's authentic voice.
+const rolesDir = path.join(__dirname, "roles");
+if (fs.existsSync(rolesDir)) {
+  for (const file of fs.readdirSync(rolesDir)) {
+    if (!file.endsWith(".js")) continue;
+    const role = require(path.join(rolesDir, file));
+    if (role && role.id) ROLES[role.id] = role;
+  }
+}
 
-Rules:
-- BEFORE drafting anything, call retrieve_client_context with a query relevant to the topic — this pulls the client's own phrasing, tone, and priorities
-- Use get_foundation_score to understand their business/offer if needed
-- Match the client's voice — vocabulary, rhythm, level of formality — from the retrieved chunks
-- Never write in a generic "AI marketing" voice. If retrieval is empty, ask for more brand material rather than inventing tone.
-- Deliver the draft, then a one-line note on which retrieved chunks shaped the voice.`,
-  },
-  ops: {
-    label: "Ops",
-    system: `You are TOJ's Ops Agent. Your job is to run rollups, spot patterns, and surface actionable signals across the client base.
+const skillsDir = path.join(__dirname, "skills");
+if (fs.existsSync(skillsDir)) {
+  for (const file of fs.readdirSync(skillsDir)) {
+    if (!file.endsWith(".md")) continue;
+    const id = path.basename(file, ".md");
+    SKILLS[id] = fs.readFileSync(path.join(skillsDir, file), "utf8");
+  }
+}
 
-Rules:
-- Use list_clients (filter by vertical if the task calls for it) to build the working set
-- Use get_foundation_score on specific records for detail
-- Report as a scannable brief: counts, patterns, outliers, recommended next actions
-- No fluff. Numbers first, then one-line interpretation each.`,
-  },
-};
+console.log(
+  `[agents] loaded ${Object.keys(ROLES).length} roles, ${Object.keys(SKILLS).length} skills`
+);
+
+function buildSystemPrompt(role) {
+  const skillBlocks = (role.skills || [])
+    .map((id) => SKILLS[id])
+    .filter(Boolean);
+  if (skillBlocks.length === 0) return role.persona;
+  return (
+    role.persona +
+    "\n\n---\n\n# Available skills\n\n" +
+    skillBlocks.join("\n\n---\n\n")
+  );
+}
 
 async function runAgent({ role, task, client_id = null }) {
-  if (!ROLES[role]) throw new Error(`unknown_role:${role}`);
+  const cfg = ROLES[role];
+  if (!cfg) throw new Error(`unknown_role:${role}`);
   if (!process.env.ANTHROPIC_API_KEY) throw new Error("ANTHROPIC_API_KEY not set");
 
   const client = new Anthropic();
-  const cfg = ROLES[role];
-
   const userMessage = client_id
     ? `Client scope: ${client_id}\n\nTask:\n${task}`
     : task;
 
   const runner = client.beta.messages.toolRunner({
-    model: MODEL,
+    model: cfg.model || MODEL,
     max_tokens: 8000,
-    system: cfg.system,
+    system: buildSystemPrompt(cfg),
     tools: [listClients, getFoundationScore, retrieveClientContext],
     messages: [{ role: "user", content: userMessage }],
     thinking: { type: "adaptive" },
@@ -89,7 +90,6 @@ async function runAgent({ role, task, client_id = null }) {
     }
     if (message.stop_reason === "end_turn") final = message;
   }
-
   if (!final) final = await runner.done();
 
   const finalText = final.content
@@ -104,7 +104,21 @@ async function runAgent({ role, task, client_id = null }) {
     trace,
     stop_reason: final.stop_reason,
     usage: final.usage,
+    skills_loaded: cfg.skills || [],
   };
 }
 
-module.exports = { runAgent, ROLES };
+function listRoles() {
+  return Object.values(ROLES).map((r) => ({
+    id: r.id,
+    label: r.label,
+    tagline: r.tagline || "",
+    skills: r.skills || [],
+  }));
+}
+
+function listSkills() {
+  return Object.keys(SKILLS).map((id) => ({ id }));
+}
+
+module.exports = { runAgent, listRoles, listSkills, ROLES, SKILLS };
