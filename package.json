@@ -33,5 +33,8 @@
   "devDependencies": {
     "newman": "^6.2.2",
     "start-server-and-test": "^3.0.2"
+  },
+  "engines": {
+    "node": ">=22.0.0"
   }
 }
