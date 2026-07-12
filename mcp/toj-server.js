@@ -6,7 +6,7 @@
 //
 // Env required:
 //   SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY  — the same values Render uses
-//   OPENAI_API_KEY                            — for the retrieve embedding
+//   VOYAGE_API_KEY                            — for the retrieve embedding
 //
 // Wire it into Claude Code / Desktop by adding to the client config:
 //   {
@@ -17,7 +17,7 @@
 //         "env": {
 //           "SUPABASE_URL": "...",
 //           "SUPABASE_SERVICE_ROLE_KEY": "...",
-//           "OPENAI_API_KEY": "..."
+//           "VOYAGE_API_KEY": "..."
 //         }
 //       }
 //     }

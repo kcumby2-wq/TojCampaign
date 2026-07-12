@@ -23,7 +23,7 @@ More tools land as the product grows (`create_deliverable`, `draft_section`,
 ```
 SUPABASE_URL=... \
 SUPABASE_SERVICE_ROLE_KEY=... \
-OPENAI_API_KEY=... \
+VOYAGE_API_KEY=... \
 node mcp/toj-server.js
 ```
 
@@ -43,7 +43,7 @@ on Mac, or via `claude mcp add` for Claude Code):
       "env": {
         "SUPABASE_URL": "https://ckaocyldpvypegwbyahh.supabase.co",
         "SUPABASE_SERVICE_ROLE_KEY": "...",
-        "OPENAI_API_KEY": "..."
+        "VOYAGE_API_KEY": "..."
       }
     }
   }

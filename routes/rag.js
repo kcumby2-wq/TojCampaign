@@ -39,7 +39,7 @@ router.post("/retrieve", async (req, res) => {
 
   let vector;
   try {
-    [vector] = await embed([query]);
+    [vector] = await embed([query], { inputType: "query" });
   } catch (e) {
     console.error("[rag] embed failed:", e.message);
     return res.status(502).json({ error: "embed_failed" });

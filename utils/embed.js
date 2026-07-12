@@ -1,10 +1,12 @@
 // Embeddings + ingest pipeline (Agentic RAG).
 //
-// Uses OpenAI text-embedding-3-small (1536 dims — matches the pgvector column
-// in migration 003). Requires OPENAI_API_KEY in env.
+// Uses Voyage AI voyage-3 (1024 dims — matches migration 004). Anthropic's
+// recommended embeddings partner. Requires VOYAGE_API_KEY in env. Free tier
+// includes 50M tokens — no card required.
 //
 // Public API:
-//   embed(texts)                 → Promise<number[][]>
+//   embed(texts, {inputType})    → Promise<number[][]>
+//        inputType: "document" (default, for ingest) | "query" (for retrieve)
 //   chunkText(str, wordsPerChunk?, overlapWords?) → string[]
 //   ingestClientDocument(sb, {   → Promise<{ok, document_id, chunks}>
 //     client_id, source_type, source_ref, title, content, metadata
@@ -14,25 +16,26 @@
 // to the client immediately, embedding happens on the request that follows.
 // Failures are logged, never thrown — the intake save is the source of truth.
 
-const OPENAI_URL = "https://api.openai.com/v1/embeddings";
-const MODEL = "text-embedding-3-small";
-const EMBED_DIM = 1536;
+const VOYAGE_URL = "https://api.voyageai.com/v1/embeddings";
+const MODEL = "voyage-3";
+const EMBED_DIM = 1024;
 
-async function embed(texts) {
-  const key = process.env.OPENAI_API_KEY;
-  if (!key) throw new Error("OPENAI_API_KEY not set");
+async function embed(texts, opts = {}) {
+  const key = process.env.VOYAGE_API_KEY;
+  if (!key) throw new Error("VOYAGE_API_KEY not set");
   const input = Array.isArray(texts) ? texts : [texts];
-  const res = await fetch(OPENAI_URL, {
+  const input_type = opts.inputType === "query" ? "query" : "document";
+  const res = await fetch(VOYAGE_URL, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
       Authorization: `Bearer ${key}`,
     },
-    body: JSON.stringify({ model: MODEL, input }),
+    body: JSON.stringify({ model: MODEL, input, input_type }),
   });
   if (!res.ok) {
     const body = await res.text().catch(() => "");
-    throw new Error(`OpenAI embed ${res.status}: ${body.slice(0, 200)}`);
+    throw new Error(`Voyage embed ${res.status}: ${body.slice(0, 200)}`);
   }
   const json = await res.json();
   return json.data.map((d) => d.embedding);
@@ -95,7 +98,7 @@ async function ingestClientDocument(sb, doc) {
   try {
     vectors = await embed(chunks);
   } catch (e) {
-    console.error("[embed] OpenAI call failed:", e.message);
+    console.error("[embed] Voyage call failed:", e.message);
     return { ok: false, error: "embed_failed", document_id: docRow.id };
   }
 
