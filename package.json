@@ -16,6 +16,7 @@
     "ci:verify": "npm run db:smoke && npm run api:negative && npm run audit:prod"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.111.0",
     "@modelcontextprotocol/sdk": "^1.29.0",
     "@supabase/supabase-js": "^2.45.0",
     "@vercel/edge": "^1.2.2",

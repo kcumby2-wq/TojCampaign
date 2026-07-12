@@ -19,6 +19,7 @@ const { initializeSchedulers } = require("./utils/reportScheduler");
       check("SUPABASE_URL"),
       check("SUPABASE_SERVICE_ROLE_KEY"),
       check("VOYAGE_API_KEY"),
+      check("ANTHROPIC_API_KEY"),
       check("BASE_URL"),
       check("SESSION_SECRET"),
     ].join(" · ")
@@ -108,6 +109,7 @@ app.use("/api/billing", requireAuth, require("./routes/billing"));
 app.use("/api/reports", requireAuth, require("./routes/reports"));
 app.use("/api/marketplace", requireAuth, require("./routes/marketplace"));
 app.use("/api/rag", requireAuth, require("./routes/rag"));
+app.use("/api/agents", requireAuth, require("./routes/agents"));
 
 // Small helper to check auth from frontend
 app.get("/api/me", (req, res) => {

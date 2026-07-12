@@ -1,0 +1,76 @@
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>TOJ Agents · Admin</title>
+<style>
+  :root { --ink:#1A1613; --cream:#F5F1EA; --gold:#B8843B; --pine:#2F5D4E; }
+  * { box-sizing:border-box; }
+  body { font-family: system-ui,-apple-system,sans-serif; background:var(--cream); color:var(--ink); margin:0; padding:32px; max-width:960px; margin-inline:auto; line-height:1.5; }
+  h1 { font-family: Georgia,serif; margin:0 0 4px; }
+  p.sub { color:#6b6156; margin:0 0 28px; }
+  label { display:block; font-weight:600; margin:16px 0 6px; font-size:14px; }
+  select, input, textarea, button { font: inherit; padding:10px 12px; border:1px solid #d4ccc0; border-radius:8px; background:#fff; width:100%; }
+  textarea { min-height:120px; resize:vertical; }
+  button { background:var(--ink); color:#fff; font-weight:600; cursor:pointer; margin-top:20px; border:0; }
+  button:disabled { opacity:.5; cursor:wait; }
+  .row { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
+  #output { margin-top:32px; padding:24px; background:#fff; border-radius:12px; border:1px solid #e8e0d0; white-space:pre-wrap; font-family: ui-monospace,monospace; font-size:13px; display:none; }
+  #output.show { display:block; }
+  .trace { margin-top:20px; padding:16px; background:#f7f2e8; border-radius:8px; font-size:12px; color:#6b6156; }
+  .trace details { margin-top:8px; }
+  .err { color:#b0343c; }
+</style>
+
+<h1>TOJ Agents</h1>
+<p class="sub">Multi-agent orchestrator — one manager, three roles. All share the RAG-backed toolset.</p>
+
+<label>Role</label>
+<select id="role"><option>Loading…</option></select>
+
+<div class="row">
+  <div>
+    <label>Client scope (optional)</label>
+    <input id="client_id" placeholder="client_id (leave blank for cross-client tasks)">
+  </div>
+</div>
+
+<label>Task</label>
+<textarea id="task" placeholder="e.g. 'Draft a Q3 outreach email to this client in their voice, offering the premium tier.'"></textarea>
+
+<button id="run">Run agent</button>
+
+<div id="output"></div>
+
+<script>
+fetch("/api/agents/roles").then(r=>r.json()).then(d=>{
+  const sel = document.getElementById("role");
+  sel.innerHTML = d.roles.map(r=>`<option value="${r.id}">${r.label}</option>`).join("");
+});
+
+document.getElementById("run").addEventListener("click", async () => {
+  const btn = document.getElementById("run");
+  const out = document.getElementById("output");
+  const role = document.getElementById("role").value;
+  const task = document.getElementById("task").value.trim();
+  const client_id = document.getElementById("client_id").value.trim() || null;
+  if (!task) return alert("Task is required");
+  btn.disabled = true; btn.textContent = "Running (can take 30–90s)…";
+  out.className = "show"; out.textContent = "Working…";
+  try {
+    const r = await fetch("/api/agents/run", {
+      method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({ role, task, client_id })
+    });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error || "failed");
+    const traceHtml = `<div class="trace"><b>Trace</b> (${d.trace.length} steps · stop=${d.stop_reason} · in=${d.usage.input_tokens} out=${d.usage.output_tokens})<details><summary>show tool calls</summary>${
+      d.trace.filter(t=>t.type==="tool_use").map(t=>`<div>→ ${t.name}(${JSON.stringify(t.input).slice(0,120)})</div>`).join("")
+    }</details></div>`;
+    out.innerHTML = `<b>${d.label} Agent output</b>\n\n${d.output}` + traceHtml;
+  } catch (e) {
+    out.innerHTML = `<span class="err">Error: ${e.message}</span>`;
+  } finally {
+    btn.disabled = false; btn.textContent = "Run agent";
+  }
+});
+</script>
