@@ -24,7 +24,14 @@
 <p class="sub">Multi-agent orchestrator — one manager, three roles. All share the RAG-backed toolset.</p>
 
 <label>Role</label>
-<select id="role"><option>Loading…</option></select>
+<select id="role">
+  <option value="research">Research — gather facts, cite sources</option>
+  <option value="copy">Copy — draft in client's own voice (uses RAG)</option>
+  <option value="ops">Ops — cross-client rollups and patterns</option>
+</select>
+<div id="authwarn" style="display:none;margin-top:8px;padding:12px;background:#fef3e2;border:1px solid #f0c674;border-radius:8px;font-size:13px;">
+  ⚠️ You're not signed in. <a href="/login.html">Log in</a> first — the agent endpoints require auth.
+</div>
 
 <div class="row">
   <div>
@@ -41,10 +48,20 @@
 <div id="output"></div>
 
 <script>
-fetch("/api/agents/roles").then(r=>r.json()).then(d=>{
-  const sel = document.getElementById("role");
-  sel.innerHTML = d.roles.map(r=>`<option value="${r.id}">${r.label}</option>`).join("");
-});
+// Check auth status. If not logged in, warn but keep the hardcoded roles usable
+// so the page still previews. Actually running an agent requires auth.
+fetch("/api/me").then(r=>r.json()).then(d=>{
+  if (!d.authenticated) document.getElementById("authwarn").style.display = "block";
+}).catch(()=>{});
+
+// Try to hydrate roles from server (in case new ones were added).
+// Fallback: hardcoded defaults above already work.
+fetch("/api/agents/roles").then(r=>r.ok?r.json():null).then(d=>{
+  if (d && d.roles && d.roles.length) {
+    const sel = document.getElementById("role");
+    sel.innerHTML = d.roles.map(r=>`<option value="${r.id}">${r.label}</option>`).join("");
+  }
+}).catch(()=>{});
 
 document.getElementById("run").addEventListener("click", async () => {
   const btn = document.getElementById("run");
