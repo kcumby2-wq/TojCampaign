@@ -36,9 +36,12 @@ const PILLAR_KEYS = [
 let supabase = null;
 function getSupabase() {
   if (supabase !== null) return supabase;
-  const url = process.env.SUPABASE_URL;
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const url = (process.env.SUPABASE_URL || "").trim();
+  const key = (process.env.SUPABASE_SERVICE_ROLE_KEY || "").trim();
   if (!url || !key) {
+    console.error(
+      `[intake] Supabase fallback: url_present=${!!url} key_present=${!!key}`
+    );
     supabase = false;
     return false;
   }
@@ -47,9 +50,12 @@ function getSupabase() {
     supabase = createClient(url, key, {
       auth: { persistSession: false, autoRefreshToken: false },
     });
-    console.log("[intake] using Supabase backend");
+    console.log(
+      `[intake] using Supabase backend (url_host=${new URL(url).host})`
+    );
     return supabase;
-  } catch {
+  } catch (e) {
+    console.error("[intake] Supabase init failed:", e.message);
     supabase = false;
     return false;
   }
