@@ -48,6 +48,32 @@
 <button id="run">Run agent</button>
 <div id="output"></div>
 
+<div style="margin-top:32px;padding:16px;background:#fef8ee;border:1px solid #f0c674;border-radius:8px;font-size:13px;">
+  <b>Admin: Embed pending documents</b><br>
+  New client_documents inserted via SQL need embeddings before agents can retrieve them.
+  <button id="backfill" style="margin-top:10px;max-width:280px;background:#8b5a1a;color:#fff;">Backfill embeddings</button>
+  <div id="backfillOut" style="margin-top:10px;font-family:ui-monospace,monospace;font-size:12px;"></div>
+</div>
+
+<script>
+document.getElementById("backfill").addEventListener("click", async () => {
+  const b = document.getElementById("backfill");
+  const o = document.getElementById("backfillOut");
+  b.disabled = true; b.textContent = "Running…"; o.textContent = "";
+  try {
+    const r = await fetch("/api/rag/backfill", { method: "POST" });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error || "failed");
+    o.textContent = "Processed " + d.processed + " docs: " +
+      d.results.map(x => x.embedded ? `[${x.embedded} chunks]` : x.skipped ? '[skip]' : `[ERR:${x.error}]`).join(" ");
+  } catch (e) {
+    o.textContent = "Error: " + e.message;
+  } finally {
+    b.disabled = false; b.textContent = "Backfill embeddings";
+  }
+});
+</script>
+
 <script>
 let selectedRole = null;
 

@@ -7,7 +7,7 @@
 //                                                    → { ok, document_id, chunks }
 
 const express = require("express");
-const { embed, ingestClientDocument } = require("../utils/embed");
+const { embed, ingestClientDocument, chunkText } = require("../utils/embed");
 const router = express.Router();
 
 let supabase = null;
@@ -76,6 +76,53 @@ router.post("/ingest", async (req, res) => {
   });
   if (!result.ok) return res.status(500).json(result);
   res.json(result);
+});
+
+// Backfill: chunk + embed any client_documents that don't yet have
+// client_embeddings rows. Use after inserting documents via SQL or MCP
+// (e.g. seeding premium clients from external material).
+router.post("/backfill", async (_req, res) => {
+  const sb = getSupabase();
+  if (!sb) return res.status(503).json({ error: "supabase_unavailable" });
+
+  const { data: docs, error } = await sb
+    .from("client_documents")
+    .select("id,client_id,content")
+    .order("created_at", { ascending: true });
+  if (error) return res.status(500).json({ error: error.message });
+
+  const results = [];
+  for (const d of docs) {
+    const { count } = await sb
+      .from("client_embeddings")
+      .select("*", { count: "exact", head: true })
+      .eq("document_id", d.id);
+    if (count && count > 0) {
+      results.push({ document_id: d.id, skipped: true, chunks: count });
+      continue;
+    }
+    const chunks = chunkText(d.content);
+    if (chunks.length === 0) {
+      results.push({ document_id: d.id, skipped: true, chunks: 0 });
+      continue;
+    }
+    try {
+      const vectors = await embed(chunks);
+      const rows = chunks.map((chunk_text, i) => ({
+        client_id: d.client_id,
+        document_id: d.id,
+        chunk_index: i,
+        chunk_text,
+        embedding: vectors[i],
+      }));
+      const { error: iErr } = await sb.from("client_embeddings").insert(rows);
+      if (iErr) throw new Error(iErr.message);
+      results.push({ document_id: d.id, embedded: chunks.length });
+    } catch (e) {
+      results.push({ document_id: d.id, error: e.message });
+    }
+  }
+  res.json({ ok: true, processed: results.length, results });
 });
 
 module.exports = router;
