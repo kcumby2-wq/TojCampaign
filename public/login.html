@@ -1,0 +1,88 @@
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Admin Login · TOJ</title>
+<style>
+  :root { --ink:#1A1613; --cream:#F5F1EA; --gold:#B8843B; --muted:#6b6156; }
+  * { box-sizing:border-box; }
+  body { font-family: system-ui,-apple-system,sans-serif; background:var(--cream); color:var(--ink); margin:0; min-height:100vh; display:flex; align-items:center; justify-content:center; padding:24px; }
+  .card { background:#fff; padding:32px 28px; border-radius:14px; box-shadow:0 12px 40px rgba(0,0,0,.08); width:100%; max-width:420px; }
+  h1 { font-family: Georgia,serif; margin:0 0 4px; font-size:26px; }
+  p.sub { color:var(--muted); margin:0 0 24px; font-size:14px; }
+  label { display:block; font-weight:600; margin:14px 0 6px; font-size:14px; }
+  input { width:100%; padding:11px 12px; border:1px solid #d4ccc0; border-radius:8px; font: inherit; background:#fff; }
+  button { width:100%; padding:12px; background:var(--ink); color:#fff; font: inherit; font-weight:600; border:0; border-radius:8px; cursor:pointer; margin-top:22px; }
+  button.secondary { background:transparent; color:var(--ink); border:1px solid #d4ccc0; margin-top:10px; }
+  button:disabled { opacity:.6; cursor:wait; }
+  .msg { margin-top:14px; padding:10px 12px; border-radius:8px; font-size:13px; display:none; }
+  .msg.err { display:block; background:#fef0ef; color:#b0343c; border:1px solid #f5c9c5; }
+  .msg.ok { display:block; background:#eaf6ec; color:#1f6a2e; border:1px solid #b8dbc0; }
+  .tabs { display:flex; gap:0; margin-bottom:18px; border-bottom:1px solid #e8e0d0; }
+  .tab { flex:1; padding:10px; text-align:center; cursor:pointer; font-weight:600; color:var(--muted); border-bottom:2px solid transparent; }
+  .tab.active { color:var(--ink); border-bottom-color:var(--gold); }
+</style>
+
+<div class="card">
+  <h1>TOJ Admin</h1>
+  <p class="sub">Sign in to run agents, view submissions, and manage clients.</p>
+
+  <div class="tabs">
+    <div class="tab active" data-mode="login">Log in</div>
+    <div class="tab" data-mode="register">Register</div>
+  </div>
+
+  <form id="authForm">
+    <label>Email</label>
+    <input type="email" id="email" required autocomplete="email">
+    <label>Password</label>
+    <input type="password" id="password" required minlength="6" autocomplete="current-password">
+    <button type="submit" id="submitBtn">Log in</button>
+  </form>
+  <div id="msg" class="msg"></div>
+  <button class="secondary" onclick="location.href='/admin/agents.html'" style="margin-top:20px;">← Back to admin</button>
+</div>
+
+<script>
+let mode = "login";
+const tabs = document.querySelectorAll(".tab");
+const btn = document.getElementById("submitBtn");
+const pw = document.getElementById("password");
+
+tabs.forEach(t => {
+  t.addEventListener("click", () => {
+    tabs.forEach(x => x.classList.remove("active"));
+    t.classList.add("active");
+    mode = t.dataset.mode;
+    btn.textContent = mode === "login" ? "Log in" : "Register";
+    pw.autocomplete = mode === "login" ? "current-password" : "new-password";
+    document.getElementById("msg").className = "msg";
+  });
+});
+
+document.getElementById("authForm").addEventListener("submit", async e => {
+  e.preventDefault();
+  const msg = document.getElementById("msg");
+  msg.className = "msg";
+  btn.disabled = true;
+  btn.textContent = mode === "login" ? "Logging in…" : "Registering…";
+  try {
+    const r = await fetch("/api/auth/" + mode, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        email: document.getElementById("email").value,
+        password: pw.value,
+      }),
+    });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error || "Failed");
+    msg.className = "msg ok";
+    msg.textContent = "Signed in as " + d.email + ". Redirecting…";
+    setTimeout(() => location.href = "/admin/agents.html", 700);
+  } catch (err) {
+    msg.className = "msg err";
+    msg.textContent = err.message;
+    btn.disabled = false;
+    btn.textContent = mode === "login" ? "Log in" : "Register";
+  }
+});
+</script>

@@ -109,7 +109,9 @@ app.use("/api/billing", requireAuth, require("./routes/billing"));
 app.use("/api/reports", requireAuth, require("./routes/reports"));
 app.use("/api/marketplace", requireAuth, require("./routes/marketplace"));
 app.use("/api/rag", requireAuth, require("./routes/rag"));
-app.use("/api/agents", requireAuth, require("./routes/agents"));
+// /api/agents/roles and /skills are public metadata; only /run is auth-gated
+// (enforced inside the route file so the roles picker renders pre-login).
+app.use("/api/agents", require("./routes/agents"));
 
 // Small helper to check auth from frontend
 app.get("/api/me", (req, res) => {
