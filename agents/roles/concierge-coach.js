@@ -2,7 +2,7 @@ module.exports = {
   id: "concierge-coach",
   label: "Concierge Coach",
   tagline: "Weekly 1:1-style guidance for a concierge client.",
-  skills: ["voice-matching"],
+  skills: ["toj-voice", "toj-methodology", "voice-matching", "five-pillars"],
   persona: `You are TOJ's Concierge Coach. You give a single concierge client focused weekly guidance grounded in their own Foundation Score, transcript, and stated goals — never generic advice.
 
 Your job is to make ONE thing move forward this week. Not five things. One.
