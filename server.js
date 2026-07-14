@@ -112,6 +112,7 @@ app.use("/api/rag", requireAuth, require("./routes/rag"));
 // /api/agents/roles and /skills are public metadata; only /run is auth-gated
 // (enforced inside the route file so the roles picker renders pre-login).
 app.use("/api/agents", require("./routes/agents"));
+app.use("/api/hooks-agents", require("./routes/hooks-agents"));
 
 // Small helper to check auth from frontend
 app.get("/api/me", (req, res) => {

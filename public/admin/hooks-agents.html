@@ -1,0 +1,151 @@
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Hooks Agents · Admin</title>
+<style>
+  :root { --ink:#0E1A24; --field:#F0EFEA; --gold:#C6A052; --navy:#1A2C3D; --cyan:#00A0B0; --muted:#5c6673; }
+  * { box-sizing:border-box; }
+  body { font-family: system-ui,-apple-system,sans-serif; background:var(--field); color:var(--ink); margin:0; padding:32px; max-width:960px; margin-inline:auto; line-height:1.5; }
+  h1 { font-family: Georgia,serif; margin:0 0 4px; }
+  .subhead { color:var(--muted); margin:0 0 4px; font-size:15px; }
+  .tag { display:inline-block; background:var(--navy); color:#fff; padding:2px 10px; border-radius:99px; font-size:11px; margin-bottom:20px; }
+  label { display:block; font-weight:600; margin:16px 0 6px; font-size:14px; }
+  select, input, textarea, button { font: inherit; padding:10px 12px; border:1px solid #c9c4b8; border-radius:8px; background:#fff; width:100%; }
+  textarea { min-height:120px; resize:vertical; }
+  button { background:var(--navy); color:#fff; font-weight:600; cursor:pointer; margin-top:20px; border:0; }
+  button:disabled { opacity:.5; cursor:wait; }
+  .roles { display:grid; grid-template-columns:repeat(auto-fit,minmax(260px,1fr)); gap:12px; margin:8px 0 20px; }
+  .role-card { border:1px solid #c9c4b8; border-radius:10px; padding:14px; background:#fff; cursor:pointer; transition:border-color .1s; }
+  .role-card:hover { border-color:var(--cyan); }
+  .role-card.selected { border-color:var(--navy); background:#ecf3f7; }
+  .role-card h3 { margin:0 0 4px; font-size:15px; color:var(--navy); }
+  .role-card p { margin:0 0 8px; font-size:13px; color:var(--muted); }
+  .chip { display:inline-block; padding:2px 8px; background:#dfe6ea; border-radius:99px; font-size:11px; color:var(--navy); margin-right:4px; margin-bottom:4px; }
+  #output { margin-top:32px; padding:24px; background:#fff; border-radius:12px; border:1px solid #dcd7c9; white-space:pre-wrap; font-family: ui-monospace,monospace; font-size:13px; display:none; }
+  #output.show { display:block; }
+  .trace { margin-top:20px; padding:16px; background:#ecf3f7; border-radius:8px; font-size:12px; color:var(--muted); white-space:normal; font-family:system-ui,sans-serif; }
+  .err { color:#b0343c; }
+  .authwarn { display:none; margin:8px 0 20px; padding:12px; background:#fff8e2; border:1px solid #e0c674; border-radius:8px; font-size:13px; }
+  .api-hint { margin-top:24px; padding:14px; background:#f7f5ec; border:1px solid #dcd7c9; border-radius:8px; font-size:12px; color:var(--muted); }
+  .api-hint code { background:#fff; padding:2px 6px; border-radius:4px; font-size:11px; }
+</style>
+
+<h1>Hooks Agents</h1>
+<p class="subhead">Operator agents for Coached by Hooks · Sky's The Limit WR · TOJ Management NIL roster.</p>
+<span class="tag">CERTIFIED OPERATOR · MARGIN HOOKS</span>
+
+<div id="authwarn" class="authwarn">⚠️ Not signed in. <a href="/login.html">Log in</a> first.</div>
+
+<label>Role</label>
+<div id="roles" class="roles">Loading…</div>
+
+<label>Athlete / Trainer scope (optional)</label>
+<input id="athlete_id" placeholder="athlete or trainer UUID (leave blank for cross-roster tasks)">
+
+<label>Task</label>
+<textarea id="task" placeholder="Concrete task. E.g. 'Grade this athlete based on the film uploaded this week' or 'Draft outreach to the Boise State WR coach about Marcus Jones.'"></textarea>
+
+<button id="run">Run agent</button>
+<div id="output"></div>
+
+<div class="api-hint">
+  <b>API Integration</b> — Same endpoints as this UI, callable from Optimum, CRM, or any external system.<br>
+  Auth via <code>X-Hooks-API-Key</code> header (set <code>HOOKS_API_KEY</code> in Render env). Full reference: <code>agents/hooks/API.md</code> in the repo.
+</div>
+
+<script>
+let selectedRole = null;
+
+fetch("/api/me").then(r=>r.json()).then(d => {
+  if (!d.authenticated) document.getElementById("authwarn").style.display = "block";
+}).catch(()=>{});
+
+fetch("/api/hooks-agents/roles")
+  .then(r => r.ok ? r.json() : Promise.reject(r.status))
+  .then(d => renderRoles(d.roles))
+  .catch(err => {
+    document.getElementById("roles").innerHTML =
+      "<div class='err'>Could not load roles (" + err + ").</div>";
+  });
+
+function renderRoles(roles) {
+  const c = document.getElementById("roles");
+  if (!roles || !roles.length) { c.innerHTML = "<div class='err'>No roles found.</div>"; return; }
+  c.innerHTML = roles.map(r => `
+    <div class="role-card" data-id="${r.id}">
+      <h3>${r.label}</h3>
+      <p>${r.tagline || ""}</p>
+      ${(r.skills||[]).map(s=>`<span class="chip">${s}</span>`).join("")}
+    </div>
+  `).join("");
+  c.querySelectorAll(".role-card").forEach(card => {
+    card.addEventListener("click", () => {
+      c.querySelectorAll(".role-card").forEach(x => x.classList.remove("selected"));
+      card.classList.add("selected");
+      selectedRole = card.dataset.id;
+    });
+  });
+  c.querySelector(".role-card")?.click();
+}
+
+async function fetchJSON(url, opts) {
+  const r = await fetch(url, opts);
+  const text = await r.text();
+  let d;
+  try { d = JSON.parse(text); } catch {
+    throw new Error("Server returned non-JSON (" + r.status + "): " + text.slice(0, 120));
+  }
+  if (!r.ok) throw new Error(d.error || ("HTTP " + r.status));
+  return d;
+}
+
+async function pollUntilDone(runId, out, startedAt) {
+  while (true) {
+    await new Promise(r => setTimeout(r, 2000));
+    const d = await fetchJSON("/api/hooks-agents/runs/" + runId);
+    const elapsed = Math.round((Date.now() - startedAt) / 1000);
+    if (d.status === "running") {
+      out.textContent = "Agent working… " + elapsed + "s elapsed.";
+      continue;
+    }
+    if (d.status === "failed") throw new Error(d.error || "run failed");
+    if (d.status === "completed") return d;
+  }
+}
+
+document.getElementById("run").addEventListener("click", async () => {
+  if (!selectedRole) return alert("Pick a role first");
+  const btn = document.getElementById("run");
+  const out = document.getElementById("output");
+  const task = document.getElementById("task").value.trim();
+  const athlete_id = document.getElementById("athlete_id").value.trim() || null;
+  if (!task) return alert("Task is required");
+  btn.disabled = true; btn.textContent = "Running…";
+  out.className = "show"; out.textContent = "Submitting…";
+  const startedAt = Date.now();
+  try {
+    const submitted = await fetchJSON("/api/hooks-agents/run", {
+      method:"POST", headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({ role: selectedRole, task, athlete_id })
+    });
+    if (!submitted.run_id) throw new Error("no run_id returned");
+    out.textContent = "Queued. Agent working…";
+    const d = await pollUntilDone(submitted.run_id, out, startedAt);
+    const trace = Array.isArray(d.trace) ? d.trace : [];
+    const toolCalls = trace.filter(t => t.type === "tool_use");
+    const roleLabel = document.querySelector('.role-card.selected h3')?.textContent || selectedRole;
+    const usage = d.usage || {};
+    out.innerHTML = "<b>" + roleLabel + " · Agent output</b>\n\n" + d.output +
+      "<div class=\"trace\"><b>Trace</b> — " + toolCalls.length + " tool calls · " +
+      (usage.input_tokens || 0) + " in / " + (usage.output_tokens || 0) + " out · " +
+      Math.round((new Date(d.completed_at) - new Date(d.created_at)) / 1000) + "s wall" +
+      (toolCalls.length ? "<details style=\"margin-top:8px;\"><summary>tool calls</summary>" +
+        toolCalls.map(t => "<div>→ " + t.name + "(" + JSON.stringify(t.input).slice(0,140) + ")</div>").join("") +
+      "</details>" : "") +
+      "</div>";
+  } catch (e) {
+    out.innerHTML = "<span class=\"err\">Error: " + e.message + "</span>";
+  } finally {
+    btn.disabled = false; btn.textContent = "Run agent";
+  }
+});
+</script>
