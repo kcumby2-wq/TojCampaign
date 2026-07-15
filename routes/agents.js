@@ -69,18 +69,39 @@ router.post("/run", requireAuth, async (req, res) => {
     const startedAt = Date.now();
     try {
       const result = await runAgent({ role, task, client_id: client_id || null });
+      const finalStatus = result.eval_status === "failed_after_retries" ? "waiting" : "completed";
       await sb
         .from("agent_runs")
         .update({
-          status: "completed",
+          status: finalStatus,
           output: result.output,
           trace: result.trace,
           usage: result.usage,
+          eval_status: result.eval_status,
+          retry_count: result.retry_count || 0,
+          eval_summary: result.eval_summary,
+          eval_biggest_miss: result.eval_biggest_miss,
           completed_at: new Date().toISOString(),
         })
         .eq("id", runRow.id);
+
+      // Persist per-attempt eval history
+      if (result.eval_history && result.eval_history.length) {
+        await sb.from("eval_runs").insert(
+          result.eval_history.map((h) => ({
+            agent_run_id: runRow.id,
+            attempt: h.attempt,
+            verdict: h.verdict,
+            total_score: h.total_score,
+            biggest_miss: h.biggest_miss,
+            auto_fail_triggered: h.auto_fail_triggered,
+            evaluator_model: h.evaluator_model,
+          }))
+        );
+      }
+
       console.log(
-        `[agents] run ${runRow.id} done · ${role} · ${Date.now() - startedAt}ms · ${result.usage?.input_tokens || 0}→${result.usage?.output_tokens || 0} tok`
+        `[agents] run ${runRow.id} ${finalStatus} · ${role} · ${Date.now() - startedAt}ms · eval=${result.eval_status} retries=${result.retry_count || 0}`
       );
     } catch (e) {
       console.error(`[agents] run ${runRow.id} failed:`, e.message);
@@ -105,7 +126,7 @@ router.get("/runs/:id", requireAuth, async (req, res) => {
 
   const { data, error } = await sb
     .from("agent_runs")
-    .select("id,role,client_id,task,status,output,trace,usage,error,created_at,completed_at")
+    .select("id,role,client_id,task,status,output,trace,usage,error,created_at,completed_at,eval_status,retry_count,eval_summary,eval_biggest_miss")
     .eq("id", req.params.id)
     .maybeSingle();
   if (error) return res.status(500).json({ error: error.message });

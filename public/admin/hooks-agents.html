@@ -134,10 +134,16 @@ document.getElementById("run").addEventListener("click", async () => {
     const toolCalls = trace.filter(t => t.type === "tool_use");
     const roleLabel = document.querySelector('.role-card.selected h3')?.textContent || selectedRole;
     const usage = d.usage || {};
-    out.innerHTML = "<b>" + roleLabel + " · Agent output</b>\n\n" + d.output +
+    const evalBadge = d.eval_status === "passed" ? "✅ PASS" :
+                       d.eval_status === "passed_after_retry" ? "✅ PASS (retry " + d.retry_count + ")" :
+                       d.eval_status === "failed_after_retries" ? "⚠️ EVAL FAILED — human review" :
+                       "eval: " + (d.eval_status || "n/a");
+    out.innerHTML = "<b>" + roleLabel + " · Agent output</b>  <span style='color:#5c6673;font-weight:normal;'>" + evalBadge + "</span>\n\n" + d.output +
       "<div class=\"trace\"><b>Trace</b> — " + toolCalls.length + " tool calls · " +
       (usage.input_tokens || 0) + " in / " + (usage.output_tokens || 0) + " out · " +
       Math.round((new Date(d.completed_at) - new Date(d.created_at)) / 1000) + "s wall" +
+      (d.eval_summary ? "<br><b>Eval:</b> " + d.eval_summary : "") +
+      (d.eval_biggest_miss ? "<br><b>Biggest miss:</b> " + d.eval_biggest_miss : "") +
       (toolCalls.length ? "<details style=\"margin-top:8px;\"><summary>tool calls</summary>" +
         toolCalls.map(t => "<div>→ " + t.name + "(" + JSON.stringify(t.input).slice(0,140) + ")</div>").join("") +
       "</details>" : "") +
