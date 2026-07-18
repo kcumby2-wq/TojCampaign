@@ -6,7 +6,7 @@
 
 **Prepared by:** Kyron Cumby, Operator, TOJ
 **For:** The Pylon owner and executive team
-**Draft:** v1.0
+**Draft:** v1.1 (V3.1 creative expansion integrated)
 **Date:** 2026-07-18
 
 ---
@@ -61,7 +61,7 @@ Kyron's scope across all three domains covers **four functions**: Tech, Sales, S
 
 ---
 
-## 5. The fourteen revenue lines
+## 5. The twenty revenue lines
 
 Every SKU below is available nationally at launch. Regional Coordinators ensure delivery quality parity across all five territories. Prices and revenue splits are locked. Changes require both signatories' approval.
 
@@ -81,16 +81,32 @@ Every SKU below is available nationally at launch. Regional Coordinators ensure 
 | 6 | Efficiency | CRM + pre-sales platform | Not customer-facing | $5/registered team OR 2% of gross registration | flat platform fee | Funds the plumbing |
 | 7 | Efficiency | Pylon City League Host Toolkit | Turnkey media + CRM + marketing kit | $2,000–$5,000/host/season | 40% (Pylon 60) | Sold to hosts, not to teams |
 | 8 | Scouting + Creative | Pylon Girls Flag NIL Package | Per-athlete profile + NIL Night content | $99–$149/athlete/season | 40% (Pylon 60) | LA28-runway play; pink-brand line |
-| 9 | Scouting | Pylon Athlete Transcript Subscription | Per-athlete Prospect Edge profile | $99/athlete/season Individual · $249/athlete/season Combine | 40% (Pylon 40, Optimum 20 on Combine) | The 117K addressable base — flagship subscription |
+| 9 | Scouting | Pylon Athlete Transcript Subscription | Per-athlete Prospect Edge profile | $99/athlete/season Individual · $249/athlete/season Combine | 40% (Pylon 40, Optimum 20 on Combine) | The 117K addressable base — flagship subscription; Momentum Score embedded |
 | 10 | Creative | Live Event Posting Package | Real-time content push during games | Bundled in 1b/1c OR $499/event standalone | 40% | Runs on the Live Event Console |
-| 11 | Scouting + Efficiency | Pylon Recruiting Concierge | Personalized coach-outreach agent + weekly digest | $99/month OR $499/season/athlete | 45% (Optimum 25, Pylon 30) | Rivals-killer; backed by Optimum's Coaches Directory |
-| 12 | Creative | Pylon Player Snapshot | Basic photo pack from one event | $69/event/athlete | 40% | Parent buys at vendor booth |
-| 13 | Creative | Pylon Player Story | Photo pack + short reel | $99/event/athlete | 40% | Parent buys at vendor booth |
-| 14 | Creative | Pylon Player Feature | Full multi-piece coverage per athlete | $199/event/athlete | 40% | Parent buys at vendor booth |
+| 11 | Scouting + Efficiency | Pylon Recruiting Concierge | Personalized coach-outreach agent + weekly digest | $99/month OR $499/season/athlete · **HBCU tier $149/month or $749/season** | 45% (Optimum 25, Pylon 30) | Rivals-killer; backed by Optimum's Coaches Directory; HBCU premium tier launches Q2 2026 |
+| 12 | Creative | Pylon Player Snapshot | Basic photo pack from one event | $69/event/athlete | 40% | Parent buys at vendor booth; Subject Medias backbone |
+| 13 | Creative | Pylon Player Story | Photo pack + short reel | $99/event/athlete | 40% | Parent buys at vendor booth; Subject Medias backbone |
+| 14 | Creative | Pylon Player Feature | Full multi-piece coverage per athlete | $199/event/athlete | 40% | Parent buys at vendor booth; Subject Medias backbone |
+| **15** | **Efficiency** | **Pylon AI Coach** | AI game-planning + scouting + practice + decision-support for head coaches | **$99/coach/month OR $999/coach/season** | **60% (Pylon 40)** | **Trained on real Pylon grade + game data; competitive moat vs generic ChatGPT wrappers** |
+| **16** | **Creative** | **Pylon Signature Series** | Narrative short films (5–15 min) presenting individual athletes / programs | **$75K–$150K/episode presenting sponsor OR $750K–$1.5M/season presenting** | **25% (Pylon 60, SM 15)** | **The differentiator vs Overtime — cultural weight + editorial credibility** |
+| **17** | **Scouting + Cultural** | **Pylon × HBCU Showcase** | HBCU-anchored showcase events + Signature Series episodes | **$500K/event presenting sponsor** | **25% (Pylon 60, SM 15)** | **Nike / State Farm / Coca-Cola sponsor magnet; cultural moat that will be remembered** |
+| **18** | **Creative** | **Pylon AI Highlight Reel** | AI-produced per-athlete highlights, grade-informed cuts | **Basic $29/season · Standard $99/season · Recruiting $149/season/athlete** | **55% (Pylon 35, SM 10)** | **Server-side clean footage + Optimum grade cuts + Recruiting Concierge distribution; solves the gaps Athlete AI's 3.4-star reviews complain about** |
+| **19** | **Cultural + Efficiency** | **Pylon Alumni Network** | 500+ NFL alumni + 4K D1 commits · membership + mentorship + investment circle | **Membership $299/year · brand collab deals $50K each · Investment Circle 2% management fee** | **~33% weighted split** | **Cultural moat Overtime doesn't have; Nike / State Farm love the mentorship story angle** |
+| **20** | **Data + B2B** | **Pylon Data Feed** | Licensed grade + stat + Momentum Score data to broadcasters, gaming, colleges | **$50K–$500K/year per licensee** | **50% (Pylon 30, Optimum 20)** | **Elias Sports Bureau for youth football; recurring high-margin annuity; requires Optimum + Sports Thread sub-agreement extensions** |
 
-Beyond these fourteen SKUs, the content system itself generates sponsor inventory (Sunday Salvo, Power Rankings Show, Off-Season Signal newsletter, Pylon Path docu-series, Live Draft, Coach Corner, Podcast, Parent Playbook, Ambassador program brand-affiliate slots). Estimated year-one gross across content-sponsor slots: ~$777K. TOJ commission at 25% commission: ~$194K.
+Beyond these twenty SKUs, the content system itself generates sponsor inventory (Sunday Salvo, Power Rankings Show, Off-Season Signal newsletter, Pylon Path docu-series, Live Draft, Coach Corner, Podcast, Parent Playbook, Ambassador program brand-affiliate slots). Estimated year-one gross across content-sponsor slots: ~$777K. TOJ commission at 25% commission: ~$194K.
 
-**Estimated year-one TOJ take (all lines combined): $1.1M–$2.4M** depending on ramp velocity and Recruiting Concierge conversion.
+### Pylon Momentum Score — the embedded metric that becomes the moat
+
+Every graded athlete gets a 0–100 longitudinal Momentum Score combining Optimum on-field grade + Pylon event volume + measurables trend + game-footage volume + recruiting-momentum signal + engagement. **The score is only as defensible as the underlying dataset. Nobody else has multi-year Pylon-event data on the same athlete.** This is the moat that makes SKUs #9 (Athlete Subscription), #1c (Combine Book), #11 (Recruiting Concierge), #15 (AI Coach), #18 (AI Highlight Reel), and #20 (Data Feed) irreplaceable.
+
+Not a standalone SKU. Embedded in the six SKUs above and referenced in Sunday Salvo "Momentum Movers" content, monthly Off-Season Signal deep-dives, and Power Rankings Show discussion. Public launch mode (quiet embedded first, or loud dedicated landing) confirmed jointly before Q3 2026.
+
+### Estimated year-one TOJ take across all lines
+
+**Approximately $2.9M–$4.0M depending on ramp velocity, Recruiting Concierge conversion, AI Highlight Reel adoption, Signature Series sponsor close rate, and Alumni Network launch cadence.**
+
+Compared to year-one fully-loaded pod cost of $950K–$1.4M (V3.0), net year-one margin is $1.5M–$2.6M.
 
 ---
 
@@ -149,12 +165,18 @@ The TAPPS cross-recruit pathway (Optimum's official partnership with the ~250 Te
 
 ---
 
-## 11. Subject Media crew allocation
+## 11. Subject Media crew allocation + operational backbone
+
+**Backbone: TOJ operates Subject Medias' proven media booking + delivery system, white-labeled as Pylon-branded coverage.** Subject Medias' operational spine — SubjectSkillz creator network, 48-hour delivery, no-watermark full-ownership terms, 3-tier package structure ($49 walk-up · custom team · $999+ event) — becomes the delivery layer for every Pylon media SKU (1a/1b/1c/10/12/13/14/17/18). Zero rebuild required. Backend runs on Subject Medias' proven infrastructure; customer-facing surface is 100% Pylon.
+
+**Crew allocation:**
 
 - **Mentorship crew** — event-level, included by default in Recap (1a), Season Pack (1b), and Live Event Posting (10). Trains younger creators on Pylon events.
-- **Contract crew** — premium, event-contracted or year-contracted. Assigned to Combine Book (1c), Digital Scouts (3), high-value events, and all international events (Pylon Japan).
+- **Contract crew** — premium, event-contracted or year-contracted. Assigned to Combine Book (1c), Digital Scouts (3), Signature Series (16), HBCU Showcase (17), high-value events, and all international events (Pylon Japan).
 
 Player-level packages (12/13/14) draw from the Coordinator's region-assigned creator pool, with contract crew callable for Player Feature ($199) when scale requires.
+
+**Subject Medias' backend is TOJ IP** (per §13). Pylon licenses white-labeled access to that infrastructure for the term of this partnership; on termination, the infrastructure and creator network stay with TOJ.
 
 ---
 
@@ -174,13 +196,22 @@ The following are TOJ's intellectual property, licensed to Pylon for the term of
 - Storefront and admin surfaces (`tojcampaign.com/pylon-*.html`, `/admin/pylon.html`)
 - Sponsor rate card for mid-market tiers (4a/4b/4c/4d)
 - Athlete Subscription platform (SKU #9)
-- Recruiting Concierge agent (SKU #11)
+- Recruiting Concierge agent (SKU #11) + HBCU premium tier
 - Content Taxonomy spec and Visual Direction rubric
 - Live Event Console + Live Card generator
-- Subject Media production library
-- The nineteen SKU designs (1a–14, plus content-sponsor slots)
+- Subject Media production library + Subject Medias operational backbone (creator network, delivery infrastructure, package structure)
+- **Pylon AI Coach agent + underlying game-planning + scouting model (SKU #15)**
+- **Pylon Momentum Score computation algorithm + longitudinal athlete dataset**
+- **Pylon Signature Series production pipeline (SKU #16)**
+- **Pylon × HBCU coach directory + showcase operational playbook (SKU #17)**
+- **AI Highlight Reel production pipeline + grade-informed cut algorithm (SKU #18)**
+- **Pylon Alumni Network membership infrastructure + Investment Circle governance (SKU #19)**
+- **Data Feed licensed data package structure (SKU #20)**
+- The twenty SKU designs (1a–20, plus content-sponsor slots)
 
 License is co-terminous with the partnership. On termination, TOJ retains all of the above and the right to license it forward to other partners.
+
+**Special note on the Pylon Momentum Score dataset:** the multi-year longitudinal athlete data compiled during the partnership term is jointly-usable by both parties for the term. On termination, the dataset stays with TOJ; Pylon retains a perpetual license to use the data for its own operational purposes but cannot license it to third parties without TOJ's consent.
 
 ---
 
@@ -212,6 +243,18 @@ Anything not on this list runs on the auto-approve rails built into the TOJ syst
 
 ---
 
+## 14b. City League Franchise Ownership (structural)
+
+Beyond the City League Host Toolkit (SKU #7 at $2,000–$5,000/host/season), TOJ intends to **directly own operating rights for 2 City League franchises in Year 1** (Portland + Dallas, aligned to Kyron's physical presence) — scaling to 8 franchises by Year 3.
+
+**Structure:** TOJ operates each acquired City League. Pays Pylon a licensing fee per market for use of the Pylon brand. Retains operating profit — registration fees + Team Media Package attach + Coaches + Officials + venue rev share + local sponsor sales. Each franchise generates approximately $100–$300K/year in revenue at maturity.
+
+**Governance:** requires a Pylon brand-licensing agreement covering TOJ-owned City League operations. Pylon gets brand licensing revenue + preferred access to acquisition targets Pylon would otherwise operate itself. **Terms of the brand-licensing agreement to be set jointly by Kyron and the Pylon CEO before the first franchise acquisition closes.**
+
+**Capital source:** funded by TOJ operating profit, external sports-investment partner, or Pylon corp itself as a portfolio co-investor. Structure decision (independent raise vs. existing-fund partnership) confirmed by Kyron with CEO before Q3 2026.
+
+---
+
 ## 15. Exit clause
 
 On termination:
@@ -234,10 +277,11 @@ If the owner signs off on this memo:
 
 1. Kyron sends this to counsel with the note "this is what we're doing."
 2. Counsel drafts the operational agreement using this memo as the source of truth.
-3. Kyron begins the Optimum sub-agreement conversation immediately.
-4. West and South Central Coordinator postings go live upon agreed retainer + commission structure.
-5. Priority 2 of the tojcampaign build (DB migration, routes, admin UIs, checkout pages, Live Event Console) begins on `claude/pylon-partnership-2026`.
-6. Partnership Memo, agreement, and Optimum sub-agreement are all signed before the first customer-facing SKU launches.
+3. Kyron begins the Optimum sub-agreement conversation immediately (blocks SKUs #1c, #2, #3, #9-Combine, #11, #20).
+4. Kyron + Pylon CEO align on Regional Coordinator retainer + commission structure.
+5. West and South Central Coordinator postings go live upon comp structure agreed.
+6. **Priority 2 of the tojcampaign build has already begun on `claude/pylon-partnership-2026` — DB migration, routes, admin UIs, checkout pages, Live Event Console, Content Ops layer, Recruiting Concierge, Player Packages, AI Coach, Signature Series, HBCU Pipeline, AI Highlight Reel, Alumni Network, and Data Feed all in-flight.**
+7. Partnership Memo, brand-licensing agreement (City League Fund), and Optimum sub-agreement all signed before the first customer-facing SKU launches.
 
 **Target: fully-signed partnership documents by end of Q3 2026 for a Q4 2026 revenue ramp into the 2027 competitive year.**
 
