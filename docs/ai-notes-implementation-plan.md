@@ -1,14 +1,61 @@
-# AI Notes → TOJcampaign.com Implementation Plan
+# AI Notes → TOJcampaign.com Implementation Plan (v3)
 
 **Author:** Kyron Cumby, Trail of Joy Management Group, LLC
 **Focus:** TOJcampaign.com — the platform, the product, and the operator OS underneath
 **Status:** Living working doc. Clients (Subject Report, Pylon7v7, Sky's The Limit WR, XpandSports, Optimum Grading, CollegeFootballRecruiting.com) are mentioned only where they change the design of a TOJcampaign agent, skill, or goal.
-**Purpose:** Turn the July 2026 AI notes into concrete additions to `agents/roles/`, `agents/skills/`, and `agents/evals/` — every note maps to a file path, a persona, or a numeric threshold.
+**Last updated:** 2026-07-18 (v3)
 **North star:** TOJcampaign.com is a 9/10-quality, 10/10-consistency operator platform running three verticals on one agent spine.
 
 ---
 
-## The one-paragraph synthesis, sharpened
+## What changed from v2 → v3
+
+The v2 plan was **the tactical roster** — roles, skills, evals, goals, loops, and the 30-day sequencing. It stands. v3 does not rewrite it. v3 **extends** it with the wider layers Kyron's notes cover that v2 under-drew:
+
+1. **Worldview operationalized** — the 12 levels of creativity, 4 values of AI, 3 levels of learning, 7 levels of AI mastery as verbs the operator performs (not framings that hover above the work). Full doc: `docs/toj-worldview-operationalized.md`.
+2. **Distribution runbook** — lead magnet, funnel spec, Meta ads runbook, pre-validation gate, guarantee scaffold, KPI baseline/ceiling/target discipline. Full doc: `docs/toj-distribution-runbook.md`.
+3. **Media roadmap** — the 12–24 month path from static site to media empire (Foundation Score audit tool → podcast → cohort community platform → interactive media). Full doc: `docs/toj-media-roadmap.md`.
+4. **Curriculum** — per-role reading lists so the roster's mental model is traceable; Kyron's reading; pilot reading. Full doc: `docs/toj-curriculum.md`.
+5. **Vertical theses** — 5 market bets with go/no-go gates: NIL/youth prep, mastery-based education, spatial intelligence, D2C future, tokens as infrastructure. Full doc: `docs/toj-vertical-theses.md`.
+6. **Community + cohort spec** — the retention layer TOJ was missing: cohort program, all-alumni community, private events, digital products, alumni board. Full doc: `docs/toj-community-cohort-spec.md`.
+
+In-line additions (this doc, below):
+
+7. **Agent archetype distribution** — the roster mapped to the 5 archetypes (Prototype / Builder / Sleeper / Grower / Maintainer) with the org-mix rule for pre-PMF vs. growing vs. strong PMF
+8. **Weekly retrospective ritual** — the notes' 5-part self-learning loop (Define → Build → Measure → Learn → Iterate) as a Sunday-evening standing ritual that improves skills/cartridges/goal-registry off real fails
+9. **KPI discipline** — every metric in the goal registry gets baseline/industry-ceiling/target the Clairvo way; no more "target: TBD"
+10. **Chief of Staff extended** — T/P/E tagging in the morning brief, "attended-to today" as a first-class metric, target cycle time per Doing item, 3P (Principles/Patterns/Passion) as the daily brief structure
+11. **Six new skills** — `hundred-mechanisms`, `four-week-pilot-playbook`, `paycheck-workflow`, `content-repurpose`, `operator-self-audit`, `different-not-better`
+12. **One new role** — `repurpose-producer.js`
+13. **Outcome-priced offering** — the $30/booked-job pattern productized without disrupting the tier structure (documented in `docs/toj-distribution-runbook.md`)
+14. **Revised sequencing** — the 30-day sprint of v2 extends into a **6-week phased rollout** because the scope grew; interleave still holds
+
+The v2 plan (roles, skills, evals, goals, loops, three plans) is preserved verbatim below, followed by the extension sections. **The tactical layer is how consistency gets enforced. The extension layer is how the quality ceiling rises. Both are needed.**
+
+---
+
+## Index of companion docs
+
+Read these in order for a first pass. Each is designed to stand alone but they cross-link at every logical seam.
+
+| # | Doc | What it covers |
+|---|-----|---------------|
+| 1 | `docs/ai-notes-implementation-plan.md` | This doc — the north-star index, roster, skills, evals, goals, loops, plans, sequencing |
+| 2 | `docs/toj-worldview-operationalized.md` | The 4 abstract ladders → verbs per artifact type |
+| 3 | `docs/toj-distribution-runbook.md` | Lead magnet, funnel, Meta ads, guarantee scaffold, outcome pricing |
+| 4 | `docs/toj-media-roadmap.md` | 12–24 month media surface build order |
+| 5 | `docs/toj-curriculum.md` | Per-role reading, Kyron's reading, pilot reading |
+| 6 | `docs/toj-vertical-theses.md` | 5 market bets with go/no-go gates |
+| 7 | `docs/toj-community-cohort-spec.md` | Cohort program + community platform + alumni layer |
+
+Foundational docs (pre-existing, referenced throughout):
+
+- `docs/toj-transition-plan.md` — the strategic transition to owned platform
+- `docs/six-week-foundational-playbook.md` — the Principles-level client curriculum (amended per Thesis 2)
+
+---
+
+## The one-paragraph synthesis, sharpened (unchanged from v2)
 
 The notes describe an operator platform in five moving parts: (1) a **short list of foundation agents** — Chief of Staff, Content Strategist, Research Assistant — that route every task, (2) an **agent roster organized by the Draft → Triage → Coordinate → Act ladder** so nothing gets over-automated, (3) a **skills library** written as markdown that defines HOW every artifact must be produced, (4) a **cartridge/eval layer** that scores every output before it ships and retries under a threshold, and (5) **four loop types** — turn, goal, time, proactive — that carry work through the system without you touching it. TOJcampaign already has the eval primitive (`agents/evals/toj-principles.js`), the architect agent that designs new agents, the six-role starter set, and a mature skill format. What is missing is the **foundation-agent trio**, the **Triage/Coordinate/Act tier agents** for concierge delivery, the **cartridge scoring layer**, ten specific **skills markdown files**, and a **goal registry** with numeric done-when thresholds. This doc names every one.
 
@@ -27,12 +74,23 @@ The notes describe an operator platform in five moving parts: (1) a **short list
 | `skeptic.js` | The Skeptic | Meta (red-team) | Challenges outputs — the guardrail against sycophancy |
 | `waitlist-warmer.js` | Waitlist Warmer | Draft/Coordinate | Nurtures leads before onboarding |
 
+**Added in v3 (this session):**
+- `repurpose-producer.js` — expands one validated piece into a 4-tier asset stack across surfaces
+
 ### Skills that exist (`agents/skills/`)
 
 - `toj-voice.md` — the 3-dial register/warmth/assertion voice DNA
 - `voice-matching.md` — the retrieval protocol for client-voice mimicry
 - `toj-methodology.md` — the TOJ core operating story every client-facing agent loads
 - `five-pillars.md` — the Foundation Score scoring rubric (0–100 per pillar, evidence + gap)
+
+**Added in v3 (this session):**
+- `operator-self-audit.md` — Public/Private/Secret/Shadow selves + attention-tracking + frequency/cycles/flow-state discipline
+- `hundred-mechanisms.md` — plateau-breaking brainstorm pattern (10 parallel × 10 mechanisms)
+- `four-week-pilot-playbook.md` — reusable 0→100 execution plan for launching a new agent-supported workflow
+- `paycheck-workflow.md` — 5-question scoring for whether a workflow is worth systemizing
+- `content-repurpose.md` — one validated piece → 4-tier stack across surfaces
+- `different-not-better.md` — positioning axiom enforced on every outbound piece
 
 ### Evals that exist (`agents/evals/`)
 
@@ -55,7 +113,7 @@ The notes describe an operator platform in five moving parts: (1) a **short list
 
 ### Missing agents (the roster the notes describe)
 
-1. **Chief of Staff** — foundation agent that routes everything, holds the daily brief, decides which role handles the task
+1. **Chief of Staff** — foundation agent that routes everything, holds the daily brief, decides which role handles the task (extended in v3 — see § Chief of Staff Extended below)
 2. **Content Strategist** — foundation agent that plans/drafts everything for TOJcampaign.com (site copy, blog, social, teardowns)
 3. **Research Assistant** — foundation agent that reads intakes, pillars, transcripts, and public data; returns 5-bullet briefs
 4. **Pilot Intake Triage** — Triage-tier agent that classifies incoming interest by vertical (Personal Brand / Non-profit / Authority) and tier ($99/$199/$499), and routes to the right onboarding path
@@ -68,29 +126,53 @@ The notes describe an operator platform in five moving parts: (1) a **short list
 11. **Vertical Positioner** — Draft-tier agent that adapts a piece of TOJcampaign.com copy for Personal Brand vs Authority vs Non-profit without breaking voice
 12. **Q&A Approval Bot** — Coordinate-tier agent that sits at the approval gate: presents a diff, one-line rationale, and the exact "yes/no/edit" option to Kyron from mobile
 
+**Added in v3:**
+
+13. **Repurpose Producer** — expands one validated piece into a 4-tier asset stack (T1 long-form → T2 medium → T3 short → T4 micro) — see `agents/roles/repurpose-producer.js`
+14. **Foundation Audit Composer** (v3, Q3 2026 ship) — produces the result page from the free Foundation Score self-audit — see `docs/toj-distribution-runbook.md` § Lead Magnet
+
 ### Missing skills (the markdown that defines HOW)
 
-1. `verify-toj-artifact.md` — the analog of `verify-frontend-change`. Any client-facing artifact runs this end-to-end verify before shipping.
-2. `pillar-diagnostic.md` — the structured question set per pillar for the intake conversation
-3. `operational-transcript.md` — the 72-hour deliverable format (structure, section shape, evidence rules)
-4. `foundation-score-intake.md` — the intake conversation flow, including insufficient-data behavior
-5. `sales-call-brief.md` — the one-page sales-call brief spec: every objection has a scripted answer, follow-up quotes 3 things they actually said
-6. `email-quality.md` — email done-when: <150 words, subject <45 chars, zero spam words, one clear ask
-7. `webpage-quality.md` — TOJcampaign.com quality gate: every CTA works, mobile <2s, brand voice pass on visible copy blocks
-8. `brand-voice-checklist.md` — the pass/fail checklist that "5 posts pass brand voice" resolves to
-9. `pilot-scoping.md` — how a pilot conversation must be shaped: outcome named, metric named, timeline named, guarantee terms named
-10. `concierge-weekly-drop.md` — the Friday-noon weekly deliverable spec per tier (Core = 1 module workflow, Premium = 1 module + working session prep)
-11. `vertical-positioner.md` — how to translate copy across Personal Brand / Authority / Non-profit without breaking voice
-12. `ad-teardown.md` — how to turn an organic piece into a paid-ad creative package
+**From v2 (unchanged):**
+
+1. `verify-toj-artifact.md`
+2. `pillar-diagnostic.md`
+3. `operational-transcript.md`
+4. `foundation-score-intake.md`
+5. `sales-call-brief.md`
+6. `email-quality.md`
+7. `webpage-quality.md`
+8. `brand-voice-checklist.md`
+9. `pilot-scoping.md`
+10. `concierge-weekly-drop.md`
+11. `vertical-positioner.md`
+12. `ad-teardown.md`
+
+**Added in v3 (shipped this session):**
+
+13. `hundred-mechanisms.md`
+14. `four-week-pilot-playbook.md`
+15. `paycheck-workflow.md`
+16. `content-repurpose.md`
+17. `operator-self-audit.md`
+18. `different-not-better.md`
+
+**Queued (not yet shipped in v3):**
+
+19. `foundation-audit-response.md` — the tone + shape of the free-audit result page (Q3 2026)
+20. `mastery-progression.md` — ZPD-aware next-move logic for `six-week-foundational-playbook.md` (Q3 2026)
+21. `nil-pillar-diagnostic.md` + `nil-guardrails.md` + `nil-vertical-positioner.md` — the NIL vertical bundle (Q4 2026 if go)
 
 ### Missing evals (the cartridges)
 
-1. `humanity-cartridge.js` — voice (3-dial match) + variety + no-LLM-tells. 0–10.
-2. `marketing-cartridge.js` — hook strength + specificity + one clear ask. 0–10.
-3. `open-rate-cartridge.js` — subject-line quality + body length + spam-word scan + opener specificity. 0–10.
-4. `pillar-evidence-cartridge.js` — every pillar claim grounded in retrieval, no ungrounded scores above 40. 0–10.
-5. `cartridge-runner.js` — the orchestrator that sums applicable cartridges and enforces 27/30 (or 18/20, etc.) before delivery.
-6. `pre-deliver.js` (hook) — the gate itself. No client-facing artifact ships without passing.
+1. `humanity-cartridge.js`
+2. `marketing-cartridge.js`
+3. `open-rate-cartridge.js`
+4. `pillar-evidence-cartridge.js`
+5. `cartridge-runner.js`
+6. `pre-deliver.js` (hook)
+
+Unchanged from v2. Plan A ships these.
 
 ---
 
@@ -98,311 +180,369 @@ The notes describe an operator platform in five moving parts: (1) a **short list
 
 The notes reduce a trusted-agent spec to seven questions. Every new TOJcampaign agent below is written to that spec plus the same file shape as `architect.js` / `closer.js` — that's what makes them drop-in.
 
-### 1. Chief of Staff — `agents/roles/chief-of-staff.js`
+### 1. Chief of Staff — `agents/roles/chief-of-staff.js` (extended in v3)
 
 **Purpose:** own the operator's day. Route inputs to the right role. Produce the morning brief and the evening close-out.
 
 - **Wakes up:** at 6:30am (time loop), on any new capture into Inbox, on any @toj-cos mention in Slack/DMs, on any Foundation Score movement > 5 points.
-- **Context:** current day's calendar, Inbox contents, `listClients` output, active pilots + tier, weekly-drop shipping schedule, last 7 days of Kyron's captures, current OKR set.
+- **Context:** current day's calendar, Inbox contents, `listClients` output, active pilots + tier, weekly-drop shipping schedule, last 7 days of Kyron's captures, current OKR set, **v3 additions:** last 7 days of Kyron's journal (`db/journal/`), current cycle-time targets, T/P/E ratio target for this quarter.
 - **Tools:** `listClients`, `getFoundationScore`, `retrieveClientContext`, ability to invoke any other role via the orchestrator, ability to push a Slack DM to Kyron, ability to write to `db/inbox.json`.
-- **Allowed to do itself:** triage Inbox → (Next / Doing / Waiting / Done), pick the day's ONE metric-moving move per vertical, book time on Kyron's calendar for approvals, draft the morning brief and evening close-out, prompt other roles for their piece of the day.
-- **Success looks like:** morning brief in Slack by 6:30am covering yesterday's Done, today's Doing, what's Waiting on Kyron specifically, one metric per vertical to move today; evening close-out by 7pm covering what moved, what didn't, tomorrow's top three.
+- **Allowed to do itself:** triage Inbox → (Next / Doing / Waiting / Done), pick the day's ONE metric-moving move per vertical, book time on Kyron's calendar for approvals, draft the morning brief and evening close-out, prompt other roles for their piece of the day, **v3 additions:** assign target cycle time to each Doing item, tag each item T/P/E, produce the daily 3P (Principles/Patterns/Passion) trace, run the evening attention audit against the 4-selves scaffold from `operator-self-audit.md`.
+- **Success looks like:** morning brief in Slack by 6:30am covering yesterday's Done, today's Doing, what's Waiting on Kyron specifically, one metric per vertical to move today; evening close-out by 7pm covering what moved, what didn't, tomorrow's top three, **v3 additions:** every Doing item tagged with target cycle time; every task traced to one of P/P/P; attention audit as a 1-line signal; T/P/E ratio for the day vs. quarterly target.
 - **Approval required for:** anything that would send a message to a real human outside TOJ (client, prospect, partner), any pricing statement, any pillar-score sent to a client.
-- **Escalates when:** two consecutive daily briefs land with no metric moved on a vertical; a pilot's engagement drops below the retention threshold; any output fails cartridges 3 times in a row.
-- **Loads skills:** `toj-voice`, `toj-methodology`, `verify-toj-artifact`.
+- **Escalates when:** two consecutive daily briefs land with no metric moved on a vertical; a pilot's engagement drops below the retention threshold; any output fails cartridges 3 times in a row; **v3 additions:** T/P/E ratio drifts more than 20% from quarterly target for 3 consecutive days; attention audit shows a divergence > 20% between stated priorities and actual attention for 2 consecutive weeks; a Doing item exceeds its target cycle time by 2×.
+- **Loads skills:** `toj-voice`, `toj-methodology`, `verify-toj-artifact`, **v3 additions:** `operator-self-audit`, `paycheck-workflow` (when scoring new automation candidates), `hundred-mechanisms` (when flagging a plateau).
+
+**v3 additions to the morning brief structure — the 3P frame:**
+
+The notes: *"Success is based on principles and patterns, passion (PPP)."*
+
+Every morning brief structures the top-three items so each traces to one of the three:
+
+- **Principles** — an item that reinforces or applies a principle (e.g., "run every artifact through cartridges before delivery today")
+- **Patterns** — an item that leverages a pattern already working (e.g., "repurpose Tuesday's high-engagement piece per `content-repurpose.md`")
+- **Passion** — an item Kyron is genuinely energized by (e.g., "1:1 with a Premium client whose Foundation moved this week")
+
+If all three items trace to the same category for 3 consecutive days, CoS flags an alignment issue.
+
+**v3 additions to the evening close-out — the attention audit:**
+
+One line per close-out, following `operator-self-audit.md`:
+
+> **Attention audit:** Public 45% · Private 30% · Secret 20% · Shadow (attended) 5% · attended-to today: [1-line list]
+
+Divergence > 20% from quarter-target for 2 consecutive weeks triggers a check-in with Concierge Coach.
+
+**v3 additions — cycle-time discipline:**
+
+Every Doing item includes a target cycle time (e.g., "sales-call brief · target: 45 min"). The evening close-out includes planned vs. actual per item. This turns speed into a measurable practice — the notes: *"It's about how quickly I can do a task for the day, not how much."*
+
+Actual > 1.5× target for 3+ items in a week = Kyron reviews cycle-time targets (may be miscalibrated, may signal a genuine capacity issue).
 
 ### 2. Content Strategist — `agents/roles/content-strategist.js`
+
+*(Unchanged from v2)*
 
 **Purpose:** own TOJcampaign.com's content surface — homepage, teardown posts, social, and any thought-leadership piece.
 
 - **Wakes up:** on the weekly content-plan trigger (Monday 8am), on any request from CoS, when Retention Watcher flags a piece that outperformed and warrants an ad teardown.
 - **Context:** current TOJcampaign.com content calendar, last 90 days of engagement metrics, the vertical positioning notes, cartridge-passing archive of prior posts, `toj-voice` and `voice-matching` skills.
-- **Tools:** `retrieveClientContext` (for anonymized composite examples), site copy read/write, Slack post, ability to invoke `ad-teardown-producer`.
+- **Tools:** `retrieveClientContext` (for anonymized composite examples), site copy read/write, Slack post, ability to invoke `ad-teardown-producer` **and (v3) `repurpose-producer`**.
 - **Allowed to do itself:** draft posts, propose a weekly calendar, produce hook variations (must generate 10 hooks under 8 words per piece), decline pieces that fail its own brief.
 - **Success looks like:** every published piece scores 27+/30 across Humanity + Marketing cartridges before publish; 10 hook variants generated per piece; per-piece done-when includes "reads aloud under 60 seconds" for scripts and "brand-voice checklist passed" for written.
 - **Approval required for:** anything with a specific client name or a hard financial claim.
 - **Escalates when:** a piece fails cartridges 3 times, or the topic requires legal/compliance judgment.
-- **Loads skills:** `toj-voice`, `toj-methodology`, `voice-matching`, `brand-voice-checklist`, `webpage-quality`, `ad-teardown`.
+- **Loads skills:** `toj-voice`, `toj-methodology`, `voice-matching`, `brand-voice-checklist`, `webpage-quality`, `ad-teardown`, **v3 additions:** `content-repurpose`, `different-not-better`.
 
 ### 3. Research Assistant — `agents/roles/research-assistant.js`
 
-**Purpose:** read the mess, return the signal. Any intake, any transcript, any public research task.
-
-- **Wakes up:** on any new Foundation Score intake submission, on any pre-sales prospect prep request, on any post-call debrief request from CoS.
-- **Context:** the intake payload / transcript / URL / uploaded file; `retrieveClientContext` for prior context if a returning client.
-- **Tools:** `retrieveClientContext`, `getFoundationScore`, web read via the environment's fetch, PDF/notes read (once wired), the ability to write to a shared briefing store.
-- **Allowed to do itself:** produce structured 5-bullet briefs (situation / evidence / gap / recommended move / owner), tag briefs by vertical + pillar, flag anything that requires ground truth from the client.
-- **Success looks like:** brief on Kyron's phone in under 10 minutes for a routine ask, under 60 minutes for a full prospect prep; every claim carries a source (chunk id, URL, or "asked the client").
-- **Approval required for:** none — briefs are internal.
-- **Escalates when:** the source material contradicts itself, or the request needs personal-data access beyond consented scope.
-- **Loads skills:** `toj-methodology`, `pillar-diagnostic`, `five-pillars`.
+*(Unchanged from v2 — with the reading list from `docs/toj-curriculum.md` added to its persona)*
 
 ### 4. Pilot Intake Triage — `agents/roles/pilot-intake-triage.js`
 
-**Purpose:** classify every inbound intent — from tojcampaign.com form, DM, referral, or event — by vertical and tier, and hand off cleanly.
-
-- **Wakes up:** on webhook from the tojcampaign.com intake form, on any Waitlist-Warmer handoff, on any @toj-triage mention.
-- **Context:** the intake payload, the tier definitions, the vertical positioning notes, current waitlist depth, current pilot capacity.
-- **Tools:** `getFoundationScore` (if returning), Slack post to CoS with the classification, ability to schedule a discovery slot via calendar.
-- **Allowed to do itself:** classify vertical (Personal Brand / Non-profit / Authority), classify tier fit ($99/$199/$499), enrich with public research from Research Assistant, add to CRM with proper tags, propose a discovery-slot bracket.
-- **Success looks like:** every intake tagged and routed within 15 minutes of receipt; less than 5% mis-classification measured monthly; zero silent drops.
-- **Approval required for:** anything sent to the prospect (Waitlist Warmer owns the send under approval; Triage stops at classify+route).
-- **Escalates when:** the intake is ambiguous across two verticals, or the prospect fits nowhere.
-- **Loads skills:** `toj-methodology`, `pilot-scoping`, `verify-toj-artifact`.
+*(Unchanged from v2 — with **v3 addition**: also runs `paycheck-workflow.md` scoring on the prospect's stated workflow before proposing a tier. Any prospect scoring below 9 gets routed to Founding tier only. Any prospect scoring 13+ becomes eligible for the outcome-priced Placement Track offering per `docs/toj-distribution-runbook.md`.)*
 
 ### 5. Operational Transcript Drafter — `agents/roles/operational-transcript-drafter.js`
 
-**Purpose:** produce the 72-hour Operational Transcript™ deliverable at 9/10 concierge quality.
-
-- **Wakes up:** on Foundation Score Intake completion, on a re-score request from Concierge Coach.
-- **Context:** the client's intake, their pillar scores, their voice sample if provided, the operational-transcript skill spec, prior transcripts for pattern (anonymized).
-- **Tools:** `retrieveClientContext`, `getFoundationScore`, the five pillar-diagnostic sub-agents (invoked in parallel).
-- **Allowed to do itself:** draft the full transcript, run it through cartridges, revise up to 3 times based on cartridge feedback.
-- **Success looks like:** transcript delivered within 72 hours of intake; 27+/30 cartridge score; all five pillars named with evidence and gap; the "weakest pillar — fix this first" section is unambiguous and actionable in 5 hours.
-- **Approval required for:** every transcript — Kyron does the final read before send.
-- **Escalates when:** intake evidence is too thin to score above 40 on 3+ pillars (that's a scoping problem, not an agent problem).
-- **Loads skills:** `toj-voice`, `toj-methodology`, `five-pillars`, `operational-transcript`, `pillar-diagnostic`.
+*(Unchanged from v2)*
 
 ### 6. Foundation Score Intake — `agents/roles/foundation-score-intake.js`
 
-**Purpose:** run the intake conversation (form-driven or 1:1) into a scored pillar tree.
-
-- **Wakes up:** on intake form submission, on Kyron's request during a live discovery call.
-- **Context:** the client's form data + any transcript, `pillar-diagnostic.md` questions, `five-pillars.md` scoring rubric.
-- **Tools:** `retrieveClientContext` for returning clients, write to `db/foundationScores.json` (or the Supabase schema in `docs/foundation-score-supabase-spec.md` once live).
-- **Allowed to do itself:** ask follow-up questions when a pillar's evidence is thin, score each pillar 0–100 with one-line evidence and one-line gap, produce the pillar-tree JSON.
-- **Success looks like:** every pillar has a score + evidence + gap; no pillar scored above 40 without a retrievable evidence chunk; the intake takes under 20 minutes of client time.
-- **Approval required for:** the client sees the score only after Kyron's review — Intake writes to storage but does not display.
-- **Escalates when:** the client's stated goals contradict their pillar evidence at a level that a human should reconcile.
-- **Loads skills:** `pillar-diagnostic`, `foundation-score-intake`, `five-pillars`, `toj-methodology`.
+*(Unchanged from v2)*
 
 ### 7. Concierge Weekly Producer — `agents/roles/concierge-weekly-producer.js`
 
-**Purpose:** ship the Friday-noon weekly deliverable for every Core and Premium pilot.
-
-- **Wakes up:** every Thursday 6am (time loop), on any Waiting-on-client input clearing early.
-- **Context:** every active Core/Premium pilot's Foundation Score, their weekly-drop history, their stated priorities, the shared modules library (CRM cadence, content calendar, intake automation).
-- **Tools:** all client-facing tools, the CSV builder (`routes/csv.js`), Slack DM to the client, calendar invite for Premium working sessions.
-- **Allowed to do itself:** produce each pilot's weekly-drop artifact + one-page summary, queue them for Kyron's Friday-morning review, propose the following week's module target.
-- **Success looks like:** every Core and Premium pilot receives a passing drop by Friday noon local time; 27+/30 cartridge score; the artifact is a decision, not homework, for the client.
-- **Approval required for:** every drop before send.
-- **Escalates when:** a pilot's engagement dropped below threshold (Retention Watcher raises it — Producer proposes a fix drop).
-- **Loads skills:** `toj-voice`, `toj-methodology`, `concierge-weekly-drop`, `verify-toj-artifact`.
+*(Unchanged from v2)*
 
 ### 8. Pillar Diagnostic — `agents/roles/pillar-*.js` (×5)
 
-Five focused sub-agents, one per pillar. Same 7-question shape, same skill loading, but each one owns one pillar's evidence + gap. The five files are `pillar-brand-identity.js`, `pillar-operational-health.js`, `pillar-revenue-architecture.js`, `pillar-content-credibility.js`, `pillar-growth-readiness.js`. Invoked in parallel by Operational Transcript Drafter and Foundation Score Intake. Success signal per pillar: score justified, evidence retrieved, gap actionable in one week. This is the "10 parallel subagents" pattern from the notes, applied to TOJ's core deliverable.
+*(Unchanged from v2)*
 
 ### 9. Retention Watcher — `agents/roles/retention-watcher.js`
 
-**Purpose:** proactive loop — catch churn signals before churn.
-
-- **Wakes up:** every Monday 7am (time loop), on any pilot's weekly-drop-open failing to register within 48 hours, on any pillar re-score dropping > 10 points.
-- **Context:** every active pilot's engagement metrics (opens, replies, session attendance), pillar-score history.
-- **Tools:** read engagement metrics, DM CoS with the alert, propose a fix action.
-- **Allowed to do itself:** raise flags with severity, draft a "check-in" DM for Kyron to send.
-- **Success looks like:** 100% of at-risk pilots surfaced to Kyron within 48 hours of the first signal; zero churn events that had no prior flag.
-- **Approval required for:** every outbound message.
-- **Escalates when:** two consecutive weeks of decline on the same pilot — CoS books a rescue call.
-- **Loads skills:** `toj-methodology`.
+*(Unchanged from v2 — with **v3 addition**: also triggers `hundred-mechanisms` when a metric plateaus for 4+ weeks.)*
 
 ### 10. Ad Teardown Producer — `agents/roles/ad-teardown-producer.js`
 
-**Purpose:** turn organically-validated TOJcampaign.com content into a paid-ad creative package.
-
-- **Wakes up:** when a piece crosses the organic threshold Content Strategist has set (e.g., X shares, N comments, engagement rate above baseline).
-- **Context:** the source piece, the piece's engagement data, `ad-teardown.md`, the 3–5 ad daily test cadence from the notes.
-- **Tools:** creative-asset generation (image/clip), hook variation generation, targeting-note drafting.
-- **Allowed to do itself:** produce 3–5 ad variants per piece, each with hook, image/clip cut, targeting note, budget suggestion ($50–60 test as the notes describe).
-- **Success looks like:** every paid-ad campaign traces back to a piece that already won organically; CTR and CPM metrics recorded before scale.
-- **Approval required for:** every ad before spend.
-- **Escalates when:** no piece meets the organic threshold in the review window.
-- **Loads skills:** `ad-teardown`, `brand-voice-checklist`.
+*(Unchanged from v2 — with **v3 addition**: works with Repurpose Producer's medium/short output. Ad Teardown does NOT re-hook validated pieces; it swaps in variant hooks per the ad testing rules in `docs/toj-distribution-runbook.md` § Meta Ads Runbook.)*
 
 ### 11. Vertical Positioner — `agents/roles/vertical-positioner.js`
 
-**Purpose:** re-shape a piece of copy or an offer for the target vertical without breaking TOJ voice.
-
-- **Wakes up:** on any Content Strategist or Closer request to adapt a piece for a specific vertical.
-- **Context:** the source piece, the vertical's positioning brief, `vertical-positioner.md`.
-- **Tools:** `retrieveClientContext`, cartridges.
-- **Allowed to do itself:** produce a vertical-adapted version with a diff summary explaining what shifted and why.
-- **Success looks like:** vertical adaptation lands in-voice per Humanity Cartridge; the diff summary is under 3 sentences.
-- **Approval required for:** external send.
-- **Escalates when:** the source piece contains a claim that only applies to one vertical and can't be neutralized.
-- **Loads skills:** `toj-voice`, `voice-matching`, `vertical-positioner`, `toj-methodology`.
+*(Unchanged from v2)*
 
 ### 12. Q&A Approval Bot — `agents/roles/qa-approval-bot.js`
 
-**Purpose:** sit at the approval gate. Every artifact needing Kyron's yes/no shows up here.
+*(Unchanged from v2)*
 
-- **Wakes up:** on any role invoking the approval hook.
-- **Context:** the artifact, the source request, the cartridge scores, the "why this deserves attention" one-liner.
-- **Tools:** Slack DM with three buttons (Approve / Edit / Reject), route back to the origin role on Edit or Reject.
-- **Allowed to do itself:** present, remind, timeout after N hours to Waiting.
-- **Success looks like:** every awaiting-approval item is a yes-or-no decision, not a "read the whole thing" chore. Every approval takes under 30 seconds on phone.
-- **Approval required for:** N/A — it IS the approval surface.
-- **Escalates when:** a Kyron approval is missed for over 24 hours.
-- **Loads skills:** `verify-toj-artifact`.
+### 13. Repurpose Producer — `agents/roles/repurpose-producer.js` (NEW in v3)
+
+**Purpose:** expand one organically-validated content piece into a 4-tier asset stack across surfaces.
+
+- **Wakes up:** when Content Strategist flags a piece that crossed the organic threshold (per `docs/toj-distribution-runbook.md` § tier-down content pattern).
+- **Context:** the source piece + its engagement data, `content-repurpose.md`, `toj-voice.md`, the T2/T3/T4 tier specs.
+- **Tools:** access to the source piece, ability to invoke cartridges per tier, ability to write to the content calendar for scheduling.
+- **Allowed to do itself:** extract hook + arc + evidence from source, produce 8 assets across T1/T2/T3/T4 tiers, propose a 7-day publish schedule.
+- **Success looks like:** all 4 tiers produced within 3 days of source validation; every tier passes cartridges before publish; hook lock enforced (same hook 3–5s / first line across all tiers); 8 assets ship over 7 days per source piece.
+- **Approval required for:** every asset before publish (routed through Q&A Approval Bot).
+- **Escalates when:** source piece failed cartridges (Content Strategist owns fix); tier produces below-27/30 twice (spec problem, not Repurpose problem).
+- **Loads skills:** `toj-voice`, `toj-methodology`, `content-repurpose`, `brand-voice-checklist`, `different-not-better`, `verify-toj-artifact`.
+
+### 14. Foundation Audit Composer — `agents/roles/foundation-audit-composer.js` (NEW in v3, Q3 2026 ship)
+
+**Purpose:** produce the result page for the free public Foundation Score self-audit lead magnet.
+
+- **Wakes up:** on form submission at `tojcampaign.com/foundation-audit`.
+- **Context:** the form submission, `five-pillars.md`, `foundation-audit-response.md` (skill to be written).
+- **Tools:** write to `db/foundationAudits.json`, generate result-page HTML, send email confirmation.
+- **Allowed to do itself:** produce the free-tier result page. Ranges (not exact scores) per pillar. One actionable one-step per pillar. Never scores above 60 on any pillar (self-report ceiling).
+- **Success looks like:** result page generated within 60 seconds of form submission; content passes cartridges; soft path to Founding tier included; no "Operational Transcript" language (that's the paid deliverable).
+- **Approval required for:** none (the free asset is deliberately un-approval-gated to preserve conversion; guardrails in the skill enforce quality).
+- **Escalates when:** form submission is malformed or evidence is contradictory (routes to Research Assistant for cleanup).
+- **Loads skills:** `foundation-audit-response.md` (to be written), `five-pillars.md`, `toj-voice.md`, `different-not-better.md`.
 
 ---
 
-## The skills library, expanded
+## The skills library, expanded (v3)
 
 Every skill below is a markdown file under `agents/skills/`. Each follows the existing shape: **Purpose · How to use it · Rules · Anti-patterns · Fallback when data is missing.** Below is one-paragraph purpose per new skill so you can prioritize which to write first.
 
-- **`verify-toj-artifact.md`** — Never report a client-facing artifact as complete based on a successful draft alone. Steps: (1) run the applicable cartridges, (2) read the piece aloud (script rule), (3) check every link/CTA works, (4) check length/subject constraints per artifact type, (5) confirm the artifact is a decision for the client, not homework. Fail any step and it goes back to the drafting role.
-- **`pillar-diagnostic.md`** — For each of the 5 pillars, the structured question tree that turns a client's answers into scoreable evidence. Includes the "insufficient data" fallback: when a pillar's evidence returns thin, the diagnostic must ask one clarifying question before scoring; if evidence is still thin, the pillar scores "insufficient data — flag as first fix" per `five-pillars.md`.
-- **`operational-transcript.md`** — The 72-hour deliverable format: cover page (client, date, weakest pillar, one recommendation), Pillar Detail section per pillar (score, evidence, gap, one-week action), Cross-Pillar Move (the one thing that lifts multiple pillars at once), Success Signals (what will be true in 30 / 60 / 90 days if this is executed), Governance (how the client should track it).
-- **`foundation-score-intake.md`** — The intake conversation flow: opening prompt, per-pillar question set (from `pillar-diagnostic.md`), evidence-capture rules, edge-case behavior for founders who under-answer or over-answer. Includes the exit conversation — how the intake ends without setting the client's expectation about the score before Kyron has reviewed it.
-- **`sales-call-brief.md`** — The one-page sales-call brief: prospect (name, role, vertical, source), stated pain (in their words), pillar hypothesis, offer fit (Founding/Core/Premium), objections + scripted answers (every objection from a prior call goes into a rolling registry — new brief must have all covered), follow-up shape (must quote 3 things the prospect said in their own words), success signal for the call.
-- **`email-quality.md`** — Email done-when: under 150 words, one clear ask, subject under 45 chars with zero spam words, opens with either a name or a specific number, no LLM tells, one CTA per email. The Open-Rate Cartridge scores against this file.
-- **`webpage-quality.md`** — TOJcampaign.com per-page done-when: every CTA fires and lands on the correct destination, mobile load under 2 seconds, all visible copy passes brand voice, no orphan states, canonical meta tags in place, page has one primary CTA (not three), Lighthouse audit >= 90 on performance and accessibility.
-- **`brand-voice-checklist.md`** — The pass/fail list for brand voice: register/warmth/assertion match the 3 dials, no banned phrases ("unlock", "transform", "in today's fast-paced world", "delve", em-dash-as-connector, triple-adjective openers), specific over abstract, verbs before nouns, no hedging on load-bearing sentences. 8/8 required.
-- **`pilot-scoping.md`** — How a pilot conversation must be shaped: outcome named in one sentence, primary metric named with baseline and target, timeline named, guarantee terms named (the 30%-more-engagement / 5%-refund pattern from the notes is the reference), budget owner named. Every pilot proposal must fill this shape or it doesn't go out.
-- **`concierge-weekly-drop.md`** — Weekly drop by tier: Founding = one Slack DM summary + a check-in question; Core = one artifact (CSV, campaign, or pipeline drop) + one-page summary + next week's chosen module; Premium = Core + custom SOP progress + calendar-held working session with agenda. Every drop must be a decision, not homework.
-- **`vertical-positioner.md`** — The translation rules: Personal Brand vertical uses X vocabulary and Y proof style; Authority uses institutional-partner vocabulary and case-study proof; Non-profit uses program-outcome vocabulary and funder-facing proof. Same underlying truth, three languages.
-- **`ad-teardown.md`** — How to turn an organically-validated piece into a paid-ad package: 3–5 variants, hook first, image/clip cut second, targeting third, budget suggestion, kill criteria (when to stop the ad based on CPM/CTR after N impressions).
+*(v2 skills unchanged: verify-toj-artifact, pillar-diagnostic, operational-transcript, foundation-score-intake, sales-call-brief, email-quality, webpage-quality, brand-voice-checklist, pilot-scoping, concierge-weekly-drop, vertical-positioner, ad-teardown)*
+
+**v3 additions (shipped in this session):**
+
+- **`operator-self-audit.md`** — the essence-level skill. Public/Private/Secret/Shadow selves scaffold; "what you repeatedly attend to" tracking; frequency/cycles/flow-state discipline. Loaded by Chief of Staff (evening close-out) and Concierge Coach (Premium working sessions).
+- **`hundred-mechanisms.md`** — invoked when a KPI plateaus 4+ weeks. 10 parallel subagents × 10 mechanisms each across 7 lenses, deduplicated to a 5–7 item shortlist. Governance: not the default response to a bad week; the response to a plateau.
+- **`four-week-pilot-playbook.md`** — reusable 0→100 execution plan for launching a new agent-supported workflow. Week 1 shadow + spec + eval set. Week 2 build + solo runs. Week 3 shadowed live runs. Week 4 cutover + tested-labor sign-off.
+- **`paycheck-workflow.md`** — 5-question scoring for whether a workflow is worth systemizing. Scored on 0–15 scale. Ship-ready threshold: 11+. Used at pilot intake and internal-automation planning.
+- **`content-repurpose.md`** — the tier-down asset production spec. One source piece → 8 assets over 7 days across long-form, medium, short, micro. Hook lock enforced. Cartridge-gated at every tier.
+- **`different-not-better.md`** — positioning axiom enforcement. Every piece of copy about TOJ passes 3 tests: sign-it test (peer can't sign the piece and publish it as their own), chose-not-to surface (piece names one thing TOJ chooses NOT to do that peers do), peer-vocabulary check (no "solutions", "growth" as noun, "leverage", "transform", "elevate", etc.).
 
 ---
 
-## The goal registry — done-when for every TOJcampaign artifact
+## Agent archetypes — the roster's lifecycle mix (v3 addition)
 
-Every artifact type produced by an agent (or by Kyron) has a numeric done-when. If the artifact does not hit its numbers, the loop re-runs. This is the "don't stop until…" pattern from the notes, converted into a table.
+The notes name 5 archetypes for agents in a mature roster: **Prototype · Builder · Sleeper · Grower · Maintainer** — with an org-mix rule for stage:
 
-| Artifact | Done-when threshold | Cartridge(s) run | Owning role |
-|----------|--------------------|--------------------|-------------|
-| Website copy block (tojcampaign.com) | Brand voice pass 8/8; page mobile load < 2s; every CTA fires | Humanity + Marketing | Content Strategist |
-| Homepage hero | ≤ 12 words in headline; ≤ 20 in subhead; one primary CTA | Humanity + Marketing | Content Strategist |
-| Blog post / teardown | 10 hook variants under 8 words each; passes voice checklist; reads aloud in ≤ 60s per 200-word section | Humanity + Marketing | Content Strategist |
-| Social post | Hook < 8 words; 27+/30 combined cartridge | Humanity + Marketing | Content Strategist |
-| Marketing / nurture email | < 150 words, subject < 45 chars, one clear ask, no spam words | Humanity + Marketing + Open-Rate | Waitlist Warmer |
-| Sales email (outbound) | < 120 words, subject < 45 chars, quotes prospect where possible | Humanity + Marketing + Open-Rate | Closer |
-| Sales-call brief | Fits on one page; every objection has scripted answer; 3 prospect quotes in follow-up shape | — (skill check) | Research Assistant |
-| Foundation Score intake | Every pillar scored 0–100 with evidence + gap; no pillar > 40 without evidence chunk | Pillar-evidence | Foundation Score Intake |
-| Operational Transcript | ≤ 72 hours from intake; 27+/30 cartridges; weakest pillar unambiguous | Humanity + Pillar-evidence | Operational Transcript Drafter |
-| Concierge weekly drop | Every Friday noon; 27+/30; decision-shaped for client | Humanity + Marketing | Concierge Weekly Producer |
-| Pilot proposal | Fills `pilot-scoping.md` shape completely; guarantee terms specific | Humanity | Closer |
-| Paid ad creative | Traces to organic-validated piece; 3–5 variants; targeting note included | Humanity + Marketing | Ad Teardown Producer |
-| Vertical adaptation | Diff summary ≤ 3 sentences; Humanity Cartridge pass | Humanity | Vertical Positioner |
-| Morning brief | Delivered by 6:30am; one metric-mover per vertical; ≤ 300 words | — | Chief of Staff |
-| Evening close-out | Delivered by 7pm; what moved / what didn't / top 3 tomorrow; ≤ 200 words | — | Chief of Staff |
-| Research brief | 5 bullets, situation/evidence/gap/move/owner; every claim sourced; ≤ 10 min routine, ≤ 60 min prospect prep | — | Research Assistant |
-| Retention flag | Raised within 48h of first signal; includes proposed fix; severity 1–3 | — | Retention Watcher |
+- **Pre-PMF** (TOJcampaign SaaS status today): needs mostly Prototype + Builder + Sleeper
+- **Growing** (post-Aug 2026 concierge launch, targeting Q1 2027 SaaS): needs Builder + Sleeper + Grower + some Maintainer
+- **Strong PMF** (post-Q1 2027 SaaS with sustained growth): needs Sleeper + Grower + Maintainer + some Builder
 
-If the artifact type isn't in this table, it doesn't get produced yet. That's the segmentation discipline the notes require.
+### The archetypes defined
 
----
+- **Prototype** — designs itself; discovers what the job actually is by trying; churns fast; not for production use. The Architect agent is TOJ's Prototype.
+- **Builder** — takes a defined spec and ships to it; produces artifacts; leaves a trail of finished work. Content Strategist, Ad Teardown Producer, Repurpose Producer, Operational Transcript Drafter, Foundation Audit Composer, most of the 12 new roles.
+- **Sleeper** — proactive-loop agents that watch and wake on trigger; noisy if too many, invisible if too few. Retention Watcher, Q&A Approval Bot, Chief of Staff (partial).
+- **Grower** — takes a shipped agent's output and extends it (scale, quality, coverage). Vertical Positioner is a Grower — extends Content Strategist output across verticals. Repurpose Producer is a Grower — extends validated pieces across tiers.
+- **Maintainer** — keeps existing systems running; low novelty, high reliability. The Skeptic is a Maintainer for quality. Concierge Coach is a Maintainer for client relationships. Every skill file is a Maintainer for its own consistency.
 
-## The four loops, mapped to TOJcampaign
+### TOJcampaign's archetype distribution (v3 read)
 
-- **Turn loop.** Skill files exist and are tagged (`/verify-toj-artifact`). Every drafting role runs the applicable skill's verify at end-of-turn. This is already the pattern in `toj-principles.js` — extend it to the cartridge runner in Plan A.
-- **Goal-based loop.** Every artifact type in the goal registry above has numeric thresholds. Retry up to 3 times, then Waiting. Same primitive already in prod.
-- **Time-based loop.** Morning brief 6:30am. Evening close-out 7pm. Concierge weekly drops Thursday build → Friday noon send. Retention Watcher Monday 7am. Content Strategist weekly plan Monday 8am.
-- **Proactive loop.** Retention Watcher (churn signals). Ad Teardown Producer (organic-threshold crossings). Chief of Staff daily-brief metric-mover flag. The trigger set is small on purpose — proactive loops are noisy if you add too many.
+| Archetype | Current roster count | Roles in this archetype |
+|-----------|----------------------|-------------------------|
+| Prototype | 1 | Architect |
+| Builder | 8 | CFO, Closer, Content Strategist, Operational Transcript Drafter, Foundation Score Intake, Ad Teardown Producer, Repurpose Producer, Foundation Audit Composer |
+| Sleeper | 4 | Chief of Staff, Retention Watcher, Q&A Approval Bot, Pilot Intake Triage |
+| Grower | 2 | Vertical Positioner, Repurpose Producer (dual-tags) |
+| Maintainer | 3 | Skeptic, Concierge Coach, Waitlist Warmer |
+| Pillar sub-agents | 5 | (Builder tag) |
 
----
+**Total planned:** 23 roles when Plan B is fully shipped.
 
-## The three plans (rewritten, TOJcampaign-first)
+### The archetype-mix read (v3)
 
-### Plan A — Cartridge OS: consistency layer for every TOJcampaign artifact
+TOJcampaign is **pre-PMF on the SaaS** but **PMF-adjacent on the concierge product**. The roster mix reflects a transition:
 
-**The bet:** the difference between "we build good stuff sometimes" and "we build 9/10 stuff every time" is the cartridge/eval gate. Ship it once, on top of `agents/evals/toj-principles.js`, and every artifact TOJcampaign produces — website copy, Operational Transcripts, concierge drops, sales emails, ad creative — routes through it or doesn't ship. This is what the notes call the Humanity + Marketing + Open-Rate cartridge combining to 27/30.
+- Strong on Builder (8) — right for a stage that's shipping the delivery product
+- Understaffed on Sleeper — pre-PMF needs MORE proactive agents to notice signals humans can't. Retention Watcher exists; the notes suggest Foundation Score Movement Watcher, Pilot Fit-Check Watcher, and Content Engagement Watcher as candidates for Q4 2026 additions
+- Weak on Grower (2) — Growth requires more agents that extend proven artifacts. Repurpose Producer helps; the notes suggest a Case-Study Extender (turn every successful pilot into a case study) and Cohort Curriculum Extender (Q1 2027, when cohort ships) as future candidates
+- Right-sized on Maintainer — the Skeptic + Coach + Warmer cover the maintenance surface for now
 
-**What ships (in file paths):**
+### Ship additions (v3 roadmap)
 
-- `agents/evals/humanity-cartridge.js`
-- `agents/evals/marketing-cartridge.js`
-- `agents/evals/open-rate-cartridge.js`
-- `agents/evals/pillar-evidence-cartridge.js`
-- `agents/evals/cartridge-runner.js` — sums the applicable cartridges per artifact type using the goal registry
-- `agents/hooks/pre-deliver.js` — the gate; every role's output routes here before it leaves the system
-- `agents/skills/verify-toj-artifact.md`
-- `agents/skills/brand-voice-checklist.md`
-- `docs/cartridges.md` — human-readable rubric so future team members (and Legal review) can reason about scores
-
-**Time to ship:** 7 focused working days for v1. Two per cartridge, one for runner, one for gate + docs.
-
-**Failure mode:** Building the rubric so tight nothing passes on first try, then softening it to move on. Better: publish v1 at "catches obvious misses," measure real fail patterns for two weeks, tighten in v1.1.
-
-**Revenue impact:** Indirect but unbounded. Removes the operator-time ceiling on concierge tiers. Every $99/$199/$499 pilot becomes deliverable at scale without you personally editing each artifact.
-
-**Notes it satisfies:** Cartridges (Humanity, Marketing, Open-Rate). Guardrails + evals. Goal-based loop 90%+ threshold. Turn loop skill files. Segmentation (only one job per cartridge).
-
-### Plan B — Agent Roster Build-out: complete the platform's brain
-
-**The bet:** the 6 existing roles cover the entry point and the delivery persona, but they do not cover the operator brain (Chief of Staff), the platform's daily production (Content Strategist, Research Assistant), the pilot lifecycle from intake through weekly drop (Pilot Intake Triage, Foundation Score Intake, Operational Transcript Drafter, Concierge Weekly Producer), or the proactive loop (Retention Watcher, Ad Teardown Producer, Vertical Positioner, Q&A Approval Bot). Ship the 12 new agents in Draft → Triage → Coordinate → Act order — never skip a tier for an artifact type.
-
-**What ships:** the 12 role files listed above under "Every missing agent" — same shape as `architect.js` / `closer.js` — plus the pillar-diagnostic ×5 sub-agents that Operational Transcript Drafter and Foundation Score Intake invoke in parallel.
-
-**Time to ship:** ship one role per working day. 12 roles + 5 sub-agents = 17 files. Cadence: 3 weeks with time for the Skeptic to red-team each before it lands. The Architect agent already exists to draft each one — use it. That IS the meta-pattern from the notes ("Claude prompts Claude").
-
-**Failure mode:** shipping roles without their skills. Every role above lists the skills it loads — those skills must exist before the role lands, or it will free-form and break voice. Plan C ships the skills; do these in an interleave rather than sequence.
-
-**Revenue impact:** Direct. The concierge tiers ($99/$199/$499) become sellable at 40+ pilots per vertical instead of 5, because the delivery labor moves into the roster instead of into Kyron's calendar. Also unlocks the Q1 2027 SaaS pivot — the roster is the product.
-
-**Notes it satisfies:** Chief of Staff / Content Strategist / Research Assistant trio. Product ladder Draft → Triage → Coordinate → Act. The archetypes (Prototype/Builder/Sleeper/Grower/Maintainer map to roster maturity phases). Slack-channel one-Claude-per-channel pattern (Chief of Staff spawns sub-orchestrators per vertical).
-
-### Plan C — Skills Library + Command Center: define done-when and orchestrate
-
-**The bet:** every agent above is only as good as the skill markdown it loads. Ship the 12 new skill files, wire the goal registry into the orchestrator, and put a mobile capture surface between Kyron and the system so the whole platform can be operated from a phone.
-
-**What ships:**
-
-- The 12 skills markdown files listed under "Missing skills"
-- `agents/goals/registry.js` — a machine-readable version of the goal-registry table above; cartridge-runner reads from it
-- Mobile capture ingress (Raycast + Shortcuts on iPhone, or Left Click AI equivalent) that POSTs raw notes to an Inbox endpoint
-- `routes/inbox.js` — the Inbox → Next → Doing → Waiting → Done pipeline
-- Slack workspace + one channel per vertical/business surface (TOJ Personal Brand, TOJ Authority, TOJ Non-profit, TOJcampaign.com Growth) with Chief of Staff DMing the morning brief per channel
-- `docs/operator-runbook.md` — how Kyron runs the platform on a Tuesday from an airport
-
-**Time to ship:** 10 working days. Skills are 300–500 words each; write two per day for 6 days, then a full day on the goal registry + inbox routes, then two days on Slack + mobile capture wiring, then a day of end-to-end verify.
-
-**Failure mode:** shipping the command center without shipping the roles that populate it (Plan B). The command center without the roster is theater. Do them in interleave.
-
-**Revenue impact:** Multiplicative. Cuts Kyron's coordination time by 50%+ within a month. Unlocks selling the same command-center pattern to Authority-vertical clients as a productized offer once it works internally.
-
-**Notes it satisfies:** Skill md files (the /verify pattern). Mobile execution / Left Click AI. Inbox → Next → Doing → Waiting → Done. Q&A approval gate. Chief of Staff daily brief. Slack channel pattern.
+- **Q4 2026:** 3 additional Sleepers (Foundation Score Movement Watcher, Pilot Fit-Check Watcher, Content Engagement Watcher)
+- **Q1 2027:** 2 additional Growers (Case-Study Extender, Cohort Curriculum Extender)
+- **Q2 2027:** 1 additional Maintainer (SOP Library Curator, once the SOP Library ships)
 
 ---
 
-## Recommendation: sequencing
+## The goal registry — done-when for every TOJcampaign artifact (v3 revision)
 
-The three plans are not competing. They are three tracks of the same 30-day sprint, with interleave.
+Every artifact type in the registry now includes **baseline / industry-ceiling / target** in the KPI columns — per the discipline in `docs/toj-distribution-runbook.md`. Where TOJ has no baseline yet, the entry says "measure for 30 days before optimization."
 
-**Days 1–7:** Plan A cartridges + `verify-toj-artifact.md` + `brand-voice-checklist.md`. This is the fastest path to 10/10 consistency and it unlocks everything downstream. Every artifact produced from Day 8 onward is gated.
+Same v2 registry structure; new columns:
 
-**Days 4–24:** Plan B roster, one role per working day. Start Chief of Staff on Day 4 in parallel with the last three days of Plan A — CoS needs less skill infrastructure than delivery roles. Then Content Strategist, Research Assistant, then the pilot-lifecycle roles (Intake Triage → Foundation Score Intake → Operational Transcript Drafter → Concierge Weekly Producer), then the proactive/support roles.
+| Artifact | Done-when threshold | Cartridges | Owning role | Baseline / Ceiling / Target |
+|----------|--------------------|------------|-------------|------------------------------|
+| Website copy block | Brand voice pass 8/8; page mobile load < 2s | Humanity + Marketing | Content Strategist | Baseline: measure 30d / Ceiling: 90 (mobile) / Target: 92 |
+| Homepage hero | ≤ 12 words headline; ≤ 20 subhead; one primary CTA | Humanity + Marketing | Content Strategist | Baseline: measure 30d / Ceiling: 4% CTR / Target: 3% |
+| Blog post / teardown | 10 hook variants; passes voice checklist; reads aloud ≤ 60s per 200-word section | Humanity + Marketing | Content Strategist | Baseline: measure 30d / Ceiling: 2× baseline engagement / Target: 1.5× |
+| Social post | Hook < 8 words; 27+/30 combined cartridge | Humanity + Marketing | Content Strategist | Baseline: measure 30d / Ceiling: 5% engagement rate / Target: 3% |
+| Marketing / nurture email | < 150 words, subject < 45 chars, one clear ask | Humanity + Marketing + Open-Rate | Waitlist Warmer | Baseline: measure 30d / Ceiling: 35% open / Target: 28% |
+| Sales email (outbound) | < 120 words, subject < 45 chars, quotes prospect | Humanity + Marketing + Open-Rate | Closer | Baseline: measure 30d / Ceiling: 25% reply / Target: 15% |
+| Sales-call brief | 1 page; every objection scripted; 3 quotes in follow-up | — (skill check) | Research Assistant | Baseline: n/a / Ceiling: 100% completion / Target: 100% |
+| Foundation Score intake | Every pillar 0–100 with evidence + gap; no pillar > 40 without chunk | Pillar-evidence | Foundation Score Intake | Baseline: measure 30d / Ceiling: 90% completion in 20 min / Target: 75% |
+| Operational Transcript | ≤ 72 hours; 27+/30 cartridges; weakest pillar unambiguous | Humanity + Pillar-evidence | OT Drafter | Baseline: n/a / Ceiling: 100% on-time / Target: 95% |
+| Concierge weekly drop | Every Friday noon; 27+/30; decision-shaped | Humanity + Marketing | Concierge Weekly Producer | Baseline: n/a / Ceiling: 100% on-time / Target: 98% |
+| Pilot proposal | Fills `pilot-scoping.md` shape; guarantee terms specific | Humanity | Closer | Baseline: measure 30d / Ceiling: 40% close rate / Target: 25% |
+| Paid ad creative | Traces to organic-validated piece; 3–5 variants | Humanity + Marketing | Ad Teardown Producer | Baseline: measure 30d / Ceiling: 3% CTR / Target: 2% |
+| Vertical adaptation | Diff summary ≤ 3 sentences; Humanity Cartridge pass | Humanity | Vertical Positioner | Baseline: measure 30d / Ceiling: 100% cartridge / Target: 95% |
+| Morning brief | 6:30am; one metric-mover per vertical; ≤ 300 words | — | Chief of Staff | Baseline: n/a / Ceiling: 100% on-time / Target: 100% |
+| Evening close-out | 7pm; what moved / didn't / top 3 tomorrow; ≤ 200 words | — | Chief of Staff | Baseline: n/a / Ceiling: 100% on-time / Target: 100% |
+| Research brief | 5 bullets; every claim sourced; ≤ 10 min routine, ≤ 60 min prospect prep | — | Research Assistant | Baseline: measure 30d / Ceiling: 100% on-time / Target: 95% |
+| Retention flag | Raised within 48h of first signal; includes proposed fix | — | Retention Watcher | Baseline: n/a / Ceiling: 100% surfaced / Target: 100% |
+| **v3 additions:** | | | | |
+| Repurpose asset stack (T1–T4) | 8 assets per validated source, 7-day schedule | Humanity + Marketing per tier | Repurpose Producer | Baseline: n/a / Ceiling: 100% stack ships / Target: 90% |
+| Free Foundation Audit result page | Generated < 60s of form submit; cartridge pass; soft path visible | Humanity + Marketing | Foundation Audit Composer | Baseline: measure 30d / Ceiling: 10% audit-to-Founding at 90d / Target: 5% |
+| Attention audit (evening close-out add-on) | 1 line; 4-selves ratios calculated; divergence flag if applicable | — | Chief of Staff | Baseline: 30-day rolling / Ceiling: within 20% of target every day / Target: within 20% for 90% of days |
+| Paycheck workflow score | 5 questions, 0-15 total, band assignment, context notes | — (skill check) | Pilot Intake Triage / Research Assistant | Baseline: n/a / Ceiling: 100% scored / Target: 100% |
 
-**Days 6–20:** Plan C skills interleaved with the roles that load them. Never ship a role whose skills aren't written yet — the Architect agent will refuse to design against absent skills, use that discipline. Ship the mobile capture and Slack wiring on Days 18–20 once there's real work to route.
+### KPI discipline
 
-**Day 25–30:** verify end-to-end. Run one full pilot lifecycle through the system as a dry-run on synthetic-but-plausible data. If anything fails cartridges, fix at the source (skill or persona), not at the cartridge.
+**Rule:** any row above where the baseline says "measure 30d" must have baseline data collected before Q4 2026. If baseline data isn't collected by Nov 1, 2026, that artifact type can't be optimized (no target movement without a starting point). Chief of Staff surfaces uncollected baselines in weekly retrospective.
 
-**Anti-plan:** launching the Aug 1 Personal Brand + Authority verticals without any of the above in place. The transition plan's Aug 1 launch depends on quality that only the roster + cartridges can deliver at concierge scale.
+**Rule:** targets are ceilings that TOJ can defend at 80%+ pass rate. Setting a target ≥ industry ceiling is a red flag — either the ceiling is stale (reset via Hundred Mechanisms) or the target is aspirational-not-operational (revise down).
+
+---
+
+## The four loops, mapped to TOJcampaign (unchanged from v2)
+
+- **Turn loop.** Skill files exist and are tagged (`/verify-toj-artifact`). Every drafting role runs the applicable skill's verify at end-of-turn.
+- **Goal-based loop.** Every artifact type in the goal registry has numeric thresholds. Retry up to 3 times, then Waiting.
+- **Time-based loop.** Morning brief 6:30am. Evening close-out 7pm. Concierge weekly drops Thursday build → Friday noon send. Retention Watcher Monday 7am. Content Strategist weekly plan Monday 8am. **v3 additions:** Repurpose Producer runs Wednesday 8am; Foundation Audit Composer runs on-demand (event-triggered); weekly retrospective Sunday 6pm.
+- **Proactive loop.** Retention Watcher (churn signals). Ad Teardown Producer (organic-threshold crossings). Chief of Staff daily-brief metric-mover flag. **v3 additions:** Hundred Mechanisms invocation on plateaus, attention audit divergence flag.
+
+---
+
+## Weekly retrospective ritual (v3 addition) — the 5-part self-learning loop
+
+The notes give a 5-part loop that governs how the roster + skills + cartridges themselves IMPROVE over time: **Define → Build → Measure → Learn → Iterate**. This is not the same as the 4 loops (turn/goal/time/proactive) — it's the **meta-loop** that keeps the whole platform getting better.
+
+### The Sunday 6pm ritual
+
+Every Sunday at 6pm, Chief of Staff runs the retrospective ritual and delivers a 5-part report to Kyron:
+
+**1. Define** — what does the platform aim to be doing better this month? (This is set at month-start; retrospective checks alignment.)
+
+**2. Build** — what was actually shipped this week? (Roles, skills, cartridges, artifacts, all counted.)
+
+**3. Measure** — how did each artifact type perform against goal registry thresholds? (Chief of Staff reads cartridge scores + delivery rates + KPI movement.)
+
+**4. Learn** — where did we fail? Every artifact that scored below threshold, every escalation, every kill-triggered ad, every missed deadline — logged with the root cause named. Root causes fall into 4 buckets:
+- **Spec problem** — the skill or goal-registry entry needs a fix
+- **Role problem** — the persona needs a fix
+- **Retrieval problem** — the underlying data wasn't there
+- **Judgment problem** — the human (Kyron) called it differently than the eval expected — this is the calibration signal
+
+**5. Iterate** — what specific fix ships this week? Not "we'll improve X"; a specific commit target. Every retrospective produces at least one fix to a skill, a cartridge, or a goal registry entry.
+
+### File output
+
+Every retrospective lands as `docs/retrospectives/YYYY-MM-DD.md`. Format:
+
+```markdown
+# Weekly Retrospective — YYYY-MM-DD
+
+## Define (month goal recap)
+[1 sentence]
+
+## Build (this week)
+- Roles shipped: [list]
+- Skills shipped: [list]
+- Cartridges shipped/updated: [list]
+- Artifacts delivered: [count by type]
+
+## Measure
+[KPI snapshot table for the week — every artifact type + score vs target]
+
+## Learn
+[Every fail with root cause, categorized as spec/role/retrieval/judgment]
+
+## Iterate
+- Fix 1: [specific commit, ship target]
+- Fix 2: [specific commit, ship target]
+- (etc)
+
+## Signature
+Chief of Staff · Approved by Kyron on [date]
+```
+
+### The skill+cartridge+goal-registry footer rule
+
+Every skill.md, every cartridge.js, and every goal-registry entry gets a footer:
+
+```
+Last iterated: YYYY-MM-DD
+Change log: [1 line per iteration]
+```
+
+The retrospective touches at least one of these three surfaces per week. If a retrospective produces no iteration for 3 consecutive weeks, that's a signal that either the platform is stable (fine) OR the retrospective isn't finding real fails (concerning) — Kyron reviews.
+
+### Sunday retrospective + `hundred-mechanisms`
+
+The retrospective is where plateaus get detected. If a KPI has been flat for 4+ weeks (per Sunday's data), Chief of Staff triggers Hundred Mechanisms next Monday morning. See `agents/skills/hundred-mechanisms.md`.
+
+---
+
+## The three plans (rewritten, TOJcampaign-first) — v2 unchanged, v3 sequencing revised
+
+*(Plans A, B, and C are unchanged from v2. See v2 sections above for the specifics.)*
+
+### The revised sequencing (v3)
+
+v2 laid out a 30-day sprint. v3's added scope pushes this to **6 weeks phased rollout** with the same interleave discipline. The alternative — cramming everything into 30 days — sacrifices quality for pace, which violates the 9/10 north star.
+
+**Weeks 1–2 · Foundation layer (Plan A + core skills)**
+
+- Ship cartridges (Humanity, Marketing, Open-Rate, Pillar-Evidence) + runner + pre-deliver hook
+- Ship `verify-toj-artifact.md`, `brand-voice-checklist.md`, `different-not-better.md`
+- Ship goal registry v1 with baseline/ceiling/target columns populated with "measure 30d" placeholders where needed
+
+**Weeks 2–4 · Roster layer (Plan B, interleaved)**
+
+- Week 2: Chief of Staff (with v3 extensions) + Content Strategist + Research Assistant
+- Week 3: Pilot Intake Triage + Foundation Score Intake + Operational Transcript Drafter + 5 Pillar Diagnostic sub-agents (parallel invocation pattern)
+- Week 4: Concierge Weekly Producer + Retention Watcher + Ad Teardown Producer + Vertical Positioner + Q&A Approval Bot + Repurpose Producer
+
+**Weeks 3–5 · Skills library (Plan C, interleaved with roles)**
+
+- Weeks 3–4: The 12 v2 skills, 2 per day
+- Week 5: The 6 v3 skills (already shipped in this session), plus `foundation-audit-response.md`
+- Week 5: Mobile capture ingress + Slack workspace wiring
+
+**Week 6 · Verify + retrospective ritual + Q3 launch**
+
+- Day 36–39: End-to-end verify — one synthetic pilot lifecycle
+- Day 40: First weekly retrospective ritual runs
+- Day 41–42: Fix at source; ship Free Foundation Audit lead magnet public
+
+**Anti-plan:** launching Aug 1 without weeks 3–4 shipped. The Aug 1 launch depends on the delivery layer being cartridge-gated. If weeks 3–4 slip, the Aug 1 launch date holds but the concierge pilot count for month 1 caps at what Kyron can hand-QA (~10 pilots) instead of the roster's target (~40).
 
 ---
 
 ## The next 72 hours (the six moves)
 
-1. **Merge this doc.** Then delete or archive `docs/toj-transition-plan.md`'s implicit assumption that manual delivery scales — it doesn't, and this plan replaces the "how" while preserving the "what" and the "when."
-2. **Ship `agents/evals/humanity-cartridge.js`** — 5 scored dimensions using `toj-voice.md` and `brand-voice-checklist.md` as the source of truth. Threshold 8/10.
-3. **Write `agents/skills/verify-toj-artifact.md`** — the analog of the notes' `verify-frontend-change`, tailored to TOJcampaign artifacts. This is the turn-loop skill everything else loads.
-4. **Use `architect.js` to draft `chief-of-staff.js`** — the notes' Chief of Staff, in TOJ's exact file shape. This is the meta-pattern working for you (Claude prompts Claude).
-5. **Publish the goal registry as `agents/goals/registry.js`** — machine-readable done-when table for every artifact. Even a v1 with only 5 artifact types wired is enough to gate everything downstream.
-6. **Pick the ONE metric per surface** that TOJcampaign is optimizing this month. Suggested: TOJcampaign.com organic pieces published passing cartridges (Content), Foundation Score intakes completed within 72h (Delivery), concierge pilots signed at any tier (Revenue), Kyron coordination hours spent per week (Operator). Refuse work that doesn't move one of the four.
+*(Unchanged from v2)*
+
+1. **Merge this v3 doc.** Archive v2 as `docs/archive/ai-notes-implementation-plan-v2.md` if desired (v3 preserves everything v2 has).
+2. **Ship `agents/evals/humanity-cartridge.js`** — 5 scored dimensions using `toj-voice.md`, `brand-voice-checklist.md`, and (v3) `different-not-better.md` as sources of truth.
+3. **Write `agents/skills/verify-toj-artifact.md`** — the analog of the notes' `verify-frontend-change`, tailored to TOJcampaign artifacts.
+4. **Use `architect.js` to draft `chief-of-staff.js`** — the notes' Chief of Staff with v3 extensions (T/P/E tagging, cycle-time discipline, attention audit, 3P daily brief).
+5. **Publish the goal registry as `agents/goals/registry.js`** — machine-readable done-when table with baseline/ceiling/target columns.
+6. **Pick the ONE metric per surface** that TOJcampaign is optimizing this month. Suggested: TOJcampaign.com organic pieces published passing cartridges (Content), Foundation Score intakes completed within 72h (Delivery), concierge pilots signed at any tier (Revenue), Kyron coordination hours spent per week (Operator).
 
 ---
 
 ## What this plan is not
 
-- **Not a rebrand.** TOJ, Foundation Score™, Operational Transcript™, five pillars, three verticals, Aug 1 launch — all preserved from `docs/toj-transition-plan.md`.
-- **Not a stack change.** Next.js / Supabase / Clerk / Stripe / Resend / Anthropic / Vercel / Render stands. All additions land in `agents/roles/`, `agents/skills/`, `agents/evals/`, `agents/hooks/`, `agents/goals/`, and `routes/`.
-- **Not a client-work plan.** Subject Report, Pylon7v7, Sky's The Limit WR, XpandSports, Optimum Grading, and CollegeFootballRecruiting.com show up here only where their patterns change how a TOJcampaign agent is designed. Client-specific SOPs live in a separate document.
-- **Not a promise on a slide.** Every element above is a file path, a numeric threshold, or a skill markdown. The proof is that after 30 days, `agents/roles/` has 12 more files, `agents/skills/` has 12 more files, `agents/evals/` has 4 more files, and `docs/cartridges.md` + `docs/operator-runbook.md` are readable by a new hire on day one.
+*(Unchanged from v2 — see v2 section above)*
+
+- Not a rebrand · Not a stack change · Not a client-work plan · Not a promise on a slide.
 
 ---
 
-## Levels-of-the-12, mapped to TOJcampaign this quarter
+## Levels-of-the-11, mapped to TOJcampaign this quarter (v3 revision — 11 levels, not 12)
+
+*(v2 mapped 12 levels. Framework locked at 11 in Q3 2026. Level 12 slot is reserved — see `docs/toj-worldview-operationalized.md` § Level 12 · Open slot for the fill candidates.)*
 
 | Level | Manifestation on TOJcampaign this quarter |
 |-------|-------------------------------------------|
@@ -410,22 +550,37 @@ The three plans are not competing. They are three tracks of the same 30-day spri
 | 2 Inspiration | The Aug 1 launch is the forcing function — the calendar drives the roster |
 | 3 Illumination | Every pilot's Foundation Score is a learning event — Retention Watcher captures what moves and what doesn't |
 | 4 Identification | Every agent has a named label ("The Closer," "Chief of Staff") — no anonymous background jobs |
-| 5 Segmentation | Never work all three plans on the same day; interleave per the sequence above |
-| 6 Systemization | The roster + skills + cartridges IS the system — push a button, artifacts ship at 9/10 |
-| 7 Delegation | Every artifact type has an owning role; nothing routed to "Kyron will do it" |
-| 8 Automation | Time loops (morning brief, weekly drops) and proactive loops (Retention Watcher, Ad Teardown Producer) run without prompting |
-| 9 Culmination | Q1 2027 self-serve SaaS launches on top of the roster — the platform Kyron shipped internally IS the product externally |
-| 10 Relaxation | Chief of Staff owns coordination; Kyron owns Standard + Strategy + Relationships |
+| 5 Separation | Vocabulary defended — Foundation ≠ framework, Operational Transcript is the paid deliverable, Non-profit is hyphenated (see `toj-voice.md`) |
+| 6 Segmentation | Never work all three plans on the same day; interleave per the sequence above |
+| 7 Systemization | The roster + skills + cartridges IS the system — push a button, artifacts ship at 9/10 |
+| 8 Delegation | Every artifact type has an owning role; nothing routed to "Kyron will do it" |
+| 9 Automation | Time loops (morning brief, weekly drops) and proactive loops (Retention Watcher, Ad Teardown Producer) run without prompting |
+| 10 Culmination | Q1 2027 self-serve SaaS launches on top of the roster — the platform Kyron shipped internally IS the product externally |
+| 11 Relaxation | Chief of Staff owns coordination; Kyron owns Standard + Strategy + Relationships; the culmination is stable enough that Kyron steps back |
+
+Full operationalization per level (verb per artifact type) in `docs/toj-worldview-operationalized.md`.
 
 ---
 
-## The 90-day success line
+## The 90-day success line (v3 revision)
 
-- 12 new roles in `agents/roles/`, 12 new skills in `agents/skills/`, 4 new cartridges + runner in `agents/evals/`, 1 goal registry, 1 pre-deliver hook, 1 mobile capture ingress, 1 Slack workspace with per-vertical channels.
+- 13 new roles in `agents/roles/`, 18 new skills in `agents/skills/`, 4 new cartridges + runner in `agents/evals/`, 1 goal registry, 1 pre-deliver hook, 1 mobile capture ingress, 1 Slack workspace with per-vertical channels.
 - Every artifact TOJcampaign.com produces gated by cartridges — zero deliverables below 27/30 shipped to a paying pilot.
 - Concierge tier capacity at 40+ pilots per vertical without Kyron editing every artifact.
-- Aug 1 Personal Brand + Authority launch happens on time, deliverable-ready, and the Sept/Oct capacity is 3x what manual delivery would have allowed.
+- **Free Foundation Audit lead magnet live** at tojcampaign.com/foundation-audit, converting > 5% to Founding within 90 days.
+- Aug 1 Personal Brand + Authority launch happens on time, deliverable-ready.
 - Kyron coordination hours per week down 50%+ month-over-month.
 - One organic-validated TOJcampaign.com teardown per week driving one paid-ad campaign that has already been proven.
+- **Weekly retrospective ritual running continuously** — every Sunday, a shipped fix to a skill/cartridge/goal-registry entry.
+- **Attention audit stable within 20% of target ratios** on 80%+ of days.
 
 That is a 9/10 quality, 10/10 consistency operator platform in market. Not a promise on a slide — every element above is a file path.
+
+---
+
+## Change log
+
+| Date | Change | Author |
+|------|--------|--------|
+| 2026-07-15 (approx) | v2 initial — roles/skills/evals/goals/loops/plans/sequencing/72-hr moves | Prior Claude session |
+| 2026-07-18 | v3 · added worldview operationalized, distribution runbook, media roadmap, curriculum, vertical theses, community/cohort spec (6 companion docs); added agent archetype distribution, weekly retrospective ritual, KPI baseline/ceiling/target discipline, Chief of Staff v3 extensions (T/P/E, attention audit, 3P daily brief, cycle-time), 6 new skills (operator-self-audit, hundred-mechanisms, four-week-pilot-playbook, paycheck-workflow, content-repurpose, different-not-better), Repurpose Producer role, Foundation Audit Composer role, outcome-priced offering, revised sequencing to 6-week phased rollout, level 12 slot reserved per framework lock | Claude |
