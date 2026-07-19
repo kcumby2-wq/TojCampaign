@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Pylon Newsletter · The Off-Season Signal</title>
+<meta name="robots" content="noindex,nofollow">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Anton&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect fill='%230A0A0A' width='100' height='100'/%3E%3Cpath fill='%23F4C82E' d='M20 20h60v60H20z'/%3E%3Cpath fill='%230A0A0A' d='M35 35h30v30H35z'/%3E%3C/svg%3E">
+<style>
+:root{--black:#0A0A0A;--near-black:#141414;--surface:#1A1A1A;--surface-2:#242424;--yellow:#F4C82E;--white:#FFFFFF;--dim:rgba(255,255,255,.72);--dimmer:rgba(255,255,255,.5);--line:#2A2A2A;--green:#5FCF80;--warn:#E6BA47;--err:#E67052}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--black);color:var(--white);font-family:'Inter',-apple-system,sans-serif;font-size:14px;line-height:1.5}
+button{cursor:pointer;font-family:inherit;border:none}
+a{color:var(--yellow);text-decoration:none}
+code{font-family:'JetBrains Mono',monospace;font-size:12px;background:var(--surface);padding:1px 5px;color:var(--yellow)}
+.shell{max-width:1400px;margin:0 auto;padding:0 22px}
+
+.top{background:var(--near-black);border-bottom:1px solid var(--line);padding:14px 0;position:sticky;top:0;z-index:10}
+.top-inner{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:14px}
+.top-brand{display:flex;align-items:center;gap:12px}
+.top-mark{width:32px;height:32px;background:var(--yellow);position:relative}
+.top-mark::before{content:'';position:absolute;inset:7px;background:var(--near-black)}
+.top-brand h1{font-family:'Anton',sans-serif;font-size:20px;text-transform:uppercase;letter-spacing:.005em;line-height:1}
+.top-brand h1 .accent{color:var(--yellow)}
+.top-actions{display:flex;gap:10px;align-items:center}
+.top-actions a,.top-actions button{padding:8px 14px;font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.14em;text-transform:uppercase;font-weight:700;background:var(--surface);color:var(--dim);border:1px solid var(--line);transition:all .12s}
+.top-actions a:hover,.top-actions button:hover{color:var(--yellow);border-color:var(--yellow)}
+.top-actions button.primary{background:var(--yellow);color:var(--black);border-color:var(--yellow)}
+
+/* Tab nav */
+.tabs{background:var(--near-black);border-bottom:1px solid var(--line)}
+.tab-nav{display:flex;gap:0}
+.tab-btn{background:transparent;color:var(--dim);padding:14px 20px;font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:.16em;text-transform:uppercase;font-weight:700;border-bottom:3px solid transparent;transition:all .12s}
+.tab-btn.active{color:var(--yellow);border-bottom-color:var(--yellow)}
+.tab-btn:hover{color:var(--white)}
+.tab-panel{display:none;padding:24px 0}
+.tab-panel.active{display:block}
+
+/* Stats */
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:24px}
+@media(max-width:900px){.stats{grid-template-columns:repeat(2,1fr)}}
+.stat{background:var(--surface);border-top:3px solid var(--yellow);padding:18px 20px}
+.stat.green{border-top-color:var(--green)} .stat.green .n{color:var(--green)}
+.stat .n{font-family:'Anton',sans-serif;font-size:34px;color:var(--yellow);line-height:1;margin-bottom:4px}
+.stat .l{font-family:'JetBrains Mono',monospace;font-size:9.5px;color:var(--dim);letter-spacing:.16em;text-transform:uppercase;font-weight:700}
+.stat .d{font-size:11px;color:var(--dimmer);margin-top:4px}
+
+.filters{background:var(--surface);border:1px solid var(--line);padding:14px 18px;margin-bottom:16px;display:flex;gap:12px;flex-wrap:wrap;align-items:center}
+.filters select,.filters input{background:var(--black);border:1px solid var(--line);color:var(--white);padding:8px 12px;font-family:'Inter',sans-serif;font-size:12.5px;min-width:160px}
+.filters button{margin-left:auto;background:var(--yellow);color:var(--black);border:none;padding:9px 16px;font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:.14em;text-transform:uppercase;font-weight:700}
+
+/* Table */
+.card{background:var(--surface);border:1px solid var(--line);margin-bottom:20px}
+.card-head{padding:14px 18px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;align-items:center}
+.card-head h3{font-family:'Anton',sans-serif;font-size:17px;text-transform:uppercase;letter-spacing:.005em}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{background:var(--near-black);padding:10px 14px;font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--yellow);letter-spacing:.14em;text-transform:uppercase;font-weight:700;text-align:left;border-bottom:2px solid var(--yellow);white-space:nowrap}
+th.right{text-align:right}
+td{padding:11px 14px;border-bottom:1px solid var(--line);color:var(--white)}
+td.right{text-align:right}
+td .sub{color:var(--dim);font-size:11.5px;margin-top:2px}
+td.money{font-family:'JetBrains Mono',monospace;color:var(--yellow);font-weight:600}
+tr:last-child td{border-bottom:none}
+tr:hover td{background:rgba(244,200,46,.03)}
+
+.pill{display:inline-block;padding:2px 8px;font-family:'JetBrains Mono',monospace;font-size:9.5px;letter-spacing:.14em;text-transform:uppercase;font-weight:700}
+.pill.free{background:var(--surface-2);color:var(--dim)}
+.pill.premium{background:var(--yellow);color:var(--black)}
+.pill.active{background:var(--green);color:var(--black)}
+.pill.cancelled{background:var(--surface-2);color:var(--dimmer)}
+.pill.draft{background:var(--surface-2);color:var(--dim)}
+.pill.scheduled{background:var(--warn);color:var(--black)}
+.pill.sent{background:var(--green);color:var(--black)}
+
+.empty{text-align:center;padding:40px 20px;color:var(--dimmer)}
+.empty .icon{font-family:'Anton',sans-serif;font-size:48px;color:var(--line);margin-bottom:12px}
+.loading{text-align:center;padding:24px;color:var(--dim);font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:.16em;text-transform:uppercase;font-weight:700}
+
+/* Analytics chart placeholder */
+.chart-box{background:var(--surface);border:1px solid var(--line);padding:20px 24px;margin-bottom:20px}
+.chart-box h4{font-family:'Anton',sans-serif;font-size:17px;text-transform:uppercase;letter-spacing:.005em;margin-bottom:16px}
+.bar-row{display:flex;flex-direction:column;gap:10px}
+.bar{display:flex;align-items:center;gap:14px;font-size:12.5px}
+.bar .label{width:180px;color:var(--white)}
+.bar .track{flex:1;height:22px;background:var(--surface-2);position:relative}
+.bar .fill{height:100%;background:var(--yellow);display:flex;align-items:center;padding:0 8px;font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--black);font-weight:700}
+</style>
+</head>
+<body>
+
+<div class="top">
+  <div class="shell top-inner">
+    <div class="top-brand">
+      <div class="top-mark"></div>
+      <h1>Newsletter <span class="accent">· The Off-Season Signal</span></h1>
+    </div>
+    <div class="top-actions">
+      <a href="/admin/pylon.html">← Admin</a>
+      <button onclick="loadAll()">↻ Refresh</button>
+    </div>
+  </div>
+</div>
+
+<div class="tabs">
+  <div class="shell tab-nav">
+    <button class="tab-btn active" data-tab="subscribers">Subscribers</button>
+    <button class="tab-btn" data-tab="issues">Issues</button>
+    <button class="tab-btn" data-tab="analytics">Analytics</button>
+  </div>
+</div>
+
+<div class="shell">
+
+  <!-- SUBSCRIBERS -->
+  <div class="tab-panel active" id="tab-subscribers">
+    <div class="stats">
+      <div class="stat"><div class="n" id="s-total">—</div><div class="l">Total Subscribers</div></div>
+      <div class="stat green"><div class="n" id="s-premium">—</div><div class="l">Premium Subscribers</div><div class="d">$9.99/mo</div></div>
+      <div class="stat"><div class="n" id="s-mrr">$—</div><div class="l">Premium MRR</div></div>
+      <div class="stat"><div class="n" id="s-free">—</div><div class="l">Free Tier</div></div>
+    </div>
+
+    <div class="filters">
+      <select id="tier-filter">
+        <option value="">All tiers</option>
+        <option value="free">Free</option>
+        <option value="premium">Premium</option>
+      </select>
+      <select id="source-filter">
+        <option value="">All sources</option>
+        <option value="parent_playbook">Parent Playbook</option>
+        <option value="sunday_salvo_cta">Sunday Salvo CTA</option>
+        <option value="rankings_show_cta">Rankings Show CTA</option>
+        <option value="direct">Direct</option>
+      </select>
+      <input type="search" id="search" placeholder="Search email…">
+    </div>
+
+    <div class="card">
+      <div class="card-head"><h3>Subscribers</h3></div>
+      <table>
+        <thead>
+          <tr>
+            <th>Email</th>
+            <th>Name</th>
+            <th>Tier</th>
+            <th>Source</th>
+            <th>Joined</th>
+            <th class="right">Status</th>
+          </tr>
+        </thead>
+        <tbody id="subs-body"><tr><td colspan="6" class="loading">Loading</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ISSUES -->
+  <div class="tab-panel" id="tab-issues">
+    <div class="filters">
+      <button onclick="alert('Issue editor · POST /api/pylon/newsletter/issues to create · edit UI ships next release')">+ New Issue</button>
+    </div>
+    <div class="card">
+      <div class="card-head"><h3>Issues</h3></div>
+      <table>
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Subject Line</th>
+            <th>Send Date</th>
+            <th class="right">Free Audience</th>
+            <th class="right">Premium Audience</th>
+            <th class="right">Opens</th>
+            <th class="right">Conversions</th>
+            <th class="right">Status</th>
+          </tr>
+        </thead>
+        <tbody id="issues-body"><tr><td colspan="8" class="loading">Loading</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ANALYTICS -->
+  <div class="tab-panel" id="tab-analytics">
+    <div class="stats">
+      <div class="stat green"><div class="n" id="a-mrr">$—</div><div class="l">Premium MRR</div></div>
+      <div class="stat"><div class="n" id="a-open">—%</div><div class="l">Avg Open Rate · 30d</div></div>
+      <div class="stat"><div class="n" id="a-conv">—</div><div class="l">Free → Premium (30d)</div></div>
+      <div class="stat"><div class="n" id="a-churn">—%</div><div class="l">Premium Churn</div></div>
+    </div>
+
+    <div class="chart-box">
+      <h4>Top Conversion Sources</h4>
+      <div class="bar-row" id="source-chart">
+        <div style="color:var(--dimmer);text-align:center;padding:20px;font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:.14em;text-transform:uppercase;font-weight:700">No data yet · conversions attributed after first premium sign-up</div>
+      </div>
+    </div>
+
+    <div class="chart-box">
+      <h4>Recent Issue Performance</h4>
+      <table>
+        <thead>
+          <tr><th>Issue</th><th class="right">Sent To</th><th class="right">Open %</th><th class="right">Click %</th><th class="right">Conversions</th></tr>
+        </thead>
+        <tbody id="perf-body"><tr><td colspan="5" class="empty">No issue history yet</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+
+</div>
+
+<script>
+async function api(path) {
+  try {
+    const res = await fetch(`/api/pylon${path}`, {headers: {'Accept':'application/json'}});
+    if (!res.ok) return null;
+    return await res.json();
+  } catch(e) { return null; }
+}
+function money(cents) { if (!cents && cents !== 0) return '$—'; return '$' + (cents/100).toLocaleString('en-US',{maximumFractionDigits:0}); }
+function pill(v) { return `<span class="pill ${v}">${v}</span>`; }
+
+document.querySelectorAll('.tab-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById(`tab-${btn.dataset.tab}`).classList.add('active');
+    if (btn.dataset.tab === 'issues') loadIssues();
+    if (btn.dataset.tab === 'analytics') loadAnalytics();
+  });
+});
+
+async function loadSubscribers() {
+  // TODO: routes/pylon.js does not yet have GET /newsletter/subscribers · using placeholder
+  const body = document.getElementById('subs-body');
+  body.innerHTML = '<tr><td colspan="6" class="empty"><div class="icon">▤</div><div>Newsletter subscriber list · read direct from Supabase for now<br><span style="color:var(--dimmer);font-family:\'JetBrains Mono\',monospace;font-size:11px;letter-spacing:.14em;text-transform:uppercase">SELECT * FROM pylon_newsletter_subscribers ORDER BY created_at DESC</span></div></td></tr>';
+  // Stats: still show 0s cleanly
+  document.getElementById('s-total').textContent = '0';
+  document.getElementById('s-premium').textContent = '0';
+  document.getElementById('s-mrr').textContent = '$0';
+  document.getElementById('s-free').textContent = '0';
+}
+
+async function loadIssues() {
+  const body = document.getElementById('issues-body');
+  body.innerHTML = '<tr><td colspan="8" class="empty"><div class="icon">▤</div><div>No issues sent yet · <code>POST /api/pylon/newsletter/issues</code> to draft the first</div></td></tr>';
+}
+
+async function loadAnalytics() {
+  document.getElementById('a-mrr').textContent = '$0';
+  document.getElementById('a-open').textContent = '—';
+  document.getElementById('a-conv').textContent = '0';
+  document.getElementById('a-churn').textContent = '—';
+}
+
+function loadAll() {
+  loadSubscribers();
+  loadIssues();
+  loadAnalytics();
+}
+
+loadAll();
+</script>
+
+</body>
+</html>

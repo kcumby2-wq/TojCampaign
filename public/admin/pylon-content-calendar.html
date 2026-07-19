@@ -1,0 +1,346 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Pylon Content Calendar · Creative Pod</title>
+<meta name="theme-color" content="#0A0A0A">
+<meta name="robots" content="noindex,nofollow">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Anton&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect fill='%230A0A0A' width='100' height='100'/%3E%3Cpath fill='%23F4C82E' d='M20 20h60v60H20z'/%3E%3Cpath fill='%230A0A0A' d='M35 35h30v30H35z'/%3E%3C/svg%3E">
+<style>
+:root{--black:#0A0A0A;--near-black:#141414;--surface:#1A1A1A;--surface-2:#242424;--yellow:#F4C82E;--white:#FFFFFF;--dim:rgba(255,255,255,.72);--dimmer:rgba(255,255,255,.5);--line:#2A2A2A;--green:#5FCF80;--warn:#E6BA47;--err:#E67052;--lav:#9B87C2;--sky:#5FB3DB}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--black);color:var(--white);font-family:'Inter',-apple-system,sans-serif;font-size:14px;line-height:1.5;-webkit-font-smoothing:antialiased}
+button{cursor:pointer;font-family:inherit;border:none}
+a{color:var(--yellow);text-decoration:none}
+.shell{max-width:1400px;margin:0 auto;padding:0 22px}
+
+/* Topbar */
+.top{background:var(--near-black);border-bottom:1px solid var(--line);padding:14px 0;position:sticky;top:0;z-index:10;backdrop-filter:blur(10px)}
+.top-inner{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:14px}
+.top-brand{display:flex;align-items:center;gap:12px}
+.top-mark{width:32px;height:32px;background:var(--yellow);position:relative}
+.top-mark::before{content:'';position:absolute;inset:7px;background:var(--near-black)}
+.top-brand h1{font-family:'Anton',sans-serif;font-size:20px;text-transform:uppercase;letter-spacing:.005em;line-height:1}
+.top-brand h1 .accent{color:var(--yellow)}
+.top-actions{display:flex;gap:10px;align-items:center}
+.top-actions button,.top-actions a{padding:8px 14px;font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.14em;text-transform:uppercase;font-weight:700;background:var(--surface);color:var(--dim);border:1px solid var(--line);transition:all .12s}
+.top-actions button:hover,.top-actions a:hover{color:var(--yellow);border-color:var(--yellow)}
+.top-actions button.primary{background:var(--yellow);color:var(--black);border-color:var(--yellow)}
+
+/* Filters */
+.filters{background:var(--surface);border-bottom:1px solid var(--line);padding:14px 0}
+.filter-inner{display:flex;gap:12px;flex-wrap:wrap;align-items:center}
+.filter-inner select,.filter-inner input{background:var(--black);border:1px solid var(--line);color:var(--white);padding:8px 12px;font-family:'Inter',sans-serif;font-size:12.5px;min-width:150px}
+.filter-inner select:focus,.filter-inner input:focus{outline:1.5px solid var(--yellow);outline-offset:-1px}
+.pillar-chips{display:flex;gap:6px;flex-wrap:wrap}
+.chip{padding:6px 12px;font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.14em;text-transform:uppercase;font-weight:700;background:var(--black);color:var(--dim);border:1px solid var(--line);cursor:pointer}
+.chip.active{background:var(--yellow);color:var(--black);border-color:var(--yellow)}
+.chip.ritual.active{background:var(--yellow)}
+.chip.scale.active{background:var(--sky);border-color:var(--sky);color:var(--black)}
+.chip.prestige.active{background:var(--lav);border-color:var(--lav);color:var(--black)}
+.chip.capture.active{background:var(--green);border-color:var(--green);color:var(--black)}
+
+/* Content grid: calendar + day panel */
+.layout{display:grid;grid-template-columns:1fr 340px;gap:20px;padding:24px 0}
+@media(max-width:1024px){.layout{grid-template-columns:1fr}}
+
+/* Calendar */
+.cal-wrap{background:var(--surface);border:1px solid var(--line)}
+.cal-head{display:grid;grid-template-columns:repeat(7,1fr);border-bottom:1px solid var(--line)}
+.cal-head-day{padding:12px;font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--yellow);letter-spacing:.14em;text-transform:uppercase;font-weight:700;text-align:center;border-right:1px solid var(--line)}
+.cal-head-day:last-child{border-right:none}
+.cal-grid{display:grid;grid-template-columns:repeat(7,1fr);grid-auto-rows:120px}
+.cal-cell{border-right:1px solid var(--line);border-bottom:1px solid var(--line);padding:6px 8px;position:relative;overflow:hidden;cursor:pointer;transition:background .12s}
+.cal-cell:hover{background:rgba(244,200,46,.03)}
+.cal-cell:nth-child(7n){border-right:none}
+.cal-cell.other-month{background:var(--near-black);color:var(--dimmer)}
+.cal-cell.today{background:rgba(244,200,46,.08)}
+.cal-cell.today .day-num{color:var(--yellow)}
+.cal-cell.selected{background:rgba(244,200,46,.15);outline:2px solid var(--yellow);outline-offset:-2px}
+.day-num{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--dim);font-weight:700;margin-bottom:4px}
+.dot-row{display:flex;flex-wrap:wrap;gap:3px}
+.dot{width:6px;height:6px;border-radius:0}
+.dot.ritual{background:var(--yellow)}
+.dot.scale{background:var(--sky)}
+.dot.prestige{background:var(--lav)}
+.dot.capture{background:var(--green)}
+.day-pieces{margin-top:4px;font-size:10px;color:var(--dim);line-height:1.35}
+.day-pieces .p-title{padding:1px 4px;background:var(--surface-2);margin-bottom:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.day-pieces .p-title.ritual{border-left:2px solid var(--yellow)}
+.day-pieces .p-title.scale{border-left:2px solid var(--sky)}
+.day-pieces .p-title.prestige{border-left:2px solid var(--lav)}
+.day-pieces .p-title.capture{border-left:2px solid var(--green)}
+
+/* Day detail panel */
+.day-panel{background:var(--surface);border:1px solid var(--line);padding:20px 22px;min-height:420px}
+.day-panel h3{font-family:'Anton',sans-serif;font-size:18px;text-transform:uppercase;letter-spacing:.005em;margin-bottom:16px}
+.day-panel h3 .accent{color:var(--yellow)}
+.piece-card{background:var(--black);border:1px solid var(--line);border-left:3px solid var(--yellow);padding:12px 14px;margin-bottom:10px}
+.piece-card.ritual{border-left-color:var(--yellow)}
+.piece-card.scale{border-left-color:var(--sky)}
+.piece-card.prestige{border-left-color:var(--lav)}
+.piece-card.capture{border-left-color:var(--green)}
+.piece-card .title{color:var(--white);font-weight:600;font-size:13px;margin-bottom:4px}
+.piece-card .meta{display:flex;justify-content:space-between;align-items:center;font-family:'JetBrains Mono',monospace;font-size:9.5px;color:var(--dim);letter-spacing:.12em;text-transform:uppercase;font-weight:700}
+.piece-card .status{padding:2px 6px;font-size:9px}
+.status.draft{background:var(--surface-2);color:var(--dim)}
+.status.in_review{background:var(--warn);color:var(--black)}
+.status.approved{background:var(--yellow);color:var(--black)}
+.status.scheduled{background:var(--sky);color:var(--black)}
+.status.published{background:var(--green);color:var(--black)}
+
+.empty-day{color:var(--dimmer);text-align:center;padding:32px 20px;font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:.14em;text-transform:uppercase;font-weight:700}
+
+/* Loading */
+.loading{text-align:center;padding:24px;color:var(--dim);font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:.16em;text-transform:uppercase;font-weight:700}
+.loading::before{content:'◆';margin-right:8px;color:var(--yellow)}
+
+.month-nav{display:flex;align-items:center;gap:12px}
+.month-nav button{background:var(--surface);color:var(--dim);border:1px solid var(--line);padding:6px 12px;font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:.14em;font-weight:700}
+.month-nav .m-label{font-family:'Anton',sans-serif;font-size:16px;color:var(--white);text-transform:uppercase;letter-spacing:.005em;min-width:180px;text-align:center}
+</style>
+</head>
+<body>
+
+<div class="top">
+  <div class="shell top-inner">
+    <div class="top-brand">
+      <div class="top-mark"></div>
+      <h1>Content Calendar <span class="accent">· Creative Pod</span></h1>
+    </div>
+    <div class="top-actions">
+      <a href="/admin/pylon.html">← Admin</a>
+      <button onclick="loadCalendar()">↻ Refresh</button>
+      <button class="primary" onclick="alert('Piece editor · coming next release · use POST /api/pylon/content for now')">+ New Piece</button>
+    </div>
+  </div>
+</div>
+
+<div class="filters">
+  <div class="shell filter-inner">
+    <div class="pillar-chips">
+      <button class="chip ritual active" data-pillar="ritual">◆ Ritual</button>
+      <button class="chip scale active" data-pillar="scale">◆ Scale</button>
+      <button class="chip prestige active" data-pillar="prestige">◆ Prestige</button>
+      <button class="chip capture active" data-pillar="capture">◆ Capture</button>
+    </div>
+    <select id="status-filter">
+      <option value="">All statuses</option>
+      <option value="draft">Draft</option>
+      <option value="in_review">In review</option>
+      <option value="approved">Approved</option>
+      <option value="scheduled">Scheduled</option>
+      <option value="published">Published</option>
+    </select>
+    <select id="channel-filter">
+      <option value="">All channels</option>
+      <option value="ig">IG</option>
+      <option value="youtube">YouTube</option>
+      <option value="tiktok">TikTok</option>
+      <option value="twitter">Twitter</option>
+      <option value="threads">Threads</option>
+      <option value="newsletter">Newsletter</option>
+      <option value="podcast">Podcast</option>
+      <option value="web">Web</option>
+    </select>
+    <input type="search" id="search-filter" placeholder="Search title / assignee…">
+    <div class="month-nav" style="margin-left:auto">
+      <button onclick="navMonth(-1)">←</button>
+      <div class="m-label" id="m-label">—</div>
+      <button onclick="navMonth(1)">→</button>
+    </div>
+  </div>
+</div>
+
+<div class="shell layout">
+  <div class="cal-wrap">
+    <div class="cal-head">
+      <div class="cal-head-day">Mon</div>
+      <div class="cal-head-day">Tue</div>
+      <div class="cal-head-day">Wed</div>
+      <div class="cal-head-day">Thu</div>
+      <div class="cal-head-day">Fri</div>
+      <div class="cal-head-day">Sat</div>
+      <div class="cal-head-day">Sun</div>
+    </div>
+    <div class="cal-grid" id="cal-grid"></div>
+  </div>
+
+  <div class="day-panel">
+    <h3 id="day-title">Select a day</h3>
+    <div id="day-pieces"><div class="empty-day">Click a day on the calendar to see pieces scheduled that day.</div></div>
+  </div>
+</div>
+
+<script>
+let currentMonth = new Date().getMonth();
+let currentYear = new Date().getFullYear();
+let activePillars = new Set(['ritual', 'scale', 'prestige', 'capture']);
+let allPieces = [];
+let selectedDate = null;
+
+async function api(path) {
+  try {
+    const res = await fetch(`/api/pylon${path}`, {headers: {'Accept': 'application/json'}});
+    if (!res.ok) return null;
+    return await res.json();
+  } catch (e) { return null; }
+}
+
+function monthLabel() {
+  const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  return `${months[currentMonth]} ${currentYear}`;
+}
+
+function daysInMonth(y, m) {
+  return new Date(y, m + 1, 0).getDate();
+}
+
+function firstMonday(y, m) {
+  const first = new Date(y, m, 1);
+  const dow = first.getDay(); // 0=Sun
+  // Convert to Mon=0 basis
+  const monBasis = (dow + 6) % 7;
+  return -monBasis; // day offset from 1st
+}
+
+function isSameDay(a, b) {
+  return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
+}
+
+function pillarsInPieces(pieces) {
+  const set = new Set();
+  pieces.forEach(p => { if (activePillars.has(p.pillar)) set.add(p.pillar); });
+  return [...set];
+}
+
+async function loadCalendar() {
+  document.getElementById('m-label').textContent = monthLabel();
+  const status = document.getElementById('status-filter').value;
+  const q = new URLSearchParams();
+  const monthStart = new Date(currentYear, currentMonth, 1).toISOString().slice(0, 10);
+  const monthEnd = new Date(currentYear, currentMonth + 1, 0).toISOString().slice(0, 10);
+  q.set('scheduled_after', monthStart);
+  q.set('scheduled_before', monthEnd + 'T23:59:59');
+  if (status) q.set('status', status);
+  allPieces = await api(`/content?${q}`) || [];
+
+  const search = document.getElementById('search-filter').value.toLowerCase();
+  const channelFilter = document.getElementById('channel-filter').value;
+  const filtered = allPieces.filter(p => {
+    if (!activePillars.has(p.pillar)) return false;
+    if (channelFilter && p.primary_channel !== channelFilter) return false;
+    if (search) {
+      const hay = `${p.title || ''} ${p.assigned_to || ''}`.toLowerCase();
+      if (!hay.includes(search)) return false;
+    }
+    return true;
+  });
+
+  renderGrid(filtered);
+}
+
+function renderGrid(pieces) {
+  const grid = document.getElementById('cal-grid');
+  grid.innerHTML = '';
+  const offset = firstMonday(currentYear, currentMonth);
+  const total = daysInMonth(currentYear, currentMonth);
+  const today = new Date();
+
+  // Group pieces by date
+  const byDate = {};
+  pieces.forEach(p => {
+    if (!p.scheduled_at) return;
+    const d = p.scheduled_at.slice(0, 10);
+    if (!byDate[d]) byDate[d] = [];
+    byDate[d].push(p);
+  });
+
+  // Compute cells: 6 rows × 7 cols
+  const numCells = 42;
+  for (let i = 0; i < numCells; i++) {
+    const dayNum = i + offset + 1;
+    const cell = document.createElement('div');
+    cell.className = 'cal-cell';
+    let dateStr = '';
+    let cellDate = null;
+    if (dayNum >= 1 && dayNum <= total) {
+      cellDate = new Date(currentYear, currentMonth, dayNum);
+      dateStr = cellDate.toISOString().slice(0, 10);
+      if (isSameDay(cellDate, today)) cell.classList.add('today');
+      if (selectedDate && cellDate.toISOString().slice(0, 10) === selectedDate) cell.classList.add('selected');
+    } else {
+      cell.classList.add('other-month');
+    }
+    const pieces = byDate[dateStr] || [];
+    cell.innerHTML = `
+      <div class="day-num">${dayNum >= 1 && dayNum <= total ? dayNum : (dayNum < 1 ? new Date(currentYear, currentMonth, dayNum).getDate() : dayNum - total)}</div>
+      <div class="dot-row">${pillarsInPieces(pieces).map(p => `<div class="dot ${p}"></div>`).join('')}</div>
+      <div class="day-pieces">
+        ${pieces.slice(0, 2).map(p => `<div class="p-title ${p.pillar}" title="${p.title || p.asset_type}">${(p.title || p.asset_type).slice(0, 20)}</div>`).join('')}
+        ${pieces.length > 2 ? `<div style="color:var(--dimmer);font-size:9px">+${pieces.length - 2} more</div>` : ''}
+      </div>
+    `;
+    if (cellDate) {
+      cell.addEventListener('click', () => selectDay(dateStr, pieces));
+    }
+    grid.appendChild(cell);
+  }
+}
+
+function selectDay(dateStr, pieces) {
+  selectedDate = dateStr;
+  const d = new Date(dateStr);
+  const dayLabel = d.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
+  document.getElementById('day-title').innerHTML = dayLabel;
+  const pane = document.getElementById('day-pieces');
+  if (!pieces.length) {
+    pane.innerHTML = '<div class="empty-day">No pieces scheduled this day</div>';
+  } else {
+    pane.innerHTML = pieces.map(p => `
+      <div class="piece-card ${p.pillar}">
+        <div class="title">${p.title || p.asset_type}</div>
+        <div class="meta">
+          <span>${p.pillar} · ${p.primary_channel}</span>
+          <span class="status ${p.status}">${p.status}</span>
+        </div>
+        ${p.assigned_to ? `<div style="margin-top:6px;font-size:11px;color:var(--dim)">Assigned: ${p.assigned_to}</div>` : ''}
+      </div>
+    `).join('');
+  }
+  loadCalendar(); // re-render to update selected state
+}
+
+function navMonth(delta) {
+  currentMonth += delta;
+  if (currentMonth < 0) { currentMonth = 11; currentYear--; }
+  if (currentMonth > 11) { currentMonth = 0; currentYear++; }
+  loadCalendar();
+}
+
+// Wire filter chips
+document.querySelectorAll('.pillar-chips .chip').forEach(chip => {
+  chip.addEventListener('click', () => {
+    const p = chip.dataset.pillar;
+    if (activePillars.has(p)) { activePillars.delete(p); chip.classList.remove('active'); }
+    else { activePillars.add(p); chip.classList.add('active'); }
+    loadCalendar();
+  });
+});
+document.getElementById('status-filter').addEventListener('change', loadCalendar);
+document.getElementById('channel-filter').addEventListener('change', loadCalendar);
+document.getElementById('search-filter').addEventListener('input', debounce(loadCalendar, 300));
+
+function debounce(fn, ms) {
+  let t; return (...args) => { clearTimeout(t); t = setTimeout(() => fn(...args), ms); };
+}
+
+loadCalendar();
+</script>
+
+</body>
+</html>

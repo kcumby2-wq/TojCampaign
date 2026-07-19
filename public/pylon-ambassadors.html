@@ -1,0 +1,350 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Pylon Ambassadors · Get paid to post what you already post.</title>
+<meta name="description" content="Pylon Ambassador Program · 100 athletes as distributed creators. Monthly stipend + brand affiliate slots + amplification.">
+<meta name="theme-color" content="#0A0A0A">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Anton&family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect fill='%230A0A0A' width='100' height='100'/%3E%3Cpath fill='%23F4C82E' d='M20 20h60v60H20z'/%3E%3Cpath fill='%230A0A0A' d='M35 35h30v30H35z'/%3E%3C/svg%3E">
+<style>
+:root{--black:#0A0A0A;--near-black:#161616;--surface:#1A1A1A;--surface-2:#242424;--yellow:#F4C82E;--yellow-2:#FFE066;--white:#FFFFFF;--dim:rgba(255,255,255,.72);--dimmer:rgba(255,255,255,.5);--line:#2A2A2A;--green:#5FCF80}
+*{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth}
+body{background:var(--black);color:var(--white);font-family:'Inter',-apple-system,sans-serif;font-size:15.5px;line-height:1.6;-webkit-font-smoothing:antialiased}
+a{color:var(--yellow);text-decoration:none}
+button{cursor:pointer;font-family:inherit;border:none}
+.shell{max-width:1080px;margin:0 auto;padding:0 22px}
+@media(min-width:900px){.shell{padding:0 40px}}
+
+header.nav{background:var(--black);border-bottom:1px solid var(--line);padding:16px 0;position:sticky;top:0;z-index:100}
+.nav-inner{display:flex;justify-content:space-between;align-items:center}
+.nav-brand{display:flex;align-items:center;gap:14px}
+.nav-mark{width:36px;height:36px;background:var(--yellow);position:relative}
+.nav-mark::before{content:'';position:absolute;inset:8px;background:var(--black)}
+.nav-brand .b1{font-family:'Anton',sans-serif;font-size:18px;color:var(--white);text-transform:uppercase;letter-spacing:.03em}
+.nav-brand .b1 .accent{color:var(--yellow)}
+.nav-links{display:flex;gap:24px;font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:.16em;text-transform:uppercase;font-weight:700}
+.nav-links a{color:var(--dim)}
+.nav-links a:hover{color:var(--yellow)}
+
+section.hero{background:var(--black);padding:80px 0 64px;border-bottom:2px solid var(--yellow);position:relative;overflow:hidden}
+.hero::before{content:'';position:absolute;inset:0;background:radial-gradient(ellipse at top right,rgba(244,200,46,.08),transparent 60%);pointer-events:none}
+.hero-inner{position:relative}
+.eyebrow{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--yellow);letter-spacing:.24em;text-transform:uppercase;font-weight:700;margin-bottom:24px}
+h1{font-family:'Anton',sans-serif;font-size:clamp(42px,7.5vw,92px);line-height:.92;letter-spacing:-.02em;text-transform:uppercase;color:var(--white);margin-bottom:22px}
+h1 .accent{color:var(--yellow)}
+.hero-lede{font-size:19px;color:var(--dim);line-height:1.55;max-width:720px;font-weight:400}
+.hero-lede b{color:var(--white);font-weight:600}
+
+/* Program mechanics */
+section.mechanics{padding:72px 0;background:var(--near-black)}
+.chapter-tag{display:inline-block;font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--yellow);letter-spacing:.24em;text-transform:uppercase;font-weight:700;margin-bottom:16px}
+h2.chapter-h{font-family:'Anton',sans-serif;font-size:clamp(30px,4.5vw,48px);letter-spacing:-.015em;text-transform:uppercase;color:var(--white);line-height:1;margin-bottom:20px}
+h2.chapter-h .accent{color:var(--yellow)}
+.sec-lede{font-size:17px;color:var(--dim);line-height:1.55;margin-bottom:36px;max-width:800px}
+
+.tier-grid{display:grid;grid-template-columns:1fr;gap:20px;margin-top:32px}
+@media(min-width:768px){.tier-grid{grid-template-columns:repeat(3,1fr)}}
+.tier{background:var(--surface);border:1px solid var(--line);border-top:4px solid var(--yellow);padding:28px 30px;display:flex;flex-direction:column}
+.tier.featured{border-top-width:4px}
+.tier-name{font-family:'Anton',sans-serif;font-size:22px;color:var(--white);text-transform:uppercase;letter-spacing:0;line-height:1;margin-bottom:8px}
+.tier .stipend{font-family:'Anton',sans-serif;font-size:44px;color:var(--yellow);line-height:1;letter-spacing:-.02em;margin:14px 0 4px}
+.tier .stipend small{font-size:18px;color:var(--dim);font-family:'Inter',sans-serif;font-weight:400}
+.tier .cadence{font-family:'JetBrains Mono',monospace;font-size:10.5px;color:var(--dim);letter-spacing:.16em;text-transform:uppercase;font-weight:700;margin-bottom:20px}
+.tier ul{list-style:none}
+.tier ul li{padding:6px 0 6px 20px;position:relative;color:var(--dim);font-size:13.5px;line-height:1.5}
+.tier ul li::before{content:'▸';position:absolute;left:0;color:var(--yellow);font-weight:700}
+.tier ul li b{color:var(--white);font-weight:600}
+
+/* Application form */
+section.apply{padding:72px 0}
+.apply-inner{max-width:640px}
+.form-row{margin-bottom:18px}
+.form-row.two{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+@media(max-width:640px){.form-row.two{grid-template-columns:1fr}}
+.form-row label{display:block;font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--yellow);letter-spacing:.16em;text-transform:uppercase;font-weight:700;margin-bottom:6px}
+.form-row input,.form-row select,.form-row textarea{width:100%;padding:12px 14px;background:var(--near-black);border:1px solid var(--line);color:var(--white);font-family:'Inter',sans-serif;font-size:14.5px;border-radius:0}
+.form-row textarea{min-height:120px;resize:vertical;font-family:'Inter',sans-serif;line-height:1.5}
+.form-row input:focus,.form-row select:focus,.form-row textarea:focus{outline:1.5px solid var(--yellow);outline-offset:-1px}
+.submit-btn{background:var(--yellow);color:var(--black);padding:18px 32px;font-family:'Anton',sans-serif;font-size:20px;text-transform:uppercase;letter-spacing:.005em;line-height:1;transition:transform .1s;box-shadow:0 4px 12px rgba(244,200,46,.3)}
+.submit-btn:hover{transform:translateY(-2px)}
+.submit-btn:disabled{background:var(--surface-2);color:var(--dim);box-shadow:none;cursor:not-allowed}
+.review-note{background:rgba(244,200,46,.08);border-left:3px solid var(--yellow);padding:14px 18px;margin-top:24px;font-size:13.5px;color:var(--dim)}
+.review-note b{color:var(--yellow);font-family:'JetBrains Mono',monospace;font-size:10.5px;letter-spacing:.16em;text-transform:uppercase;display:block;margin-bottom:4px}
+
+.thanks{display:none;background:linear-gradient(135deg,var(--yellow),var(--yellow-2));color:var(--black);padding:32px 36px;margin-top:24px}
+.thanks.show{display:block}
+.thanks h3{font-family:'Anton',sans-serif;font-size:28px;text-transform:uppercase;letter-spacing:-.005em;margin-bottom:8px}
+.thanks p{color:var(--black);font-size:15px}
+
+/* Spotlight */
+section.spotlight{padding:72px 0;background:var(--near-black);border-top:1px solid var(--line)}
+.spotlight-grid{display:grid;grid-template-columns:1fr;gap:14px}
+@media(min-width:640px){.spotlight-grid{grid-template-columns:repeat(2,1fr)}}
+@media(min-width:900px){.spotlight-grid{grid-template-columns:repeat(3,1fr)}}
+.amb-card{background:var(--surface);border:1px solid var(--line);padding:22px 24px;display:flex;flex-direction:column;gap:8px}
+.amb-card .name{font-family:'Anton',sans-serif;font-size:22px;color:var(--white);text-transform:uppercase;letter-spacing:0;line-height:1.1}
+.amb-card .position{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--yellow);letter-spacing:.14em;text-transform:uppercase;font-weight:700}
+.amb-card .followers{color:var(--dim);font-size:13px;margin-top:4px}
+.amb-card .followers b{color:var(--white)}
+
+footer{background:var(--black);border-top:2px solid var(--yellow);padding:36px 0;font-size:11px;font-family:'JetBrains Mono',monospace;letter-spacing:.16em;text-transform:uppercase;font-weight:700}
+footer .foot{display:flex;flex-direction:column;gap:14px;color:var(--dim)}
+@media(min-width:768px){footer .foot{flex-direction:row;justify-content:space-between;align-items:center}}
+footer .foot .attr{color:var(--dimmer);font-size:9.5px}
+footer a{color:var(--yellow)}
+</style>
+</head>
+<body>
+
+<header class="nav">
+  <div class="shell nav-inner">
+    <div class="nav-brand">
+      <div class="nav-mark"></div>
+      <div class="b1">Pylon <span class="accent">Ambassadors</span></div>
+    </div>
+    <div class="nav-links">
+      <a href="/pylon-media.html">Media</a>
+      <a href="/pylon-athlete-subscribe.html">Athlete</a>
+      <a href="/pylon-newsletter.html">Newsletter</a>
+    </div>
+  </div>
+</header>
+
+<section class="hero">
+  <div class="shell hero-inner">
+    <div class="eyebrow">◆ Pylon Ambassador Program · 100 athletes · distributed creators</div>
+    <h1>Get paid to post <span class="accent">what you already post.</span></h1>
+    <p class="hero-lede">Monthly stipend + brand affiliate slots + amplification from Pylon's channels. Your content, your audience, your voice — with Pylon's audience and sponsor pipeline behind you. <b>3 tiers based on reach and consistency. Apply below · rolling review.</b></p>
+  </div>
+</section>
+
+<section class="mechanics">
+  <div class="shell">
+    <span class="chapter-tag">◆ Program mechanics</span>
+    <h2 class="chapter-h">Three tiers · <span class="accent">rolling stipend.</span></h2>
+    <p class="sec-lede">Every ambassador delivers a defined post cadence per week + accepts a defined number of brand-affiliate slots per month. Stipend is monthly. Amplification from Pylon's channels is automatic on qualifying posts.</p>
+
+    <div class="tier-grid">
+      <div class="tier">
+        <div class="tier-name">Standard</div>
+        <div class="stipend">$50<small>/mo</small></div>
+        <div class="cadence">Entry Tier</div>
+        <ul>
+          <li><b>3 posts/week</b> minimum</li>
+          <li>4 brand-affiliate slots/month</li>
+          <li>Pylon amplification on top posts</li>
+          <li>Access to sponsor product samples</li>
+          <li>Monthly cohort call (optional)</li>
+        </ul>
+      </div>
+
+      <div class="tier featured">
+        <div class="tier-name">Featured</div>
+        <div class="stipend">$150<small>/mo</small></div>
+        <div class="cadence">Growth Tier</div>
+        <ul>
+          <li>Everything in Standard</li>
+          <li><b>5 posts/week</b> minimum</li>
+          <li>8 brand-affiliate slots/month</li>
+          <li>Priority Pylon channel amplification</li>
+          <li>Featured on <code>pylon-ambassadors.html</code> spotlight</li>
+          <li>Quarterly 1:1 with Head of Social</li>
+        </ul>
+      </div>
+
+      <div class="tier">
+        <div class="tier-name">Flagship</div>
+        <div class="stipend">$500<small>/mo</small></div>
+        <div class="cadence">Premier Tier</div>
+        <ul>
+          <li>Everything in Featured</li>
+          <li><b>7 posts/week</b> minimum + IG Live monthly</li>
+          <li>Unlimited brand-affiliate slots</li>
+          <li>Pylon Signature Series episode eligibility</li>
+          <li>Direct access to Kyron + Creative Lead</li>
+          <li>NIL deal introduction pipeline</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="apply">
+  <div class="shell apply-inner">
+    <span class="chapter-tag">◆ Apply</span>
+    <h2 class="chapter-h">Rolling review · <span class="accent">most decisions in 7 days.</span></h2>
+    <p class="sec-lede">Applications are reviewed weekly. Tier assignment happens at acceptance based on your handles, audience, and content history. Not every applicant is accepted — the program is capped at 100 active ambassadors across all tiers.</p>
+
+    <form id="app-form" style="margin-top:32px">
+      <div class="form-row two">
+        <div>
+          <label>Full Name</label>
+          <input type="text" name="full_name" required>
+        </div>
+        <div>
+          <label>Position</label>
+          <select name="position" required>
+            <option value="">Select…</option>
+            <option>QB</option><option>WR</option><option>RB</option><option>TE</option>
+            <option>OL</option><option>DL</option><option>LB</option><option>DB</option>
+            <option>K/P</option><option>ATH</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="form-row two">
+        <div>
+          <label>Class Year</label>
+          <select name="class_year" required>
+            <option value="">Select…</option>
+            <option>2026</option><option>2027</option><option>2028</option><option>2029</option><option>2030</option>
+          </select>
+        </div>
+        <div>
+          <label>Team / Program</label>
+          <input type="text" name="team_name" required>
+        </div>
+      </div>
+
+      <div class="form-row">
+        <label>Email</label>
+        <input type="email" name="email" required>
+      </div>
+
+      <div class="form-row">
+        <label>Parent / Guardian Email (required for minors)</label>
+        <input type="email" name="parent_email">
+      </div>
+
+      <div class="form-row two">
+        <div>
+          <label>Instagram Handle</label>
+          <input type="text" name="ig_handle" placeholder="@yourhandle">
+        </div>
+        <div>
+          <label>TikTok Handle</label>
+          <input type="text" name="tiktok_handle" placeholder="@yourhandle">
+        </div>
+      </div>
+
+      <div class="form-row two">
+        <div>
+          <label>Total Followers (all platforms)</label>
+          <input type="number" name="follower_count_total" min="0" placeholder="e.g. 5200">
+        </div>
+        <div>
+          <label>Tier Target</label>
+          <select name="tier_target">
+            <option value="standard">Standard ($50/mo)</option>
+            <option value="featured">Featured ($150/mo)</option>
+            <option value="flagship">Flagship ($500/mo)</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="form-row">
+        <label>Why do you want to be a Pylon Ambassador?</label>
+        <textarea name="why" placeholder="A short paragraph — what you post about, what your audience responds to, what you want out of the program."></textarea>
+      </div>
+
+      <div class="form-row">
+        <label>Guardian Consent (required for minors)</label>
+        <select name="guardian_consent" required>
+          <option value="">Select…</option>
+          <option value="parent_yes">Parent — I consent + I will co-sign contract</option>
+          <option value="guardian_yes">Legal guardian — I consent + will co-sign</option>
+          <option value="adult">Athlete is 18+</option>
+        </select>
+      </div>
+
+      <button type="submit" class="submit-btn" id="submit-btn">Submit Application</button>
+
+      <div class="review-note">
+        <b>Applications are reviewed weekly</b>
+        Your application lands in <code>applied_pending_review</code> status. If accepted, you'll get an onboarding email within 7 days with contract, tier assignment, and first-month stipend timing. Applications are held until parent/guardian consent is documented for anyone under 18. NCAA-eligible athletes: we route to NIL compliance review before tier assignment.
+      </div>
+    </form>
+
+    <div class="thanks" id="thanks">
+      <h3>Application received.</h3>
+      <p>Kyron and the Head of Social review applications every Monday. If we can slot you in, you'll hear back with an onboarding email within 7 days. Thanks for applying to the program.</p>
+    </div>
+  </div>
+</section>
+
+<section class="spotlight">
+  <div class="shell">
+    <span class="chapter-tag">◆ Featured ambassadors</span>
+    <h2 class="chapter-h">Some of the <span class="accent">roster.</span></h2>
+    <div class="spotlight-grid" id="spotlight">
+      <div class="amb-card"><div class="name">Featured Slot</div><div class="position">Reserved for Program Launch</div><div class="followers">Program capped at 100 ambassadors · roster fills after Q1 2026 launch.</div></div>
+      <div class="amb-card"><div class="name">Featured Slot</div><div class="position">Reserved for Program Launch</div><div class="followers">Program capped at 100 ambassadors · roster fills after Q1 2026 launch.</div></div>
+      <div class="amb-card"><div class="name">Featured Slot</div><div class="position">Reserved for Program Launch</div><div class="followers">Program capped at 100 ambassadors · roster fills after Q1 2026 launch.</div></div>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="shell foot">
+    <span>Pylon Ambassador Program · <a href="/pylon-media.html">Media</a> · <a href="/pylon-newsletter.html">Newsletter</a></span>
+    <span class="attr">Presented by Pylon Football × Trail of Joy · 2026 · applications in review mode</span>
+  </div>
+</footer>
+
+<script>
+document.getElementById('app-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const btn = document.getElementById('submit-btn');
+  btn.disabled = true;
+  btn.textContent = 'Submitting…';
+  const formData = Object.fromEntries(new FormData(e.target));
+  try {
+    const res = await fetch('/api/pylon/ambassadors', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({
+        // athlete_id is not known at application time · will be resolved on acceptance
+        athlete_id: null,
+        tier: formData.tier_target,
+        monthly_stipend_cents: formData.tier_target === 'flagship' ? 50000 : formData.tier_target === 'featured' ? 15000 : 5000,
+        posts_expected_weekly: formData.tier_target === 'flagship' ? 7 : formData.tier_target === 'featured' ? 5 : 3,
+        ig_handle: (formData.ig_handle || '').replace(/^@/, ''),
+        tiktok_handle: (formData.tiktok_handle || '').replace(/^@/, ''),
+        follower_count_total: parseInt(formData.follower_count_total, 10) || 0,
+        status: 'applied_pending_review',
+        metadata: {
+          full_name: formData.full_name,
+          position: formData.position,
+          class_year: formData.class_year,
+          team_name: formData.team_name,
+          email: formData.email,
+          parent_email: formData.parent_email,
+          why: formData.why,
+          guardian_consent: formData.guardian_consent,
+        },
+      }),
+    });
+    if (res.ok) {
+      document.getElementById('app-form').style.display = 'none';
+      document.getElementById('thanks').classList.add('show');
+      window.scrollTo({top: document.getElementById('thanks').offsetTop - 100, behavior: 'smooth'});
+    } else {
+      btn.disabled = false;
+      btn.textContent = 'Submit Application';
+      alert('Something went wrong. Please email hello@pylonfootball.com to apply directly.');
+    }
+  } catch (err) {
+    btn.disabled = false;
+    btn.textContent = 'Submit Application';
+    alert('Network error. Please try again.');
+  }
+});
+</script>
+
+</body>
+</html>

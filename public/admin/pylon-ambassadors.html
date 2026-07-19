@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Pylon Ambassadors · Roster + Stipend + Compliance</title>
+<meta name="robots" content="noindex,nofollow">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Anton&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect fill='%230A0A0A' width='100' height='100'/%3E%3Cpath fill='%23F4C82E' d='M20 20h60v60H20z'/%3E%3Cpath fill='%230A0A0A' d='M35 35h30v30H35z'/%3E%3C/svg%3E">
+<style>
+:root{--black:#0A0A0A;--near-black:#141414;--surface:#1A1A1A;--surface-2:#242424;--yellow:#F4C82E;--white:#FFFFFF;--dim:rgba(255,255,255,.72);--dimmer:rgba(255,255,255,.5);--line:#2A2A2A;--green:#5FCF80;--warn:#E6BA47;--err:#E67052}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--black);color:var(--white);font-family:'Inter',-apple-system,sans-serif;font-size:14px;line-height:1.5}
+button{cursor:pointer;font-family:inherit;border:none}
+a{color:var(--yellow);text-decoration:none}
+code{font-family:'JetBrains Mono',monospace;font-size:12px;background:var(--surface);padding:1px 5px;color:var(--yellow)}
+.shell{max-width:1400px;margin:0 auto;padding:0 22px}
+
+.top{background:var(--near-black);border-bottom:1px solid var(--line);padding:14px 0;position:sticky;top:0;z-index:10}
+.top-inner{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:14px}
+.top-brand{display:flex;align-items:center;gap:12px}
+.top-mark{width:32px;height:32px;background:var(--yellow);position:relative}
+.top-mark::before{content:'';position:absolute;inset:7px;background:var(--near-black)}
+.top-brand h1{font-family:'Anton',sans-serif;font-size:20px;text-transform:uppercase;letter-spacing:.005em;line-height:1}
+.top-brand h1 .accent{color:var(--yellow)}
+.top-actions{display:flex;gap:10px;align-items:center}
+.top-actions a,.top-actions button{padding:8px 14px;font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.14em;text-transform:uppercase;font-weight:700;background:var(--surface);color:var(--dim);border:1px solid var(--line);transition:all .12s}
+.top-actions a:hover,.top-actions button:hover{color:var(--yellow);border-color:var(--yellow)}
+.top-actions button.primary{background:var(--yellow);color:var(--black);border-color:var(--yellow)}
+
+/* Stats */
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin:24px 0}
+@media(max-width:900px){.stats{grid-template-columns:repeat(2,1fr)}}
+.stat{background:var(--surface);border-top:3px solid var(--yellow);padding:18px 20px}
+.stat .n{font-family:'Anton',sans-serif;font-size:34px;color:var(--yellow);line-height:1;margin-bottom:4px}
+.stat .l{font-family:'JetBrains Mono',monospace;font-size:9.5px;color:var(--dim);letter-spacing:.16em;text-transform:uppercase;font-weight:700}
+.stat.dim .n{color:var(--white)}
+.stat.dim{border-top-color:var(--dimmer)}
+
+/* Filters */
+.filters{background:var(--surface);border:1px solid var(--line);padding:14px 18px;margin-bottom:16px;display:flex;gap:12px;flex-wrap:wrap;align-items:center}
+.filters select,.filters input{background:var(--black);border:1px solid var(--line);color:var(--white);padding:8px 12px;font-family:'Inter',sans-serif;font-size:12.5px}
+.filters .bulk{margin-left:auto;display:flex;gap:8px}
+.filters button{background:var(--surface-2);color:var(--dim);border:1px solid var(--line);padding:8px 12px;font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.14em;text-transform:uppercase;font-weight:700}
+.filters button:hover{color:var(--yellow);border-color:var(--yellow)}
+.filters button.danger:hover{color:var(--err);border-color:var(--err)}
+
+/* Table */
+.card{background:var(--surface);border:1px solid var(--line)}
+.card-head{padding:14px 18px;border-bottom:1px solid var(--line)}
+.card-head h3{font-family:'Anton',sans-serif;font-size:17px;text-transform:uppercase;letter-spacing:.005em}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{background:var(--near-black);padding:10px 14px;font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--yellow);letter-spacing:.14em;text-transform:uppercase;font-weight:700;text-align:left;border-bottom:2px solid var(--yellow);white-space:nowrap}
+th.right{text-align:right}
+th.center{text-align:center}
+th.check{width:36px}
+td{padding:11px 14px;border-bottom:1px solid var(--line);color:var(--white);vertical-align:middle}
+td.right{text-align:right}
+td.center{text-align:center}
+td .sub{color:var(--dim);font-size:11.5px;margin-top:2px}
+td.money{font-family:'JetBrains Mono',monospace;color:var(--yellow);font-weight:600}
+tr:last-child td{border-bottom:none}
+tr:hover td{background:rgba(244,200,46,.03)}
+input[type="checkbox"]{accent-color:var(--yellow);width:16px;height:16px;cursor:pointer}
+
+.pill{display:inline-block;padding:2px 8px;font-family:'JetBrains Mono',monospace;font-size:9.5px;letter-spacing:.14em;text-transform:uppercase;font-weight:700}
+.pill.standard{background:var(--surface-2);color:var(--dim)}
+.pill.featured{background:var(--yellow);color:var(--black)}
+.pill.flagship{background:var(--err);color:var(--white)}
+.pill.active{background:var(--green);color:var(--black)}
+.pill.paused{background:var(--warn);color:var(--black)}
+.pill.applied{background:var(--surface-2);color:var(--dim)}
+.pill.applied_pending_review{background:var(--warn);color:var(--black)}
+
+.compliance-good{color:var(--green);font-weight:700}
+.compliance-flag{color:var(--err);font-weight:700}
+
+.progress{display:flex;align-items:center;gap:8px}
+.progress .bar{flex:1;height:6px;background:var(--surface-2);border-radius:0;overflow:hidden;max-width:120px}
+.progress .fill{height:100%;background:var(--yellow);transition:width .3s}
+.progress .fill.warn{background:var(--warn)}
+.progress .fill.err{background:var(--err)}
+.progress .num{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--dim);font-weight:700;min-width:44px}
+
+.empty{text-align:center;padding:40px 20px;color:var(--dimmer)}
+.empty .icon{font-family:'Anton',sans-serif;font-size:48px;color:var(--line);margin-bottom:12px}
+.loading{text-align:center;padding:24px;color:var(--dim);font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:.16em;text-transform:uppercase;font-weight:700}
+</style>
+</head>
+<body>
+
+<div class="top">
+  <div class="shell top-inner">
+    <div class="top-brand">
+      <div class="top-mark"></div>
+      <h1>Ambassadors <span class="accent">· Roster + Compliance</span></h1>
+    </div>
+    <div class="top-actions">
+      <a href="/admin/pylon.html">← Admin</a>
+      <button onclick="loadAll()">↻ Refresh</button>
+    </div>
+  </div>
+</div>
+
+<div class="shell">
+  <div class="stats">
+    <div class="stat"><div class="n" id="s-total">—</div><div class="l">Active Ambassadors</div></div>
+    <div class="stat dim"><div class="n" id="s-flagship">—</div><div class="l">Flagship Tier</div></div>
+    <div class="stat"><div class="n" id="s-mrr">$—</div><div class="l">Monthly Stipend Load</div></div>
+    <div class="stat dim"><div class="n" id="s-flags">—</div><div class="l">Compliance Flags</div></div>
+  </div>
+
+  <div class="filters">
+    <select id="tier-filter">
+      <option value="">All tiers</option>
+      <option value="standard">Standard</option>
+      <option value="featured">Featured</option>
+      <option value="flagship">Flagship</option>
+    </select>
+    <select id="status-filter">
+      <option value="">All statuses</option>
+      <option value="active">Active</option>
+      <option value="paused">Paused</option>
+      <option value="applied_pending_review">Applied · pending review</option>
+      <option value="removed">Removed</option>
+    </select>
+    <input type="search" id="search" placeholder="Search name or handle…">
+    <div class="bulk">
+      <button onclick="bulkAction('pause')">⏸ Pause Selected</button>
+      <button onclick="bulkAction('promote')">↑ Promote</button>
+      <button class="danger" onclick="bulkAction('remove')">✕ Remove</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-head">
+      <h3>Ambassador Roster</h3>
+    </div>
+    <table>
+      <thead>
+        <tr>
+          <th class="check"><input type="checkbox" id="select-all"></th>
+          <th>Athlete</th>
+          <th>Handles</th>
+          <th class="center">Tier</th>
+          <th class="right">Stipend/mo</th>
+          <th>Posts This Week</th>
+          <th class="center">Compliance</th>
+          <th class="center">Status</th>
+        </tr>
+      </thead>
+      <tbody id="tbody"><tr><td colspan="8" class="loading">Loading</td></tr></tbody>
+    </table>
+  </div>
+</div>
+
+<script>
+let ambassadors = [];
+async function api(path, opts) {
+  try {
+    const res = await fetch(`/api/pylon${path}`, {headers: {'Accept':'application/json','Content-Type':'application/json'}, ...(opts || {})});
+    if (!res.ok) return null;
+    return await res.json();
+  } catch(e) { return null; }
+}
+function money(cents) { if (!cents && cents !== 0) return '$—'; return '$' + (cents/100).toLocaleString('en-US',{maximumFractionDigits:0}); }
+function pill(v, klass) { return `<span class="pill ${klass || v}">${v}</span>`; }
+
+async function loadAll() {
+  const tier = document.getElementById('tier-filter').value;
+  const status = document.getElementById('status-filter').value;
+  const search = document.getElementById('search').value.toLowerCase();
+  const q = new URLSearchParams();
+  if (tier) q.set('tier', tier);
+  if (status) q.set('status', status);
+  ambassadors = await api(`/ambassadors?${q}`) || [];
+  render(search);
+  renderStats();
+}
+
+function render(search = '') {
+  const body = document.getElementById('tbody');
+  const filtered = search ? ambassadors.filter(a =>
+    (a.ig_handle || '').toLowerCase().includes(search) ||
+    (a.tiktok_handle || '').toLowerCase().includes(search) ||
+    (a.athlete_id || '').includes(search)
+  ) : ambassadors;
+  if (!filtered.length) {
+    body.innerHTML = '<tr><td colspan="8" class="empty"><div class="icon">▤</div><div>No ambassadors yet · public application at <code>/pylon-ambassadors.html</code></div></td></tr>';
+    return;
+  }
+  body.innerHTML = filtered.map(a => {
+    const expected = a.posts_expected_weekly || 3;
+    const actual = 0; // TODO: join to posts count · placeholder
+    const pct = Math.min(100, Math.round(actual / expected * 100));
+    const fillClass = pct >= 80 ? '' : pct >= 40 ? 'warn' : 'err';
+    return `
+      <tr>
+        <td><input type="checkbox" class="row-check" data-id="${a.id}"></td>
+        <td>
+          <b>Athlete ${(a.athlete_id || '').slice(0,8)}…</b>
+          ${a.onboarded_at ? `<div class="sub">Onboarded ${new Date(a.onboarded_at).toLocaleDateString()}</div>` : ''}
+        </td>
+        <td>
+          ${a.ig_handle ? `<div class="sub">IG @${a.ig_handle}</div>` : ''}
+          ${a.tiktok_handle ? `<div class="sub">TT @${a.tiktok_handle}</div>` : ''}
+          ${!a.ig_handle && !a.tiktok_handle ? '<span class="sub">—</span>' : ''}
+        </td>
+        <td class="center">${pill(a.tier || 'standard')}</td>
+        <td class="right money">${money(a.monthly_stipend_cents)}</td>
+        <td>
+          <div class="progress">
+            <span class="num">${actual}/${expected}</span>
+            <div class="bar"><div class="fill ${fillClass}" style="width:${pct}%"></div></div>
+          </div>
+        </td>
+        <td class="center"><span class="compliance-good">✓ Clean</span></td>
+        <td class="center">${pill(a.status || 'active')}</td>
+      </tr>
+    `;
+  }).join('');
+}
+
+function renderStats() {
+  const active = ambassadors.filter(a => a.status === 'active');
+  document.getElementById('s-total').textContent = active.length;
+  document.getElementById('s-flagship').textContent = active.filter(a => a.tier === 'flagship').length;
+  const mrr = active.reduce((a,r) => a + (r.monthly_stipend_cents || 0), 0);
+  document.getElementById('s-mrr').textContent = money(mrr);
+  document.getElementById('s-flags').textContent = '0';
+}
+
+async function bulkAction(action) {
+  const ids = Array.from(document.querySelectorAll('.row-check:checked')).map(el => el.dataset.id);
+  if (!ids.length) { alert('Select at least one ambassador'); return; }
+  if (!confirm(`${action.toUpperCase()} ${ids.length} ambassador(s)?`)) return;
+  const statusMap = { pause: 'paused', remove: 'removed', promote: 'featured' };
+  const status = statusMap[action];
+  for (const id of ids) {
+    await api(`/ambassadors/${id}`, { method: 'PATCH', body: JSON.stringify({ status }) });
+  }
+  loadAll();
+}
+
+document.getElementById('select-all').addEventListener('change', (e) => {
+  document.querySelectorAll('.row-check').forEach(c => c.checked = e.target.checked);
+});
+document.getElementById('tier-filter').addEventListener('change', loadAll);
+document.getElementById('status-filter').addEventListener('change', loadAll);
+document.getElementById('search').addEventListener('input', () => render(document.getElementById('search').value.toLowerCase()));
+
+loadAll();
+</script>
+
+</body>
+</html>
