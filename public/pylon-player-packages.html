@@ -1,0 +1,365 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Pylon Player Packages · Your athlete, edited to college coach standard.</title>
+<meta name="description" content="Individual coverage packages for athletes at Pylon events. Snapshot · Story · Feature.">
+<meta name="theme-color" content="#0A0A0A">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Anton&family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect fill='%230A0A0A' width='100' height='100'/%3E%3Cpath fill='%23F4C82E' d='M20 20h60v60H20z'/%3E%3Cpath fill='%230A0A0A' d='M35 35h30v30H35z'/%3E%3C/svg%3E">
+<style>
+:root{--black:#0A0A0A;--near-black:#161616;--surface:#1A1A1A;--surface-2:#222;--yellow:#F4C82E;--yellow-2:#FFE066;--white:#FFFFFF;--dim:rgba(255,255,255,.72);--dimmer:rgba(255,255,255,.5);--line:#2A2A2A;--green:#5FCF80}
+*{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth}
+body{background:var(--black);color:var(--white);font-family:'Inter',-apple-system,sans-serif;font-size:15.5px;line-height:1.6;-webkit-font-smoothing:antialiased}
+a{color:var(--yellow);text-decoration:none}
+button{cursor:pointer;font-family:inherit;border:none}
+.shell{max-width:1200px;margin:0 auto;padding:0 22px}
+@media(min-width:900px){.shell{padding:0 40px}}
+
+header.nav{background:var(--black);border-bottom:1px solid var(--line);padding:16px 0;position:sticky;top:0;z-index:100;backdrop-filter:blur(10px)}
+.nav-inner{display:flex;justify-content:space-between;align-items:center}
+.nav-brand{display:flex;align-items:center;gap:14px}
+.nav-mark{width:36px;height:36px;background:var(--yellow);position:relative}
+.nav-mark::before{content:'';position:absolute;inset:8px;background:var(--black)}
+.nav-brand .b1{font-family:'Anton',sans-serif;font-size:18px;color:var(--white);text-transform:uppercase;letter-spacing:.03em}
+.nav-brand .b1 .accent{color:var(--yellow)}
+.nav-links{display:flex;gap:24px;font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:.16em;text-transform:uppercase;font-weight:700}
+.nav-links a{color:var(--dim)}
+.nav-links a:hover{color:var(--yellow)}
+
+.referral-banner{background:var(--yellow);color:var(--black);padding:12px 0;font-family:'JetBrains Mono',monospace;font-size:12px;letter-spacing:.14em;text-transform:uppercase;font-weight:700;text-align:center;display:none}
+.referral-banner.show{display:block}
+.referral-banner b{font-weight:800}
+
+section.hero{background:var(--black);padding:64px 0 48px;border-bottom:2px solid var(--yellow)}
+.eyebrow{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--yellow);letter-spacing:.24em;text-transform:uppercase;font-weight:700;margin-bottom:20px}
+h1{font-family:'Anton',sans-serif;font-size:clamp(40px,7vw,88px);line-height:.92;letter-spacing:-.02em;text-transform:uppercase;color:var(--white);margin-bottom:20px}
+h1 .accent{color:var(--yellow)}
+.hero-lede{font-size:18px;color:var(--dim);line-height:1.55;max-width:720px}
+
+section.tiers{padding:64px 0;background:var(--near-black)}
+.tier-grid{display:grid;grid-template-columns:1fr;gap:20px;margin-top:32px}
+@media(min-width:768px){.tier-grid{grid-template-columns:repeat(3,1fr)}}
+.tier{background:var(--surface);border:1px solid var(--line);padding:32px 30px 40px;display:flex;flex-direction:column;position:relative;transition:border-color .15s,transform .15s}
+.tier:hover{border-color:var(--yellow);transform:translateY(-2px)}
+.tier.featured{border-color:var(--yellow);border-width:2px}
+.tier.featured::before{content:'BEST VALUE';position:absolute;top:-11px;left:24px;background:var(--yellow);color:var(--black);font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.18em;font-weight:700;padding:4px 10px}
+.tier .tier-name{font-family:'Anton',sans-serif;font-size:26px;color:var(--white);text-transform:uppercase;letter-spacing:0;line-height:1;margin-bottom:8px}
+.tier .price{font-family:'Anton',sans-serif;font-size:56px;color:var(--yellow);line-height:1;letter-spacing:-.02em;margin:16px 0 4px}
+.tier .price.discounted{color:var(--dimmer);text-decoration:line-through;font-size:36px;display:inline-block;margin-right:12px}
+.tier .price-final{font-family:'Anton',sans-serif;font-size:56px;color:var(--yellow);line-height:1;letter-spacing:-.02em;display:inline-block}
+.tier .price-detail{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--dim);letter-spacing:.16em;text-transform:uppercase;font-weight:700;margin-bottom:24px}
+.tier ul{list-style:none;margin-bottom:32px;flex-grow:1}
+.tier ul li{padding:8px 0 8px 22px;position:relative;color:var(--dim);font-size:14px;line-height:1.5}
+.tier ul li::before{content:'▸';position:absolute;left:0;color:var(--yellow);font-weight:700}
+.tier ul li b{color:var(--white);font-weight:600}
+.tier button.book{background:var(--yellow);color:var(--black);padding:16px 24px;font-family:'JetBrains Mono',monospace;font-size:12px;letter-spacing:.16em;text-transform:uppercase;font-weight:700;width:100%;transition:transform .15s}
+.tier button.book:hover{transform:translateY(-2px)}
+
+/* Upsell strip */
+section.upsell{padding:56px 0;border-top:1px solid var(--line);background:linear-gradient(180deg,var(--surface),var(--near-black))}
+.upsell-inner{display:grid;grid-template-columns:1fr;gap:24px;align-items:center}
+@media(min-width:768px){.upsell-inner{grid-template-columns:2fr 1fr}}
+.upsell h3{font-family:'Anton',sans-serif;font-size:34px;color:var(--white);text-transform:uppercase;letter-spacing:-.005em;line-height:1;margin-bottom:12px}
+.upsell h3 .accent{color:var(--yellow)}
+.upsell p{color:var(--dim);font-size:15px;line-height:1.55}
+.upsell .price-box{background:var(--surface-2);border:1px solid var(--yellow);padding:24px 28px;text-align:center}
+.upsell .price-box .p-label{font-family:'JetBrains Mono',monospace;font-size:10.5px;color:var(--yellow);letter-spacing:.16em;text-transform:uppercase;font-weight:700;margin-bottom:8px}
+.upsell .price-box .p-num{font-family:'Anton',sans-serif;font-size:44px;color:var(--white);line-height:1;letter-spacing:-.02em}
+.upsell .price-box .p-cadence{font-family:'JetBrains Mono',monospace;font-size:10.5px;color:var(--dim);letter-spacing:.14em;text-transform:uppercase;font-weight:700;margin-top:4px}
+.upsell .price-box a{display:inline-block;background:var(--yellow);color:var(--black);padding:12px 20px;font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:.16em;text-transform:uppercase;font-weight:700;margin-top:16px;text-decoration:none}
+
+/* Modal */
+.modal-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.85);z-index:1000;display:none;align-items:center;justify-content:center;padding:20px}
+.modal-backdrop.show{display:flex}
+.modal{background:var(--surface);border:2px solid var(--yellow);max-width:520px;width:100%;padding:36px 36px 32px;max-height:90vh;overflow-y:auto}
+.modal h3{font-family:'Anton',sans-serif;font-size:28px;color:var(--white);text-transform:uppercase;letter-spacing:0;margin-bottom:8px}
+.modal p{color:var(--dim);font-size:14.5px;margin-bottom:20px}
+.discount-callout{background:rgba(244,200,46,.12);border-left:3px solid var(--yellow);padding:12px 16px;margin-bottom:20px;font-size:13px;color:var(--yellow-2);font-family:'JetBrains Mono',monospace;letter-spacing:.14em;text-transform:uppercase;font-weight:700;display:none}
+.discount-callout.show{display:block}
+.form-row{margin-bottom:18px}
+.form-row label{display:block;font-family:'JetBrains Mono',monospace;font-size:10.5px;color:var(--yellow);letter-spacing:.16em;text-transform:uppercase;font-weight:700;margin-bottom:6px}
+.form-row input,.form-row select{width:100%;padding:12px 14px;background:var(--black);border:1px solid var(--line);color:var(--white);font-family:'Inter',sans-serif;font-size:14.5px;border-radius:0}
+.form-row input:focus,.form-row select:focus{outline:1.5px solid var(--yellow);outline-offset:-1px}
+.modal-actions{display:flex;gap:12px;margin-top:24px}
+.modal-actions button{flex:1;padding:14px;font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:.16em;text-transform:uppercase;font-weight:700}
+.modal-actions button.primary{background:var(--yellow);color:var(--black)}
+.modal-actions button.secondary{background:transparent;color:var(--dim);border:1px solid var(--line)}
+
+.event-required{background:rgba(244,200,46,.08);border:1px solid var(--yellow);padding:20px 24px;margin:32px 0;color:var(--yellow-2);font-size:14px;text-align:center;display:none}
+.event-required.show{display:block}
+
+footer{background:var(--black);border-top:2px solid var(--yellow);padding:36px 0;font-size:11px;font-family:'JetBrains Mono',monospace;letter-spacing:.16em;text-transform:uppercase;font-weight:700}
+footer .foot{display:flex;flex-direction:column;gap:14px;color:var(--dim)}
+@media(min-width:768px){footer .foot{flex-direction:row;justify-content:space-between;align-items:center}}
+footer .foot .attr{color:var(--dimmer);font-size:9.5px}
+footer a{color:var(--yellow)}
+</style>
+</head>
+<body>
+
+<div class="referral-banner" id="referral-banner">
+  ◆ Referral discount applied: <b id="referral-code-display"></b> · <b>25% OFF</b>
+</div>
+
+<header class="nav">
+  <div class="shell nav-inner">
+    <div class="nav-brand">
+      <div class="nav-mark"></div>
+      <div class="b1">Pylon <span class="accent">Media</span></div>
+    </div>
+    <div class="nav-links">
+      <a href="/pylon-media.html">Overview</a>
+      <a href="/pylon-team-packages.html">Teams</a>
+      <a href="/pylon-player-packages.html">Athletes</a>
+    </div>
+  </div>
+</header>
+
+<section class="hero">
+  <div class="shell">
+    <div class="eyebrow">◆ Player Packages · Individual coverage</div>
+    <h1>Your athlete, edited to <span class="accent">college coach standard.</span></h1>
+    <p class="hero-lede">Professional coverage of your athlete at Pylon events. Photo pack. Short reel. Full multi-piece. Delivered in 48 hours. You own everything. <b>No watermarks. No expiration.</b></p>
+
+    <div class="event-required" id="event-required">
+      ⚠ To book coverage, please select your event first · <a href="mailto:hello@pylonfootball.com" style="color:var(--yellow);text-decoration:underline">contact us if you need help</a>
+    </div>
+  </div>
+</section>
+
+<section class="tiers">
+  <div class="shell">
+    <div class="tier-grid">
+      <div class="tier">
+        <div class="tier-name">Pylon Player Snapshot</div>
+        <div class="price" data-base="6900" data-discounted="5175">$69</div>
+        <div class="price-detail">Per Event / Per Athlete</div>
+        <ul>
+          <li><b>10-15 photos</b> from one Pylon event</li>
+          <li>Athlete-specific — focused on your player</li>
+          <li>Full resolution · no watermarks</li>
+          <li>48-hour delivery to your inbox</li>
+        </ul>
+        <button class="book" data-sku="12" data-amount="6900" data-name="Player Snapshot">Book Snapshot</button>
+      </div>
+
+      <div class="tier featured">
+        <div class="tier-name">Pylon Player Story</div>
+        <div class="price" data-base="9900" data-discounted="7425">$99</div>
+        <div class="price-detail">Per Event / Per Athlete</div>
+        <ul>
+          <li>Everything in Snapshot</li>
+          <li><b>Short reel (15-30 sec)</b> featuring your athlete</li>
+          <li>Social-ready format (IG Reel + TikTok cuts)</li>
+          <li>48-hour delivery</li>
+        </ul>
+        <button class="book" data-sku="13" data-amount="9900" data-name="Player Story">Book Story</button>
+      </div>
+
+      <div class="tier">
+        <div class="tier-name">Pylon Player Feature</div>
+        <div class="price" data-base="19900" data-discounted="14925">$199</div>
+        <div class="price-detail">Per Event / Per Athlete</div>
+        <ul>
+          <li>Everything in Story</li>
+          <li><b>Full POV Reel</b> — Content Taxonomy Content 1 spec</li>
+          <li>Action Photos Carousel personalized to athlete</li>
+          <li>Support pieces (single shots + individual focus)</li>
+          <li>Cinematic realism · college-coach ready</li>
+        </ul>
+        <button class="book" data-sku="14" data-amount="19900" data-name="Player Feature">Book Feature</button>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="upsell">
+  <div class="shell">
+    <div class="upsell-inner">
+      <div>
+        <h3>Add <span class="accent">Recruiting Concierge.</span></h3>
+        <p>Your event coverage becomes recruiting-ready when the Concierge agent takes it directly to college coaches on your behalf. Personalized outreach. Weekly digest. Hot replies escalated to you. Backed by Optimum grading.</p>
+      </div>
+      <div class="price-box">
+        <div class="p-label">Pylon Recruiting Concierge</div>
+        <div class="p-num">$99</div>
+        <div class="p-cadence">Per Month</div>
+        <a href="/pylon-recruiting.html">Learn More</a>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Booking modal -->
+<div class="modal-backdrop" id="modal">
+  <div class="modal">
+    <h3 id="modal-title">Book Coverage</h3>
+    <p id="modal-sub">Enter your athlete's info — Stripe checkout · confirmation email within 60 seconds.</p>
+
+    <div class="discount-callout" id="discount-callout">
+      ◆ Referral discount applied: 25% OFF
+    </div>
+
+    <form id="booking-form">
+      <div class="form-row">
+        <label>Athlete Name</label>
+        <input type="text" name="athlete_name" required placeholder="e.g. Kaydon Finley">
+      </div>
+      <div class="form-row">
+        <label>Athlete Position</label>
+        <select name="position" required>
+          <option value="">Select…</option>
+          <option>QB</option><option>WR</option><option>RB</option><option>TE</option>
+          <option>OL</option><option>DL</option><option>LB</option><option>DB</option>
+          <option>K/P</option><option>ATH</option>
+        </select>
+      </div>
+      <div class="form-row">
+        <label>Class Year</label>
+        <select name="class_year" required>
+          <option value="">Select…</option>
+          <option>2026</option><option>2027</option><option>2028</option><option>2029</option><option>2030</option><option>2031</option>
+        </select>
+      </div>
+      <div class="form-row">
+        <label>Parent Name</label>
+        <input type="text" name="parent_name" required>
+      </div>
+      <div class="form-row">
+        <label>Parent Email</label>
+        <input type="email" name="parent_email" required>
+      </div>
+      <div class="form-row">
+        <label>Team Name</label>
+        <input type="text" name="team_name" required>
+      </div>
+      <div class="form-row" style="display:none" id="event-row">
+        <label>Event ID</label>
+        <input type="text" name="event_id" readonly>
+      </div>
+      <div class="modal-actions">
+        <button type="button" class="secondary" onclick="closeModal()">Cancel</button>
+        <button type="submit" class="primary" id="submit-btn">Continue to Checkout</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<footer>
+  <div class="shell foot">
+    <span>Pylon Media · <a href="/pylon-media.html">Overview</a> · <a href="/pylon-team-packages.html">Team packages</a></span>
+    <span class="attr">Presented by Pylon Football × Trail of Joy · 2026</span>
+  </div>
+</footer>
+
+<script>
+const urlParams = new URLSearchParams(window.location.search);
+const eventId = urlParams.get('event_id');
+const referralCode = urlParams.get('ref');
+
+// V2.9 requirement: reject purchase without event_id
+if (!eventId) {
+  document.getElementById('event-required').classList.add('show');
+  // Still allow browsing but require event selection at checkout
+}
+
+if (eventId) {
+  document.getElementById('event-row').style.display = 'block';
+  document.querySelector('[name="event_id"]').value = eventId;
+}
+
+// V2.8 · 25% OFF referral code (auto-apply from URL)
+let discountPct = 0;
+if (referralCode) {
+  discountPct = 25;
+  document.getElementById('referral-banner').classList.add('show');
+  document.getElementById('referral-code-display').textContent = referralCode;
+  document.getElementById('discount-callout').classList.add('show');
+  document.querySelectorAll('.tier').forEach(tier => {
+    const priceEl = tier.querySelector('.price');
+    if (priceEl && priceEl.dataset.base && priceEl.dataset.discounted) {
+      const base = parseInt(priceEl.dataset.base, 10);
+      const disc = parseInt(priceEl.dataset.discounted, 10);
+      priceEl.innerHTML = `<span class="discounted">$${(base/100).toFixed(0)}</span><span class="price-final">$${(disc/100).toFixed(0)}</span>`;
+    }
+  });
+}
+
+let currentBooking = null;
+
+document.querySelectorAll('.book').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const baseAmount = parseInt(btn.dataset.amount, 10);
+    const finalAmount = discountPct > 0 ? Math.round(baseAmount * (1 - discountPct/100)) : baseAmount;
+    currentBooking = {
+      sku: btn.dataset.sku,
+      amount: finalAmount,
+      base_amount: baseAmount,
+      referral_code: referralCode,
+      name: btn.dataset.name,
+    };
+    document.getElementById('modal-title').textContent = currentBooking.name;
+    document.getElementById('modal').classList.add('show');
+  });
+});
+
+function closeModal() {
+  document.getElementById('modal').classList.remove('show');
+}
+
+document.getElementById('modal').addEventListener('click', (e) => {
+  if (e.target.id === 'modal') closeModal();
+});
+
+document.getElementById('booking-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const formData = Object.fromEntries(new FormData(e.target));
+  if (!eventId && !formData.event_id) {
+    alert('Please select your event before booking. Contact hello@pylonfootball.com if you need help finding your event.');
+    return;
+  }
+  const submitBtn = document.getElementById('submit-btn');
+  submitBtn.disabled = true;
+  submitBtn.textContent = 'Creating order…';
+  try {
+    const orderRes = await fetch('/api/pylon/packages/order', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({
+        sku: currentBooking.sku,
+        amount_cents: currentBooking.amount,
+        metadata: {
+          ...formData,
+          referral_code: currentBooking.referral_code,
+          base_amount_cents: currentBooking.base_amount,
+          event_id: eventId || formData.event_id,
+        },
+      }),
+    });
+    const orderData = await orderRes.json();
+    if (orderData.stripe_checkout_url) {
+      window.location.href = orderData.stripe_checkout_url;
+    } else {
+      submitBtn.textContent = 'Order Recorded ✓';
+      setTimeout(() => {
+        alert('Order recorded! We will follow up within 24 hours with payment details.');
+        closeModal();
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'Continue to Checkout';
+      }, 800);
+    }
+  } catch (err) {
+    submitBtn.disabled = false;
+    submitBtn.textContent = 'Continue to Checkout';
+    alert('Something went wrong. Please email hello@pylonfootball.com to book.');
+  }
+});
+</script>
+
+</body>
+</html>

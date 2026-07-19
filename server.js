@@ -113,6 +113,13 @@ app.use("/api/rag", requireAuth, require("./routes/rag"));
 // (enforced inside the route file so the roles picker renders pre-login).
 app.use("/api/agents", require("./routes/agents"));
 app.use("/api/hooks-agents", require("./routes/hooks-agents"));
+app.use("/api/pylon", require("./routes/pylon"));
+
+// Pylon × TOJ · pre/during/post-event sales sequence cron
+// Toggle via env: PYLON_CRON_ENABLED=true
+if (process.env.PYLON_CRON_ENABLED === "true") {
+  require("./utils/pylon-sequence-cron").start();
+}
 
 // Small helper to check auth from frontend
 app.get("/api/me", (req, res) => {
