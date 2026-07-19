@@ -1,0 +1,718 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Pylon Admin · Operator Dashboard</title>
+<meta name="theme-color" content="#0A0A0A">
+<meta name="robots" content="noindex,nofollow">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Anton&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect fill='%230A0A0A' width='100' height='100'/%3E%3Cpath fill='%23F4C82E' d='M20 20h60v60H20z'/%3E%3Cpath fill='%230A0A0A' d='M35 35h30v30H35z'/%3E%3C/svg%3E">
+<style>
+:root{--black:#0A0A0A;--near-black:#161616;--surface:#1A1A1A;--surface-2:#222;--yellow:#F4C82E;--white:#FFFFFF;--dim:rgba(255,255,255,.72);--dimmer:rgba(255,255,255,.5);--line:#2A2A2A;--green:#5FCF80;--warn:#E6BA47;--err:#E67052;--hbcu:#E67052;--lav:#9B87C2}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--black);color:var(--white);font-family:'Inter',-apple-system,sans-serif;font-size:14px;line-height:1.5;-webkit-font-smoothing:antialiased;overflow-x:hidden}
+button{cursor:pointer;font-family:inherit;border:none}
+a{color:var(--yellow);text-decoration:none}
+code{font-family:'JetBrains Mono',monospace;font-size:12px;background:var(--surface);padding:1px 5px;color:var(--yellow)}
+
+/* Layout: fixed sidebar + main */
+.app{display:grid;grid-template-columns:240px 1fr;min-height:100vh}
+@media(max-width:900px){.app{grid-template-columns:1fr}.sidebar{display:none}}
+
+/* Sidebar */
+.sidebar{background:var(--near-black);border-right:1px solid var(--line);padding:20px 0;position:sticky;top:0;height:100vh;overflow-y:auto}
+.brand{padding:0 22px 20px;border-bottom:1px solid var(--line);margin-bottom:16px;display:flex;align-items:center;gap:12px}
+.brand-mark{width:32px;height:32px;background:var(--yellow);position:relative}
+.brand-mark::before{content:'';position:absolute;inset:7px;background:var(--near-black)}
+.brand-label{font-family:'Anton',sans-serif;font-size:16px;color:var(--white);text-transform:uppercase;letter-spacing:.03em;line-height:1}
+.brand-label .accent{color:var(--yellow)}
+.brand-sub{font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--dimmer);letter-spacing:.16em;text-transform:uppercase;font-weight:700;display:block;margin-top:2px}
+
+.nav-group{padding:12px 0}
+.nav-group-label{font-family:'JetBrains Mono',monospace;font-size:9.5px;color:var(--dimmer);letter-spacing:.18em;text-transform:uppercase;font-weight:700;padding:0 22px 6px}
+.nav-item{display:flex;align-items:center;gap:10px;padding:8px 22px;color:var(--dim);cursor:pointer;font-size:13.5px;font-weight:500;border-left:3px solid transparent;transition:all .12s}
+.nav-item:hover{color:var(--white);background:var(--surface)}
+.nav-item.active{color:var(--yellow);background:var(--surface);border-left-color:var(--yellow)}
+.nav-item .badge{margin-left:auto;font-family:'JetBrains Mono',monospace;font-size:9.5px;color:var(--yellow);background:rgba(244,200,46,.12);padding:2px 6px;font-weight:700;letter-spacing:.05em}
+
+/* Main */
+main{padding:0}
+.topbar{background:var(--near-black);border-bottom:1px solid var(--line);padding:14px 24px;display:flex;justify-content:space-between;align-items:center;position:sticky;top:0;z-index:10;backdrop-filter:blur(10px)}
+.topbar h1{font-family:'Anton',sans-serif;font-size:22px;color:var(--white);text-transform:uppercase;letter-spacing:.005em;line-height:1}
+.topbar .actions{display:flex;gap:10px}
+.topbar button{padding:8px 14px;font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.14em;text-transform:uppercase;font-weight:700;background:var(--surface);color:var(--dim);border:1px solid var(--line);transition:all .12s}
+.topbar button:hover{color:var(--yellow);border-color:var(--yellow)}
+.topbar button.primary{background:var(--yellow);color:var(--black);border-color:var(--yellow)}
+
+.content{padding:24px}
+.tab-panel{display:none}
+.tab-panel.active{display:block}
+
+/* Stat cards */
+.stats{display:grid;grid-template-columns:1fr;gap:14px;margin-bottom:24px}
+@media(min-width:640px){.stats{grid-template-columns:repeat(2,1fr)}}
+@media(min-width:1024px){.stats{grid-template-columns:repeat(4,1fr)}}
+.stat{background:var(--surface);border-top:3px solid var(--yellow);padding:18px 20px}
+.stat .n{font-family:'Anton',sans-serif;font-size:32px;color:var(--yellow);line-height:1;letter-spacing:-.01em;margin-bottom:4px}
+.stat .l{font-family:'JetBrains Mono',monospace;font-size:9.5px;color:var(--dim);letter-spacing:.16em;text-transform:uppercase;font-weight:700}
+.stat .d{font-size:11px;color:var(--dimmer);margin-top:4px}
+.stat.green{border-top-color:var(--green)} .stat.green .n{color:var(--green)}
+.stat.warn{border-top-color:var(--warn)} .stat.warn .n{color:var(--warn)}
+.stat.err{border-top-color:var(--err)} .stat.err .n{color:var(--err)}
+.stat.dim{border-top-color:var(--dimmer)} .stat.dim .n{color:var(--white)}
+
+/* Data table */
+.card{background:var(--surface);border:1px solid var(--line);margin-bottom:20px}
+.card-head{padding:14px 18px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px}
+.card-head h3{font-family:'Anton',sans-serif;font-size:17px;color:var(--white);text-transform:uppercase;letter-spacing:.005em}
+.card-head .tools{display:flex;gap:8px;align-items:center}
+.card-head input,.card-head select{background:var(--near-black);border:1px solid var(--line);color:var(--white);padding:6px 10px;font-family:'Inter',sans-serif;font-size:12px;min-width:180px}
+.card-head input:focus,.card-head select:focus{outline:1.5px solid var(--yellow);outline-offset:-1px}
+.card-body{padding:0;overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{background:var(--near-black);padding:10px 14px;font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--yellow);letter-spacing:.14em;text-transform:uppercase;font-weight:700;text-align:left;border-bottom:2px solid var(--yellow);white-space:nowrap}
+th.right{text-align:right}
+td{padding:11px 14px;border-bottom:1px solid var(--line);color:var(--white);vertical-align:middle}
+td.right{text-align:right}
+td .sub{color:var(--dim);font-size:11.5px;margin-top:2px}
+td.money{font-family:'JetBrains Mono',monospace;color:var(--yellow);font-weight:600}
+tr:last-child td{border-bottom:none}
+tr:hover td{background:rgba(244,200,46,.03)}
+
+/* Kanban */
+.kanban{display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin:0}
+@media(max-width:1024px){.kanban{grid-template-columns:repeat(2,1fr)}}
+@media(max-width:640px){.kanban{grid-template-columns:1fr}}
+.k-col{background:var(--near-black);border:1px solid var(--line);border-radius:0;padding:14px 12px;min-height:220px}
+.k-col h4{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--yellow);letter-spacing:.16em;text-transform:uppercase;font-weight:700;margin-bottom:10px;display:flex;justify-content:space-between}
+.k-col h4 .count{color:var(--dim)}
+.k-card{background:var(--surface);border-left:3px solid var(--yellow);padding:10px 12px;margin-bottom:8px;font-size:12.5px}
+.k-card .name{color:var(--white);font-weight:600}
+.k-card .amount{font-family:'JetBrains Mono',monospace;color:var(--yellow);font-size:11.5px;margin-top:4px}
+
+/* Pill */
+.pill{display:inline-block;padding:2px 8px;font-family:'JetBrains Mono',monospace;font-size:9.5px;letter-spacing:.14em;text-transform:uppercase;font-weight:700}
+.pill.active{background:var(--green);color:var(--black)}
+.pill.pending{background:var(--warn);color:var(--black)}
+.pill.paid{background:var(--yellow);color:var(--black)}
+.pill.cold{background:var(--surface-2);color:var(--dim)}
+.pill.hot{background:var(--err);color:var(--white)}
+.pill.hbcu{background:var(--hbcu);color:var(--white)}
+.pill.dim{background:var(--surface-2);color:var(--dim)}
+
+/* Empty state */
+.empty{text-align:center;padding:40px 20px;color:var(--dimmer)}
+.empty .icon{font-family:'Anton',sans-serif;font-size:48px;color:var(--line);margin-bottom:12px}
+.empty .msg{font-size:14px;margin-bottom:6px;color:var(--dim)}
+.empty .sub{font-size:12px;color:var(--dimmer);font-family:'JetBrains Mono',monospace;letter-spacing:.1em;text-transform:uppercase}
+
+/* Loading */
+.loading{text-align:center;padding:32px;color:var(--dim);font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:.16em;text-transform:uppercase;font-weight:700}
+.loading::before{content:'◆';margin-right:8px;color:var(--yellow);animation:pulse 1.2s infinite}
+@keyframes pulse{0%,100%{opacity:.3}50%{opacity:1}}
+
+.two-col{display:grid;grid-template-columns:1fr;gap:20px}
+@media(min-width:900px){.two-col{grid-template-columns:2fr 1fr}}
+</style>
+</head>
+<body>
+<div class="app">
+
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="brand-mark"></div>
+      <div>
+        <div class="brand-label">Pylon <span class="accent">Admin</span></div>
+        <span class="brand-sub">Operator Console</span>
+      </div>
+    </div>
+
+    <div class="nav-group">
+      <div class="nav-group-label">◆ Overview</div>
+      <div class="nav-item active" data-tab="dashboard">◇ Dashboard</div>
+    </div>
+
+    <div class="nav-group">
+      <div class="nav-group-label">◆ People</div>
+      <div class="nav-item" data-tab="teams">▤ Teams</div>
+      <div class="nav-item" data-tab="athletes">▤ Athletes</div>
+      <div class="nav-item" data-tab="coordinators">▤ Coordinators</div>
+      <div class="nav-item" data-tab="alumni">▤ Alumni Network</div>
+    </div>
+
+    <div class="nav-group">
+      <div class="nav-group-label">◆ Events + Live</div>
+      <div class="nav-item" data-tab="events">▤ Events</div>
+      <div class="nav-item" data-tab="live" data-link="/admin/pylon-live-console.html">▤ Live Console <span class="badge">→</span></div>
+    </div>
+
+    <div class="nav-group">
+      <div class="nav-group-label">◆ Revenue</div>
+      <div class="nav-item" data-tab="packages">▤ Packages</div>
+      <div class="nav-item" data-tab="subscriptions">▤ Athlete Subs</div>
+      <div class="nav-item" data-tab="recruiting">▤ Recruiting</div>
+      <div class="nav-item" data-tab="ai-coach">▤ AI Coach</div>
+      <div class="nav-item" data-tab="highlight-reel">▤ Highlight Reel</div>
+      <div class="nav-item" data-tab="signature">▤ Signature Series</div>
+      <div class="nav-item" data-tab="data-feed">▤ Data Feed</div>
+      <div class="nav-item" data-tab="city-league">▤ City League</div>
+    </div>
+
+    <div class="nav-group">
+      <div class="nav-group-label">◆ Marketing</div>
+      <div class="nav-item" data-tab="sponsors">▤ Sponsors</div>
+      <div class="nav-item" data-tab="email">▤ Email Campaigns</div>
+      <div class="nav-item" data-tab="merch">▤ Merch Drops</div>
+      <div class="nav-item" data-tab="sequences">▤ Sales Sequences</div>
+    </div>
+  </aside>
+
+  <main>
+    <div class="topbar">
+      <h1 id="page-title">Dashboard</h1>
+      <div class="actions">
+        <button onclick="loadAll()">↻ Refresh</button>
+        <button class="primary" onclick="alert('Export coming next release · use direct SQL for now')">↓ Export</button>
+      </div>
+    </div>
+
+    <div class="content">
+
+      <!-- DASHBOARD -->
+      <div class="tab-panel active" id="tab-dashboard">
+        <div class="stats" id="dashboard-stats">
+          <div class="stat"><div class="n" id="s-teams">—</div><div class="l">Teams · Active Season</div></div>
+          <div class="stat green"><div class="n" id="s-toj-take">$—</div><div class="l">TOJ Take · YTD</div><div class="d" id="s-toj-take-d">Estimated · sync required</div></div>
+          <div class="stat"><div class="n" id="s-subs">—</div><div class="l">Active Athlete Subs</div></div>
+          <div class="stat warn"><div class="n" id="s-pending-deals">—</div><div class="l">Sponsor Deals · Pending</div></div>
+        </div>
+
+        <div class="stats">
+          <div class="stat dim"><div class="n" id="s-coordinators">—</div><div class="l">Regional Coordinators</div></div>
+          <div class="stat dim"><div class="n" id="s-ambassadors">—</div><div class="l">Ambassadors · Active</div></div>
+          <div class="stat dim"><div class="n" id="s-momentum">—</div><div class="l">Avg Momentum · 30d</div></div>
+          <div class="stat dim"><div class="n" id="s-scored">—</div><div class="l">Athletes Scored · 30d</div></div>
+        </div>
+
+        <div class="two-col">
+          <div class="card">
+            <div class="card-head"><h3>Package Orders by SKU</h3></div>
+            <div class="card-body">
+              <table>
+                <thead><tr><th>SKU</th><th class="right">Orders</th><th class="right">TOJ Take</th></tr></thead>
+                <tbody id="dashboard-orders"><tr><td colspan="3" class="loading">Loading</td></tr></tbody>
+              </table>
+            </div>
+          </div>
+          <div class="card">
+            <div class="card-head"><h3>Deals by Status</h3></div>
+            <div class="card-body">
+              <table>
+                <thead><tr><th>Status</th><th class="right">Count</th><th class="right">Commission</th></tr></thead>
+                <tbody id="dashboard-deals"><tr><td colspan="3" class="loading">Loading</td></tr></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- TEAMS -->
+      <div class="tab-panel" id="tab-teams">
+        <div class="card">
+          <div class="card-head">
+            <h3>Teams</h3>
+            <div class="tools">
+              <select id="teams-region"><option value="">All regions</option><option value="west">West</option><option value="south_central">South Central</option><option value="northeast">Northeast</option><option value="southeast">Southeast</option><option value="midwest">Midwest</option></select>
+              <input type="search" id="teams-search" placeholder="Search team name…">
+            </div>
+          </div>
+          <div class="card-body">
+            <table>
+              <thead><tr><th>Team</th><th>Region</th><th>Division</th><th>Head Coach</th><th class="right">Season</th></tr></thead>
+              <tbody id="teams-body"><tr><td colspan="5" class="loading">Loading</td></tr></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- ATHLETES -->
+      <div class="tab-panel" id="tab-athletes">
+        <div class="card">
+          <div class="card-head">
+            <h3>Athletes</h3>
+            <div class="tools">
+              <input type="search" id="athletes-search" placeholder="Search athlete name…">
+            </div>
+          </div>
+          <div class="card-body">
+            <table>
+              <thead><tr><th>Name</th><th>Position</th><th class="right">Class</th><th>Team</th><th class="right">Consent</th></tr></thead>
+              <tbody id="athletes-body"><tr><td colspan="5" class="loading">Loading</td></tr></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- COORDINATORS -->
+      <div class="tab-panel" id="tab-coordinators">
+        <div class="card">
+          <div class="card-head"><h3>Regional Coordinators</h3></div>
+          <div class="card-body">
+            <table>
+              <thead><tr><th>Name</th><th>Territory</th><th>Base City</th><th>Hire Quarter</th><th class="right">Status</th></tr></thead>
+              <tbody id="coordinators-body"><tr><td colspan="5" class="loading">Loading</td></tr></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- ALUMNI -->
+      <div class="tab-panel" id="tab-alumni">
+        <div class="card">
+          <div class="card-head"><h3>Alumni Network (SKU #19)</h3></div>
+          <div class="card-body">
+            <table>
+              <thead><tr><th>Name</th><th>Type</th><th>College · NFL Team</th><th>Membership</th><th class="right">Mentor</th></tr></thead>
+              <tbody id="alumni-body"><tr><td colspan="5" class="loading">Loading</td></tr></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- EVENTS -->
+      <div class="tab-panel" id="tab-events">
+        <div class="card">
+          <div class="card-head"><h3>Events</h3></div>
+          <div class="card-body">
+            <table>
+              <thead><tr><th>Event</th><th>Region</th><th>Start Date</th><th>Tier</th><th class="right">Type</th></tr></thead>
+              <tbody id="events-body"><tr><td colspan="5" class="loading">Loading</td></tr></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- PACKAGES -->
+      <div class="tab-panel" id="tab-packages">
+        <div class="card">
+          <div class="card-head"><h3>Package Orders</h3></div>
+          <div class="card-body">
+            <table>
+              <thead><tr><th>SKU</th><th>Order Date</th><th>Amount</th><th>TOJ Take</th><th class="right">Status</th></tr></thead>
+              <tbody id="packages-body"><tr><td colspan="5" class="loading">Loading</td></tr></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- SUBSCRIPTIONS -->
+      <div class="tab-panel" id="tab-subscriptions">
+        <div class="card">
+          <div class="card-head"><h3>Athlete Transcript Subscriptions (SKU #9)</h3></div>
+          <div class="card-body">
+            <table>
+              <thead><tr><th>Athlete</th><th>Tier</th><th>Amount</th><th>Next Billing</th><th class="right">Status</th></tr></thead>
+              <tbody id="subs-body"><tr><td colspan="5" class="loading">Loading</td></tr></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- RECRUITING -->
+      <div class="tab-panel" id="tab-recruiting">
+        <div class="card">
+          <div class="card-head"><h3>Recruiting Concierge (SKU #11)</h3></div>
+          <div class="card-body">
+            <table>
+              <thead><tr><th>Athlete</th><th>Tier</th><th>Target</th><th>Next Billing</th><th class="right">Status</th></tr></thead>
+              <tbody id="recruiting-body"><tr><td colspan="5" class="loading">Loading</td></tr></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- SPONSORS · Kanban -->
+      <div class="tab-panel" id="tab-sponsors">
+        <div class="card">
+          <div class="card-head"><h3>Sponsor Deals · Kanban</h3></div>
+          <div class="card-body" style="padding:16px">
+            <div class="kanban" id="sponsors-kanban">
+              <div class="k-col"><h4>Pending <span class="count">0</span></h4><div id="k-pending"></div></div>
+              <div class="k-col"><h4>Signed <span class="count">0</span></h4><div id="k-signed"></div></div>
+              <div class="k-col"><h4>Invoiced <span class="count">0</span></h4><div id="k-invoiced"></div></div>
+              <div class="k-col"><h4>Paid <span class="count">0</span></h4><div id="k-paid"></div></div>
+              <div class="k-col"><h4>Delivered <span class="count">0</span></h4><div id="k-delivered"></div></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Simpler stubs for the rest -->
+      <div class="tab-panel" id="tab-ai-coach">
+        <div class="card">
+          <div class="card-head"><h3>AI Coach Subscribers (SKU #15)</h3></div>
+          <div class="card-body">
+            <div class="empty"><div class="icon">▤</div><div class="msg">No AI Coach subscribers yet.</div><div class="sub">Ready to accept once Priority 2 checkout page ships.</div></div>
+          </div>
+        </div>
+      </div>
+      <div class="tab-panel" id="tab-highlight-reel">
+        <div class="card">
+          <div class="card-head"><h3>AI Highlight Reel Subscribers (SKU #18)</h3></div>
+          <div class="card-body">
+            <div class="empty"><div class="icon">▤</div><div class="msg">No Highlight Reel subscribers yet.</div><div class="sub">Checkout wiring is live · awaits first athlete sign-ups.</div></div>
+          </div>
+        </div>
+      </div>
+      <div class="tab-panel" id="tab-signature">
+        <div class="card">
+          <div class="card-head"><h3>Signature Series Episodes (SKU #16)</h3></div>
+          <div class="card-body">
+            <div class="empty"><div class="icon">▤</div><div class="msg">No episodes in production.</div><div class="sub">Add via POST /api/pylon/signature-series</div></div>
+          </div>
+        </div>
+      </div>
+      <div class="tab-panel" id="tab-data-feed">
+        <div class="card">
+          <div class="card-head"><h3>Data Feed Licensees (SKU #20)</h3></div>
+          <div class="card-body">
+            <div class="empty"><div class="icon">▤</div><div class="msg">No licensees signed yet.</div><div class="sub">Add via POST /api/pylon/data-feed/licensees</div></div>
+          </div>
+        </div>
+      </div>
+      <div class="tab-panel" id="tab-city-league">
+        <div class="card">
+          <div class="card-head"><h3>City League Hosts (SKU #7)</h3></div>
+          <div class="card-body">
+            <div class="empty"><div class="icon">▤</div><div class="msg">No City League hosts yet.</div><div class="sub">Add via POST /api/pylon/city-league-hosts</div></div>
+          </div>
+        </div>
+      </div>
+      <div class="tab-panel" id="tab-email">
+        <div class="card">
+          <div class="card-head"><h3>Sponsored Email Campaigns (SKU #4d)</h3></div>
+          <div class="card-body">
+            <div class="empty"><div class="icon">▤</div><div class="msg">No campaigns queued.</div><div class="sub">Add via POST /api/pylon/email-campaigns</div></div>
+          </div>
+        </div>
+      </div>
+      <div class="tab-panel" id="tab-merch">
+        <div class="card">
+          <div class="card-head"><h3>Merch Drops (SKUs #5a/5b)</h3></div>
+          <div class="card-body">
+            <div class="empty"><div class="icon">▤</div><div class="msg">No active drops.</div><div class="sub">Add via POST /api/pylon/merch-drops</div></div>
+          </div>
+        </div>
+      </div>
+      <div class="tab-panel" id="tab-sequences">
+        <div class="card">
+          <div class="card-head"><h3>Sales Sequences · 12 canonical templates</h3></div>
+          <div class="card-body">
+            <table>
+              <thead><tr><th>Key</th><th>Phase</th><th>Channel</th><th class="right">Active</th></tr></thead>
+              <tbody id="sequences-body"><tr><td colspan="4" class="loading">Loading</td></tr></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </main>
+
+</div>
+
+<script>
+// Tab switching
+document.querySelectorAll('.nav-item').forEach(item => {
+  item.addEventListener('click', () => {
+    if (item.dataset.link) { window.location.href = item.dataset.link; return; }
+    document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+    item.classList.add('active');
+    document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+    const target = document.getElementById(`tab-${item.dataset.tab}`);
+    if (target) target.classList.add('active');
+    document.getElementById('page-title').textContent = item.textContent.trim().replace(/^[◇▤]\s*/, '');
+    loadTab(item.dataset.tab);
+  });
+});
+
+// API wrapper
+async function api(path) {
+  try {
+    const res = await fetch(`/api/pylon${path}`, { headers: {'Accept': 'application/json'} });
+    if (!res.ok) return null;
+    return await res.json();
+  } catch (e) { return null; }
+}
+
+function money(cents) {
+  if (!cents && cents !== 0) return '—';
+  const n = cents / 100;
+  return '$' + n.toLocaleString('en-US', {maximumFractionDigits: 0});
+}
+
+function pill(status, klass) {
+  return `<span class="pill ${klass || status}">${status}</span>`;
+}
+
+// Loaders per tab
+async function loadDashboard() {
+  const data = await api('/dashboard');
+  if (!data) {
+    document.getElementById('dashboard-orders').innerHTML = '<tr><td colspan="3" class="empty">No API response · check auth</td></tr>';
+    return;
+  }
+
+  // Aggregates
+  let totalToj = 0, totalOrders = 0;
+  (data.orders_by_sku || []).forEach(r => { totalToj += parseInt(r.toj_take, 10) || 0; totalOrders += parseInt(r.n, 10) || 0; });
+  (data.subscriptions_by_tier || []).forEach(r => { totalToj += parseInt(r.toj_take, 10) || 0; });
+
+  document.getElementById('s-toj-take').textContent = money(totalToj);
+  document.getElementById('s-toj-take-d').textContent = `${totalOrders} orders · ${data.subscriptions_by_tier?.length || 0} sub tiers`;
+  document.getElementById('s-subs').textContent = (data.subscriptions_by_tier || []).reduce((a,r) => a + parseInt(r.n,10), 0) || 0;
+  document.getElementById('s-pending-deals').textContent = (data.deals_by_status || []).find(r => r.status === 'pending')?.n || 0;
+  document.getElementById('s-coordinators').textContent = (data.coordinators || []).length || 0;
+  document.getElementById('s-ambassadors').textContent = (data.ambassadors || []).reduce((a,r) => a + parseInt(r.n,10), 0) || 0;
+  document.getElementById('s-momentum').textContent = data.momentum?.avg_score ? Math.round(data.momentum.avg_score) : '—';
+  document.getElementById('s-scored').textContent = data.momentum?.scored || '—';
+
+  // Orders by SKU
+  const oBody = document.getElementById('dashboard-orders');
+  oBody.innerHTML = (data.orders_by_sku || []).map(r => `
+    <tr><td><code>${r.sku}</code></td><td class="right">${r.n}</td><td class="right money">${money(r.toj_take)}</td></tr>
+  `).join('') || '<tr><td colspan="3" class="empty">No orders yet</td></tr>';
+
+  // Deals by status
+  const dBody = document.getElementById('dashboard-deals');
+  dBody.innerHTML = (data.deals_by_status || []).map(r => `
+    <tr><td>${pill(r.status)}</td><td class="right">${r.n}</td><td class="right money">${money(r.commission)}</td></tr>
+  `).join('') || '<tr><td colspan="3" class="empty">No deals yet</td></tr>';
+
+  // Teams count (stub — separate call)
+  const teams = await api('/teams');
+  document.getElementById('s-teams').textContent = teams ? teams.length : '—';
+}
+
+async function loadTeams() {
+  const region = document.getElementById('teams-region').value;
+  const search = document.getElementById('teams-search').value;
+  const q = new URLSearchParams();
+  if (region) q.set('region', region);
+  if (search) q.set('search', search);
+  const data = await api(`/teams${q.toString() ? '?' + q : ''}`);
+  const body = document.getElementById('teams-body');
+  if (!data || !data.length) {
+    body.innerHTML = '<tr><td colspan="5" class="empty">No teams · add via POST /api/pylon/teams</td></tr>';
+    return;
+  }
+  body.innerHTML = data.map(t => `
+    <tr>
+      <td><b>${t.name}</b><div class="sub">${t.program || ''}</div></td>
+      <td>${t.region || '—'}</td>
+      <td>${t.division || '—'}</td>
+      <td>${t.coach_name || '—'}<div class="sub">${t.coach_email || ''}</div></td>
+      <td class="right">${t.active_season || '—'}</td>
+    </tr>
+  `).join('');
+}
+
+async function loadAthletes() {
+  const search = document.getElementById('athletes-search').value;
+  const q = search ? `?search=${encodeURIComponent(search)}` : '';
+  const data = await api(`/athletes${q}`);
+  const body = document.getElementById('athletes-body');
+  if (!data || !data.length) {
+    body.innerHTML = '<tr><td colspan="5" class="empty">No athletes yet</td></tr>';
+    return;
+  }
+  body.innerHTML = data.map(a => `
+    <tr>
+      <td><b>${a.canonical_name}</b>${a.represented ? ' <span class="pill hot">Repped</span>' : ''}</td>
+      <td>${a.position || '—'}</td>
+      <td class="right">${a.class_year || '—'}</td>
+      <td>${a.team_id ? '<code>' + a.team_id.slice(0,8) + '…</code>' : '—'}</td>
+      <td class="right">
+        ${a.consent_public_stats ? '<span class="pill active">Public</span>' : '<span class="pill dim">Held</span>'}
+      </td>
+    </tr>
+  `).join('');
+}
+
+async function loadCoordinators() {
+  const data = await api('/coordinators');
+  const body = document.getElementById('coordinators-body');
+  if (!data || !data.length) {
+    body.innerHTML = `<tr><td colspan="5" class="empty">No coordinators onboarded yet · V3.0 hire sequence begins Q1 2026<br><span class="sub">West → South Central → Northeast → Southeast → Midwest → Intl</span></td></tr>`;
+    return;
+  }
+  body.innerHTML = data.map(c => `
+    <tr>
+      <td><b>${c.full_name}</b><div class="sub">${c.email}</div></td>
+      <td>${c.territory}</td>
+      <td>${c.base_city || '—'}</td>
+      <td>${c.hire_quarter || '—'}</td>
+      <td class="right">${pill(c.onboarding_status, c.onboarding_status === 'active' ? 'active' : c.onboarding_status === 'onboarding' ? 'pending' : 'dim')}</td>
+    </tr>
+  `).join('');
+}
+
+async function loadAlumni() {
+  const data = await api('/alumni');
+  const body = document.getElementById('alumni-body');
+  if (!data || !data.length) {
+    body.innerHTML = '<tr><td colspan="5" class="empty">No alumni onboarded yet · 500+ NFL + 4K D1 target</td></tr>';
+    return;
+  }
+  body.innerHTML = data.map(a => `
+    <tr>
+      <td><b>${a.full_name}</b><div class="sub">${a.playing_position || ''}</div></td>
+      <td>${a.alumni_type}</td>
+      <td>${a.college_program || a.nfl_team || '—'}</td>
+      <td>${pill(a.membership_tier, 'dim')}</td>
+      <td class="right">${a.mentor_active ? '<span class="pill active">Mentor</span>' : '<span class="pill dim">—</span>'}</td>
+    </tr>
+  `).join('');
+}
+
+async function loadEvents() {
+  const data = await api('/events');
+  const body = document.getElementById('events-body');
+  if (!data || !data.length) {
+    body.innerHTML = '<tr><td colspan="5" class="empty">No events scheduled yet · add via POST /api/pylon/events</td></tr>';
+    return;
+  }
+  body.innerHTML = data.map(e => `
+    <tr>
+      <td><b>${e.name}</b><div class="sub">${e.city || ''}${e.state ? ', ' + e.state : ''}</div></td>
+      <td>${e.region || '—'}</td>
+      <td>${e.start_date}</td>
+      <td>${e.event_size_tier || '—'}</td>
+      <td class="right">${e.event_type}</td>
+    </tr>
+  `).join('');
+}
+
+async function loadPackages() {
+  // Just show recent orders — API endpoint not built for filter yet, use dashboard's rollup
+  const data = await api('/dashboard');
+  const body = document.getElementById('packages-body');
+  const orders = data?.orders_by_sku || [];
+  if (!orders.length) {
+    body.innerHTML = '<tr><td colspan="5" class="empty">No orders yet · public checkout pages are live</td></tr>';
+    return;
+  }
+  body.innerHTML = orders.map(r => `
+    <tr>
+      <td><code>SKU #${r.sku}</code></td>
+      <td>Aggregated</td>
+      <td class="money">${r.n} orders</td>
+      <td class="money">${money(r.toj_take)}</td>
+      <td class="right">${pill('active', 'active')}</td>
+    </tr>
+  `).join('');
+}
+
+async function loadSubscriptions() {
+  const data = await api('/dashboard');
+  const body = document.getElementById('subs-body');
+  const subs = data?.subscriptions_by_tier || [];
+  if (!subs.length) {
+    body.innerHTML = '<tr><td colspan="5" class="empty">No subscriptions yet · SKU #9 checkout is live</td></tr>';
+    return;
+  }
+  body.innerHTML = subs.map(s => `
+    <tr>
+      <td>Aggregated (${s.n} athletes)</td>
+      <td>${s.tier}</td>
+      <td class="money">${money(s.toj_take)}</td>
+      <td>—</td>
+      <td class="right">${pill('active', 'active')}</td>
+    </tr>
+  `).join('');
+}
+
+async function loadRecruiting() {
+  const body = document.getElementById('recruiting-body');
+  body.innerHTML = '<tr><td colspan="5" class="empty">Detailed recruiting view · rollup coming next release<br><span class="sub">Use direct query for now: SELECT * FROM pylon_recruiting_subscriptions WHERE status=\'active\'</span></td></tr>';
+}
+
+async function loadSponsors() {
+  const data = await api('/sponsors/deals');
+  const cols = {pending:[], signed:[], invoiced:[], paid:[], delivered:[]};
+  (data || []).forEach(d => { if (cols[d.status]) cols[d.status].push(d); });
+  Object.entries(cols).forEach(([status, list]) => {
+    const el = document.getElementById(`k-${status}`);
+    if (!el) return;
+    if (list.length === 0) {
+      el.innerHTML = '<div style="text-align:center;color:var(--dimmer);font-size:11px;padding:16px 8px">None</div>';
+    } else {
+      el.innerHTML = list.map(d => `
+        <div class="k-card">
+          <div class="name">${d.tier}</div>
+          <div class="amount">${money(d.amount_cents)}</div>
+        </div>
+      `).join('');
+    }
+    const countEl = el.closest('.k-col').querySelector('.count');
+    if (countEl) countEl.textContent = list.length;
+  });
+}
+
+async function loadSequences() {
+  const data = await api('/sequences');
+  const body = document.getElementById('sequences-body');
+  if (!data || !data.length) {
+    body.innerHTML = `<tr><td colspan="4" class="empty">No sequences seeded yet · apply db/seeds/pylon_sales_sequences.sql</td></tr>`;
+    return;
+  }
+  body.innerHTML = data.map(s => `
+    <tr>
+      <td><code>${s.sequence_key}</code></td>
+      <td>${s.phase}</td>
+      <td>${s.channel}</td>
+      <td class="right">${s.active ? '<span class="pill active">Active</span>' : '<span class="pill dim">Paused</span>'}</td>
+    </tr>
+  `).join('');
+}
+
+function loadTab(tab) {
+  const loaders = {
+    dashboard: loadDashboard,
+    teams: loadTeams,
+    athletes: loadAthletes,
+    coordinators: loadCoordinators,
+    alumni: loadAlumni,
+    events: loadEvents,
+    packages: loadPackages,
+    subscriptions: loadSubscriptions,
+    recruiting: loadRecruiting,
+    sponsors: loadSponsors,
+    sequences: loadSequences,
+  };
+  const fn = loaders[tab];
+  if (fn) fn();
+}
+
+function loadAll() {
+  loadDashboard();
+}
+
+// Wire filters
+document.getElementById('teams-region').addEventListener('change', loadTeams);
+document.getElementById('teams-search').addEventListener('input', debounce(loadTeams, 300));
+document.getElementById('athletes-search').addEventListener('input', debounce(loadAthletes, 300));
+
+function debounce(fn, ms) {
+  let t; return (...args) => { clearTimeout(t); t = setTimeout(() => fn(...args), ms); };
+}
+
+// Initial load
+loadAll();
+</script>
+
+</body>
+</html>

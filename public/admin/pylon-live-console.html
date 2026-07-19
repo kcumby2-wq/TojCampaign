@@ -1,0 +1,473 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Pylon Live Console · SKU #10</title>
+<meta name="theme-color" content="#0A0A0A">
+<meta name="robots" content="noindex,nofollow">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Anton&family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;600;700&display=swap" rel="stylesheet">
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect fill='%230A0A0A' width='100' height='100'/%3E%3Cpath fill='%23F4C82E' d='M20 20h60v60H20z'/%3E%3Cpath fill='%230A0A0A' d='M35 35h30v30H35z'/%3E%3C/svg%3E">
+<style>
+:root{--black:#0A0A0A;--near-black:#121212;--surface:#1A1A1A;--surface-2:#242424;--yellow:#F4C82E;--yellow-2:#FFE066;--white:#FFFFFF;--dim:rgba(255,255,255,.72);--dimmer:rgba(255,255,255,.5);--line:#2A2A2A;--green:#5FCF80;--err:#E67052}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--black);color:var(--white);font-family:'Inter',-apple-system,sans-serif;font-size:15px;line-height:1.4;-webkit-font-smoothing:antialiased;height:100vh;overflow:hidden}
+button{cursor:pointer;font-family:inherit;border:none}
+input,select{font-family:'Inter',sans-serif}
+
+/* HIGH-CONTRAST outdoor UI — operator is on phone/tablet in bright sun */
+.app{display:grid;grid-template-columns:280px 1fr 320px;grid-template-rows:56px 1fr 100px;height:100vh;grid-template-areas:"top top top" "left main right" "bottom bottom bottom"}
+@media(max-width:1100px){.app{grid-template-columns:1fr;grid-template-rows:56px auto auto auto 120px;grid-template-areas:"top" "left" "main" "right" "bottom"}}
+
+/* Top bar */
+.top{grid-area:top;background:var(--yellow);color:var(--black);display:flex;justify-content:space-between;align-items:center;padding:0 20px;font-family:'Anton',sans-serif;font-size:20px;text-transform:uppercase;letter-spacing:.02em;line-height:1;position:relative;overflow:hidden}
+.top .live-badge{background:var(--black);color:var(--yellow);padding:6px 12px;font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:.16em;text-transform:uppercase;font-weight:700;display:flex;align-items:center;gap:8px}
+.top .live-badge::before{content:'●';color:var(--err);animation:pulse 1.5s infinite;font-size:10px}
+@keyframes pulse{0%,100%{opacity:.3}50%{opacity:1}}
+.top .exit{background:var(--black);color:var(--yellow);padding:8px 14px;font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:.14em;text-transform:uppercase;font-weight:700;text-decoration:none;display:inline-block}
+
+/* Left rail: event + team + game state */
+.left{grid-area:left;background:var(--near-black);border-right:1px solid var(--line);padding:20px 18px;overflow-y:auto}
+.section-label{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--yellow);letter-spacing:.18em;text-transform:uppercase;font-weight:700;margin-bottom:8px;margin-top:20px}
+.section-label:first-of-type{margin-top:0}
+.left select,.left input{background:var(--black);border:1.5px solid var(--line);color:var(--white);padding:10px 12px;width:100%;font-size:14px;margin-bottom:8px}
+.left select:focus,.left input:focus{outline:none;border-color:var(--yellow)}
+.game-state{background:var(--surface);padding:14px 16px;border-left:3px solid var(--yellow);margin-top:6px}
+.game-state .score{font-family:'Anton',sans-serif;font-size:36px;color:var(--yellow);line-height:1;margin:8px 0 4px}
+.game-state .quarter{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--dim);letter-spacing:.14em;text-transform:uppercase;font-weight:700}
+.qtr-btns{display:grid;grid-template-columns:repeat(5,1fr);gap:4px;margin-top:8px}
+.qtr-btns button{background:var(--surface-2);color:var(--dim);padding:6px 4px;font-size:11px;font-family:'JetBrains Mono',monospace;font-weight:700;transition:all .1s}
+.qtr-btns button.active{background:var(--yellow);color:var(--black)}
+
+/* Center: stat entry */
+.main{grid-area:main;padding:20px 24px;overflow-y:auto;background:var(--black)}
+.stat-form{background:var(--near-black);border:1px solid var(--line);padding:20px 22px}
+.stat-form h2{font-family:'Anton',sans-serif;font-size:22px;text-transform:uppercase;letter-spacing:.005em;line-height:1;margin-bottom:16px}
+.field-row{margin-bottom:14px}
+.field-row label{display:block;font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--yellow);letter-spacing:.16em;text-transform:uppercase;font-weight:700;margin-bottom:6px}
+.field-row input,.field-row select{background:var(--black);border:1.5px solid var(--line);color:var(--white);padding:12px 14px;width:100%;font-size:15px;font-weight:500}
+.field-row input:focus,.field-row select:focus{outline:none;border-color:var(--yellow)}
+
+/* Big-play chips */
+.big-play-strip{margin-top:16px}
+.chip-row{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:8px}
+@media(max-width:640px){.chip-row{grid-template-columns:repeat(2,1fr)}}
+.chip{background:var(--surface);border:1.5px solid var(--line);color:var(--white);padding:14px 12px;font-family:'Anton',sans-serif;font-size:15px;text-transform:uppercase;letter-spacing:.005em;line-height:1;transition:all .1s;text-align:center}
+.chip:hover{border-color:var(--yellow);color:var(--yellow)}
+.chip.selected{background:var(--yellow);color:var(--black);border-color:var(--yellow)}
+
+/* Post types */
+.post-type-strip{margin-top:20px}
+.post-type-strip .chip-row{grid-template-columns:repeat(2,1fr)}
+@media(max-width:640px){.post-type-strip .chip-row{grid-template-columns:1fr}}
+
+/* Right rail: preview */
+.right{grid-area:right;background:var(--near-black);border-left:1px solid var(--line);padding:20px 18px;overflow-y:auto}
+.preview-card{aspect-ratio:1080/1350;background:linear-gradient(135deg,var(--surface),var(--surface-2));border:2px solid var(--yellow);position:relative;overflow:hidden;display:flex;flex-direction:column;padding:20px}
+.preview-card .p-brand{font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--yellow);letter-spacing:.2em;font-weight:700}
+.preview-card .p-athlete{font-family:'Anton',sans-serif;font-size:32px;color:var(--white);text-transform:uppercase;letter-spacing:-.005em;line-height:.95;margin-top:auto}
+.preview-card .p-stat{font-family:'Anton',sans-serif;font-size:64px;color:var(--yellow);line-height:1;letter-spacing:-.02em;margin:8px 0}
+.preview-card .p-context{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--dim);letter-spacing:.14em;text-transform:uppercase;font-weight:700}
+.preview-card .p-sponsor{font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--yellow);letter-spacing:.16em;font-weight:700;margin-top:auto;padding-top:8px;border-top:1px solid rgba(244,200,46,.3)}
+.preview-empty{aspect-ratio:1080/1350;background:var(--surface);border:1px dashed var(--line);display:flex;align-items:center;justify-content:center;color:var(--dimmer);font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:.16em;text-transform:uppercase;font-weight:700}
+
+.sponsor-tag{margin-top:16px}
+.sponsor-tag select{background:var(--black);border:1.5px solid var(--line);color:var(--white);padding:10px 12px;width:100%;font-size:13px}
+
+/* Bottom: publish tray */
+.bottom{grid-area:bottom;background:var(--near-black);border-top:1px solid var(--line);padding:14px 24px;display:flex;justify-content:space-between;align-items:center;gap:20px;flex-wrap:wrap}
+.channels{display:flex;gap:10px;flex-wrap:wrap}
+.channel{display:flex;align-items:center;gap:6px;background:var(--surface);padding:8px 14px;border:1.5px solid var(--line);cursor:pointer;transition:all .1s}
+.channel:hover{border-color:var(--yellow)}
+.channel.checked{background:var(--yellow);color:var(--black);border-color:var(--yellow)}
+.channel input{display:none}
+.channel label{font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:.14em;text-transform:uppercase;font-weight:700;cursor:pointer;color:inherit}
+.publish-btn{background:var(--yellow);color:var(--black);padding:16px 32px;font-family:'Anton',sans-serif;font-size:18px;text-transform:uppercase;letter-spacing:.02em;line-height:1;transition:transform .1s;box-shadow:0 4px 12px rgba(244,200,46,.4)}
+.publish-btn:hover{transform:translateY(-2px)}
+.publish-btn:disabled{background:var(--surface-2);color:var(--dimmer);box-shadow:none;cursor:not-allowed}
+.publish-btn.publishing{background:var(--green);color:var(--black)}
+
+/* Toast */
+.toast{position:fixed;bottom:120px;right:24px;background:var(--green);color:var(--black);padding:14px 22px;font-family:'Anton',sans-serif;font-size:16px;text-transform:uppercase;letter-spacing:.005em;line-height:1;box-shadow:0 4px 20px rgba(0,0,0,.5);transform:translateX(400px);transition:transform .3s;z-index:1000}
+.toast.show{transform:translateX(0)}
+.toast.err{background:var(--err)}
+
+/* Recent posts list */
+.recent{margin-top:20px}
+.recent-post{background:var(--surface);padding:10px 14px;border-left:3px solid var(--green);margin-bottom:6px;font-size:12px;color:var(--dim);display:flex;justify-content:space-between;align-items:center;gap:8px}
+.recent-post b{color:var(--white)}
+.recent-post .when{color:var(--dimmer);font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.1em}
+</style>
+</head>
+<body>
+<div class="app">
+
+  <!-- TOP -->
+  <div class="top">
+    <div style="display:flex;align-items:center;gap:14px">
+      <span class="live-badge">Live</span>
+      <span>Pylon Console</span>
+    </div>
+    <a href="/admin/pylon.html" class="exit">← Admin</a>
+  </div>
+
+  <!-- LEFT: event + team + game state -->
+  <aside class="left">
+    <div class="section-label">◆ Event</div>
+    <select id="event-select">
+      <option value="">Select event…</option>
+    </select>
+
+    <div class="section-label">◆ Team</div>
+    <select id="team-select" disabled>
+      <option value="">Pick event first…</option>
+    </select>
+
+    <div class="section-label">◆ Game State</div>
+    <div class="game-state">
+      <div class="quarter" id="qtr-label">Quarter · —</div>
+      <div class="score" id="score-display">0–0</div>
+      <div style="display:flex;gap:8px;margin-top:8px">
+        <input type="number" id="home-score" placeholder="Home" style="text-align:center" min="0" value="0">
+        <input type="number" id="away-score" placeholder="Away" style="text-align:center" min="0" value="0">
+      </div>
+      <div class="qtr-btns">
+        <button data-qtr="1">Q1</button>
+        <button data-qtr="2">Q2</button>
+        <button data-qtr="3">Q3</button>
+        <button data-qtr="4">Q4</button>
+        <button data-qtr="F">F</button>
+      </div>
+    </div>
+
+    <div class="section-label">◆ Recent Posts</div>
+    <div class="recent" id="recent-posts">
+      <div style="color:var(--dimmer);font-size:11px;text-align:center;padding:12px;font-family:'JetBrains Mono',monospace;letter-spacing:.14em">No posts yet</div>
+    </div>
+  </aside>
+
+  <!-- MAIN: stat entry -->
+  <main class="main">
+    <div class="stat-form">
+      <h2>Fire a Card</h2>
+
+      <div class="field-row">
+        <label>Athlete</label>
+        <select id="athlete-select" disabled>
+          <option value="">Pick team first…</option>
+        </select>
+      </div>
+
+      <div class="post-type-strip">
+        <label style="display:block;font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--yellow);letter-spacing:.16em;text-transform:uppercase;font-weight:700;margin-bottom:6px">◆ Post Type</label>
+        <div class="chip-row">
+          <button class="chip post-type" data-type="stat_card">Stat Card</button>
+          <button class="chip post-type" data-type="play_of_the_day">Play of the Day</button>
+          <button class="chip post-type" data-type="athlete_of_the_half">Athlete of the Half</button>
+          <button class="chip post-type" data-type="ranking_drop">Ranking Drop</button>
+        </div>
+      </div>
+
+      <div class="field-row" style="margin-top:20px">
+        <label>Stat Type</label>
+        <select id="stat-type">
+          <option>Passing Yards</option>
+          <option>Rushing Yards</option>
+          <option>Receiving Yards</option>
+          <option>Touchdowns</option>
+          <option>Receptions</option>
+          <option>Tackles</option>
+          <option>Sacks</option>
+          <option>Interceptions</option>
+          <option>All-purpose Yards</option>
+        </select>
+      </div>
+
+      <div class="field-row">
+        <label>Stat Value</label>
+        <input type="number" id="stat-value" placeholder="e.g. 157" min="0">
+      </div>
+
+      <div class="big-play-strip">
+        <label style="display:block;font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--yellow);letter-spacing:.16em;text-transform:uppercase;font-weight:700;margin-bottom:6px">◆ Big Play Quick-fire</label>
+        <div class="chip-row">
+          <button class="chip big-play" data-value="6" data-stat="Touchdowns">TD</button>
+          <button class="chip big-play" data-value="100" data-stat="Rushing Yards">100 YD RUN</button>
+          <button class="chip big-play" data-value="3" data-stat="Sacks">3 SACKS</button>
+          <button class="chip big-play" data-value="2" data-stat="Interceptions">2 INT</button>
+          <button class="chip big-play" data-value="150" data-stat="All-purpose Yards">150 APY</button>
+          <button class="chip big-play" data-value="1" data-stat="Touchdowns">HERO PLAY</button>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <!-- RIGHT: preview -->
+  <aside class="right">
+    <div class="section-label">◆ Preview · IG 1080×1350</div>
+    <div id="preview-container">
+      <div class="preview-empty">Pick athlete + stat</div>
+    </div>
+
+    <div class="sponsor-tag">
+      <div class="section-label">◆ Sponsor Tag</div>
+      <select id="sponsor-select">
+        <option value="">No sponsor</option>
+      </select>
+    </div>
+  </aside>
+
+  <!-- BOTTOM: publish tray -->
+  <div class="bottom">
+    <div class="channels">
+      <div class="channel checked" data-channel="team_ig"><input type="checkbox" checked><label>Team IG</label></div>
+      <div class="channel checked" data-channel="pylon_ig"><input type="checkbox" checked><label>Pylon IG</label></div>
+      <div class="channel" data-channel="twitter"><input type="checkbox"><label>Twitter</label></div>
+      <div class="channel" data-channel="threads"><input type="checkbox"><label>Threads</label></div>
+      <div class="channel" data-channel="tiktok"><input type="checkbox"><label>TikTok</label></div>
+    </div>
+    <button class="publish-btn" id="publish-btn" disabled>Publish</button>
+  </div>
+
+</div>
+
+<div class="toast" id="toast">Card published ✓</div>
+
+<script>
+const state = {
+  event: null,
+  team: null,
+  athlete: null,
+  postType: null,
+  currentPostId: null,
+};
+
+async function api(path, opts = {}) {
+  try {
+    const res = await fetch(`/api/pylon${path}`, {
+      headers: {'Accept': 'application/json', 'Content-Type': 'application/json'},
+      ...opts,
+    });
+    if (!res.ok) return null;
+    return await res.json();
+  } catch (e) { return null; }
+}
+
+// Load events
+async function loadEvents() {
+  const events = await api('/events');
+  const sel = document.getElementById('event-select');
+  if (!events || !events.length) {
+    sel.innerHTML = '<option value="">No events found · add via admin</option>';
+    return;
+  }
+  sel.innerHTML = '<option value="">Select event…</option>' + events.map(e =>
+    `<option value="${e.id}" data-name="${e.name}">${e.name} · ${e.start_date}</option>`
+  ).join('');
+}
+
+// Load teams (for event)
+async function loadTeams() {
+  const teams = await api('/teams');
+  const sel = document.getElementById('team-select');
+  if (!teams || !teams.length) {
+    sel.innerHTML = '<option value="">No teams</option>';
+    return;
+  }
+  sel.innerHTML = '<option value="">Select team…</option>' + teams.map(t =>
+    `<option value="${t.id}" data-name="${t.name}">${t.name}</option>`
+  ).join('');
+  sel.disabled = false;
+}
+
+// Load athletes (for team)
+async function loadAthletes(teamId) {
+  const athletes = await api(`/athletes?team_id=${teamId}`);
+  const sel = document.getElementById('athlete-select');
+  if (!athletes || !athletes.length) {
+    sel.innerHTML = '<option value="">No athletes on team</option>';
+    sel.disabled = true;
+    return;
+  }
+  sel.innerHTML = '<option value="">Select athlete…</option>' + athletes.map(a =>
+    `<option value="${a.id}" data-name="${a.canonical_name}" data-position="${a.position || ''}">${a.canonical_name}${a.position ? ' · ' + a.position : ''}</option>`
+  ).join('');
+  sel.disabled = false;
+}
+
+// Wire event → team → athlete cascade
+document.getElementById('event-select').addEventListener('change', (e) => {
+  const opt = e.target.selectedOptions[0];
+  state.event = opt.value ? {id: opt.value, name: opt.dataset.name} : null;
+  document.getElementById('team-select').disabled = !state.event;
+  if (state.event) loadTeams();
+  updatePreview();
+});
+
+document.getElementById('team-select').addEventListener('change', (e) => {
+  const opt = e.target.selectedOptions[0];
+  state.team = opt.value ? {id: opt.value, name: opt.dataset.name} : null;
+  document.getElementById('athlete-select').disabled = !state.team;
+  if (state.team) loadAthletes(state.team.id);
+  updatePreview();
+});
+
+document.getElementById('athlete-select').addEventListener('change', (e) => {
+  const opt = e.target.selectedOptions[0];
+  state.athlete = opt.value ? {id: opt.value, name: opt.dataset.name, position: opt.dataset.position} : null;
+  updatePreview();
+});
+
+// Post type chips
+document.querySelectorAll('.chip.post-type').forEach(chip => {
+  chip.addEventListener('click', () => {
+    document.querySelectorAll('.chip.post-type').forEach(c => c.classList.remove('selected'));
+    chip.classList.add('selected');
+    state.postType = chip.dataset.type;
+    updatePreview();
+  });
+});
+
+// Big-play quick-fire
+document.querySelectorAll('.chip.big-play').forEach(chip => {
+  chip.addEventListener('click', () => {
+    document.getElementById('stat-type').value = chip.dataset.stat;
+    document.getElementById('stat-value').value = chip.dataset.value;
+    updatePreview();
+  });
+});
+
+// Live inputs
+document.getElementById('stat-type').addEventListener('change', updatePreview);
+document.getElementById('stat-value').addEventListener('input', updatePreview);
+document.getElementById('sponsor-select').addEventListener('change', updatePreview);
+
+// Score updater
+function updateScore() {
+  const h = document.getElementById('home-score').value || 0;
+  const a = document.getElementById('away-score').value || 0;
+  document.getElementById('score-display').textContent = `${h}–${a}`;
+}
+document.getElementById('home-score').addEventListener('input', updateScore);
+document.getElementById('away-score').addEventListener('input', updateScore);
+document.querySelectorAll('.qtr-btns button').forEach(b => {
+  b.addEventListener('click', () => {
+    document.querySelectorAll('.qtr-btns button').forEach(x => x.classList.remove('active'));
+    b.classList.add('active');
+    document.getElementById('qtr-label').textContent = `Quarter · ${b.dataset.qtr}`;
+  });
+});
+
+// Channels
+document.querySelectorAll('.channel').forEach(ch => {
+  ch.addEventListener('click', () => {
+    ch.classList.toggle('checked');
+    const input = ch.querySelector('input');
+    input.checked = !input.checked;
+  });
+});
+
+// Preview update
+function updatePreview() {
+  const container = document.getElementById('preview-container');
+  const canPreview = state.athlete && document.getElementById('stat-value').value;
+  if (!canPreview) {
+    container.innerHTML = '<div class="preview-empty">Pick athlete + stat</div>';
+    document.getElementById('publish-btn').disabled = true;
+    return;
+  }
+  const statType = document.getElementById('stat-type').value;
+  const statValue = document.getElementById('stat-value').value;
+  const sponsor = document.getElementById('sponsor-select').value;
+
+  container.innerHTML = `
+    <div class="preview-card">
+      <div class="p-brand">◆ Pylon${state.event ? ' · ' + state.event.name : ''}</div>
+      <div style="flex-grow:1"></div>
+      <div class="p-athlete">${state.athlete.name}</div>
+      <div class="p-stat">${statValue}</div>
+      <div class="p-context">${statType.toUpperCase()}${state.athlete.position ? ' · ' + state.athlete.position : ''}${state.team ? ' · ' + state.team.name : ''}</div>
+      ${sponsor ? `<div class="p-sponsor">Presented by ${sponsor}</div>` : '<div style="height:20px"></div>'}
+    </div>
+  `;
+  document.getElementById('publish-btn').disabled = false;
+}
+
+// Publish
+document.getElementById('publish-btn').addEventListener('click', async () => {
+  const btn = document.getElementById('publish-btn');
+  const channels = Array.from(document.querySelectorAll('.channel.checked')).map(c => c.dataset.channel);
+  if (!channels.length) {
+    showToast('Pick at least one channel', true);
+    return;
+  }
+  btn.disabled = true;
+  btn.classList.add('publishing');
+  btn.textContent = 'Publishing…';
+  try {
+    const post = await api('/live-posts', {
+      method: 'POST',
+      body: JSON.stringify({
+        event_id: state.event.id,
+        team_id: state.team.id,
+        athlete_id: state.athlete.id,
+        post_type: state.postType || 'stat_card',
+        sponsor_tag: document.getElementById('sponsor-select').value || null,
+        operator: 'live-console',
+        metadata: {
+          stat_type: document.getElementById('stat-type').value,
+          stat_value: document.getElementById('stat-value').value,
+          home_score: document.getElementById('home-score').value,
+          away_score: document.getElementById('away-score').value,
+        },
+      }),
+    });
+    if (post) {
+      await api(`/live-posts/${post.id}/publish`, {
+        method: 'POST',
+        body: JSON.stringify({channels}),
+      });
+      showToast(`Published to ${channels.length} channel${channels.length > 1 ? 's' : ''} ✓`);
+      addToRecent(post, state.athlete.name);
+      // Clear stat value for next post
+      document.getElementById('stat-value').value = '';
+      updatePreview();
+    } else {
+      showToast('Publish failed · check API', true);
+    }
+  } catch (err) {
+    showToast('Error · try again', true);
+  } finally {
+    btn.classList.remove('publishing');
+    btn.textContent = 'Publish';
+  }
+});
+
+function addToRecent(post, athleteName) {
+  const container = document.getElementById('recent-posts');
+  const empty = container.querySelector('div[style*="No posts"]');
+  if (empty) empty.remove();
+  const div = document.createElement('div');
+  div.className = 'recent-post';
+  div.innerHTML = `<span><b>${athleteName}</b> · ${post.post_type}</span><span class="when">${new Date().toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'})}</span>`;
+  container.insertBefore(div, container.firstChild);
+  // Keep only last 8
+  while (container.children.length > 8) container.removeChild(container.lastChild);
+}
+
+function showToast(msg, isError) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.toggle('err', !!isError);
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2500);
+}
+
+// Init
+loadEvents();
+</script>
+
+</body>
+</html>
