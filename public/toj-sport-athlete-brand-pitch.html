@@ -38,6 +38,17 @@
     .hero h1 em { font-style: italic; font-weight: 500; color: var(--accent-2); }
     .hero .kicker { font-family: 'Inter', monospace; font-size: 0.72rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--accent-2); font-weight: 700; margin-bottom: 0.9rem; display: block; }
     .hero .line { font-family: 'Fraunces', serif; font-size: 1.15rem; font-style: italic; color: var(--ink-soft); margin-top: 0.75rem; }
+    .hero .what-we-are { font-size: 0.92rem; color: var(--ink-soft); margin-top: 1.1rem; padding-top: 1.1rem; border-top: 1px solid var(--rule); }
+    .hero .what-we-are strong { color: var(--ink); }
+
+    .room { background: var(--parchment-2); border-left: 4px solid var(--accent-2); border-radius: 8px; padding: 1.75rem 2rem; margin-bottom: 2.75rem; }
+    .room .section-num { color: var(--accent-2); }
+    .room p { color: var(--ink-soft); margin-bottom: 1rem; font-size: 0.95rem; }
+    .room p:last-child { margin-bottom: 0; }
+    .room-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 0.75rem; margin: 1.25rem 0; }
+    .rstat { background: #fff; padding: 0.85rem 1rem; border-radius: 6px; border-top: 3px solid var(--accent); text-align: center; }
+    .rstat .n { display: block; font-family: 'Fraunces', serif; font-size: 1.5rem; font-weight: 700; color: var(--ink); line-height: 1.1; }
+    .rstat .l { display: block; font-family: 'Inter', monospace; font-size: 0.65rem; color: var(--ink-mute); letter-spacing: 0.06em; text-transform: uppercase; margin-top: 0.3rem; }
 
     .essence { background: var(--accent); color: var(--parchment); padding: 2rem 2rem 2.25rem; border-radius: 10px; margin-bottom: 2.75rem; }
     .essence .section-num { color: var(--accent-2); }
@@ -109,6 +120,21 @@
       <span class="kicker">TOJ Sport &middot; Department Vision &amp; Strategy</span>
       <h1>Athlete Brand <em>&amp; NIL.</em></h1>
       <p class="line">"Built from who they are. Sold on who they become."</p>
+      <p class="what-we-are"><strong>What we are.</strong> A creative agency built inside an asset management group. Brand, content, and NIL on one side. Camps, LLCs, non-profits, and the legal groundwork under an athlete's business on the other. One room, one phone call.</p>
+    </div>
+
+    <div class="room">
+      <span class="section-num">THE ROOM</span>
+      <h2>Two transfers. One locker room. One standard.</h2>
+      <p>Kyron Cumby played at Illinois. Max Patterson played at Rutgers. Both transferred to Delaware — and that's where they connected. Not in a marketing seminar. On a roster, inside the parts of college football that never make a highlight reel: the meeting rooms, the compliance forms, the conversation with a coach deciding whether to trust you with the ball.</p>
+      <p>Kyron built Trail of Joy around one line — <em>the athlete is not the product, they are the subject</em> — the reason every deliverable this department ships gets built the way it does. Max built 0routez the same way: a route-running specialty brand carrying a 300,000-person audience, because he learned the same lesson Kyron did. The athletes who get protected are the ones somebody with real football experience is actually watching.</p>
+      <div class="room-stats">
+        <div class="rstat"><span class="n">300K</span><span class="l">0routez audience</span></div>
+        <div class="rstat"><span class="n">2</span><span class="l">Former college football players</span></div>
+        <div class="rstat"><span class="n">1</span><span class="l">Evaluation platform &middot; Subject Report</span></div>
+        <div class="rstat"><span class="n">1</span><span class="l">Production company &middot; Subject Media</span></div>
+      </div>
+      <p>This isn't two people who took a course on athlete marketing. This is two former college football players who transferred into the same locker room, built the protection they didn't have, and are now the room every athlete on this network walks into.</p>
     </div>
 
     <div class="essence">
@@ -163,7 +189,7 @@
         <div class="track logic">
           <span class="num">Logic</span>
           <h4>The infrastructure case</h4>
-          <p>Evaluation, production, and distribution already run under one roof. Verifiable, not promised — what gets a deal through approval.</p>
+          <p>Evaluation (Subject Report), production (Subject Media), and distribution — 0routez's 300K audience plus Kyron and Max's own channels — already run under one roof. Verifiable, not promised.</p>
         </div>
         <div class="track">
           <span class="num">01</span>
@@ -241,8 +267,9 @@
 
     <section class="tr-section">
       <span class="section-num">08</span>
-      <h2>Resources &amp; Support</h2>
-      <p>Film study reviewed with the same rigor Subject Report applies to any evaluation. Off-season training and rehab, coordinated with the athlete's own trainer, not run in parallel to it. Additional management support — contracts, scheduling, family communication. Cross-athlete, cross-sport collaboration inside the TOJ federation.</p>
+      <h2>Resources &amp; Support — the asset-management layer</h2>
+      <p>A creative agency posts. An asset management group builds the business underneath what gets posted.</p>
+      <p>Film study reviewed with the same rigor Subject Report applies to any evaluation. Off-season training and rehab, coordinated with the athlete's own trainer. Additional management support — contracts, scheduling, family communication. <strong>Camps</strong> — the athlete's own camp, built and run as a business. <strong>LLC formation</strong> and <strong>non-profit setup</strong>, coordinated with counsel. <strong>Legal-matter coordination</strong> — contracts, compliance, and NIL paperwork routed to counsel before anything gets signed; draft-only until a lawyer signs off. Cross-athlete, cross-sport collaboration inside the TOJ federation.</p>
     </section>
 
     <section class="tr-section">
@@ -253,15 +280,15 @@
         <tr><th>Tier</th><th>Covers</th><th>Positioning</th></tr>
         <tr><td>Entry</td><td>Visual &amp; verbal identity + digital strategy foundation</td><td>The on-ramp. Proves the system before the athlete commits further.</td></tr>
         <tr><td>Core</td><td>Entry + media &amp; PR strategy + metrics review</td><td>The standard build. Most signed athletes live here.</td></tr>
-        <tr class="premium"><td>Premium</td><td>Everything on everything — every section in this document, one engagement</td><td>The full department, in one call. The value is the whole system running together.</td></tr>
+        <tr class="premium"><td>Premium</td><td>Everything on everything — brand, NIL, and the full asset-management layer: camps, LLC formation, non-profit setup, legal-matter coordination</td><td>The full department, in one call. The brand and the business behind it, handled by the same room.</td></tr>
       </table>
       <p>The Premium tier is the one this department leads with. Selling pieces invites a discount conversation. Selling the whole system sells the outcome.</p>
     </section>
 
     <div class="doc-footer">
-      <p class="close-line">Essence first. Foundation second. Everything after that is the system doing what it was built to do.</p>
+      <p class="close-line">Two players who transferred into the same locker room built the room every athlete on this network walks into.</p>
       <p>Score the athlete's Foundation. Sell the whole system, not the pieces. Show the receipt before the adjective.</p>
-      <div class="legal">&copy; 2026 Trail of Joy Player Management Group, LLC. TOJ Sport is a department of TOJ Campaign. This document is a strategic instrument, not a representation or warranty of results. Pricing referenced is illustrative and locks per trainer and vertical.</div>
+      <div class="legal">&copy; 2026 Trail of Joy Player Management Group, LLC. TOJ Sport is a department of TOJ Campaign. This document is a strategic instrument, not a representation or warranty of results. Pricing referenced is illustrative and locks per trainer and vertical. Legal-matter coordination is not a substitute for licensed legal counsel.</div>
     </div>
 
   </div>

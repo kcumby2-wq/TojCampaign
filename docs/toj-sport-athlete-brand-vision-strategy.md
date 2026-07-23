@@ -6,6 +6,20 @@
 
 > "Built from who they are. Sold on who they become."
 
+**What we are.** A creative agency built inside an asset management group. Brand, content, and NIL on one side. Camps, LLCs, non-profits, and the legal groundwork under an athlete's business on the other. One room, one phone call — not a content shop that hands off the business side to somebody else.
+
+---
+
+## The Room
+
+Kyron Cumby played at Illinois. Max Patterson played at Rutgers. Both transferred to Delaware — and that's where they connected. Not in a marketing seminar. On a roster, inside the parts of college football that never make a highlight reel: the meeting rooms, the compliance forms, the conversation with a coach deciding whether to trust you with the ball. That's the room this department comes out of.
+
+Kyron built Trail of Joy around one line — *the athlete is not the product, they are the subject* — and it's the reason every deliverable this department ships gets built the way it does. Max built 0routez the same way: a route-running specialty brand carrying a 300,000-person audience, because he learned the same lesson Kyron did. The athletes who get protected are the ones somebody with real football experience is actually watching.
+
+Between the two of them, the infrastructure already exists before this pitch is ever sent: an evaluation platform (Subject Report), a production company (Subject Media), a trainer federation running Kyron's methodology across DFW, the Northeast, and Europe, and an audience network — 0routez, Subject Media, and both of their own names — that already reaches the people this department needs to reach before a single new post goes up.
+
+This isn't two people who took a course on athlete marketing. This is two former college football players who transferred into the same locker room, built the protection they didn't have, and are now the room every athlete on this network walks into.
+
 ---
 
 ## 00 · Essence — the lens everything runs through
@@ -76,7 +90,7 @@ Alignment with the athlete's actual brand pillars first, dollar amount second. A
 
 Every brand pitch is custom — built to that company's voice, goals, and market position, backed by the athlete's actual engagement data and the story built in Sections 01–04. But the pitch itself is not a spec sheet. It's an argument, and it runs on two tracks at once.
 
-**The logic pitch (one track, always present).** The infrastructure case: TOJ Sport already runs evaluation (Subject Report), production (Subject Media), and distribution (the trainer's own platform and audience) under one roof. That's not a promise — it's an operating fact a brand partner can verify before they sign anything. The logic pitch is what gets a deal through a compliance or marketing department's approval process.
+**The logic pitch (one track, always present).** The infrastructure case: TOJ Sport already runs evaluation (Subject Report), production (Subject Media), and distribution — the trainer's own platform, 0routez's 300,000-person audience, and Kyron and Max's own channels — under one roof. That's not a promise — it's an operating fact a brand partner can verify before they sign anything. The logic pitch is what gets a deal through a compliance or marketing department's approval process.
 
 **The emotional case (five tracks, built into the story, never labeled as such in front of the client).** A partnership isn't decided on a spreadsheet — it's decided on how the decision-maker feels reading the deck, and then justified with the spreadsheet after. Five things the pitch has to make a reader feel, in every deck this department produces:
 
@@ -124,11 +138,17 @@ A tiered model — legacy brands, emerging brands, niche or local brands — bui
 
 ---
 
-## 08 · Resources & Support
+## 08 · Resources & Support — the asset-management layer
+
+This is what separates this department from a content shop. A creative agency posts. An asset management group builds the business underneath what gets posted.
 
 - **Film study** — access to the athlete's own game footage, reviewed with the same rigor Subject Report applies to any evaluation.
 - **Off-season training and rehab** — coordinated with the athlete's trainer, not run in parallel to it.
-- **Additional management support** — the layer above content: contracts, scheduling, family communication.
+- **Additional management support** — contracts, scheduling, family communication.
+- **Camps** — the athlete's own camp built and operated as a business, not a one-off appearance.
+- **LLC formation** — the athlete's business gets its own legal structure, coordinated with counsel.
+- **Non-profit setup** — for athletes whose brand runs on giving back, structured as its own entity, coordinated with counsel.
+- **Legal-matter coordination** — contracts, compliance, NIL paperwork routed to counsel before anything gets signed. This department coordinates the legal work; it doesn't replace an attorney. Every deliverable here is draft-only until a lawyer signs off, same hard line as every trainer repo in the federation.
 - **Collaboration opportunities** — cross-athlete, cross-sport moments inside the TOJ federation (see `data/cross-brand-touches.md` pattern already running in the trainer repos).
 
 ---
@@ -141,9 +161,9 @@ Pricing is locked per trainer and per vertical, not set at the department level 
 |---|---|---|
 | **Entry** | Visual & verbal identity + digital strategy foundation (Sections 02–03) | The on-ramp. Proves the system before the athlete commits further. |
 | **Core** | Entry + media & PR strategy + metrics review (Sections 02–04, 07) | The standard build. Most signed athletes live here. |
-| **Premium — everything on everything** | Every section in this document, bundled as one engagement: brand foundation through partnerships, NIL activation, community, metrics, and resources | The full department, in one call. Not a-la-carte — the value is in the whole system running together, not any single piece of it. |
+| **Premium — everything on everything** | Every section in this document, bundled as one engagement: brand foundation through partnerships, NIL activation, community, metrics, and the full asset-management layer — camps, LLC formation, non-profit setup, legal-matter coordination | The full department, in one call. Not a-la-carte — the value is in the whole system running together, not any single piece of it. |
 
-The Premium tier is the one this department leads with in any pitch call. Selling pieces invites a discount conversation. Selling the whole system sells the outcome.
+The Premium tier is the one this department leads with in any pitch call. Selling pieces invites a discount conversation. Selling the whole system sells the outcome — the brand and the business behind it, handled by the same room.
 
 ---
 
@@ -178,6 +198,6 @@ Five more rules govern how those tracks move, defined in full in Section 05:
 
 ## Close
 
-Essence first. Foundation second. Everything after that is the system doing what it was built to do — turning attention a real athlete already earned into a business that outlasts any one season.
+Two players who transferred into the same locker room built the room every athlete on this network walks into. Essence first. Foundation second. Everything after that is the system doing what it was built to do — the brand and the business behind it, handled by people who already lived the thing they're protecting.
 
 Score the athlete's Foundation. Sell the whole system, not the pieces. Show the receipt before the adjective.
