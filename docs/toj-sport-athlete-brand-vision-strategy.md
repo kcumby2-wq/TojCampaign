@@ -88,6 +88,16 @@ Every brand pitch is custom — built to that company's voice, goals, and market
 
 **The rule:** show, don't tell. A pitch deck that says "this athlete is a rising star" is asking the reader to trust an adjective. A pitch deck that shows the engagement chart, the film clip, and the schedule of what's coming next is asking the reader to trust their own eyes. Sell the thing we built, not a description of it.
 
+### How every pitch behaves
+
+The six tracks above are what the pitch says. These five rules govern how it moves.
+
+- **Prevent the worse.** Every pitch is framed as protection, not persuasion — what's actually at risk if this window closes: the NIL value that goes unclaimed, the story that goes untold, the deal a faster-moving athlete gets instead. The reader isn't being offered an upgrade; they're being shown what's already exposed if they wait. Real risk, same discipline as Track 5 — never manufactured.
+- **Move to action.** Every pitch ends with the next real step, not "think it over." A feeling with no action attached is entertainment, not a pitch.
+- **Feel before they understand.** The five emotional tracks lead the read. Logic closes — it doesn't open. A reader has to want the outcome before they'll sit still for why it works.
+- **Change how they think, not just what they buy.** Before this conversation, attention felt like something that just happens to an athlete. After it, attention is the asset being built on purpose. The pitch isn't selling a service inside the client's existing picture of their own career — it's handing them a new picture, and letting the receipts in Section 05 make it credible.
+- **Serve to create love, not just satisfaction.** A transaction produces a repeat customer. Service — the follow-up nobody asked for, the deliverable that arrives early, the honest answer instead of the convenient one — produces someone who talks about this department unprompted. This is Section 00 again, from a different angle: love is what a referral is made of.
+
 ### Endorsement tiers
 
 A tiered model — legacy brands, emerging brands, niche or local brands — building a portfolio that reflects how the athlete actually lives, not just what pays the most per post. Where possible, a paid partnership pairs with real product use, because a deal that isn't true to Essence doesn't survive past the first payment.
@@ -153,6 +163,16 @@ Every pitch this department produces runs **one logic track and five emotional t
 | **Cost of standing still** | Makes the real, time-limited cost of waiting visible. |
 
 **The standing rule:** never tell when you can show. Never describe an athlete when a clip, a chart, or a delivered receipt can do it instead. Sell the thing we built — the pitch itself is a demonstration of the system, not a description of it.
+
+Five more rules govern how those tracks move, defined in full in Section 05:
+
+| Rule | What it does |
+|---|---|
+| **Prevent the worse** | Frames the pitch as protection against a real, specific risk — never manufactured fear. |
+| **Move to action** | Every pitch ends with the next real step, never "think it over." |
+| **Feel before understand** | Emotional tracks lead the read; logic closes the deal, it doesn't open it. |
+| **Change how they think** | Reframes the client's picture of what attention actually is, not just what they're buying. |
+| **Serve to create love** | Genuine, unasked-for service is what turns a client into someone who refers without being asked. |
 
 ---
 
