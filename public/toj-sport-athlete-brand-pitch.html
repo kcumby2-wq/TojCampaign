@@ -49,6 +49,12 @@
     .rstat { background: #fff; padding: 0.85rem 1rem; border-radius: 6px; border-top: 3px solid var(--accent); text-align: center; }
     .rstat .n { display: block; font-family: 'Fraunces', serif; font-size: 1.5rem; font-weight: 700; color: var(--ink); line-height: 1.1; }
     .rstat .l { display: block; font-family: 'Inter', monospace; font-size: 0.65rem; color: var(--ink-mute); letter-spacing: 0.06em; text-transform: uppercase; margin-top: 0.3rem; }
+    .room-h3 { font-size: 1.05rem; margin: 1.5rem 0 0.75rem; color: var(--ink); }
+    .room-table { width: 100%; border-collapse: collapse; margin: 0 0 1rem; font-size: 0.85rem; background: #fff; border-radius: 6px; overflow: hidden; }
+    .room-table th, .room-table td { padding: 0.6rem 0.75rem; text-align: left; border-bottom: 1px solid var(--rule); vertical-align: top; }
+    .room-table th { font-family: 'Inter', sans-serif; font-size: 0.7rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-mute); font-weight: 700; }
+    .room-table td:first-child { font-weight: 600; color: var(--accent-2); white-space: nowrap; }
+    .room-table tr:last-child td { border-bottom: 0; }
 
     .essence { background: var(--accent); color: var(--parchment); padding: 2rem 2rem 2.25rem; border-radius: 10px; margin-bottom: 2.75rem; }
     .essence .section-num { color: var(--accent-2); }
@@ -125,16 +131,27 @@
 
     <div class="room">
       <span class="section-num">THE ROOM</span>
-      <h2>Two transfers. One locker room. One standard.</h2>
-      <p>Kyron Cumby played at Illinois. Max Patterson played at Rutgers. Both transferred to Delaware — and that's where they connected. Not in a marketing seminar. On a roster, inside the parts of college football that never make a highlight reel: the meeting rooms, the compliance forms, the conversation with a coach deciding whether to trust you with the ball.</p>
-      <p>Kyron built Trail of Joy around one line — <em>the athlete is not the product, they are the subject</em> — the reason every deliverable this department ships gets built the way it does. Max built 0routez the same way: a route-running specialty brand carrying a 300,000-person audience, because he learned the same lesson Kyron did. The athletes who get protected are the ones somebody with real football experience is actually watching.</p>
+      <h2>Two transfers, a year apart. One standard.</h2>
+      <p>Kyron Cumby played running back and receiver across four programs — Illinois (Big Ten), a walk-on transfer to Texas Tech (Big 12), a starting role at Delaware (CAA), and a final season at Tennessee Tech (OVC). Max Patterson played receiver at Rutgers (Big Ten), earning Academic All-Big Ten honors twice, then transferred to Delaware (CAA, then CUSA) and became a full-time starter.</p>
+      <p>They didn't overlap on the roster — Kyron's snaps at Delaware end in 2023, Max's begin in 2024. Same program, same staff, a year apart, not a locker room together. What they share isn't a season. It's what happens to a player who transfers more than once: you learn, faster than anyone who stayed put, exactly what it feels like not to be protected. That's the room this department comes out of.</p>
+      <p>Kyron built Trail of Joy around one line — <em>the athlete is not the product, they are the subject</em> — the reason every deliverable this department ships gets built the way it does. Max built 0routez the same way: a route-running specialty brand that's grown to a 383,000-person TikTok audience (Delaware Online's Top 31 Influencers, September 2025), because he learned the same lesson Kyron did, a year later, in the same building.</p>
       <div class="room-stats">
-        <div class="rstat"><span class="n">300K</span><span class="l">0routez audience</span></div>
-        <div class="rstat"><span class="n">2</span><span class="l">Former college football players</span></div>
-        <div class="rstat"><span class="n">1</span><span class="l">Evaluation platform &middot; Subject Report</span></div>
-        <div class="rstat"><span class="n">1</span><span class="l">Production company &middot; Subject Media</span></div>
+        <div class="rstat"><span class="n">383K</span><span class="l">0routez TikTok audience &middot; Sept 2025</span></div>
+        <div class="rstat"><span class="n">4</span><span class="l">Programs Kyron played across</span></div>
+        <div class="rstat"><span class="n">2&times;</span><span class="l">Academic All-Big Ten &middot; Max Patterson</span></div>
+        <div class="rstat"><span class="n">350+</span><span class="l">Coaching staffs on Optimum Grading</span></div>
       </div>
-      <p>This isn't two people who took a course on athlete marketing. This is two former college football players who transferred into the same locker room, built the protection they didn't have, and are now the room every athlete on this network walks into.</p>
+      <p>This isn't two people who took a course on athlete marketing. This is two players who each transferred more than once, built the protection they didn't have, and are now the room every athlete on this network walks into.</p>
+
+      <h3 class="room-h3">Who runs this</h3>
+      <table class="room-table">
+        <tr><th></th><th>Kyron Cumby</th><th>Max Patterson</th></tr>
+        <tr><td>Role</td><td>Founder &amp; principal</td><td>50/50 creative partner</td></tr>
+        <tr><td>Function</td><td>Builds the room — evaluation, production, the business infrastructure underneath it</td><td>Fills the room — creative direction with athletes</td></tr>
+        <tr><td>Playing record</td><td>4 programs: Illinois, Texas Tech, Delaware, Tennessee Tech</td><td>2 programs: Rutgers, Delaware &middot; 2&times; Academic All-Big Ten</td></tr>
+        <tr><td>Current credential</td><td>Operates Subject Report, Subject Media, tojcampaign.com</td><td>Rutgers Editing team — cuts for a program, not only for himself</td></tr>
+      </table>
+      <p>Neither side substitutes for the other. Kyron built the infrastructure; Max brings the reach and the editorial instinct that infrastructure needs to actually reach athletes. That's what makes it a 50/50, not a founder-plus-face arrangement.</p>
     </div>
 
     <div class="essence">
@@ -189,7 +206,7 @@
         <div class="track logic">
           <span class="num">Logic</span>
           <h4>The infrastructure case</h4>
-          <p>Evaluation (Subject Report), production (Subject Media), and distribution — 0routez's 300K audience plus Kyron and Max's own channels — already run under one roof. Verifiable, not promised.</p>
+          <p>Evaluation (Subject Report, built on Optimum Grading — 350+ coaching staffs), production (Subject Media), and distribution — 0routez's 383K TikTok audience plus Kyron and Max's own channels — already run under one roof. Verifiable, not promised.</p>
         </div>
         <div class="track">
           <span class="num">01</span>
@@ -286,7 +303,7 @@
     </section>
 
     <div class="doc-footer">
-      <p class="close-line">Two players who transferred into the same locker room built the room every athlete on this network walks into.</p>
+      <p class="close-line">Two players who each transferred more than once built the room every athlete on this network walks into.</p>
       <p>Score the athlete's Foundation. Sell the whole system, not the pieces. Show the receipt before the adjective.</p>
       <div class="legal">&copy; 2026 Trail of Joy Player Management Group, LLC. TOJ Sport is a department of TOJ Campaign. This document is a strategic instrument, not a representation or warranty of results. Pricing referenced is illustrative and locks per trainer and vertical. Legal-matter coordination is not a substitute for licensed legal counsel.</div>
     </div>

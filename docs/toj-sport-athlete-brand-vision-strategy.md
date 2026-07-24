@@ -12,13 +12,26 @@
 
 ## The Room
 
-Kyron Cumby played at Illinois. Max Patterson played at Rutgers. Both transferred to Delaware — and that's where they connected. Not in a marketing seminar. On a roster, inside the parts of college football that never make a highlight reel: the meeting rooms, the compliance forms, the conversation with a coach deciding whether to trust you with the ball. That's the room this department comes out of.
+Kyron Cumby played running back and receiver across four programs — Illinois (Big Ten), a walk-on transfer to Texas Tech (Big 12), a starting role at Delaware (CAA), and a final season at Tennessee Tech (OVC). Max Patterson played receiver at Rutgers (Big Ten), where he earned Academic All-Big Ten honors twice, then transferred to Delaware (CAA, then CUSA) and became a full-time starter.
 
-Kyron built Trail of Joy around one line — *the athlete is not the product, they are the subject* — and it's the reason every deliverable this department ships gets built the way it does. Max built 0routez the same way: a route-running specialty brand carrying a 300,000-person audience, because he learned the same lesson Kyron did. The athletes who get protected are the ones somebody with real football experience is actually watching.
+They didn't overlap on the roster — Kyron's snaps at Delaware end in 2023, Max's begin in 2024. Same program, same staff, a year apart, not a locker room together. What they share isn't a season. It's the thing that happens to a player who transfers more than once: you learn, faster than anyone who stayed put, exactly what it feels like not to be protected — by a program, by an agent, by anyone. That's the room this department comes out of.
+
+Kyron built Trail of Joy around one line — *the athlete is not the product, they are the subject* — and it's the reason every deliverable this department ships gets built the way it does. Max built 0routez the same way: a route-running specialty brand that's grown to a 383,000-person TikTok audience (Delaware Online's Top 31 Influencers, September 2025), because he learned the same lesson Kyron did, a year later, in the same building.
 
 Between the two of them, the infrastructure already exists before this pitch is ever sent: an evaluation platform (Subject Report), a production company (Subject Media), a trainer federation running Kyron's methodology across DFW, the Northeast, and Europe, and an audience network — 0routez, Subject Media, and both of their own names — that already reaches the people this department needs to reach before a single new post goes up.
 
-This isn't two people who took a course on athlete marketing. This is two former college football players who transferred into the same locker room, built the protection they didn't have, and are now the room every athlete on this network walks into.
+This isn't two people who took a course on athlete marketing. This is two players who each transferred more than once, built the protection they didn't have, and are now the room every athlete on this network walks into.
+
+### Who runs this
+
+| | Kyron Cumby | Max Patterson |
+|---|---|---|
+| **Role** | Founder & principal | 50/50 creative partner |
+| **Function** | Builds the room — evaluation, production, and the business infrastructure underneath it | Fills the room — creative direction with athletes |
+| **Playing record** | 4 programs: Illinois, Texas Tech, Delaware, Tennessee Tech | 2 programs: Rutgers, Delaware · 2× Academic All-Big Ten |
+| **Current credential** | Operates Subject Report, Subject Media, and tojcampaign.com | Rutgers Editing team — cuts for a program, not only for himself |
+
+Neither side substitutes for the other. Kyron built the infrastructure; Max brings the reach and the editorial instinct that infrastructure needs to actually reach athletes. That's what makes it a 50/50, not a founder-plus-face arrangement.
 
 ---
 
@@ -90,7 +103,7 @@ Alignment with the athlete's actual brand pillars first, dollar amount second. A
 
 Every brand pitch is custom — built to that company's voice, goals, and market position, backed by the athlete's actual engagement data and the story built in Sections 01–04. But the pitch itself is not a spec sheet. It's an argument, and it runs on two tracks at once.
 
-**The logic pitch (one track, always present).** The infrastructure case: TOJ Sport already runs evaluation (Subject Report), production (Subject Media), and distribution — the trainer's own platform, 0routez's 300,000-person audience, and Kyron and Max's own channels — under one roof. That's not a promise — it's an operating fact a brand partner can verify before they sign anything. The logic pitch is what gets a deal through a compliance or marketing department's approval process.
+**The logic pitch (one track, always present).** The infrastructure case: TOJ Sport already runs evaluation (Subject Report, built on Optimum Grading — 350+ coaching staffs), production (Subject Media), and distribution — the trainer's own platform, 0routez's 383K TikTok audience, and Kyron and Max's own channels — under one roof. That's not a promise — it's an operating fact a brand partner can verify before they sign anything. The logic pitch is what gets a deal through a compliance or marketing department's approval process.
 
 **The emotional case (five tracks, built into the story, never labeled as such in front of the client).** A partnership isn't decided on a spreadsheet — it's decided on how the decision-maker feels reading the deck, and then justified with the spreadsheet after. Five things the pitch has to make a reader feel, in every deck this department produces:
 
@@ -198,6 +211,6 @@ Five more rules govern how those tracks move, defined in full in Section 05:
 
 ## Close
 
-Two players who transferred into the same locker room built the room every athlete on this network walks into. Essence first. Foundation second. Everything after that is the system doing what it was built to do — the brand and the business behind it, handled by people who already lived the thing they're protecting.
+Two players who each transferred more than once built the room every athlete on this network walks into. Essence first. Foundation second. Everything after that is the system doing what it was built to do — the brand and the business behind it, handled by people who already lived the thing they're protecting.
 
 Score the athlete's Foundation. Sell the whole system, not the pieces. Show the receipt before the adjective.
