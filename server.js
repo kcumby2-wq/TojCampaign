@@ -113,6 +113,7 @@ app.use("/api/rag", requireAuth, require("./routes/rag"));
 // (enforced inside the route file so the roles picker renders pre-login).
 app.use("/api/agents", require("./routes/agents"));
 app.use("/api/hooks-agents", require("./routes/hooks-agents"));
+app.use("/api/diagnostic-agents", require("./routes/diagnostic-agents"));
 app.use("/api/pylon", require("./routes/pylon"));
 
 // Pylon × TOJ · pre/during/post-event sales sequence cron
