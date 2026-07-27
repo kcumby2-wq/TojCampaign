@@ -60,10 +60,30 @@ module.exports = {
     },
     {
       id: "llm_vocabulary",
-      description: "Generic hype language — 'elevate', 'unlock', 'journey', 'blessed to' (as filler)",
+      description: "Generic hype language · matches the performance-principles pack for cross-namespace consistency",
       check_type: "regex",
-      pattern: "\\b(unlock|elevate|next[- ]level|game[- ]changing|blessed to (announce|receive|share)|journey)\\b",
+      pattern: "\\b(unlock|unleash|elevate|elevated|transform(ative|s|ing|ed)?|elite|generational|next[- ]level|phenom|future\\s+star|game[- ]changing|supercharg|blessed to (announce|receive|share)|journey|in today['’]s fast[- ]paced|are you ready to|imagine a world where)\\b",
       flags: "i",
+    },
+    {
+      id: "hype_triples",
+      description: "Adjective triples in the body copy ('bold, dynamic, and revolutionary')",
+      check_type: "regex",
+      pattern: "\\b(bold|dynamic|revolutionary|innovative|cutting[- ]edge|world[- ]class|premier|leading|elite|explosive|dominant)\\s*,\\s*(bold|dynamic|revolutionary|innovative|cutting[- ]edge|world[- ]class|premier|leading|elite|explosive|dominant)\\s*,?\\s*(and\\s+)?(bold|dynamic|revolutionary|innovative|cutting[- ]edge|world[- ]class|premier|leading|elite|explosive|dominant)\\b",
+      flags: "i",
+    },
+    {
+      id: "exclamation_marks",
+      description: "Exclamation marks in Hooks body copy — Coach-direct voice never punctuates with '!' (fine in an athlete's own quoted voice; auto-fail if produced by the agent)",
+      check_type: "regex",
+      pattern: "!",
+    },
+    {
+      id: "pro_comparison_without_evidence",
+      description: "Compares the athlete to a named pro without measured basis · the credibility-killer college coaches burn the source for",
+      check_type: "regex",
+      pattern: "\\b(the next|reminds me of|comparable to|in the mold of)\\s+[A-Z][a-z]+\\s+[A-Z][a-z]+\\b",
+      flags: "",
     },
     {
       id: "invented_athlete_facts",

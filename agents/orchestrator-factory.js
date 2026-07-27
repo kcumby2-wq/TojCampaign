@@ -146,7 +146,15 @@ function createOrchestrator({ namespace, baseDir, tools, defaultModel = DEFAULT_
         };
       }
 
-      lastEval = await evaluate(EVAL_SPEC, lastResult, {
+      // Merge in per-role eval_additions if the role defines any — lets
+      // roles append role-specific questions to the shared namespace spec
+      // without forking the whole eval file. Recomputed per invocation so a
+      // role edit doesn't require a server restart in dev.
+      const roleSpec = (cfg.eval_additions && cfg.eval_additions.length)
+        ? { ...EVAL_SPEC, questions: [...EVAL_SPEC.questions, ...cfg.eval_additions] }
+        : EVAL_SPEC;
+
+      lastEval = await evaluate(roleSpec, lastResult, {
         client_id_present: !!client_id,
       });
       evalHistory.push({
