@@ -51,9 +51,9 @@ module.exports = {
   auto_fails: [
     {
       id: "hype_vocabulary",
-      description: "Uses forbidden vocabulary — 'elite,' 'generational,' 'next-level,' 'phenom,' 'future star,' 'unlock,' 'transform,' 'game-changing,' 'unleash,' 'supercharge,' 'in today's fast-paced world,' 'are you ready to'",
+      description: "Uses forbidden vocabulary · CLAUDE.md §6 banned list · 'elite,' 'generational,' 'next-level,' 'phenom,' 'future star,' 'unlock,' 'transform,' 'game-changing,' 'unleash,' 'supercharge,' 'in today's fast-paced world,' 'are you ready to,' 'premier,' 'top-notch,' 'state-of-the-art,' 'revolutionize'",
       check_type: "regex",
-      pattern: "\\b(elite|generational|next[- ]level|phenom|future\\s+star|unlock|unleash|transform(ative|s|ing|ed)?|game[- ]changing|supercharg|in today['’]s fast[- ]paced|are you ready to)\\b",
+      pattern: "\\b(elite|generational|next[- ]level|phenom|future\\s+star|unlock|unleash|transform(ative|s|ing|ed)?|game[- ]changing|supercharg|in today['’]s fast[- ]paced|are you ready to|premier|top[- ]notch|state[- ]of[- ]the[- ]art|revolutionize)\\b",
       flags: "i",
     },
     {

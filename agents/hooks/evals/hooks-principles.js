@@ -60,9 +60,9 @@ module.exports = {
     },
     {
       id: "llm_vocabulary",
-      description: "Generic hype language · matches the performance-principles pack for cross-namespace consistency",
+      description: "Generic hype language · matches performance-principles + adds 'premier', 'top-notch', 'state-of-the-art', 'revolutionize' per CLAUDE.md §6 (universal builder brief banned-vocab list)",
       check_type: "regex",
-      pattern: "\\b(unlock|unleash|elevate|elevated|transform(ative|s|ing|ed)?|elite|generational|next[- ]level|phenom|future\\s+star|game[- ]changing|supercharg|blessed to (announce|receive|share)|journey|in today['’]s fast[- ]paced|are you ready to|imagine a world where)\\b",
+      pattern: "\\b(unlock|unleash|elevate|elevated|transform(ative|s|ing|ed)?|elite|generational|next[- ]level|phenom|future\\s+star|game[- ]changing|supercharg|blessed to (announce|receive|share)|journey|in today['’]s fast[- ]paced|are you ready to|imagine a world where|premier|top[- ]notch|state[- ]of[- ]the[- ]art|revolutionize)\\b",
       flags: "i",
     },
     {
