@@ -40,7 +40,7 @@ Authenticated. Submits a task, returns a `run_id` immediately; the agent runs in
 ```json
 {
   "role": "coach-scout-reporter",
-  "task": "Athlete: Ben Corners, WR, [grad year]. Trailing 90 days: <session list>. Benchmarks: <band data>.",
+  "task": "Athlete: [athlete name], WR, [grad year]. Trailing 90 days: <session list>. Benchmarks: <band data>.",
   "client_id": "optional-athlete-uuid"
 }
 ```
