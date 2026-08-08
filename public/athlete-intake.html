@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta name="robots" content="noindex" />
+<title>Start Your Verified Season — Athlete Intake</title>
+<style>
+  :root{
+    --ink:#0e0c0a; --ink-2:#171310; --cream:#F5F1EA; --paper:#fffdf9;
+    --gold:#C6952E; --gold-2:#e0b452; --line:#efe7d8; --line-dk:#2a231b;
+    --mute:#a89e8c; --ok:#2F5D4E; --alert:#c58b3a;
+  }
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:'Inter',-apple-system,Segoe UI,sans-serif;background:var(--ink);color:var(--cream);line-height:1.6;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:720px;margin:0 auto;padding:48px 22px 96px}
+  .eyebrow{font-size:11px;letter-spacing:.24em;text-transform:uppercase;color:var(--gold);font-weight:700}
+  h1{font-family:Georgia,serif;font-size:clamp(30px,6vw,44px);line-height:1.05;margin:10px 0 8px;font-weight:600}
+  h1 em{color:var(--gold);font-style:italic}
+  .lede{color:var(--mute);font-size:15px;max-width:56ch;margin-bottom:8px}
+  .card{background:var(--ink-2);border:1px solid var(--line-dk);border-radius:16px;padding:26px 24px;margin-top:22px}
+  .card h2{font-family:Georgia,serif;font-size:20px;font-weight:600;margin-bottom:4px}
+  .card .hint{color:var(--mute);font-size:13px;margin-bottom:18px}
+  .field{margin-bottom:16px}
+  label{display:block;font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--cream);font-weight:600;margin-bottom:6px}
+  label .req{color:var(--gold);font-weight:700}
+  label .opt{color:var(--mute);text-transform:none;letter-spacing:0;font-weight:400;font-size:11px}
+  input,select,textarea{width:100%;background:#0b0908;border:1px solid var(--line-dk);border-radius:9px;color:var(--cream);font:inherit;font-size:15px;padding:11px 13px;outline:none}
+  input:focus,select:focus,textarea:focus{border-color:var(--gold)}
+  textarea{resize:vertical;min-height:84px}
+  .row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  @media(max-width:560px){.row{grid-template-columns:1fr}}
+  .toggle{display:flex;gap:10px;align-items:center;background:#0b0908;border:1px solid var(--line-dk);border-radius:9px;padding:12px 14px;cursor:pointer}
+  .toggle input{width:auto}
+  .consent-wrap{display:none;margin-top:16px;border-top:1px solid var(--line-dk);padding-top:16px}
+  .consent-wrap.on{display:block}
+  .clevel{display:block;background:#0b0908;border:1px solid var(--line-dk);border-radius:10px;padding:13px 15px;margin-bottom:10px;cursor:pointer}
+  .clevel.sel{border-color:var(--gold);background:rgba(198,149,46,.06)}
+  .clevel .t{font-weight:700;font-size:14px}
+  .clevel .d{color:var(--mute);font-size:12.5px;margin-top:2px}
+  .clevel input{width:auto;margin-right:8px}
+  .safety{background:rgba(197,139,58,.08);border:1px solid rgba(197,139,58,.3);border-left:3px solid var(--alert);border-radius:10px;padding:14px 16px;font-size:13.5px;color:var(--cream);margin-top:18px}
+  .safety b{color:var(--gold-2)}
+  .checkline{display:flex;gap:10px;align-items:flex-start;font-size:13.5px;color:var(--cream)}
+  .checkline input{width:auto;margin-top:3px}
+  .btn{display:inline-block;width:100%;background:var(--gold);color:#161206;border:none;border-radius:11px;font-weight:800;letter-spacing:.04em;font-size:15px;padding:15px;cursor:pointer;margin-top:8px}
+  .btn:hover{background:var(--gold-2)}
+  .err{color:#e6a15a;font-size:13px;margin-top:10px;display:none}
+  .success{display:none;text-align:center;padding:40px 10px}
+  .success.on{display:block}
+  .success .mark{font-size:40px}
+  .success h2{font-family:Georgia,serif;font-size:26px;margin:10px 0}
+  .foot{color:var(--mute);font-size:12px;margin-top:26px;text-align:center}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <form id="form" novalidate>
+    <div class="eyebrow">The Verified Season · Subject Medias</div>
+    <h1>Start your <em>Verified Season</em>.</h1>
+    <p class="lede">Tell us about the athlete. If they're under 18, a parent or guardian
+      is in control of every step — consent is the foundation, not a checkbox.</p>
+
+    <div class="card">
+      <h2>The athlete</h2>
+      <div class="hint">Who we'd be building the season around.</div>
+      <div class="field">
+        <label for="athlete_name">Athlete name <span class="req">◆</span></label>
+        <input id="athlete_name" type="text" placeholder="First Last" />
+      </div>
+      <div class="row">
+        <div class="field"><label for="sport">Sport</label><input id="sport" type="text" placeholder="Football" /></div>
+        <div class="field"><label for="position">Position</label><input id="position" type="text" placeholder="WR" /></div>
+      </div>
+      <div class="row">
+        <div class="field"><label for="grad_year">Grad year</label><input id="grad_year" type="text" inputmode="numeric" placeholder="2027" /></div>
+        <div class="field"><label for="city">City / base</label><input id="city" type="text" placeholder="Plano, TX" /></div>
+      </div>
+
+      <label class="toggle" for="is_minor">
+        <input id="is_minor" type="checkbox" />
+        <span>The athlete is <b>under 18</b> (a parent/guardian must complete consent below)</span>
+      </label>
+
+      <div class="consent-wrap" id="consentWrap">
+        <div class="field">
+          <label for="guardian_name">Parent / guardian name <span class="req">◆</span></label>
+          <input id="guardian_name" type="text" placeholder="Parent full name" />
+        </div>
+        <div class="field">
+          <label for="guardian_email">Parent / guardian email <span class="req">◆</span></label>
+          <input id="guardian_email" type="email" placeholder="parent@email.com" />
+        </div>
+        <label style="margin-bottom:10px">How public should the athlete's profile be? <span class="opt">— you can change this any time</span></label>
+        <label class="clevel sel" data-c="c1">
+          <input type="radio" name="clevel" value="c1" checked />
+          <span class="t">Private</span>
+          <div class="d">We work internally only. Nothing about the athlete goes public or to any agent tool.</div>
+        </label>
+        <label class="clevel" data-c="c3">
+          <input type="radio" name="clevel" value="c3" />
+          <span class="t">Coach-facing</span>
+          <div class="d">A named profile/link you can share with coaches you approve. Not public.</div>
+        </label>
+        <label class="clevel" data-c="c4">
+          <input type="radio" name="clevel" value="c4" />
+          <span class="t">Public</span>
+          <div class="d">A public profile and highlight distribution. Named, public use of likeness.</div>
+        </label>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>How we reach you</h2>
+      <div class="hint">For a minor, this is the parent/guardian.</div>
+      <div class="row">
+        <div class="field"><label for="contact_email">Best email <span class="req">◆</span></label><input id="contact_email" type="email" placeholder="you@email.com" /></div>
+        <div class="field"><label for="contact_phone">Phone / text <span class="opt">optional</span></label><input id="contact_phone" type="tel" placeholder="(555) 555-5555" /></div>
+      </div>
+      <div class="field">
+        <label for="package">Package you're interested in <span class="opt">optional</span></label>
+        <select id="package">
+          <option value="">Not sure yet — help me choose</option>
+          <option>Foundation</option>
+          <option>Build</option>
+          <option>Season</option>
+          <option>Elite</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="goals">What are you hoping the season does? <span class="opt">optional</span></label>
+        <textarea id="goals" placeholder="Recruiting exposure, a documented season, brand building…"></textarea>
+      </div>
+    </div>
+
+    <div class="safety" id="safetyNote">
+      <b>Your athlete, your call.</b> For minors, nothing is published, shared, or sent to
+      any agent tool until a parent grants named consent. You control how public the profile
+      is, and you can withdraw at any time. TOJ takes no cut of NIL and acts as no one's agent.
+    </div>
+
+    <label class="checkline" id="consentCheckWrap" style="margin-top:16px;display:none">
+      <input id="consent_ok" type="checkbox" />
+      <span>I am the parent/guardian of this athlete and I authorize this intake and the
+        visibility level I selected above.</span>
+    </label>
+
+    <div class="err" id="err"></div>
+    <button class="btn" type="submit" id="submitBtn">Submit intake →</button>
+    <div class="foot">Trail of Joy Player Management Group, LLC · Subject Medias · we respond within 24 hours.</div>
+  </form>
+
+  <div class="success" id="success">
+    <div class="mark">✓</div>
+    <h2>Received. Welcome to the Verified Season.</h2>
+    <p class="lede" style="margin:0 auto">We'll reach out within 24 hours. If the athlete is a minor,
+      nothing moves publicly until your consent is confirmed.</p>
+  </div>
+</div>
+
+<script>
+(function(){
+  var ENDPOINT='/api/onboarding'; // Vercel rewrites /api/* → Render backend
+  var minor=document.getElementById('is_minor');
+  var cw=document.getElementById('consentWrap');
+  var ccw=document.getElementById('consentCheckWrap');
+  function syncMinor(){
+    var on=minor.checked;
+    cw.classList.toggle('on',on);
+    ccw.style.display=on?'flex':'none';
+  }
+  minor.addEventListener('change',syncMinor);
+
+  document.querySelectorAll('.clevel').forEach(function(l){
+    l.addEventListener('click',function(){
+      document.querySelectorAll('.clevel').forEach(function(x){x.classList.remove('sel')});
+      l.classList.add('sel');
+      l.querySelector('input').checked=true;
+    });
+  });
+
+  function val(id){var e=document.getElementById(id);return e?e.value.trim():'';}
+  function validEmail(s){return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s);}
+  function showErr(m){var e=document.getElementById('err');e.textContent=m;e.style.display='block';}
+
+  document.getElementById('form').addEventListener('submit',function(ev){
+    ev.preventDefault();
+    var isMinor=minor.checked;
+    var athlete=val('athlete_name');
+    if(!athlete){return showErr('Please add the athlete name.');}
+    var guardianEmail=val('guardian_email');
+    var contactEmail=val('contact_email');
+    var reachable=isMinor?(guardianEmail||contactEmail):contactEmail;
+    if(!validEmail(reachable)){return showErr(isMinor?'A valid parent/guardian email is required.':'A valid email is required.');}
+    if(isMinor){
+      if(!val('guardian_name')){return showErr('Please add the parent/guardian name.');}
+      if(!validEmail(guardianEmail)){return showErr('Please add a valid parent/guardian email.');}
+      if(!document.getElementById('consent_ok').checked){return showErr('Please confirm you authorize this intake as the parent/guardian.');}
+    }
+    var clevelEl=document.querySelector('input[name="clevel"]:checked');
+    var consent_level=isMinor?(clevelEl?clevelEl.value:'c1'):null;
+
+    var body={
+      audience:'athlete',
+      branch:'subject-medias',
+      subject_name:athlete,
+      is_minor:isMinor,
+      contact_email:contactEmail||guardianEmail||null,
+      contact_phone:val('contact_phone')||null,
+      guardian_name:isMinor?val('guardian_name'):null,
+      guardian_email:isMinor?guardianEmail:null,
+      consent_level:consent_level,
+      intake_version:'athlete-v1',
+      source:'verified-season/intake',
+      payload:{
+        sport:val('sport'),position:val('position'),grad_year:val('grad_year'),
+        city:val('city'),package:val('package'),goals:val('goals')
+      }
+    };
+
+    document.getElementById('submitBtn').disabled=true;
+    var done=false;
+    function finish(){if(done)return;done=true;
+      document.getElementById('form').style.display='none';
+      document.getElementById('success').classList.add('on');
+      window.scrollTo(0,0);
+    }
+    var t=setTimeout(finish,8000); // never leave the family hanging
+    fetch(ENDPOINT,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)})
+      .then(function(r){return r.json().catch(function(){return{};})})
+      .then(function(){clearTimeout(t);finish();})
+      .catch(function(){clearTimeout(t);finish();});
+  });
+})();
+</script>
+</body>
+</html>
