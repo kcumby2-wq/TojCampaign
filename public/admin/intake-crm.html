@@ -1,0 +1,379 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Admin · Intake CRM — TOJ / Subject</title>
+<meta name="robots" content="noindex" />
+<link rel="icon" href='data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect width="100" height="100" rx="20" fill="%231A1613"/><text x="50" y="66" font-family="Georgia" font-size="52" font-weight="600" fill="%23B8843B" text-anchor="middle">T</text></svg>' />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Fraunces:opsz,wght@9..144,500;9..144,600&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet" />
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --ink:#1A1613; --ink-soft:#3B3530; --ink-mute:#6E655C;
+    --parchment:#F5F1EA; --parchment-2:#EBE4D6; --rule:rgba(26,22,19,0.12);
+    --rule-strong:rgba(26,22,19,0.35); --score:#B8843B;
+    --athlete:#1E3A5F; --coach:#2F5D4E; --branch:#B8843B; --business:#A85F26; --creator:#6B4E9E;
+    --alert:#B3261E; --ok:#2F5D4E;
+  }
+  body { font-family: 'Inter', -apple-system, sans-serif; background: var(--parchment); color: var(--ink); line-height: 1.55; }
+  h1, h2, h3 { font-family: 'Fraunces', Georgia, serif; font-weight: 600; letter-spacing: -0.015em; }
+  a { color: var(--athlete); text-decoration: none; }
+
+  .top { padding: 0.9rem 1.5rem; border-bottom: 1px solid var(--rule); background: rgba(245,241,234,0.94); display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0; z-index: 5; }
+  .brand { font-family: 'Fraunces', serif; font-weight: 600; color: var(--ink); }
+  .brand span { color: var(--score); }
+  .top .who { font-family: 'JetBrains Mono', monospace; font-size: 0.75rem; color: var(--ink-mute); letter-spacing: 0.12em; text-transform: uppercase; }
+  .top .who a { margin-left: 1rem; color: var(--ink-soft); }
+
+  main { max-width: 1340px; margin: 0 auto; padding: 2rem 1.5rem 4rem; }
+  h1 { font-size: 2rem; margin-bottom: 0.4rem; }
+  h1 em { color: var(--score); font-style: italic; font-weight: 500; }
+  .lede { color: var(--ink-mute); margin-bottom: 1.6rem; font-size: 0.95rem; max-width: 62ch; }
+  .backend-tag { font-family: 'JetBrains Mono', monospace; font-size: 0.7rem; color: var(--ink-mute); letter-spacing: 0.1em; text-transform: uppercase; }
+
+  .stat-row { display: grid; grid-template-columns: repeat(5, 1fr); gap: 0.85rem; margin-bottom: 1.6rem; }
+  @media (max-width: 900px) { .stat-row { grid-template-columns: repeat(2, 1fr); } }
+  .stat { background: #fff; border: 1px solid var(--rule); border-radius: 10px; padding: 0.95rem 1.05rem; position: relative; overflow: hidden; }
+  .stat::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px; background: var(--score); }
+  .stat.alert::before { background: var(--alert); }
+  .stat.minor::before { background: var(--ink-mute); }
+  .stat .lbl { font-family: 'JetBrains Mono', monospace; font-size: 0.66rem; font-weight: 600; letter-spacing: 0.14em; text-transform: uppercase; color: var(--ink-mute); margin-bottom: 0.35rem; }
+  .stat .num { font-family: 'Fraunces', serif; font-size: 2rem; line-height: 1; color: var(--ink); }
+  .stat.alert .num { color: var(--alert); }
+  .stat .sub { font-size: 0.72rem; color: var(--ink-mute); margin-top: 0.35rem; }
+
+  .toolbar { display: flex; gap: 0.5rem; align-items: center; margin-bottom: 0.6rem; flex-wrap: wrap; }
+  .toolbar .grp { display: flex; gap: 0.35rem; align-items: center; flex-wrap: wrap; }
+  .toolbar .glabel { font-family: 'JetBrains Mono', monospace; font-size: 0.62rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink-mute); margin-right: 0.15rem; }
+  .filter-btn, .btn {
+    font-family: 'JetBrains Mono', monospace; font-size: 0.68rem; font-weight: 600;
+    letter-spacing: 0.08em; text-transform: uppercase;
+    padding: 0.42rem 0.75rem; border-radius: 999px; border: 1px solid var(--rule-strong);
+    background: #fff; color: var(--ink-soft); cursor: pointer;
+  }
+  .filter-btn.active { background: var(--ink); color: var(--parchment); border-color: var(--ink); }
+  .btn.primary { background: var(--ink); color: var(--parchment); border-color: var(--ink); }
+  .btn:hover, .filter-btn:hover { filter: brightness(0.96); }
+  .spacer { margin-left: auto; }
+  .refresh-note { font-family: 'JetBrains Mono', monospace; font-size: 0.64rem; color: var(--ink-mute); letter-spacing: 0.06em; }
+
+  table { width: 100%; border-collapse: collapse; background: #fff; border: 1px solid var(--rule); border-radius: 10px; overflow: hidden; }
+  th, td { text-align: left; padding: 0.6rem 0.7rem; font-size: 0.85rem; vertical-align: top; }
+  th { background: var(--parchment-2); font-family: 'JetBrains Mono', monospace; font-size: 0.66rem; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink-mute); border-bottom: 1px solid var(--rule); }
+  tbody tr { border-top: 1px solid var(--rule); }
+  tbody tr:hover { background: var(--parchment); }
+  td.mono { font-family: 'JetBrains Mono', monospace; font-size: 0.74rem; color: var(--ink-soft); }
+  td .name { font-weight: 600; }
+  td .sub2 { font-size: 0.72rem; color: var(--ink-mute); }
+
+  .chip { display: inline-block; padding: 0.13rem 0.45rem; border-radius: 999px; font-size: 0.64rem; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; color: #fff; white-space: nowrap; }
+  .chip.athlete { background: var(--athlete); }
+  .chip.coach { background: var(--coach); }
+  .chip.branch { background: var(--branch); }
+  .chip.business { background: var(--business); }
+  .chip.creator { background: var(--creator); }
+  .chip.minor { background: var(--ink); }
+  .chip.c-not_required { background: var(--ink-mute); }
+  .chip.c-pending { background: var(--alert); }
+  .chip.c-granted { background: var(--ok); }
+  .chip.c-revoked { background: var(--ink); }
+
+  select.inline { font-family: 'JetBrains Mono', monospace; font-size: 0.7rem; padding: 0.28rem 0.4rem; border: 1px solid var(--rule-strong); border-radius: 6px; background: var(--parchment); color: var(--ink); }
+  a.agent-link { font-family: 'JetBrains Mono', monospace; font-size: 0.7rem; font-weight: 600; letter-spacing: 0.06em; color: var(--score); white-space: nowrap; }
+  a.agent-link:hover { text-decoration: underline; }
+
+  .empty { padding: 2rem; text-align: center; color: var(--ink-mute); font-style: italic; background: #fff; border: 1px dashed var(--rule-strong); border-radius: 10px; }
+  .safety { background: #FBF3EF; border: 1px solid rgba(179,38,30,0.25); border-left: 3px solid var(--alert); border-radius: 8px; padding: 0.7rem 0.95rem; font-size: 0.8rem; color: var(--ink-soft); margin-bottom: 1.4rem; }
+  .safety strong { color: var(--alert); }
+
+  #gate { display: none; max-width: 420px; margin: 5rem auto; background: #fff; border: 1px solid var(--rule); border-radius: 12px; padding: 2rem; text-align: center; }
+  #gate.on { display: block; }
+  #gate h1 { font-size: 1.4rem; margin-bottom: 0.5rem; }
+  #gate p { color: var(--ink-mute); margin-bottom: 1.25rem; }
+</style>
+</head>
+<body>
+<div class="top">
+  <a href="/" class="brand">TOJ <span>Intake CRM</span></a>
+  <div class="who">
+    <span id="who">…</span>
+    <a href="/admin/agents.html">Agents →</a>
+    <a href="#" id="logout">Log out</a>
+  </div>
+</div>
+
+<main id="app" style="display:none;">
+  <h1>Intake <em>CRM</em>.</h1>
+  <p class="lede">
+    Every athlete, coach/trainer, and branch intake lands here — one board to
+    work every submission from the whole ecosystem. Move a row's status, assign
+    an agent, or open it in the agent platform. <span class="backend-tag" id="backend-tag"></span>
+  </p>
+
+  <div class="safety">
+    <strong>Child-safety gate is live.</strong> A minor's intake is stored for a
+    human to work but is <strong>never sent to an agent</strong> until a guardian
+    grants named consent (c3/c4). Rows tagged <span class="chip c-pending" style="vertical-align:middle;">pending</span>
+    need a guardian consent step before any agent touches them.
+  </div>
+
+  <div class="stat-row">
+    <div class="stat">
+      <div class="lbl">Total intakes</div>
+      <div class="num" id="s-total">—</div>
+      <div class="sub">All audiences</div>
+    </div>
+    <div class="stat minor">
+      <div class="lbl">Minors</div>
+      <div class="num" id="s-minors">—</div>
+      <div class="sub">Consent-gated</div>
+    </div>
+    <div class="stat alert">
+      <div class="lbl">Consent pending</div>
+      <div class="num" id="s-pending">—</div>
+      <div class="sub">Blocked from agents</div>
+    </div>
+    <div class="stat">
+      <div class="lbl">Athletes</div>
+      <div class="num" id="s-athlete">—</div>
+      <div class="sub">Onboarding</div>
+    </div>
+    <div class="stat">
+      <div class="lbl">Coaches</div>
+      <div class="num" id="s-coach">—</div>
+      <div class="sub">Trainers &amp; coaches</div>
+    </div>
+  </div>
+
+  <div class="toolbar">
+    <div class="grp">
+      <span class="glabel">Audience</span>
+      <button class="filter-btn active" data-af="">All</button>
+      <button class="filter-btn" data-af="athlete">Athletes</button>
+      <button class="filter-btn" data-af="coach">Coaches</button>
+      <button class="filter-btn" data-af="branch">Branches</button>
+      <button class="filter-btn" data-af="business">Business</button>
+      <button class="filter-btn" data-af="creator">Creators</button>
+    </div>
+  </div>
+  <div class="toolbar">
+    <div class="grp">
+      <span class="glabel">Window</span>
+      <button class="filter-btn" data-tf="1">24h</button>
+      <button class="filter-btn" data-tf="3">3d</button>
+      <button class="filter-btn" data-tf="7">7d</button>
+      <button class="filter-btn" data-tf="30">30d</button>
+      <button class="filter-btn active" data-tf="">All</button>
+    </div>
+    <div class="grp">
+      <span class="glabel">Consent</span>
+      <button class="filter-btn active" data-cf="">All</button>
+      <button class="filter-btn" data-cf="pending">Pending</button>
+      <button class="filter-btn" data-cf="granted">Granted</button>
+      <button class="filter-btn" data-cf="not_required">N/A</button>
+    </div>
+    <div class="spacer"></div>
+    <span class="refresh-note" id="refresh-note"></span>
+    <button class="btn" id="refresh-btn">Refresh</button>
+    <button class="btn" id="export-csv">Export CSV</button>
+  </div>
+
+  <div id="rows-body"></div>
+</main>
+
+<div id="gate">
+  <h1>Admin sign-in required.</h1>
+  <p>Sign in with your TOJ admin account to open the Intake CRM.</p>
+  <a href="/app.html" class="btn primary" style="text-decoration:none; display:inline-block;">Go to sign-in →</a>
+</div>
+
+<script>
+(function () {
+  var AUD_LABEL = { athlete:'Athlete', coach:'Coach', branch:'Branch', business:'Business', creator:'Creator' };
+  var STATUSES = ['new','reviewing','contacted','onboarding','active','declined'];
+  var CONSENT_STATUSES = ['not_required','pending','granted','revoked'];
+  // Agent roles the operator can hand a row to (matches the agents platform).
+  var AGENT_ROLES = ['', 'recruiting-analyst','creative-director','story-producer','growth-operator','worldbuild-strategist'];
+
+  var cache = [];
+  var af = '', cf = '', tf = ''; // audience, consent, time filters
+  var refreshTimer = null;
+
+  function fmt(d) {
+    if (!d) return '—';
+    var dt = new Date(d);
+    if (isNaN(dt)) return '—';
+    return dt.toISOString().slice(0,10) + ' ' + dt.toTimeString().slice(0,5);
+  }
+  function esc(s) { return (s == null ? '' : String(s)).replace(/</g,'&lt;'); }
+  function audChip(a) { return '<span class="chip '+a+'">'+(AUD_LABEL[a]||a)+'</span>'; }
+  function consentChip(c) { return '<span class="chip c-'+c+'">'+c.replace('_',' ')+'</span>'; }
+
+  function withinWindow(r) {
+    if (!tf) return true;
+    var t = new Date(r.created_at).getTime();
+    if (isNaN(t)) return true;
+    return (Date.now() - t) <= (parseInt(tf,10) * 86400000);
+  }
+  function filtered() {
+    return cache.filter(function (r) {
+      if (af && r.audience !== af) return false;
+      if (cf && r.consent_status !== cf) return false;
+      if (!withinWindow(r)) return false;
+      return true;
+    });
+  }
+
+  function statusSelect(r) {
+    var out = '<select class="inline" data-act="status" data-id="'+r.id+'">';
+    STATUSES.forEach(function (s) {
+      out += '<option value="'+s+'"'+(r.status===s?' selected':'')+'>'+s+'</option>';
+    });
+    return out + '</select>';
+  }
+  function agentSelect(r) {
+    var out = '<select class="inline" data-act="agent" data-id="'+r.id+'">';
+    AGENT_ROLES.forEach(function (a) {
+      var lbl = a || 'unassigned';
+      out += '<option value="'+a+'"'+((r.assigned_agent||'')===a?' selected':'')+'>'+lbl+'</option>';
+    });
+    return out + '</select>';
+  }
+
+  function render() {
+    var rows = filtered();
+    var box = document.getElementById('rows-body');
+    if (!rows.length) {
+      box.innerHTML = '<div class="empty">No intakes match these filters yet. When a front-end posts to /api/onboarding, it shows up here.</div>';
+      return;
+    }
+    var html = '<table><thead><tr>' +
+      '<th>Subject</th><th>Audience</th><th>Branch</th><th>Contact</th>' +
+      '<th>Consent</th><th>Status</th><th>Agent</th><th>Received</th><th></th>' +
+      '</tr></thead><tbody>';
+    rows.forEach(function (r) {
+      var minorTag = r.is_minor ? ' <span class="chip minor">Minor</span>' : '';
+      var contact = r.is_minor
+        ? (r.guardian_email ? esc(r.guardian_email)+' <span class="sub2">(guardian)</span>' : '<span class="sub2">guardian —</span>')
+        : (esc(r.contact_email) || '—');
+      // Agent hand-off is BLOCKED in the link when a minor's consent is pending.
+      var canAgent = !(r.is_minor && r.consent_status === 'pending');
+      var agentCell = canAgent
+        ? '<a class="agent-link" href="/admin/agents.html?client='+encodeURIComponent(r.id)+'&audience='+encodeURIComponent(r.audience)+'">Open →</a>'
+        : '<span class="sub2" title="Guardian consent required first">consent first</span>';
+      html += '<tr>' +
+        '<td><span class="name">'+ (esc(r.subject_name) || '—') +'</span>'+minorTag+'</td>' +
+        '<td>'+ audChip(r.audience) +'</td>' +
+        '<td class="mono">'+ (r.branch || '—') +'</td>' +
+        '<td class="mono">'+ contact + (r.contact_phone ? '<div class="sub2">'+esc(r.contact_phone)+'</div>':'') +'</td>' +
+        '<td>'+ consentChip(r.consent_status) + (r.consent_level ? ' <span class="sub2">'+r.consent_level+'</span>':'') +'</td>' +
+        '<td>'+ statusSelect(r) +'</td>' +
+        '<td>'+ agentSelect(r) +'</td>' +
+        '<td class="mono">'+ fmt(r.created_at) +'</td>' +
+        '<td>'+ agentCell +'</td>' +
+        '</tr>';
+    });
+    box.innerHTML = html + '</tbody></table>';
+
+    box.querySelectorAll('select.inline').forEach(function (sel) {
+      sel.addEventListener('change', function () {
+        var id = sel.getAttribute('data-id');
+        var act = sel.getAttribute('data-act');
+        var patch = act === 'status' ? { status: sel.value } : { assigned_agent: sel.value };
+        fetch('/api/onboarding/' + encodeURIComponent(id), {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'same-origin',
+          body: JSON.stringify(patch),
+        })
+          .then(function (r) { return r.json(); })
+          .then(function (out) {
+            if (out && out.entry) {
+              var i = cache.findIndex(function (x) { return x.id === id; });
+              if (i >= 0) cache[i] = out.entry;
+            } else if (out && out.error) {
+              alert('Update failed: ' + out.error);
+            }
+          });
+      });
+    });
+  }
+
+  function renderStats(s) {
+    document.getElementById('s-total').textContent = s.total || 0;
+    document.getElementById('s-minors').textContent = s.minors || 0;
+    document.getElementById('s-pending').textContent = s.consent_pending || 0;
+    document.getElementById('s-athlete').textContent = (s.byAudience && s.byAudience.athlete) || 0;
+    document.getElementById('s-coach').textContent = (s.byAudience && s.byAudience.coach) || 0;
+    document.getElementById('backend-tag').textContent = 'Backend: ' + (s.backend || '—');
+  }
+
+  function csvEscape(s) { s = (s==null?'':String(s)); return /["\n,]/.test(s) ? '"'+s.replace(/"/g,'""')+'"' : s; }
+  function exportCsv() {
+    var rows = filtered();
+    var header = ['subject_name','audience','branch','is_minor','contact_email','guardian_email','consent_status','consent_level','status','assigned_agent','created_at'];
+    var lines = [header.join(',')];
+    rows.forEach(function (r) {
+      lines.push(header.map(function (k) { return csvEscape(r[k]); }).join(','));
+    });
+    var blob = new Blob([lines.join('\n')], { type: 'text/csv' });
+    var a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'toj-intake-crm-' + new Date().toISOString().slice(0,10) + '.csv';
+    a.click();
+  }
+
+  function load() {
+    return Promise.all([
+      fetch('/api/onboarding/stats', { credentials: 'same-origin' }).then(function (r) { return r.json(); }),
+      fetch('/api/onboarding/list?limit=1000', { credentials: 'same-origin' }).then(function (r) { return r.json(); }),
+    ]).then(function (out) {
+      renderStats(out[0] || {});
+      cache = (out[1] && out[1].entries) || [];
+      render();
+      document.getElementById('refresh-note').textContent = 'Updated ' + new Date().toTimeString().slice(0,8);
+    });
+  }
+
+  function boot() {
+    fetch('/api/me', { credentials: 'same-origin' })
+      .then(function (r) { return r.json(); })
+      .then(function (me) {
+        if (!me.authenticated) { document.getElementById('gate').classList.add('on'); return; }
+        document.getElementById('app').style.display = 'block';
+        document.getElementById('who').textContent = me.email;
+        load();
+        refreshTimer = setInterval(load, 30000); // auto-refresh, subject-media-ops style
+      })
+      .catch(function () { document.getElementById('gate').classList.add('on'); });
+  }
+  boot();
+
+  document.getElementById('logout').addEventListener('click', function (e) {
+    e.preventDefault();
+    fetch('/api/auth/logout', { method: 'POST', credentials: 'same-origin' })
+      .finally(function () { location.href = '/'; });
+  });
+  document.getElementById('refresh-btn').addEventListener('click', load);
+  document.getElementById('export-csv').addEventListener('click', exportCsv);
+
+  function wireFilters(attr, setter) {
+    document.querySelectorAll('['+attr+']').forEach(function (b) {
+      b.addEventListener('click', function () {
+        document.querySelectorAll('['+attr+']').forEach(function (x) { x.classList.remove('active'); });
+        b.classList.add('active');
+        setter(b.getAttribute(attr));
+        render();
+      });
+    });
+  }
+  wireFilters('data-af', function (v) { af = v; });
+  wireFilters('data-cf', function (v) { cf = v; });
+  wireFilters('data-tf', function (v) { tf = v; });
+})();
+</script>
+</body>
+</html>

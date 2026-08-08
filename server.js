@@ -41,6 +41,16 @@ const CORS_ALLOWED_ORIGINS = new Set([
   "https://www.tojcampaign.com",
   "http://localhost:3000",
   "http://localhost:5173",
+  // Sibling intake front-ends that POST onboarding intakes to this backend.
+  // (Each can alternatively proxy /api/* via its own vercel.json for same-
+  // origin, no-CORS calls — see routes/onboarding.js header.)
+  "https://verified-season.vercel.app",
+  "https://subject-media-ops-xow7.vercel.app",
+  // Extend without a code change: ONBOARDING_CORS_ORIGINS="https://a,https://b"
+  ...String(process.env.ONBOARDING_CORS_ORIGINS || "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean),
 ]);
 app.use((req, res, next) => {
   const origin = req.headers.origin;
@@ -77,6 +87,7 @@ app.use("/api/auth", require("./routes/auth"));
 app.use("/api/analytics", require("./routes/analytics"));
 app.use("/api/email", require("./routes/email"));
 app.use("/api/intake", require("./routes/intake"));
+app.use("/api/onboarding", require("./routes/onboarding"));
 app.use("/api/waitlist", require("./routes/waitlist"));
 app.use("/api/admin", require("./routes/admin"));
 app.use("/api/client", require("./routes/client"));

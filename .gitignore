@@ -31,3 +31,9 @@ build/
 # Database backups
 *.backup.json
 *.old.json
+
+# Runtime JSON stores — may hold real intake/contact data (incl. minors).
+# Child-safety: these must NEVER be committed. Real data lives only in the
+# private Supabase project, not in git. (Pre-existing tracked db/*.json files
+# predate this rule and need a separate scrub — see the onboarding intake work.)
+db/onboarding_intakes.json
