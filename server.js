@@ -126,7 +126,15 @@ app.use("/api/agents", require("./routes/agents"));
 app.use("/api/hooks-agents", require("./routes/hooks-agents"));
 app.use("/api/diagnostic-agents", require("./routes/diagnostic-agents"));
 app.use("/api/performance-agents", require("./routes/performance-agents"));
-app.use("/api/pylon", require("./routes/pylon"));
+// Pylon route needs a Postgres `db` module (it calls db.query(...) throughout).
+// That module was never wired, so requiring it crashes boot. Mount defensively:
+// if ../db is missing, skip the route with a warning instead of taking the whole
+// server down. It auto-enables the day a real db module exists.
+try {
+  app.use("/api/pylon", require("./routes/pylon"));
+} catch (e) {
+  console.warn("[pylon] route not mounted — missing ../db module:", e.message);
+}
 
 // Pylon × TOJ · pre/during/post-event sales sequence cron
 // Toggle via env: PYLON_CRON_ENABLED=true
