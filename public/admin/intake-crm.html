@@ -86,6 +86,8 @@
   select.inline { font-family: 'JetBrains Mono', monospace; font-size: 0.7rem; padding: 0.28rem 0.4rem; border: 1px solid var(--rule-strong); border-radius: 6px; background: var(--parchment); color: var(--ink); }
   a.agent-link { font-family: 'JetBrains Mono', monospace; font-size: 0.7rem; font-weight: 600; letter-spacing: 0.06em; color: var(--score); white-space: nowrap; }
   a.agent-link:hover { text-decoration: underline; }
+  button.consent-copy { background: none; border: none; cursor: pointer; padding: 0; }
+  button.consent-copy:hover { text-decoration: underline; }
 
   .empty { padding: 2rem; text-align: center; color: var(--ink-mute); font-style: italic; background: var(--card); border: 1px dashed var(--rule-strong); border-radius: 10px; }
   .safety { background: rgba(230,112,82,0.10); border: 1px solid rgba(230,112,82,0.28); border-left: 3px solid var(--alert); border-radius: 8px; padding: 0.7rem 0.95rem; font-size: 0.8rem; color: var(--ink-soft); margin-bottom: 1.4rem; }
@@ -265,9 +267,14 @@
         : (esc(r.contact_email) || '—');
       // Agent hand-off is BLOCKED in the link when a minor's consent is pending.
       var canAgent = !(r.is_minor && r.consent_status === 'pending');
-      var agentCell = canAgent
-        ? '<a class="agent-link" href="/admin/agents.html?client='+encodeURIComponent(r.id)+'&audience='+encodeURIComponent(r.audience)+'">Open →</a>'
-        : '<span class="sub2" title="Guardian consent required first">consent first</span>';
+      var agentCell;
+      if (canAgent) {
+        agentCell = '<a class="agent-link" href="/admin/agents.html?client='+encodeURIComponent(r.id)+'&audience='+encodeURIComponent(r.audience)+'">Open →</a>';
+      } else if (r.consent_token) {
+        agentCell = '<button class="agent-link consent-copy" data-token="'+esc(r.consent_token)+'" title="Copy the guardian consent link">Consent link ⧉</button>';
+      } else {
+        agentCell = '<span class="sub2" title="Guardian consent required first">consent first</span>';
+      }
       html += '<tr>' +
         '<td><span class="name">'+ (esc(r.subject_name) || '—') +'</span>'+minorTag+'</td>' +
         '<td>'+ audChip(r.audience) +'</td>' +
@@ -302,6 +309,18 @@
               alert('Update failed: ' + out.error);
             }
           });
+      });
+    });
+
+    // Copy the guardian consent link for a pending-minor row.
+    box.querySelectorAll('.consent-copy').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        var link = location.origin + '/consent.html?token=' + btn.getAttribute('data-token');
+        var orig = btn.textContent;
+        var done = function () { btn.textContent = 'Copied ✓'; setTimeout(function () { btn.textContent = orig; }, 1600); };
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(link).then(done).catch(function () { window.prompt('Copy this consent link:', link); });
+        } else { window.prompt('Copy this consent link:', link); }
       });
     });
   }

@@ -28,6 +28,7 @@
 const express = require("express");
 const fs = require("fs");
 const path = require("path");
+const crypto = require("crypto");
 const { ingestClientDocument, payloadToProse } = require("../utils/embed");
 
 const router = express.Router();
@@ -123,6 +124,43 @@ function requireAdmin(req, res, next) {
   return res.status(401).json({ error: "not_authenticated" });
 }
 
+// Embed an intake row into the agent RAG — GATED. A minor's row embeds only at
+// c3+ (named); only c4 puts the name into the vector store. Shared by the public
+// submit path and the guardian-consent grant path. Fire-and-forget; failures log.
+function ingestIntakeRow(sb, row) {
+  if (!sb || !row) return;
+  const mayEmbed = !row.is_minor || EMBED_OK_MINOR_LEVELS.has(row.consent_level);
+  if (!mayEmbed) return;
+  const publicNamed = row.is_minor && row.consent_level === "c4";
+  const nameLine =
+    !row.is_minor || publicNamed ? `Subject: ${row.subject_name || "n/a"}\n` : "";
+  const prose =
+    `Audience: ${row.audience}\n` +
+    (row.branch ? `Branch: ${row.branch}\n` : "") +
+    nameLine +
+    payloadToProse(row.payload || {});
+  ingestClientDocument(sb, {
+    client_id: row.id, // client_documents.client_id doubles as the intake scope id
+    source_type: "onboarding_intake",
+    source_ref: row.id,
+    title: `Onboarding intake — ${row.audience}${row.branch ? " · " + row.branch : ""}`,
+    content: prose,
+    metadata: {
+      audience: row.audience,
+      branch: row.branch,
+      intake_version: row.intake_version,
+      is_minor: row.is_minor,
+    },
+  })
+    .then((r) => {
+      console.log(
+        `[onboarding][RAG] ${row.id} → ${r.ok ? `${r.chunks} chunks` : `FAIL ${r.error}`}`
+      );
+      if (r.ok) sb.from("onboarding_intakes").update({ embedded: true }).eq("id", row.id).then(() => {});
+    })
+    .catch((e) => console.error("[onboarding][RAG] crashed:", e.message));
+}
+
 // Decide consent_status + whether we may embed, given minor flag + level.
 function resolveConsent(isMinor, level) {
   if (!isMinor) return { consent_status: "not_required", mayEmbed: true };
@@ -213,53 +251,15 @@ router.post("/", async (req, res) => {
     status: "new",
     assigned_agent: null,
     embedded: false,
+    // Minors get a one-time consent token so a guardian can grant a visibility
+    // level from a public link (see /consent/:token). Adults don't need one.
+    consent_token: is_minor ? crypto.randomBytes(24).toString("hex") : null,
     source,
     ip: typeof ip === "string" ? ip.slice(0, 100) : null,
     user_agent,
   };
 
   const sb = getSupabase();
-
-  // Embed only when the gate allows it AND we have a Supabase to embed into.
-  // For minors we additionally strip identity from the prose (belt + braces):
-  // the RAG stores the intake content, not "who", unless c4 (public) named use.
-  function maybeEmbed(sb, rowId, clientKey) {
-    if (!mayEmbed || !sb) return;
-    setImmediate(() => {
-      const publicNamed = is_minor && consent_level === "c4";
-      const nameLine =
-        !is_minor || publicNamed
-          ? `Subject: ${subject_name || "n/a"}\n`
-          : ""; // minors below c4: no name into the vector store
-      const prose =
-        `Audience: ${audience}\n` +
-        (branch ? `Branch: ${branch}\n` : "") +
-        nameLine +
-        payloadToProse(payload);
-      ingestClientDocument(sb, {
-        client_id: clientKey, // reuse client_documents.client_id as the intake key
-        source_type: "onboarding_intake",
-        source_ref: rowId,
-        title: `Onboarding intake — ${audience}${branch ? " · " + branch : ""}`,
-        content: prose,
-        metadata: { audience, branch, intake_version, is_minor },
-      })
-        .then((r) => {
-          console.log(
-            `[onboarding][RAG] ${rowId} → ${
-              r.ok ? `${r.chunks} chunks` : `FAIL ${r.error}`
-            }`
-          );
-          if (r.ok && sb) {
-            sb.from("onboarding_intakes")
-              .update({ embedded: true })
-              .eq("id", rowId)
-              .then(() => {});
-          }
-        })
-        .catch((e) => console.error("[onboarding][RAG] crashed:", e.message));
-    });
-  }
 
   if (sb) {
     const { data, error } = await sb
@@ -274,7 +274,7 @@ router.post("/", async (req, res) => {
     console.log(
       `[ONBOARDING] Supabase · ${audience}${branch ? "/" + branch : ""} · minor=${is_minor} · consent=${consent_status} · id=${data.id}`
     );
-    maybeEmbed(sb, data.id, data.id);
+    setImmediate(() => ingestIntakeRow(sb, data));
     return res.json({
       ok: true,
       id: data.id,
@@ -417,6 +417,80 @@ router.patch("/:id", requireAdmin, async (req, res) => {
   list[i] = { ...list[i], ...patch, updated_at: new Date().toISOString() };
   saveJson(list);
   res.json({ ok: true, entry: list[i] });
+});
+
+// =====================================================================
+//  Guardian consent — PUBLIC, token-gated (no admin session).
+//  The operator shares /consent.html?token=… with the guardian.
+//  GET  /consent/:token  → minimal summary for the consent page
+//  POST /consent/:token  → guardian grants a visibility level (c1/c3/c4)
+// =====================================================================
+router.get("/consent/:token", async (req, res) => {
+  const token = String(req.params.token || "");
+  if (token.length < 20) return res.status(400).json({ error: "bad_token" });
+  const sb = getSupabase();
+  let row = null;
+  if (sb) {
+    const { data } = await sb
+      .from("onboarding_intakes")
+      .select("id,audience,branch,subject_name,is_minor,consent_status,consent_level")
+      .eq("consent_token", token)
+      .maybeSingle();
+    row = data || null;
+  } else {
+    row = loadJson().find((r) => r.consent_token === token) || null;
+  }
+  if (!row) return res.status(404).json({ error: "not_found" });
+  // First name only — minimize PII exposed on a public page.
+  const first = (row.subject_name || "").trim().split(/\s+/)[0] || "the athlete";
+  res.json({
+    ok: true,
+    athlete_first_name: first,
+    audience: row.audience,
+    branch: row.branch,
+    already: row.consent_status === "granted",
+  });
+});
+
+router.post("/consent/:token", async (req, res) => {
+  const token = String(req.params.token || "");
+  if (token.length < 20) return res.status(400).json({ error: "bad_token" });
+  const level = req.body && req.body.consent_level;
+  // The guardian chooses Private (c1), Coach-facing (c3), or Public (c4).
+  if (!["c1", "c3", "c4"].includes(level))
+    return res.status(400).json({ error: "invalid_consent_level" });
+  const guardian_name =
+    (req.body && req.body.guardian_name ? String(req.body.guardian_name) : "").slice(0, 200) || null;
+
+  const patch = {
+    consent_level: level,
+    consent_status: "granted",
+    consent_token: null, // one-time: burn the token after use
+  };
+  if (guardian_name) patch.guardian_name = guardian_name;
+
+  const sb = getSupabase();
+  if (sb) {
+    const { data, error } = await sb
+      .from("onboarding_intakes")
+      .update(patch)
+      .eq("consent_token", token)
+      .select()
+      .single();
+    if (error || !data) return res.status(404).json({ error: "not_found" });
+    setImmediate(() => ingestIntakeRow(sb, data)); // embeds now if c3+
+    return res.json({
+      ok: true,
+      consent_level: level,
+      embedded_queued: EMBED_OK_MINOR_LEVELS.has(level),
+    });
+  }
+  const list = loadJson();
+  const i = list.findIndex((r) => r.consent_token === token);
+  if (i < 0) return res.status(404).json({ error: "not_found" });
+  list[i] = { ...list[i], ...patch, updated_at: new Date().toISOString() };
+  saveJson(list);
+  res.json({ ok: true, consent_level: level, embedded_queued: false });
 });
 
 module.exports = router;
