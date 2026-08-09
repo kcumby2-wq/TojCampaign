@@ -66,9 +66,18 @@ function returnTarget() {
   return null;
 }
 
+// Where you land after auth:
+//   1. an explicit ?return=/path  → go there (gate sign-ins use this)
+//   2. otherwise the Intake CRM    → the default home; NOT the Builder
+//   3. the Builder ONLY opens with ?view=builder (its own link uses that)
+function wantsBuilder() {
+  try { return new URLSearchParams(location.search).get("view") === "builder"; }
+  catch (e) { return false; }
+}
 function showApp() {
   var back = returnTarget();
   if (back) { location.href = back; return; }
+  if (!wantsBuilder()) { location.href = "/admin/intake-crm.html"; return; }
   document.getElementById("authView").classList.add("hidden");
   document.getElementById("appView").classList.remove("hidden");
   loadTemplates();
@@ -98,12 +107,7 @@ document.getElementById("loginForm").addEventListener("submit", async (e) => {
       }),
     });
     document.getElementById("userEmail").textContent = data.email;
-    // Fresh sign-in lands on the Command Center hub (unless the gate asked to
-    // return somewhere specific, e.g. the Intake CRM). Already-authed page loads
-    // still show the Builder normally (see showApp / checkAuth).
-    var back = returnTarget();
-    location.href = back || "/admin/command-center.html";
-    return;
+    showApp(); // routes to ?return, else Intake CRM (never the Builder unless ?view=builder)
   } catch (err) {
     errEl.textContent = err.message;
   }
