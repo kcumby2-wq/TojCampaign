@@ -317,8 +317,25 @@
       showApp();
       $("who").textContent = me.email || "";
       loadIntakeStat();
+      loadHealth();
     })
     .catch(function(){ showGate(); });
+
+  // Live backend health → the top-right status pill.
+  function loadHealth(){
+    var pill = $("sessionPill");
+    fetch("/api/health", { credentials: "same-origin" })
+      .then(function(r){ return r.ok ? r.json() : null; })
+      .then(function(h){
+        if (!h || !h.ok) { pill.className = "pill warn"; pill.textContent = "Backend unreachable"; return; }
+        var bits = [ h.backend === "supabase" ? "Supabase live" : "JSON fallback" ];
+        if (h.voyage) bits.push("RAG on");
+        if (h.sessionStore === "postgres") bits.push("persistent login");
+        pill.className = "pill " + (h.backend === "supabase" ? "ok" : "warn");
+        pill.textContent = bits.join(" · ");
+      })
+      .catch(function(){ pill.className = "pill warn"; pill.textContent = "Backend unreachable"; });
+  }
 
   // Live signal on the Intake CRM card — total intakes + backend.
   function loadIntakeStat(){

@@ -65,14 +65,34 @@ app.use((req, res, next) => {
   next();
 });
 
-app.use(
-  session({
-    secret: process.env.SESSION_SECRET || "toj-dev-secret-change-me",
-    resave: false,
-    saveUninitialized: false,
-    cookie: { maxAge: 1000 * 60 * 60 * 24 * 7 }, // 1 week
-  })
-);
+// Session store. Postgres-backed (connect-pg-simple) when DATABASE_URL is set —
+// sessions then survive Render restarts/redeploys and scale past one process.
+// Falls back to the in-memory store (dev / not-yet-configured) with a warning.
+const sessionOpts = {
+  secret: process.env.SESSION_SECRET || "toj-dev-secret-change-me",
+  resave: false,
+  saveUninitialized: false,
+  cookie: { maxAge: 1000 * 60 * 60 * 24 * 7 }, // 1 week
+};
+if (process.env.DATABASE_URL) {
+  try {
+    const PgStore = require("connect-pg-simple")(session);
+    const { Pool } = require("pg");
+    sessionOpts.store = new PgStore({
+      pool: new Pool({
+        connectionString: process.env.DATABASE_URL,
+        ssl: { rejectUnauthorized: false },
+      }),
+      createTableIfMissing: true,
+    });
+    console.log("[session] Postgres-backed store active (survives redeploys)");
+  } catch (e) {
+    console.warn("[session] DATABASE_URL set but pg store failed — MemoryStore:", e.message);
+  }
+} else {
+  console.warn("[session] no DATABASE_URL — MemoryStore (sessions reset on restart). Set DATABASE_URL to persist logins.");
+}
+app.use(session(sessionOpts));
 
 // Auth gate for API routes (except /auth)
 function requireAuth(req, res, next) {
@@ -141,6 +161,20 @@ try {
 if (process.env.PYLON_CRON_ENABLED === "true") {
   require("./utils/pylon-sequence-cron").start();
 }
+
+// Public health signal — powers the live status dot on the Command Center.
+// Reports which storage/AI backends are actually wired (no secrets leaked).
+app.get("/api/health", (req, res) => {
+  const supa = !!(process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY);
+  res.json({
+    ok: true,
+    backend: supa ? "supabase" : "json",
+    voyage: !!process.env.VOYAGE_API_KEY,
+    anthropic: !!process.env.ANTHROPIC_API_KEY,
+    sessionStore: process.env.DATABASE_URL ? "postgres" : "memory",
+    ts: new Date().toISOString(),
+  });
+});
 
 // Small helper to check auth from frontend
 app.get("/api/me", (req, res) => {
