@@ -1,0 +1,346 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta name="robots" content="noindex, nofollow" />
+<title>Command Center — TOJ / Subject Operator Hub</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Anton&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet" />
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect fill='%230A1420' width='100' height='100' rx='20'/%3E%3Ctext x='50' y='68' font-family='Anton,sans-serif' font-size='44' fill='%23C89848' text-anchor='middle'%3ETOJ%3C/text%3E%3C/svg%3E" />
+<style>
+  :root{
+    --bg:#0A1420; --bg-2:#141F30; --bg-3:#1E2B3D; --bg-4:#28374B;
+    --paper:#F5F1E8; --dim:rgba(245,241,232,.72); --dimmer:rgba(245,241,232,.48);
+    --line:#2A3547; --line-2:rgba(245,241,232,.14);
+    --gold:#C89848; --gold-b:#e0b452; --clay:#B84D2D; --sage:#7BA07B;
+    --blue:#2fa3e8; --ok:#7BA07B; --warn:#E6BA47; --err:#E67052;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--bg);color:var(--paper);font-family:'Inter',-apple-system,sans-serif;font-size:14px;line-height:1.55;min-height:100vh;-webkit-font-smoothing:antialiased}
+  body::before{content:'';position:fixed;inset:0;z-index:-1;background:radial-gradient(ellipse 70% 50% at 85% 0%,rgba(200,152,72,.08),transparent 60%),linear-gradient(180deg,var(--bg),var(--bg-2))}
+  a{color:inherit;text-decoration:none}
+  button{font-family:inherit;cursor:pointer}
+  .mono{font-family:'JetBrains Mono',monospace}
+
+  /* GATE */
+  #gate{min-height:100vh;display:none;align-items:center;justify-content:center;padding:40px 20px}
+  #gate.on{display:flex}
+  .gate-box{width:100%;max-width:420px;background:var(--bg-3);border:1px solid var(--line-2);border-radius:16px;padding:38px 34px;box-shadow:0 24px 70px rgba(0,0,0,.5)}
+  .gate-box .mark{width:48px;height:48px;background:var(--bg-4);color:var(--gold);border:1.5px solid var(--gold);border-radius:12px;display:flex;align-items:center;justify-content:center;font-family:'Anton',sans-serif;font-size:18px;margin-bottom:20px}
+  .gate-box h1{font-family:'Anton',sans-serif;font-size:26px;letter-spacing:.02em;text-transform:uppercase;color:var(--paper);line-height:1;margin-bottom:6px}
+  .gate-box p{color:var(--dim);font-size:13.5px;margin-bottom:24px}
+  .gate-box .btn-signin{display:inline-block;width:100%;text-align:center;background:var(--gold);color:var(--bg);border:0;border-radius:10px;padding:14px;font-weight:700;letter-spacing:.03em}
+  .gate-box .btn-signin:hover{background:var(--gold-b)}
+
+  /* SHELL */
+  #app{display:none}
+  #app.on{display:block}
+  .wrap{max-width:1360px;margin:0 auto;padding:26px 28px 80px}
+
+  header.top{display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap;margin-bottom:8px}
+  .brand{display:flex;align-items:center;gap:14px}
+  .brand .mk{width:46px;height:46px;background:var(--bg-3);color:var(--gold);border:1.5px solid var(--gold);border-radius:12px;display:flex;align-items:center;justify-content:center;font-family:'Anton',sans-serif;font-size:18px}
+  .brand h1{font-family:'Anton',sans-serif;font-size:26px;letter-spacing:.03em;text-transform:uppercase;line-height:1;color:var(--paper)}
+  .brand .sub{font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.2em;text-transform:uppercase;color:var(--dim);margin-top:5px}
+  .top-actions{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+  .who{font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:.06em;color:var(--dim)}
+  .pill{font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.12em;text-transform:uppercase;padding:7px 11px;border-radius:999px;border:1px solid var(--line-2);color:var(--dim);display:inline-flex;align-items:center;gap:6px}
+  .pill::before{content:'';width:7px;height:7px;border-radius:50%;background:var(--dim)}
+  .pill.ok{color:var(--ok);border-color:rgba(123,160,123,.4)}.pill.ok::before{background:var(--ok);box-shadow:0 0 0 4px rgba(123,160,123,.12)}
+  .pill.warn{color:var(--warn);border-color:rgba(230,186,71,.4)}.pill.warn::before{background:var(--warn)}
+  .btn-ghost{padding:8px 13px;border-radius:9px;border:1px solid var(--line-2);background:transparent;color:var(--paper);font-size:12.5px}
+  .btn-ghost:hover{border-color:var(--gold);color:var(--gold-b)}
+
+  .lede{color:var(--dim);font-size:14px;max-width:70ch;margin:14px 0 26px;border-left:2px solid var(--gold);padding-left:14px}
+  .lede b{color:var(--gold-b)}
+
+  .section-kicker{font-family:'JetBrains Mono',monospace;font-size:10.5px;font-weight:700;letter-spacing:.22em;text-transform:uppercase;color:var(--gold);margin:34px 0 14px;display:flex;align-items:center;gap:10px}
+  .section-kicker::before{content:'◆';font-size:10px}
+  .section-kicker .count{color:var(--dimmer);letter-spacing:.14em}
+
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:14px}
+  .card{background:var(--bg-3);border:1px solid var(--line);border-radius:14px;padding:20px;display:flex;flex-direction:column;gap:10px;position:relative;transition:border-color .18s,transform .18s;overflow:hidden}
+  .card:hover{border-color:var(--gold);transform:translateY(-3px)}
+  .card::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;background:var(--gold);transform:scaleX(0);transform-origin:left;transition:transform .3s}
+  .card:hover::before{transform:scaleX(1)}
+  .card.star{background:linear-gradient(180deg,var(--bg-4),var(--bg-3));border-color:rgba(200,152,72,.4)}
+  .card.star::before{transform:scaleX(1)}
+  .card-top{display:flex;align-items:flex-start;justify-content:space-between;gap:10px}
+  .card h3{font-family:'Anton',sans-serif;font-size:19px;letter-spacing:.01em;text-transform:uppercase;color:var(--paper);line-height:1.05}
+  .card h3 .em{color:var(--gold)}
+  .tag{font-family:'JetBrains Mono',monospace;font-size:8.5px;letter-spacing:.1em;text-transform:uppercase;font-weight:700;padding:4px 7px;border-radius:5px;white-space:nowrap}
+  .tag.one{background:rgba(123,160,123,.14);color:var(--ok);border:1px solid rgba(123,160,123,.3)}
+  .tag.own{background:rgba(230,186,71,.12);color:var(--warn);border:1px solid rgba(230,186,71,.3)}
+  .tag.pub{background:rgba(47,163,232,.12);color:var(--blue);border:1px solid rgba(47,163,232,.3)}
+  .tag.soon{background:rgba(245,241,232,.06);color:var(--dimmer);border:1px solid var(--line)}
+  .card p{color:var(--dim);font-size:12.8px;line-height:1.5;flex:1}
+  .card .foot{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:2px}
+  .card .path{font-family:'JetBrains Mono',monospace;font-size:10.5px;color:var(--dimmer);letter-spacing:.03em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .open{font-family:'JetBrains Mono',monospace;font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;font-weight:700;color:var(--gold);white-space:nowrap}
+  .card:hover .open{color:var(--gold-b)}
+  .stat-inline{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--sage);letter-spacing:.04em}
+
+  .legend{display:flex;gap:16px;flex-wrap:wrap;margin-top:6px;font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.08em;color:var(--dimmer);text-transform:uppercase}
+  .legend span{display:inline-flex;align-items:center;gap:6px}
+  .legend i{width:9px;height:9px;border-radius:3px;display:inline-block}
+
+  footer{margin-top:44px;padding-top:20px;border-top:1px solid var(--line);font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--dimmer);text-align:center;line-height:1.7}
+  footer b{color:var(--gold)}
+  @media(max-width:640px){.wrap{padding:18px 14px 60px}.brand h1{font-size:22px}}
+</style>
+</head>
+<body>
+
+<!-- GATE -->
+<div id="gate">
+  <div class="gate-box">
+    <div class="mark">TOJ</div>
+    <h1>Command Center</h1>
+    <p>One sign-in for every CRM and dashboard across the business. Sign in with your TOJ operator account to unlock the hub.</p>
+    <a class="btn-signin" href="/app.html?return=/admin/command-center.html">Sign in →</a>
+  </div>
+</div>
+
+<!-- APP -->
+<div id="app">
+  <div class="wrap">
+    <header class="top">
+      <div class="brand">
+        <div class="mk">TOJ</div>
+        <div>
+          <h1>Command Center</h1>
+          <div class="sub">Operator Hub · Trail of Joy / Subject</div>
+        </div>
+      </div>
+      <div class="top-actions">
+        <span class="pill ok" id="sessionPill">One login active</span>
+        <span class="who" id="who">…</span>
+        <a class="btn-ghost" href="/app.html">Builder</a>
+        <button class="btn-ghost" id="logout" type="button">Log out</button>
+      </div>
+    </header>
+
+    <p class="lede">
+      Every operating surface in the business, one page, one login. The cards tagged
+      <b>one login</b> ride your current TOJ session — click straight through, no re-auth.
+      A few external tools keep their <b>own login</b> (marked), and public storefronts are
+      one click away. Bookmark this — it's how you run the shop.
+    </p>
+    <div class="legend">
+      <span><i style="background:var(--ok)"></i> one login (this session)</span>
+      <span><i style="background:var(--warn)"></i> own login</span>
+      <span><i style="background:var(--blue)"></i> public site</span>
+      <span><i style="background:var(--line)"></i> not live yet</span>
+    </div>
+
+    <!-- CRMs & OPS -->
+    <div class="section-kicker">CRMs &amp; Ops Dashboards <span class="count" id="crmCount"></span></div>
+    <div class="grid">
+      <a class="card star" href="/admin/intake-crm.html">
+        <div class="card-top"><h3>Intake <span class="em">CRM</span></h3><span class="tag one">one login</span></div>
+        <p>The unified board. Every athlete, coach, and business intake lands here from all sites — consent-gated, filterable, exportable, with agent hand-off.</p>
+        <div class="foot"><span class="stat-inline" id="crmStat">loading…</span><span class="open">Open →</span></div>
+      </a>
+      <a class="card" href="https://subject-media-ops-xow7.vercel.app/" target="_blank" rel="noopener">
+        <div class="card-top"><h3>Subject Media <span class="em">Ops</span></h3><span class="tag own">own login</span></div>
+        <p>Stripe-backed money dashboard — payments, subscriptions, MRR, creator payouts. Auto-refresh + CSV export. Uses its own admin password.</p>
+        <div class="foot"><span class="path">subject-media-ops · Stripe</span><span class="open">Open ↗</span></div>
+      </a>
+      <a class="card" href="/admin/waitlist.html">
+        <div class="card-top"><h3>Waitlist &amp; <span class="em">Pilots</span></h3><span class="tag one">one login</span></div>
+        <p>Founder rollup — waitlist signups by vertical + the concierge pilot pipeline (prospect → signed → onboarded).</p>
+        <div class="foot"><span class="path">/admin/waitlist</span><span class="open">Open →</span></div>
+      </a>
+      <a class="card" href="https://fbtrainer.tojcampaign.com/money" target="_blank" rel="noopener">
+        <div class="card-top"><h3>Money in the <span class="em">Door</span></h3><span class="tag pub">tool</span></div>
+        <p>Financial ops tracker — MRR by client, CAC per channel, LTV per tier, runway, and the milestone ladder to $10K → $25K → $50K MRR.</p>
+        <div class="foot"><span class="path">fbtrainer · /money</span><span class="open">Open ↗</span></div>
+      </a>
+    </div>
+
+    <!-- AGENT CONSOLES -->
+    <div class="section-kicker">Agent Consoles</div>
+    <div class="grid">
+      <a class="card" href="/admin/agents.html">
+        <div class="card-top"><h3>TOJ <span class="em">Agents</span></h3><span class="tag one">one login</span></div>
+        <p>Your personal agent platform — pick a role + client scope, run an agent over the retrieved intake/client memory.</p>
+        <div class="foot"><span class="path">/admin/agents</span><span class="open">Open →</span></div>
+      </a>
+      <a class="card" href="/admin/hooks-agents.html">
+        <div class="card-top"><h3>Hooks <span class="em">Agents</span></h3><span class="tag one">one login</span></div>
+        <p>The Coached-by-Hooks operating brain — 6 roles for lead capture, recaps, renewals, account health, rev-share.</p>
+        <div class="foot"><span class="path">/admin/hooks-agents</span><span class="open">Open →</span></div>
+      </a>
+      <a class="card" href="/admin/diagnostic-agents.html">
+        <div class="card-top"><h3>Diagnostic <span class="em">Agents</span></h3><span class="tag one">one login</span></div>
+        <p>The $999 AI-Tools Assessment engine — discovery → opportunity map → report → offer, as a productized console.</p>
+        <div class="foot"><span class="path">/admin/diagnostic-agents</span><span class="open">Open →</span></div>
+      </a>
+      <a class="card" href="/admin/performance-agents.html">
+        <div class="card-top"><h3>Performance <span class="em">Agents</span></h3><span class="tag one">one login</span></div>
+        <p>performance-os runtime — session reports, coach one-pagers, progress tracking, the 5-pillar diagnostic.</p>
+        <div class="foot"><span class="path">/admin/performance-agents</span><span class="open">Open →</span></div>
+      </a>
+    </div>
+
+    <!-- PYLON OPS -->
+    <div class="section-kicker">Pylon Ops</div>
+    <div class="grid">
+      <a class="card" href="/admin/pylon.html">
+        <div class="card-top"><h3>Pylon <span class="em">Admin</span></h3><span class="tag one">one login</span></div>
+        <p>The Pylon × TOJ operator dashboard — teams, athletes, events, packages, subscriptions, sponsors, revenue.</p>
+        <div class="foot"><span class="path">/admin/pylon</span><span class="open">Open →</span></div>
+      </a>
+      <a class="card" href="/admin/pylon-live-console.html">
+        <div class="card-top"><h3>Pylon Live <span class="em">Console</span></h3><span class="tag one">one login</span></div>
+        <p>Event-day live posting — stat cards, play of the day, rankings, sponsor bumpers, pushed to socials.</p>
+        <div class="foot"><span class="path">/admin/pylon-live-console</span><span class="open">Open →</span></div>
+      </a>
+      <a class="card" href="/admin/pylon-content-calendar.html">
+        <div class="card-top"><h3>Content <span class="em">Calendar</span></h3><span class="tag one">one login</span></div>
+        <p>The creative pod war room — month grid, pillar-colored pieces, status + channel filters.</p>
+        <div class="foot"><span class="path">/admin/pylon-content-calendar</span><span class="open">Open →</span></div>
+      </a>
+      <a class="card" href="/admin/pylon-content-performance.html">
+        <div class="card-top"><h3>Content <span class="em">Performance</span></h3><span class="tag one">one login</span></div>
+        <p>Cross-pillar KPIs — reach, engagement, conversions and revenue per content piece.</p>
+        <div class="foot"><span class="path">/admin/pylon-content-performance</span><span class="open">Open →</span></div>
+      </a>
+      <a class="card" href="/admin/pylon-ambassadors.html">
+        <div class="card-top"><h3>Pylon <span class="em">Ambassadors</span></h3><span class="tag one">one login</span></div>
+        <p>Ambassador roster — tiers, stipends, weekly-post compliance, bulk promote/pause.</p>
+        <div class="foot"><span class="path">/admin/pylon-ambassadors</span><span class="open">Open →</span></div>
+      </a>
+      <a class="card" href="/admin/pylon-newsletter.html">
+        <div class="card-top"><h3>Pylon <span class="em">Newsletter</span></h3><span class="tag one">one login</span></div>
+        <p>The Off-Season Signal — free/premium subscribers, issues, opens, conversions.</p>
+        <div class="foot"><span class="path">/admin/pylon-newsletter</span><span class="open">Open →</span></div>
+      </a>
+    </div>
+
+    <!-- INTAKE FRONT DOORS -->
+    <div class="section-kicker">Intake Front Doors <span class="count">— all feed the Intake CRM</span></div>
+    <div class="grid">
+      <a class="card" href="/athlete-intake.html" target="_blank" rel="noopener">
+        <div class="card-top"><h3>Athlete <span class="em">Intake</span></h3><span class="tag pub">public</span></div>
+        <p>Consent-first athlete/family intake with the guardian-consent gate. Feeds the CRM as <b>audience: athlete</b>.</p>
+        <div class="foot"><span class="path">/athlete-intake</span><span class="open">Open ↗</span></div>
+      </a>
+      <a class="card" href="https://fbtrainer.tojcampaign.com/intake" target="_blank" rel="noopener">
+        <div class="card-top"><h3>Coach <span class="em">Intake</span></h3><span class="tag pub">public</span></div>
+        <p>The 6-section coach snapshot (+ Basic / Premium tiers). Feeds the CRM as <b>audience: coach</b>.</p>
+        <div class="foot"><span class="path">fbtrainer · /intake</span><span class="open">Open ↗</span></div>
+      </a>
+      <a class="card" href="https://smallbusiness-tojcampaign.vercel.app/intake" target="_blank" rel="noopener">
+        <div class="card-top"><h3>Business <span class="em">Intake</span></h3><span class="tag pub">public</span></div>
+        <p>Small-business snapshot intake. Feeds the CRM as <b>audience: business</b>.</p>
+        <div class="foot"><span class="path">smallbusiness · /intake</span><span class="open">Open ↗</span></div>
+      </a>
+    </div>
+
+    <!-- CLIENT SITES & VERTICALS -->
+    <div class="section-kicker">Client Sites &amp; Verticals</div>
+    <div class="grid">
+      <a class="card" href="https://subjectmedias.com" target="_blank" rel="noopener">
+        <div class="card-top"><h3>Subject <span class="em">Medias</span></h3><span class="tag pub">public</span></div>
+        <p>The athlete visibility company — event coverage, packages, booking.</p>
+        <div class="foot"><span class="path">subjectmedias.com</span><span class="open">Open ↗</span></div>
+      </a>
+      <a class="card" href="https://subjectreport.com" target="_blank" rel="noopener">
+        <div class="card-top"><h3>Subject <span class="em">Report</span></h3><span class="tag pub">public</span></div>
+        <p>Recruiting evaluation + transcript platform.</p>
+        <div class="foot"><span class="path">subjectreport.com</span><span class="open">Open ↗</span></div>
+      </a>
+      <a class="card" href="https://fbtrainer.tojcampaign.com/control" target="_blank" rel="noopener">
+        <div class="card-top"><h3>Control <span class="em">Tower</span></h3><span class="tag pub">tool</span></div>
+        <p>The coach-vertical operator dashboard — demos, pipeline, quick actions, architecture map.</p>
+        <div class="foot"><span class="path">fbtrainer · /control</span><span class="open">Open ↗</span></div>
+      </a>
+      <a class="card" href="https://fbtrainer.tojcampaign.com/" target="_blank" rel="noopener">
+        <div class="card-top"><h3>fbtrainer <span class="em">Vertical</span></h3><span class="tag pub">public</span></div>
+        <p>Football + skills coach snapshots — 8 reference demos, tier ladder, Trainer OS.</p>
+        <div class="foot"><span class="path">fbtrainer.tojcampaign.com</span><span class="open">Open ↗</span></div>
+      </a>
+      <a class="card" href="https://smallbusiness-tojcampaign.vercel.app/" target="_blank" rel="noopener">
+        <div class="card-top"><h3>Small Business <span class="em">Vertical</span></h3><span class="tag pub">public</span></div>
+        <p>Personal-business snapshots — barbers, trainers, yoga, realtors, wellness.</p>
+        <div class="foot"><span class="path">smallbusiness-tojcampaign</span><span class="open">Open ↗</span></div>
+      </a>
+      <a class="card" href="https://verified-season.vercel.app/" target="_blank" rel="noopener">
+        <div class="card-top"><h3>Verified <span class="em">Season</span></h3><span class="tag soon">deploy blocked</span></div>
+        <p>Premium athlete/family site. Vercel deploy is account-blocked — the athlete intake is live on the mothership meanwhile.</p>
+        <div class="foot"><span class="path">verified-season</span><span class="open">Open ↗</span></div>
+      </a>
+    </div>
+
+    <!-- BUILDER & DEV -->
+    <div class="section-kicker">Builder &amp; Dev</div>
+    <div class="grid">
+      <a class="card" href="/app.html">
+        <div class="card-top"><h3>Campaign <span class="em">Builder</span></h3><span class="tag one">one login</span></div>
+        <p>UTM + QR builder, contacts CSV, column templates.</p>
+        <div class="foot"><span class="path">/app.html</span><span class="open">Open →</span></div>
+      </a>
+      <a class="card" href="https://github.com/kcumby2-wq" target="_blank" rel="noopener">
+        <div class="card-top"><h3>GitHub</h3><span class="tag own">own login</span></div>
+        <p>All 28 repos — the whole codebase behind every site, agent, and dashboard.</p>
+        <div class="foot"><span class="path">github.com/kcumby2-wq</span><span class="open">Open ↗</span></div>
+      </a>
+      <a class="card" href="https://vercel.com/kcumby2-9563s-projects" target="_blank" rel="noopener">
+        <div class="card-top"><h3>Vercel</h3><span class="tag own">own login</span></div>
+        <p>Every deployment — build status, rollbacks, domains.</p>
+        <div class="foot"><span class="path">vercel · kcumby2-9563s</span><span class="open">Open ↗</span></div>
+      </a>
+    </div>
+
+    <footer>
+      Trail of Joy · Subject · Command Center v1 · <b>bookmark this URL</b><br>
+      One operator login · every CRM &amp; dashboard · noindex
+    </footer>
+  </div>
+</div>
+
+<script>
+(function(){
+  function $(id){return document.getElementById(id);}
+
+  function showGate(){ $("gate").classList.add("on"); $("app").classList.remove("on"); }
+  function showApp(){ $("gate").classList.remove("on"); $("app").classList.add("on"); }
+
+  // Auth: shared TOJ session via /api/me. If not authed, show the gate.
+  fetch("/api/me", { credentials: "same-origin" })
+    .then(function(r){ return r.json(); })
+    .then(function(me){
+      if (!me || !me.authenticated) { showGate(); return; }
+      showApp();
+      $("who").textContent = me.email || "";
+      loadIntakeStat();
+    })
+    .catch(function(){ showGate(); });
+
+  // Live signal on the Intake CRM card — total intakes + backend.
+  function loadIntakeStat(){
+    fetch("/api/onboarding/stats", { credentials: "same-origin" })
+      .then(function(r){ return r.ok ? r.json() : null; })
+      .then(function(s){
+        if (!s) { $("crmStat").textContent = ""; return; }
+        var total = s.total || 0;
+        var pend = s.consent_pending || 0;
+        $("crmStat").textContent = total + " intake" + (total === 1 ? "" : "s") +
+          " · " + (s.backend || "?") + (pend ? " · " + pend + " consent-pending" : "");
+        $("crmCount").textContent = "— " + total + " total · backend: " + (s.backend || "?");
+      })
+      .catch(function(){ $("crmStat").textContent = ""; });
+  }
+
+  var lo = $("logout");
+  if (lo) lo.addEventListener("click", function(){
+    fetch("/api/auth/logout", { method: "POST", credentials: "same-origin" })
+      .finally(function(){ location.href = "/admin/command-center.html"; });
+  });
+})();
+</script>
+</body>
+</html>

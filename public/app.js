@@ -98,7 +98,12 @@ document.getElementById("loginForm").addEventListener("submit", async (e) => {
       }),
     });
     document.getElementById("userEmail").textContent = data.email;
-    showApp();
+    // Fresh sign-in lands on the Command Center hub (unless the gate asked to
+    // return somewhere specific, e.g. the Intake CRM). Already-authed page loads
+    // still show the Builder normally (see showApp / checkAuth).
+    var back = returnTarget();
+    location.href = back || "/admin/command-center.html";
+    return;
   } catch (err) {
     errEl.textContent = err.message;
   }
