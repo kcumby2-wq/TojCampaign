@@ -55,7 +55,20 @@ function showAuth() {
   document.getElementById("appView").classList.add("hidden");
 }
 
+// If we arrived with ?return=/some/admin/path, bounce there once authenticated
+// (e.g. the Intake CRM sends users here to sign in, then wants them back).
+// Same-origin paths only — must start with a single "/" (no "//host" open-redirect).
+function returnTarget() {
+  try {
+    var r = new URLSearchParams(location.search).get("return");
+    if (r && r.charAt(0) === "/" && r.charAt(1) !== "/") return r;
+  } catch (e) {}
+  return null;
+}
+
 function showApp() {
+  var back = returnTarget();
+  if (back) { location.href = back; return; }
   document.getElementById("authView").classList.add("hidden");
   document.getElementById("appView").classList.remove("hidden");
   loadTemplates();
