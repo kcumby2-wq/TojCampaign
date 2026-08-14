@@ -31,6 +31,22 @@
   .flow .arrow { align-self:center; color:var(--gold); font-weight:700; }
   .note { margin-top:28px; padding:16px; background:#fef8ee; border:1px solid #f0c674; border-radius:8px; font-size:13px; }
   .note code { background:#f0e8d8; padding:1px 5px; border-radius:4px; font-size:12px; }
+  /* ── Navy/gold theme · matches Command Center + Intake CRM (appended override) ── */
+  :root{ --ink:#F5F1E8; --cream:#0A1420; --gold:#C89848; --muted:rgba(245,241,232,.60); --clay:#E09A66; --pine:#5CB894; }
+  body{ background:#0A1420 !important; color:#F5F1E8 !important; }
+  h1,h2,h3{ color:#F5F1E8; }
+  p.sub,.sub{ color:rgba(245,241,232,.60); }
+  label{ color:#F5F1E8; }
+  select,input,textarea{ background:#0B1524 !important; color:#F5F1E8 !important; border-color:rgba(245,241,232,.18) !important; }
+  button{ background:#C89848 !important; color:#0A1420 !important; border:0 !important; }
+  .role-card,#output,.card{ background:#1E2B3D !important; border-color:rgba(245,241,232,.14) !important; color:#F5F1E8; }
+  .role-card:hover{ border-color:#C89848 !important; }
+  .role-card.selected{ background:rgba(200,152,72,.10) !important; border-color:#C89848 !important; }
+  .role-card p{ color:rgba(245,241,232,.60); }
+  .chip{ background:rgba(200,152,72,.16) !important; color:#e0b452 !important; }
+  .trace{ background:#141F30 !important; color:rgba(245,241,232,.70) !important; }
+  .authwarn{ background:rgba(200,152,72,.10) !important; border-color:rgba(200,152,72,.35) !important; color:#F5F1E8 !important; }
+  .err{ color:#E67052 !important; }
 </style>
 
 <div style="display:flex;gap:14px;align-items:center;font-family:'JetBrains Mono',ui-monospace,monospace;font-size:11px;letter-spacing:.1em;text-transform:uppercase;margin-bottom:18px;padding-bottom:12px;border-bottom:1px solid rgba(128,128,128,.22)"><a href="/admin/command-center.html" style="color:#B8843B;text-decoration:none;font-weight:700">⌂ Command Center</a><a href="/admin/intake-crm.html" style="color:inherit;opacity:.65;text-decoration:none">Intake CRM</a></div>
