@@ -40,3 +40,6 @@ db/onboarding_intakes.json
 
 # Local dev auth fallback — real store is Supabase `users`; never commit hashes
 db/users.json
+
+# All local JSON fallback data (real client/contact/intake data) stays out of git
+db/*.json
