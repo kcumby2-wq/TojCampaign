@@ -15,6 +15,8 @@ services:
         sync: false
       - key: ADMIN_EMAILS
         sync: false
+      - key: CAMPAIGN_DATABASE_URL
+        sync: false
       - key: REPORTS_ENABLED
         value: "false"
       - key: BASE_URL

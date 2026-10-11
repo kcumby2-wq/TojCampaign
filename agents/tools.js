@@ -93,4 +93,17 @@ const retrieveClientContext = betaTool({
   },
 });
 
-module.exports = { listClients, getFoundationScore, retrieveClientContext };
+// Ownership check for clientOwned(getFoundationScore): the score must belong
+// to the client the run is scoped to.
+async function foundationScoreBelongsTo({ foundation_score_id }, clientId) {
+  if (!foundation_score_id || !clientId) return false;
+  const { data, error } = await sb()
+    .from("foundation_scores")
+    .select("client_id")
+    .eq("id", foundation_score_id)
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  return !!data && String(data.client_id) === String(clientId);
+}
+
+module.exports = { listClients, getFoundationScore, retrieveClientContext, foundationScoreBelongsTo };

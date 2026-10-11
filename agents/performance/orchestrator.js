@@ -5,10 +5,12 @@
 // the wearable-data → athlete-facing recap → coach-facing scout report motion.
 // See agents/performance/API.md.
 const { createOrchestrator } = require("../orchestrator-factory");
+const { roster, clientBound } = require("../tool-scope");
 const { listClients, retrieveClientContext } = require("./tools");
 
 module.exports = createOrchestrator({
   namespace: "performance",
   baseDir: __dirname,
-  tools: [listClients, retrieveClientContext],
+  // list_clients only in unscoped runs; client memory only for the run's client.
+  tools: [roster(listClients), clientBound(retrieveClientContext, "client_id")],
 });
