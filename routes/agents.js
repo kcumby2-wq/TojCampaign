@@ -33,10 +33,8 @@ function getSupabase() {
   }
 }
 
-function requireAuth(req, res, next) {
-  if (req.session && req.session.userEmail) return next();
-  return res.status(401).json({ error: "not_authenticated" });
-}
+// Staff only (utils/staff.js) — runs read client memory.
+const requireAuth = require("../utils/staff").requireStaff;
 
 router.get("/roles", (_req, res) => res.json({ roles: listRoles() }));
 router.get("/skills", (_req, res) => res.json({ skills: listSkills() }));

@@ -87,9 +87,28 @@ async function main() {
       (r) => r.status === 401
     );
 
+    // Staff-only data must never be readable without a staff sign-in.
+    for (const [method, url] of [
+      ["GET", "/api/intake"],
+      ["GET", "/api/waitlist/list"],
+      ["GET", "/api/admin/users"],
+      ["POST", "/api/rag/retrieve"],
+      ["GET", "/api/agents/runs/smoke"],
+    ]) {
+      await expect(
+        method + " " + url + " (must be auth-gated)",
+        fetch(base + url, {
+          method,
+          headers: { "Content-Type": "application/json" },
+          body: method === "POST" ? "{}" : undefined,
+        }),
+        (r) => r.status === 401
+      );
+    }
+
     await expect("GET /api/me", fetch(base + "/api/me"), (r) => r.ok);
 
-    finish(0, "✅ SMOKE PASS — boot + /api/health + onboarding POST(200) + list(401) + me(200)");
+    finish(0, "✅ SMOKE PASS — boot + /api/health + onboarding POST(200) + staff routes(401) + me(200)");
   } catch (e) {
     finish(1, "❌ SMOKE FAIL: " + e.message);
   }

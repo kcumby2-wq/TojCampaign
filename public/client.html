@@ -201,7 +201,15 @@
         // Try to hydrate real client data. Endpoint may not exist yet in
         // this repo state — that's fine; the placeholder greeting stays.
         return fetch('/api/client/me', { credentials: 'same-origin' })
-          .then(function (r) { return r.ok ? r.json() : null; })
+          .then(function (r) {
+            // 401 here means the session predates portal roles: sign in again.
+            if (r.status === 401) {
+              document.getElementById('app').style.display = 'none';
+              document.getElementById('gate').classList.add('on');
+              return null;
+            }
+            return r.ok ? r.json() : null;
+          })
           .then(function (client) {
             if (!client) return;
             if (client.operator_name) document.getElementById('op-name').textContent = client.operator_name;
