@@ -13,6 +13,8 @@ services:
         value: 3000
       - key: SESSION_SECRET
         sync: false
+      - key: ADMIN_EMAILS
+        sync: false
       - key: REPORTS_ENABLED
         value: "false"
       - key: BASE_URL

@@ -33,16 +33,8 @@ function getSupabase() {
   }
 }
 
-function requireAuth(req, res, next) {
-  // Session auth OR API key (for external integrations + automation).
-  if (req.session && req.session.userEmail) return next();
-  const apiKey = req.headers["x-performance-api-key"];
-  if (apiKey && apiKey === process.env.PERFORMANCE_API_KEY) {
-    req._apiKeyAuth = true;
-    return next();
-  }
-  return res.status(401).json({ error: "not_authenticated" });
-}
+// Staff session (utils/staff.js) OR the PERFORMANCE_API_KEY header key for integrations.
+const requireAuth = require("../utils/staff").requireStaffOrApiKey("x-performance-api-key", "PERFORMANCE_API_KEY");
 
 router.get("/roles", (_req, res) => res.json({ roles: performance.listRoles() }));
 router.get("/skills", (_req, res) => res.json({ skills: performance.listSkills() }));

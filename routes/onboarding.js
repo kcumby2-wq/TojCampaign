@@ -119,10 +119,9 @@ function newId() {
 function validEmail(s) {
   return typeof s === "string" && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s.trim());
 }
-function requireAdmin(req, res, next) {
-  if (req.session && req.session.userEmail) return next();
-  return res.status(401).json({ error: "not_authenticated" });
-}
+// Staff only. Being signed in is not enough: the email must be on ADMIN_EMAILS
+// and the account must not be self-registered (utils/staff.js).
+const { requireStaff: requireAdmin } = require("../utils/staff");
 
 // Embed an intake row into the agent RAG — GATED. A minor's row embeds only at
 // c3+ (named); only c4 puts the name into the vector store. Shared by the public
