@@ -20,3 +20,5 @@ jobs:
         run: node scripts/smoke.js
         env:
           SESSION_SECRET: ci-smoke-secret
+      - name: Staff access tests (no database needed)
+        run: node --test tests/staff-access.test.js

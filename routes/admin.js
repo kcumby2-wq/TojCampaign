@@ -1,4 +1,4 @@
-// Admin API — dashboard endpoints. Session-authed like the other admin routes.
+// Admin API — dashboard endpoints.
 // Pilots table: uses Supabase if configured, else db/pilots.json fallback.
 //
 // Endpoints:
@@ -6,6 +6,10 @@
 //   POST /api/admin/pilots        create
 //   PATCH /api/admin/pilots/:id   update
 //   GET  /api/admin/dashboard     rollup: waitlist + pilots + verticals
+//   GET  /api/admin/users         accounts (email, role, created) — for review
+//   PATCH /api/admin/users/role   { email, role: "client" | "creator" | "staff" }
+//
+// Staff only: on ADMIN_EMAILS and not a self-registered account (utils/staff.js).
 
 const express = require("express");
 const fs = require("fs");
@@ -61,11 +65,8 @@ function newId() {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
 }
 
-// All admin routes require an authenticated session.
-router.use((req, res, next) => {
-  if (req.session && req.session.userEmail) return next();
-  return res.status(401).json({ error: "not_authenticated" });
-});
+// All admin routes are staff only (utils/staff.js).
+router.use(require("../utils/staff").requireStaff);
 
 // ---- Pilots
 
@@ -166,6 +167,60 @@ router.patch("/pilots/:id", async (req, res) => {
   list[i] = { ...list[i], ...patch, updated_at: new Date().toISOString() };
   saveJson(PILOTS_FILE, list);
   res.json({ pilot: list[i] });
+});
+
+// ---- Accounts
+// The role alone never makes anyone staff: 'staff' also needs the email on
+// ADMIN_EMAILS (utils/staff.js). 'client' lets an account open the client
+// portal. 'creator' is a plain self-registered account. The legacy value
+// 'admin' can't be set from here — accounts only ever move off it.
+
+const USERS_FILE = path.join(__dirname, "..", "db", "users.json");
+const SETTABLE_ROLES = new Set(["client", "creator", "staff"]);
+
+router.get("/users", async (_req, res) => {
+  const sb = getSupabase();
+  if (sb) {
+    const { data, error } = await sb
+      .from("users")
+      .select("email, role, created_at")
+      .order("created_at", { ascending: false });
+    if (error) return res.status(500).json({ error: "storage_error" });
+    return res.json({ users: data, backend: "supabase" });
+  }
+  const users = loadJson(USERS_FILE).map((u) => ({
+    email: u.email,
+    role: u.role || "admin",
+    created_at: u.createdAt || null,
+  }));
+  res.json({ users, backend: "json" });
+});
+
+router.patch("/users/role", async (req, res) => {
+  const email = String(req.body?.email || "").trim().toLowerCase();
+  const role = String(req.body?.role || "");
+  if (!email) return res.status(400).json({ error: "missing_email" });
+  if (!SETTABLE_ROLES.has(role))
+    return res.status(400).json({ error: "invalid_role", allowed: [...SETTABLE_ROLES] });
+
+  const sb = getSupabase();
+  if (sb) {
+    const { data, error } = await sb
+      .from("users")
+      .update({ role })
+      .eq("email", email)
+      .select("email, role")
+      .maybeSingle();
+    if (error) return res.status(500).json({ error: "storage_error" });
+    if (!data) return res.status(404).json({ error: "not_found" });
+    return res.json({ user: data });
+  }
+  const users = loadJson(USERS_FILE);
+  const u = users.find((x) => String(x.email).toLowerCase() === email);
+  if (!u) return res.status(404).json({ error: "not_found" });
+  u.role = role;
+  saveJson(USERS_FILE, users);
+  res.json({ user: { email: u.email, role: u.role } });
 });
 
 // ---- Combined dashboard rollup

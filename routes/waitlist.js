@@ -166,12 +166,10 @@ router.get("/stats", async (_req, res) => {
   });
 });
 
-// Admin listing — auth-gated. Uses the same session middleware other admin
-// routes use. Returns full entries for the admin dashboard.
-function requireAdmin(req, res, next) {
-  if (req.session && req.session.userEmail) return next();
-  return res.status(401).json({ error: "not_authenticated" });
-}
+// Admin listing — staff only. Returns full entries for the admin dashboard.
+// Staff only. Being signed in is not enough: the email must be on ADMIN_EMAILS
+// and the account must not be self-registered (utils/staff.js).
+const { requireStaff: requireAdmin } = require("../utils/staff");
 
 router.get("/list", requireAdmin, async (req, res) => {
   const vertical = req.query.vertical;

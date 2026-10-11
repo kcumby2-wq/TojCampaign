@@ -139,7 +139,8 @@ app.use("/api/pages", requireAuth, require("./routes/pages"));
 app.use("/api/billing", requireAuth, require("./routes/billing"));
 app.use("/api/reports", requireAuth, require("./routes/reports"));
 app.use("/api/marketplace", requireAuth, require("./routes/marketplace"));
-app.use("/api/rag", requireAuth, require("./routes/rag"));
+// Client memory (retrieve / ingest / backfill) — staff only, not just signed in.
+app.use("/api/rag", require("./utils/staff").requireStaff, require("./routes/rag"));
 // /api/agents/roles and /skills are public metadata; only /run is auth-gated
 // (enforced inside the route file so the roles picker renders pre-login).
 app.use("/api/agents", require("./routes/agents"));
@@ -179,7 +180,11 @@ app.get("/api/health", (req, res) => {
 // Small helper to check auth from frontend
 app.get("/api/me", (req, res) => {
   if (req.session && req.session.userEmail) {
-    return res.json({ authenticated: true, email: req.session.userEmail });
+    return res.json({
+      authenticated: true,
+      email: req.session.userEmail,
+      staff: require("./utils/staff").isStaff(req),
+    });
   }
   res.json({ authenticated: false });
 });

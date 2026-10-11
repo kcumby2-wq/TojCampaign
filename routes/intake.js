@@ -83,10 +83,9 @@ function newId() {
 function validEmail(s) {
   return typeof s === "string" && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s.trim());
 }
-function requireAdmin(req, res, next) {
-  if (req.session && req.session.userEmail) return next();
-  return res.status(401).json({ error: "not_authenticated" });
-}
+// Staff only. Being signed in is not enough: the email must be on ADMIN_EMAILS
+// and the account must not be self-registered (utils/staff.js).
+const { requireStaff: requireAdmin } = require("../utils/staff");
 
 // =====================================================================
 //  LEGACY: POST /  (avenue classifier intake, pre-v2)
@@ -107,8 +106,9 @@ router.post("/", (req, res) => {
     const list = readJson(LEGACY_LOG);
     list.push(record);
     writeJson(LEGACY_LOG, list);
+    // Log an ID, not identity — no email in application logs.
     console.log(
-      `[LEGACY INTAKE] ${record.received_at} · ${payload.avenue.primary} · ${payload.brand?.email || "no-email"}`
+      `[LEGACY INTAKE] ${record.received_at} · ${payload.avenue.primary} · #${list.length}`
     );
     res.json({ ok: true, id: list.length });
   } catch (err) {
@@ -117,7 +117,8 @@ router.post("/", (req, res) => {
   }
 });
 
-router.get("/", (_req, res) => {
+// Legacy submissions hold emails, IP addresses and user agents — staff only.
+router.get("/", requireAdmin, (_req, res) => {
   res.json({ count: readJson(LEGACY_LOG).length, submissions: readJson(LEGACY_LOG) });
 });
 

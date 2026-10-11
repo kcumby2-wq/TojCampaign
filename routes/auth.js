@@ -11,7 +11,31 @@ const fs = require("fs");
 const path = require("path");
 const router = express.Router();
 
+const { ROLES } = require("../utils/staff");
+
 const USERS_FILE = path.join(__dirname, "..", "db", "users.json");
+
+// Start a fresh session id at sign-in (no session fixation), then record who
+// signed in and their stored role. Staff access is NOT decided here — see
+// utils/staff.js (ADMIN_EMAILS allow-list + a role that was not self-registered).
+// Resolves true on success, false if the session store failed (Express 4
+// does not catch rejected promises in handlers, so this never rejects).
+function signIn(req, email, role) {
+  return new Promise((resolve) => {
+    req.session.regenerate((err) => {
+      if (err) {
+        console.error("[auth] session regenerate failed:", err.message);
+        return resolve(false);
+      }
+      req.session.userEmail = email;
+      req.session.userRole = role;
+      req.session.save((err2) => {
+        if (err2) console.error("[auth] session save failed:", err2.message);
+        resolve(!err2);
+      });
+    });
+  });
+}
 
 // ---- Supabase (lazy) ----
 let supabase = null;
@@ -50,6 +74,8 @@ function isValidEmail(s) {
 }
 
 // POST /api/auth/register
+// Open on purpose (the page builder signs creators up here), so a new account
+// is a 'creator' — never staff, never a client-portal login.
 router.post("/register", async (req, res) => {
   const email = (req.body?.email || "").toString().trim().toLowerCase();
   const password = req.body?.password || "";
@@ -64,8 +90,8 @@ router.post("/register", async (req, res) => {
   if (sb) {
     const { data, error } = await sb
       .from("users")
-      .insert({ email, hash })
-      .select()
+      .insert({ email, hash, role: ROLES.CREATOR })
+      .select("email,role")
       .single();
     if (error) {
       if (error.code === "23505")
@@ -73,7 +99,8 @@ router.post("/register", async (req, res) => {
       console.error("[auth] register error:", error);
       return res.status(500).json({ error: "storage_error" });
     }
-    req.session.userEmail = data.email;
+    if (!(await signIn(req, data.email, data.role || ROLES.CREATOR)))
+      return res.status(500).json({ error: "session_error" });
     return res.json({ success: true, email: data.email });
   }
 
@@ -81,9 +108,10 @@ router.post("/register", async (req, res) => {
   const users = loadUsers();
   if (users.find((u) => u.email.toLowerCase() === email))
     return res.status(409).json({ error: "email_already_registered" });
-  users.push({ email, hash, createdAt: new Date().toISOString() });
+  users.push({ email, hash, role: ROLES.CREATOR, createdAt: new Date().toISOString() });
   saveUsers(users);
-  req.session.userEmail = email;
+  if (!(await signIn(req, email, ROLES.CREATOR)))
+    return res.status(500).json({ error: "session_error" });
   res.json({ success: true, email });
 });
 
@@ -100,7 +128,7 @@ router.post("/login", async (req, res) => {
   if (sb) {
     const { data, error } = await sb
       .from("users")
-      .select("email,hash")
+      .select("email,hash,role")
       .eq("email", email)
       .maybeSingle();
     if (error) {
@@ -117,7 +145,10 @@ router.post("/login", async (req, res) => {
   const ok = await bcrypt.compare(password, user.hash);
   if (!ok) return res.status(401).json({ error: "invalid_credentials" });
 
-  req.session.userEmail = user.email;
+  // Accounts made before roles were set have no role in the JSON fallback;
+  // the Supabase column defaulted to 'admin'. Both are treated as legacy.
+  if (!(await signIn(req, user.email, user.role || ROLES.LEGACY)))
+    return res.status(500).json({ error: "session_error" });
   res.json({ success: true, email: user.email });
 });
 

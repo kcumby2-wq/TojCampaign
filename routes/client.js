@@ -49,9 +49,24 @@ function readJson(p) {
   }
 }
 
+// The portal looks a client up by the signed-in email. Registration is open
+// and does not verify email, so a self-registered account ('creator') must
+// never open a portal — otherwise anyone could sign up with a client's email
+// first and read their record. Portal logins are 'client' accounts (role set
+// by staff) or legacy accounts made before roles existed. Staff may also view.
+const { isStaff, ROLES } = require("../utils/staff");
+const PORTAL_ROLES = new Set([ROLES.CLIENT, ROLES.LEGACY]);
+
 function requireSession(req, res, next) {
-  if (req.session && req.session.userEmail) return next();
-  return res.status(401).json({ error: "not_authenticated" });
+  if (!(req.session && req.session.userEmail))
+    return res.status(401).json({ error: "not_authenticated" });
+  if (isStaff(req)) return next();
+  const role = req.session.userRole;
+  // Sessions from before this change carry no role: ask for a fresh sign-in.
+  if (!role) return res.status(401).json({ error: "sign_in_again" });
+  if (!PORTAL_ROLES.has(role))
+    return res.status(403).json({ error: "not_a_client_account" });
+  return next();
 }
 
 router.get("/me", requireSession, async (req, res) => {
