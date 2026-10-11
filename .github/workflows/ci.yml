@@ -22,8 +22,10 @@ jobs:
       - name: Staff access tests (no database needed)
         run: node --test tests/staff-access.test.js
 
-  campaign-tests:
-    name: campaign deal graph + agent scope tests (throwaway Postgres)
+  db-tests:
+    name: database gate tests (throwaway Postgres)
+    # npm test runs every tests/*.test.js: parent approval (rebuilds "public"),
+    # campaign deal graph (rebuilds "deal"), agent tool scope, staff access.
     runs-on: ubuntu-latest
     services:
       postgres:
@@ -45,7 +47,7 @@ jobs:
         with:
           node-version: "22"
       - run: npm ci
-      - name: Deal graph gates, campaign routes, tool scoping (rebuilds the "deal" schema only)
-        run: node --test tests/campaign-deal-graph.test.js tests/agent-tool-scope.test.js
+      - name: All tests (rebuild the tojtest schemas they use)
+        run: npm test
         env:
           TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/tojtest
