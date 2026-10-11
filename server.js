@@ -156,6 +156,13 @@ try {
 } catch (e) {
   console.warn("[pylon] route not mounted — missing ../db module:", e.message);
 }
+// Public, token-gated parent approval of recruiting outreach (migration 013).
+// Same db dependency as /api/pylon, so it is mounted the same defensive way.
+try {
+  app.use("/api/pylon-parent", require("./routes/pylon-parent"));
+} catch (e) {
+  console.warn("[pylon-parent] route not mounted — missing ../db module:", e.message);
+}
 
 // Pylon × TOJ · pre/during/post-event sales sequence cron
 // Toggle via env: PYLON_CRON_ENABLED=true

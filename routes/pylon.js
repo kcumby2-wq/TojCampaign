@@ -8,6 +8,7 @@
 const express = require("express");
 const router = express.Router();
 const db = require("../db");
+const parentApproval = require("../utils/parentApproval");
 
 // ═══════════════════════════════════════════════════════════════════════════
 // PYLON_REVENUE_SPLITS · Single source of truth for every SKU's split
@@ -566,13 +567,49 @@ router.post("/recruiting/draft", async (req, res) => {
   res.json(result.rows[0]);
 });
 
-router.post("/recruiting/approve/:id", async (req, res) => {
+// Staff can only REQUEST the parent's approval. This issues a one-time link for
+// the parent (see routes/pylon-parent.js and public/parent-approval.html).
+// Approval itself is recorded only by the parent, through that link; the
+// database refuses any other path (migration 013). Requesting again replaces
+// the previous link.
+router.post("/recruiting/request-approval/:id", async (req, res) => {
+  const token = parentApproval.newToken();
   const result = await db.query(
-    `UPDATE pylon_recruiting_outreach SET parent_approved=true, parent_approved_at=now() WHERE id=$1 RETURNING *`,
-    [req.params.id]
+    `UPDATE pylon_recruiting_outreach o
+        SET parent_approval_token_hash   = $2,
+            parent_approval_requested_at = now(),
+            parent_approval_expires_at   = $3,
+            parent_decision              = null,
+            parent_decided_at            = null,
+            parent_decided_name          = null
+       FROM pylon_athletes a
+      WHERE o.id = $1
+        AND a.id = o.athlete_id
+        AND o.parent_approved = false
+        AND o.sent_at IS NULL
+      RETURNING o.id, o.parent_approval_expires_at, (a.parent_email IS NOT NULL) AS parent_email_on_file`,
+    [req.params.id, parentApproval.hashToken(token), parentApproval.expiresAt()]
   );
-  res.json(result.rows[0]);
+  if (result.rowCount === 0)
+    return res.status(409).json({ error: "draft not found, already approved, or already sent" });
+  const row = result.rows[0];
+  res.json({
+    outreach_id: row.id,
+    approval_url: parentApproval.approvalUrl(req, token),
+    expires_at: row.parent_approval_expires_at,
+    parent_email_on_file: row.parent_email_on_file,
+    note: "Share this link with the parent or guardian only. It works once and is not stored.",
+  });
 });
+
+// The old staff route that set parent_approved=true directly. Kept as a clear
+// refusal so any caller still using it learns the new path.
+router.post("/recruiting/approve/:id", (_req, res) =>
+  res.status(410).json({
+    error: "parent approval is recorded only by the parent",
+    use: "POST /api/pylon/recruiting/request-approval/:id, then share the link with the parent",
+  })
+);
 
 router.post("/recruiting/inbound", async (req, res) => {
   const { outreach_id, coach_reply_body } = req.body;

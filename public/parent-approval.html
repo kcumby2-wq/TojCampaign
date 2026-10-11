@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta name="robots" content="noindex, nofollow" />
+<meta name="referrer" content="no-referrer" />
+<title>Approve a message to a college coach — Pylon Recruiting Concierge</title>
+<style>
+  :root{ --bg:#0A1420; --card:#1E2B3D; --line:rgba(245,241,232,.14); --cream:#F5F1E8;
+    --dim:rgba(245,241,232,.72); --gold:#C89848; --gold-b:#e0b452; --alert:#E67052; }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:'Inter',-apple-system,Segoe UI,sans-serif;background:var(--bg);color:var(--cream);line-height:1.6;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:640px;margin:0 auto;padding:48px 16px 80px}
+  .eyebrow{font-size:11px;letter-spacing:.24em;text-transform:uppercase;color:var(--gold);font-weight:700}
+  h1{font-family:Georgia,serif;font-size:clamp(26px,5vw,36px);line-height:1.1;margin:10px 0 8px;font-weight:600}
+  h1 em{color:var(--gold);font-style:italic}
+  .lede{color:var(--dim);font-size:15px;margin-bottom:8px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:22px;margin-top:22px}
+  .meta{display:grid;grid-template-columns:110px minmax(0,1fr);gap:6px 12px;font-size:14px}
+  .meta dt{color:var(--dim)}
+  .meta dd{overflow-wrap:anywhere}
+  .msg{margin-top:16px;border-top:1px solid var(--line);padding-top:16px}
+  .msg .subj{font-weight:700;margin-bottom:10px;overflow-wrap:anywhere}
+  .msg .body{white-space:pre-wrap;font-size:14.5px;overflow-wrap:anywhere}
+  label.opt{display:block;font-size:12px;letter-spacing:.06em;text-transform:uppercase;font-weight:600;margin-bottom:10px}
+  input[type=text]{width:100%;background:#0b0908;border:1px solid var(--line);border-radius:9px;color:var(--cream);font:inherit;font-size:15px;padding:11px 13px;outline:none;margin-bottom:6px}
+  input[type=text]:focus{border-color:var(--gold)}
+  .checkline{display:flex;gap:10px;align-items:flex-start;font-size:13.5px;margin-top:14px}
+  .checkline input{margin-top:4px}
+  .row{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:10px;margin-top:18px}
+  .btn{display:block;width:100%;border:none;border-radius:11px;font:inherit;font-weight:800;letter-spacing:.03em;font-size:15px;padding:15px;cursor:pointer}
+  .btn.yes{background:var(--gold);color:#161206}
+  .btn.yes:hover{background:var(--gold-b)}
+  .btn.no{background:transparent;color:var(--cream);border:1px solid var(--line)}
+  .btn:disabled{opacity:.5;cursor:not-allowed}
+  .err{color:#e6a15a;font-size:13px;margin-top:10px;min-height:18px}
+  .note{color:var(--dim);font-size:13px;margin-top:14px}
+  .state{display:none}.state.on{display:block}
+  .center{text-align:center;padding:36px 10px}
+  .mark{font-size:40px}
+  @media (max-width:420px){ .row{grid-template-columns:minmax(0,1fr)} .meta{grid-template-columns:minmax(0,1fr)} .meta dt{margin-top:6px} }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="eyebrow">Pylon Recruiting Concierge</div>
+
+  <div id="loading" class="state on"><h1>Loading…</h1><p class="lede">Checking your approval link.</p></div>
+
+  <div id="invalid" class="state center">
+    <div class="mark">⚠️</div>
+    <h1>This link isn't active</h1>
+    <p class="lede">It may have been used already, it may have expired, or the message was changed after the link was sent. Please ask your Recruiting Concierge contact for a new link.</p>
+  </div>
+
+  <form id="form" class="state" novalidate>
+    <h1>A message about <em id="athlete">your athlete</em>, waiting for you.</h1>
+    <p class="lede">Nothing goes to a college coach until you approve it. Read it below exactly as it will be sent, then approve it or decline it.</p>
+
+    <div class="card">
+      <dl class="meta">
+        <dt>Program</dt><dd id="program">—</dd>
+        <dt>Coach</dt><dd id="coach">—</dd>
+        <dt>Coach email</dt><dd id="email">—</dd>
+      </dl>
+      <div class="msg">
+        <div class="subj" id="subject"></div>
+        <div class="body" id="body"></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <label class="opt" for="pname">Your name (parent or guardian)</label>
+      <input type="text" id="pname" autocomplete="name" placeholder="Full name" />
+      <label class="checkline">
+        <input type="checkbox" id="ok" />
+        <span>I am this athlete's parent or legal guardian, and my decision below is about this message only.</span>
+      </label>
+      <div class="row">
+        <button class="btn yes" type="button" id="approve">Approve and allow sending</button>
+        <button class="btn no" type="button" id="decline">Decline</button>
+      </div>
+      <div class="err" id="err" role="alert"></div>
+      <p class="note">Approving covers this message only. Any change to it needs your approval again. No one is promised an offer, a roster spot or a scholarship.</p>
+    </div>
+  </form>
+
+  <div id="done" class="state center">
+    <div class="mark">✓</div>
+    <h1 id="doneTitle">Thank you.</h1>
+    <p class="lede" id="doneText">Your decision is recorded.</p>
+  </div>
+</div>
+
+<script>
+(function(){
+  function $(id){ return document.getElementById(id); }
+  function show(id){ ["loading","invalid","form","done"].forEach(function(s){ $(s).classList.toggle("on", s === id); }); }
+  var token = new URLSearchParams(location.search).get("token") || "";
+  // Keep the token out of the address bar, browser history sync and screenshots.
+  try { history.replaceState(null, "", location.pathname); } catch (e) {}
+  var base = "/api/pylon-parent/approval/" + encodeURIComponent(token);
+  if (!/^[0-9a-f]{64}$/.test(token)) { show("invalid"); return; }
+
+  fetch(base).then(function(r){ return r.ok ? r.json() : null; }).then(function(d){
+    if (!d || !d.ok) { show("invalid"); return; }
+    $("athlete").textContent = d.athlete_first_name || "your athlete";
+    $("program").textContent = [d.program_name, d.program_level].filter(Boolean).join(" · ") || "—";
+    $("coach").textContent = d.coach_name || "—";
+    $("email").textContent = d.coach_email || "—";
+    $("subject").textContent = d.draft_subject || "(no subject)";
+    $("body").textContent = d.draft_body || "";
+    show("form");
+  }).catch(function(){ show("invalid"); });
+
+  function decide(decision){
+    var err = $("err"); err.textContent = "";
+    var name = $("pname").value.trim();
+    if (name.length < 2) { err.textContent = "Please enter your name."; return; }
+    if (!$("ok").checked) { err.textContent = "Please confirm you are the parent or legal guardian."; return; }
+    $("approve").disabled = true; $("decline").disabled = true;
+    fetch(base, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ decision: decision, parent_name: name, confirm: true })
+    }).then(function(r){ return r.json().catch(function(){ return {}; }); })
+      .then(function(out){
+        if (out && out.ok) {
+          $("doneTitle").textContent = decision === "approved" ? "Approved." : "Declined.";
+          $("doneText").textContent = decision === "approved"
+            ? "This message may now be sent to the coach, exactly as you read it."
+            : "This message will not be sent. Your Recruiting Concierge contact will follow up with you.";
+          show("done");
+        } else {
+          err.textContent = "This link may no longer be active. Please ask for a new one.";
+          $("approve").disabled = false; $("decline").disabled = false;
+        }
+      })
+      .catch(function(){ err.textContent = "Network error. Please try again."; $("approve").disabled = false; $("decline").disabled = false; });
+  }
+  $("approve").addEventListener("click", function(){ decide("approved"); });
+  $("decline").addEventListener("click", function(){ decide("declined"); });
+})();
+</script>
+</body>
+</html>
