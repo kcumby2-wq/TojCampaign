@@ -12,6 +12,7 @@
 // and docs/TOJ-Diagnostic-Offer.md for the business playbook.
 
 const express = require("express");
+const { checkClientScope } = require("../utils/agent-client-scope");
 const diagnostic = require("../agents/diagnostic/orchestrator");
 const router = express.Router();
 
@@ -51,11 +52,15 @@ router.post("/run", requireAuth, async (req, res) => {
   const sb = getSupabase();
   if (!sb) return res.status(503).json({ error: "supabase_unavailable" });
 
+  // The run reads only this client's data, so it must be a real client.
+  const scope = await checkClientScope(sb, scopedId);
+  if (!scope.ok) return res.status(scope.status).json({ error: scope.error });
+
   const { data: runRow, error: insErr } = await sb
     .from("agent_runs")
     .insert({
       role,
-      client_id: scopedId,
+      client_id: scope.client_id,
       task,
       status: "running",
     })
@@ -66,7 +71,7 @@ router.post("/run", requireAuth, async (req, res) => {
   setImmediate(async () => {
     const startedAt = Date.now();
     try {
-      const result = await diagnostic.runAgent({ role, task, client_id: scopedId });
+      const result = await diagnostic.runAgent({ role, task, client_id: scope.client_id });
       const finalStatus = result.eval_status === "failed_after_retries" ? "waiting" : "completed";
       await sb
         .from("agent_runs")

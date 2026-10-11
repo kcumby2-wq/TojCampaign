@@ -94,6 +94,7 @@ async function main() {
       ["GET", "/api/admin/users"],
       ["POST", "/api/rag/retrieve"],
       ["GET", "/api/agents/runs/smoke"],
+      ["GET", "/api/campaign/campaigns"],
     ]) {
       await expect(
         method + " " + url + " (must be auth-gated)",

@@ -7,17 +7,30 @@
 //   module.exports = factory.createOrchestrator({
 //     namespace: "toj",
 //     baseDir: __dirname,        // scans roles/ and skills/ under this dir
-//     tools: [...],              // Anthropic betaTool() definitions
-//   });
+//     tools: [...],              // betaTool() definitions, optionally wrapped
+//   });                          //   with roster / clientBound / clientOwned
+//
+// `tools` may also be a function (ctx) => [...] that builds tools for one run
+// — used by packs whose tools must be bound to the run's scope (see
+// agents/campaign). ctx = { role, client_id, scope }.
 //
 // Roles live in <baseDir>/roles/*.js; skills in <baseDir>/skills/*.md.
-// Each role: { id, label, tagline, skills: [], persona, model? }
+// Each role: { id, label, tagline, skills: [], persona, model?, tools? }
+//   tools — optional allow-list of tool names. A role that lists tools gets
+//           only those; a role without the list gets every tool the run allows.
+//   cross_client — true for a cross-roster report role: in an unscoped run it
+//           may read any client it lists (see agents/tool-scope.js).
 // System prompt = persona + "\n\n---\n\n" + skill contents joined.
+//
+// Which tools a run gets is decided per run (agents/tool-scope.js): a run
+// scoped to one client can only read that client; an unscoped run gets the
+// cross-client listings and no per-client reads.
 
 const fs = require("fs");
 const path = require("path");
 const Anthropic = require("@anthropic-ai/sdk").default;
 const { evaluate } = require("../utils/evaluator");
+const { resolveTools, toolName } = require("./tool-scope");
 
 const DEFAULT_MODEL = "claude-opus-4-8";
 const MAX_ITERATIONS = 20;
@@ -63,6 +76,30 @@ function createOrchestrator({ namespace, baseDir, tools, defaultModel = DEFAULT_
     }
   }
 
+  // A role's allow-list should only name tools the pack has.
+  if (Array.isArray(tools)) {
+    const known = new Set(tools.map(toolName));
+    for (const r of Object.values(ROLES)) {
+      for (const name of r.tools || []) {
+        if (!known.has(name)) console.warn(`[${namespace}] role ${r.id} lists unknown tool "${name}"`);
+      }
+    }
+  }
+
+  // The tools one run gets: built for the run, scoped to its client, then
+  // narrowed to the role's allow-list.
+  function toolsForRun(role, { client_id = null, scope = null } = {}) {
+    const cfg = ROLES[role];
+    if (!cfg) throw new Error(`unknown_role:${role}`);
+    const entries = typeof tools === "function" ? tools({ role, client_id, scope }) : tools;
+    let runTools = resolveTools(entries || [], { client_id, cross_client: !!cfg.cross_client });
+    if (Array.isArray(cfg.tools)) {
+      const allow = new Set(cfg.tools);
+      runTools = runTools.filter((t) => allow.has(t.name));
+    }
+    return runTools;
+  }
+
   console.log(
     `[${namespace}] loaded ${Object.keys(ROLES).length} roles, ${Object.keys(SKILLS).length} skills${EVAL_SPEC ? `, eval spec "${EVAL_SPEC.id}"` : ", no eval spec"}`
   );
@@ -74,8 +111,9 @@ function createOrchestrator({ namespace, baseDir, tools, defaultModel = DEFAULT_
   }
 
   // Single agent invocation (no eval loop) — internal.
-  async function _invokeAgentOnce({ role, task, client_id }) {
+  async function _invokeAgentOnce({ role, task, client_id, scope }) {
     const cfg = ROLES[role];
+    const runTools = toolsForRun(role, { client_id, scope });
     const client = new Anthropic();
     const userMessage = client_id
       ? `Client scope: ${client_id}\n\nTask:\n${task}`
@@ -85,7 +123,7 @@ function createOrchestrator({ namespace, baseDir, tools, defaultModel = DEFAULT_
       model: cfg.model || defaultModel,
       max_tokens: 8000,
       system: buildSystemPrompt(cfg),
-      tools,
+      tools: runTools,
       messages: [{ role: "user", content: userMessage }],
       thinking: { type: "adaptive" },
       max_iterations: MAX_ITERATIONS,
@@ -119,7 +157,7 @@ function createOrchestrator({ namespace, baseDir, tools, defaultModel = DEFAULT_
   }
 
   // Public runAgent — wraps _invokeAgentOnce with the eval retry loop.
-  async function runAgent({ role, task, client_id = null }) {
+  async function runAgent({ role, task, client_id = null, scope = null }) {
     const cfg = ROLES[role];
     if (!cfg) throw new Error(`unknown_role:${role}`);
     if (!process.env.ANTHROPIC_API_KEY) throw new Error("ANTHROPIC_API_KEY not set");
@@ -132,7 +170,7 @@ function createOrchestrator({ namespace, baseDir, tools, defaultModel = DEFAULT_
 
     while (attempt < MAX_EVAL_RETRIES) {
       attempt++;
-      lastResult = await _invokeAgentOnce({ role, task: currentTask, client_id });
+      lastResult = await _invokeAgentOnce({ role, task: currentTask, client_id, scope });
 
       // If no eval spec, ship immediately
       if (!EVAL_SPEC) {
@@ -214,7 +252,7 @@ function createOrchestrator({ namespace, baseDir, tools, defaultModel = DEFAULT_
     return Object.keys(SKILLS).map((id) => ({ id }));
   }
 
-  return { namespace, runAgent, listRoles, listSkills, ROLES, SKILLS };
+  return { namespace, runAgent, listRoles, listSkills, toolsForRun, ROLES, SKILLS };
 }
 
 module.exports = { createOrchestrator };
