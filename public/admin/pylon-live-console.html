@@ -98,6 +98,16 @@ input,select{font-family:'Inter',sans-serif}
 .recent{margin-top:20px}
 .recent-post{background:var(--surface);padding:10px 14px;border-left:3px solid var(--green);margin-bottom:6px;font-size:12px;color:var(--dim);display:flex;justify-content:space-between;align-items:center;gap:8px}
 .recent-post b{color:var(--white)}
+
+/* Approval queue (migration 016: every card passes the Pylon approver gate) */
+.queue{margin-top:8px;margin-bottom:20px}
+.queue-post{background:var(--surface);padding:10px 14px;border-left:3px solid var(--yellow);margin-bottom:6px;font-size:12px;color:var(--dim);display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap}
+.queue-post.approved{border-left-color:var(--green)}
+.queue-post b{color:var(--white)}
+.queue-post .actions{display:flex;gap:6px}
+.mini-btn{font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.12em;text-transform:uppercase;font-weight:700;padding:6px 10px;border:1.5px solid var(--line);background:var(--black);color:var(--white);cursor:pointer}
+.mini-btn.go{background:var(--yellow);color:var(--black);border-color:var(--yellow)}
+.mini-btn:disabled{opacity:.5;cursor:not-allowed}
 .recent-post .when{color:var(--dimmer);font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.1em}
 </style>
 </head>
@@ -140,6 +150,11 @@ input,select{font-family:'Inter',sans-serif}
         <button data-qtr="4">Q4</button>
         <button data-qtr="F">F</button>
       </div>
+    </div>
+
+    <div class="section-label">◆ Waiting for approval</div>
+    <div class="queue" id="queue-posts">
+      <div class="queue-empty" style="color:var(--dimmer);font-size:11px;text-align:center;padding:12px;font-family:'JetBrains Mono',monospace;letter-spacing:.14em">Nothing waiting</div>
     </div>
 
     <div class="section-label">◆ Recent Posts</div>
@@ -228,7 +243,7 @@ input,select{font-family:'Inter',sans-serif}
       <div class="channel" data-channel="threads"><input type="checkbox"><label>Threads</label></div>
       <div class="channel" data-channel="tiktok"><input type="checkbox"><label>TikTok</label></div>
     </div>
-    <button class="publish-btn" id="publish-btn" disabled>Publish</button>
+    <button class="publish-btn" id="publish-btn" disabled>Send for approval</button>
   </div>
 
 </div>
@@ -242,7 +257,21 @@ const state = {
   athlete: null,
   postType: null,
   currentPostId: null,
+  athleteNames: {},
 };
+
+// Like api(), but keeps the HTTP status so the queue can tell a 403 from a failure.
+async function apiCall(path, opts = {}) {
+  try {
+    const res = await fetch(`/api/pylon${path}`, {
+      headers: {'Accept': 'application/json', 'Content-Type': 'application/json'},
+      ...opts,
+    });
+    let body = null;
+    try { body = await res.json(); } catch (e) {}
+    return {status: res.status, body};
+  } catch (e) { return {status: 0, body: null}; }
+}
 
 async function api(path, opts = {}) {
   try {
@@ -291,6 +320,7 @@ async function loadAthletes(teamId) {
     sel.disabled = true;
     return;
   }
+  athletes.forEach(a => { state.athleteNames[a.id] = a.canonical_name; });
   sel.innerHTML = '<option value="">Select athlete…</option>' + athletes.map(a =>
     `<option value="${a.id}" data-name="${a.canonical_name}" data-position="${a.position || ''}">${a.canonical_name}${a.position ? ' · ' + a.position : ''}</option>`
   ).join('');
@@ -304,6 +334,7 @@ document.getElementById('event-select').addEventListener('change', (e) => {
   document.getElementById('team-select').disabled = !state.event;
   if (state.event) loadTeams();
   updatePreview();
+  refreshQueue();
 });
 
 document.getElementById('team-select').addEventListener('change', (e) => {
@@ -405,7 +436,7 @@ document.getElementById('publish-btn').addEventListener('click', async () => {
   }
   btn.disabled = true;
   btn.classList.add('publishing');
-  btn.textContent = 'Publishing…';
+  btn.textContent = 'Sending…';
   try {
     const post = await api('/live-posts', {
       method: 'POST',
@@ -425,25 +456,90 @@ document.getElementById('publish-btn').addEventListener('click', async () => {
       }),
     });
     if (post) {
-      await api(`/live-posts/${post.id}/publish`, {
-        method: 'POST',
-        body: JSON.stringify({channels}),
-      });
-      showToast(`Published to ${channels.length} channel${channels.length > 1 ? 's' : ''} ✓`);
-      addToRecent(post, state.athlete.name);
-      // Clear stat value for next post
+      // Every card waits for a Pylon approver (migration 016). It posts from the queue once approved.
+      showToast('Queued for approval ✓');
       document.getElementById('stat-value').value = '';
       updatePreview();
+      refreshQueue();
     } else {
-      showToast('Publish failed · check API', true);
+      showToast('Send failed · check API', true);
     }
   } catch (err) {
     showToast('Error · try again', true);
   } finally {
     btn.classList.remove('publishing');
-    btn.textContent = 'Publish';
+    btn.textContent = 'Send for approval';
   }
 });
+
+// Approval queue: queued cards wait for a Pylon approver; approved cards can be published.
+async function refreshQueue() {
+  const container = document.getElementById('queue-posts');
+  if (!state.event) { container.replaceChildren(emptyQueue()); return; }
+  const ev = encodeURIComponent(state.event.id);
+  const [queued, approved] = await Promise.all([
+    api(`/live-posts?event_id=${ev}&status=queued`),
+    api(`/live-posts?event_id=${ev}&status=approved`),
+  ]);
+  const rows = [...(approved || []), ...(queued || [])];
+  if (!rows.length) { container.replaceChildren(emptyQueue()); return; }
+  container.replaceChildren(...rows.map(queueItem));
+}
+
+function emptyQueue() {
+  const d = document.createElement('div');
+  d.className = 'queue-empty';
+  d.style.cssText = "color:var(--dimmer);font-size:11px;text-align:center;padding:12px;font-family:'JetBrains Mono',monospace;letter-spacing:.14em";
+  d.textContent = 'Nothing waiting';
+  return d;
+}
+
+function queueItem(post) {
+  const div = document.createElement('div');
+  div.className = 'queue-post' + (post.status === 'approved' ? ' approved' : '');
+  const label = document.createElement('span');
+  const who = document.createElement('b');
+  who.textContent = state.athleteNames[post.athlete_id] || 'Card';
+  const meta = post.metadata || {};
+  label.append(who, ` · ${post.post_type}${meta.stat_value ? ' · ' + meta.stat_value + ' ' + (meta.stat_type || '') : ''} · ${post.status}`);
+  const actions = document.createElement('span');
+  actions.className = 'actions';
+  if (post.status === 'queued') {
+    actions.append(miniBtn('Approve', true, () => decide(post, 'approve')), miniBtn('Reject', false, () => decide(post, 'reject')));
+  } else {
+    actions.append(miniBtn('Publish', true, () => publishApproved(post)), miniBtn('Reject', false, () => decide(post, 'reject')));
+  }
+  div.append(label, actions);
+  return div;
+}
+
+function miniBtn(text, go, onClick) {
+  const b = document.createElement('button');
+  b.className = 'mini-btn' + (go ? ' go' : '');
+  b.textContent = text;
+  b.addEventListener('click', async () => { b.disabled = true; await onClick(); b.disabled = false; });
+  return b;
+}
+
+async function decide(post, action) {
+  const r = await apiCall(`/live-posts/${post.id}/${action}`, {method: 'POST'});
+  if (r.status === 403) showToast('Only a Pylon approver can do that', true);
+  else if (r.status !== 200) showToast((r.body && r.body.error) || 'Could not update the card', true);
+  else showToast(action === 'approve' ? 'Approved ✓' : 'Rejected');
+  refreshQueue();
+}
+
+async function publishApproved(post) {
+  const channels = Array.from(document.querySelectorAll('.channel.checked')).map(c => c.dataset.channel);
+  if (!channels.length) { showToast('Pick at least one channel', true); return; }
+  const r = await apiCall(`/live-posts/${post.id}/publish`, {method: 'POST', body: JSON.stringify({channels})});
+  if (r.status !== 200) { showToast((r.body && r.body.error) || 'Publish failed', true); refreshQueue(); return; }
+  showToast(`Published to ${channels.length} channel${channels.length > 1 ? 's' : ''} ✓`);
+  addToRecent(r.body, state.athleteNames[post.athlete_id] || 'Card');
+  refreshQueue();
+}
+
+setInterval(() => { if (state.event) refreshQueue(); }, 10000);
 
 function addToRecent(post, athleteName) {
   const container = document.getElementById('recent-posts');
@@ -451,7 +547,14 @@ function addToRecent(post, athleteName) {
   if (empty) empty.remove();
   const div = document.createElement('div');
   div.className = 'recent-post';
-  div.innerHTML = `<span><b>${athleteName}</b> · ${post.post_type}</span><span class="when">${new Date().toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'})}</span>`;
+  const label = document.createElement('span');
+  const who = document.createElement('b');
+  who.textContent = athleteName;
+  label.append(who, ` · ${post.post_type}`);
+  const when = document.createElement('span');
+  when.className = 'when';
+  when.textContent = new Date().toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'});
+  div.append(label, when);
   container.insertBefore(div, container.firstChild);
   // Keep only last 8
   while (container.children.length > 8) container.removeChild(container.lastChild);

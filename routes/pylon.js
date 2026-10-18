@@ -413,21 +413,46 @@ router.post("/live-posts", async (req, res) => {
 });
 
 router.get("/live-posts", async (req, res) => {
-  const { event_id } = req.query;
+  const { event_id, status } = req.query;
   const params = [];
-  let query = "SELECT * FROM pylon_live_posts";
-  if (event_id) { params.push(event_id); query += ` WHERE event_id = $1`; }
+  let query = "SELECT * FROM pylon_live_posts WHERE 1=1";
+  if (event_id) { params.push(event_id); query += ` AND event_id = $${params.length}`; }
+  if (status) { params.push(status); query += ` AND status = $${params.length}`; }
   query += " ORDER BY posted_at DESC NULLS LAST, created_at DESC LIMIT 100";
   const result = await db.query(query, params);
   res.json(result.rows);
 });
 
+// Console cards pass the same approver gate as every content asset (migration 016).
+// A card starts 'queued'; only a PYLON_APPROVERS approver can approve or reject it.
+router.post("/live-posts/:id/approve", requirePylonApprover, async (req, res) => {
+  const result = await db.query(
+    `UPDATE pylon_live_posts SET status='approved', decided_by=$1, decided_at=now()
+      WHERE id=$2 AND status='queued' RETURNING *`,
+    [req.session.user.email, req.params.id]
+  );
+  if (result.rowCount === 0) return res.status(409).json({ error: "card not found or not waiting for approval" });
+  res.json(result.rows[0]);
+});
+
+router.post("/live-posts/:id/reject", requirePylonApprover, async (req, res) => {
+  const result = await db.query(
+    `UPDATE pylon_live_posts SET status='rejected', decided_by=$1, decided_at=now()
+      WHERE id=$2 AND status IN ('queued','approved') RETURNING *`,
+    [req.session.user.email, req.params.id]
+  );
+  if (result.rowCount === 0) return res.status(409).json({ error: "card not found or already published or rejected" });
+  res.json(result.rows[0]);
+});
+
 router.post("/live-posts/:id/publish", async (req, res) => {
   const { channels } = req.body;
   const result = await db.query(
-    `UPDATE pylon_live_posts SET posted_at=now(), channels=$1 WHERE id=$2 RETURNING *`,
+    `UPDATE pylon_live_posts SET status='published', posted_at=now(), channels=$1
+      WHERE id=$2 AND status='approved' RETURNING *`,
     [channels || [], req.params.id]
   );
+  if (result.rowCount === 0) return res.status(400).json({ error: "live card must be approved before publish" });
   res.json(result.rows[0]);
 });
 
