@@ -424,6 +424,7 @@ module.exports = {
   checkColumnHeader,
   checkKit,
   maskBanned,
+  lintWords: wordIssues,
   diffKits,
   diffText,
   kitText,

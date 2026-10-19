@@ -29,6 +29,10 @@
 // objects; the API runs them. A long server-tool turn can come back with
 // stop_reason "pause_turn" — the runner is told to continue it.
 //
+// attachments — optional array of content blocks (images) sent with the task
+// in the first user message (agents/studio-brief: the photos and video stills
+// someone attached). Never stored; they live only for the run.
+//
 // evalView — optional (agentResult, { role, client_id, scope }) => agentResult.
 // What the judge scores, when the agent's work is more than its final text
 // (agents/studio: the kit it staged). The run still returns the agent's own
@@ -125,7 +129,7 @@ function createOrchestrator({ namespace, baseDir, tools, defaultModel = DEFAULT_
   }
 
   // Single agent invocation (no eval loop) — internal.
-  async function _invokeAgentOnce({ role, task, client_id, scope }) {
+  async function _invokeAgentOnce({ role, task, client_id, scope, attachments }) {
     const cfg = ROLES[role];
     const runTools = toolsForRun(role, { client_id, scope });
     const client = new Anthropic();
@@ -138,7 +142,12 @@ function createOrchestrator({ namespace, baseDir, tools, defaultModel = DEFAULT_
       max_tokens: cfg.max_tokens || MAX_TOKENS,
       system: buildSystemPrompt(cfg),
       tools: runTools,
-      messages: [{ role: "user", content: userMessage }],
+      messages: [
+        {
+          role: "user",
+          content: attachments && attachments.length ? [{ type: "text", text: userMessage }, ...attachments] : userMessage,
+        },
+      ],
       thinking: { type: "adaptive" },
       max_iterations: cfg.max_iterations || MAX_ITERATIONS,
     });
@@ -181,7 +190,7 @@ function createOrchestrator({ namespace, baseDir, tools, defaultModel = DEFAULT_
   }
 
   // Public runAgent — wraps _invokeAgentOnce with the eval retry loop.
-  async function runAgent({ role, task, client_id = null, scope = null }) {
+  async function runAgent({ role, task, client_id = null, scope = null, attachments = null }) {
     const cfg = ROLES[role];
     if (!cfg) throw new Error(`unknown_role:${role}`);
     if (!process.env.ANTHROPIC_API_KEY) throw new Error("ANTHROPIC_API_KEY not set");
@@ -194,7 +203,7 @@ function createOrchestrator({ namespace, baseDir, tools, defaultModel = DEFAULT_
 
     while (attempt < MAX_EVAL_RETRIES) {
       attempt++;
-      lastResult = await _invokeAgentOnce({ role, task: currentTask, client_id, scope });
+      lastResult = await _invokeAgentOnce({ role, task: currentTask, client_id, scope, attachments });
 
       // If no eval spec, ship immediately
       if (!EVAL_SPEC) {

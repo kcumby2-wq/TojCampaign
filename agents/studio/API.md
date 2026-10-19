@@ -4,6 +4,7 @@ The studio pack turns production playbooks into **Milanote kits**: one board wri
 
 - **Kit Refresher** (`kit-refresher`) starts from the approved kit and makes the smallest set of changes a brief asks for: re-check Netflix's camera list and the other gear, update a source, add a card, fold in a playbook revision.
 - **Kit Builder** (`kit-builder`) builds a new kit from a playbook (pasted, or a PDF read in the browser) and a brief.
+- **Brief Writer** (`brief-writer`, pack `agents/studio-brief`) turns an idea plus references (photos, video stills, links, PDF or text) into the brief for either of them. It reads the approved kits and the links, and changes nothing. "Use this brief" puts it in the run form.
 
 Console: `/admin/studio-agents.html` (Command Center → Studio Kits).
 
@@ -32,6 +33,7 @@ All under `/api/studio-agents`. Auth: staff session, or `X-Studio-API-Key: $STUD
 | POST | `/kits/:id/discard` | **staff only** | Discard a draft |
 | GET | `/assets/:set/:file` | signed URL or staff | A template image |
 | POST | `/run` | staff or key | Start a run → `{ run_id }` |
+| POST | `/brief` | staff or key | Start the Brief Writer → `{ run_id, references }` |
 | GET | `/runs/:id` | staff or key | Poll: `running` → `completed` / `waiting` / `failed`, plus the draft it saved |
 
 ### POST /run
@@ -61,6 +63,26 @@ All under `/api/studio-agents`. Auth: staff session, or `X-Studio-API-Key: $STUD
 - `assets`: a template image set (`same-work`) or omitted for none.
 
 Runs take roughly 5 to 20 minutes (Opus with web search and fetch, up to 3 judged attempts). Poll every few seconds.
+
+### POST /brief
+
+```json
+{
+  "idea": "I like the grain on these, can we get that look for Same Work?",
+  "target": { "mode": "refresh", "slug": "same-work" },
+  "links": [{ "url": "https://www.youtube.com/watch?v=...", "caption": "the grain at 0:40" }],
+  "images": [
+    { "media_type": "image/jpeg", "data": "<base64>", "caption": "this grain" },
+    { "media_type": "image/jpeg", "data": "<base64>", "caption": "dusk", "video": { "group": 1, "at": 12.5, "duration": 42 } }
+  ],
+  "files": [{ "caption": "notes", "text": "..." }]
+}
+```
+
+- `target.mode`: `refresh` (with `slug`), `build`, or `either` (the Brief Writer decides).
+- Photos: JPEG, PNG, WebP or GIF, up to 12. Video: up to 4 videos as up to 8 stills each (the page takes 6, in the browser). All pictures together stay under about 3.3 MB. Links: up to 10. Files: up to 3, 60,000 characters each.
+- **Pictures are sent to the model for this run only and never stored.** File names never leave the browser; references are called Image 1, Video 1, Link 1, File 1. The stored task keeps the idea, the notes, the links and file text.
+- Poll `GET /runs/:id`; when done it carries `brief`: `{ mode, slug, title, brief, needs_source, references: [{ ref, what_it_shows, take, leave, seen }], questions }`.
 
 ### Example: a monthly refresh from a scheduler
 
