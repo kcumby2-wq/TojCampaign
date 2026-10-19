@@ -342,3 +342,74 @@ test("a draft made from an older approved version can't be approved", async () =
   assert.equal(stale.json.error, "stale_draft");
   assert.equal(stale.json.approved_version, a.kit.version);
 });
+
+// ── Brief Writer ─────────────────────────────────────────────────────────
+const PIXEL = "/9j/4AAQSkZJRgABAQEASABIAAD/2wBDAP//////////////////////////////////////////////////////////////////////////////////////wgALCAABAAEBAREA/8QAFBABAAAAAAAAAAAAAAAAAAAAAP/aAAgBAQABPxA=";
+
+test("brief: the request is checked, and the brief role can't be started as a kit run", async () => {
+  assert.equal((await call("/brief", { method: "POST", body: { idea: "a grain look please" } })).status, 401);
+  const r = await call("/brief", { method: "POST", headers: STAFF, body: { idea: "x" } });
+  assert.equal(r.status, 400);
+  assert.equal(r.json.error, "missing_idea");
+  const badImg = await call("/brief", { method: "POST", headers: STAFF, body: { idea: "a grain look please", images: [{ media_type: "image/heic", data: PIXEL }] } });
+  assert.equal(badImg.json.error, "unsupported_image_type");
+  assert.equal((await call("/run", { method: "POST", headers: STAFF, body: { role: "brief-writer", slug: "same-work", brief: "Write a brief." } })).json.error, "invalid_role");
+});
+
+test("brief: photos go to the agent, never to the database; the poll returns the brief", async () => {
+  const brief = require("../agents/studio-brief/orchestrator");
+  let gotAttachments = null;
+  router._setDeps({
+    brief: async ({ role, task, scope, attachments }) => {
+      gotAttachments = attachments;
+      const tools = Object.fromEntries(brief.toolsForRun(role, { scope }).filter((t) => t.run).map((t) => [t.name, (i) => t.run(i || {})]));
+      const outline = JSON.parse(await tools.kit_outline({ slug: "same-work" }));
+      assert.ok(outline.columns.length >= 10);
+      const out = await tools.submit_brief({
+        mode: "refresh",
+        slug: "same-work",
+        title: "Add a fine grain look",
+        brief: "Goal: Add a fine film-grain look as a proposed option.\n\nKit: Same Work (refresh)\n\nDo:\n1. The look and sound › Vintage looks: three ways to get them: add the grain from Image 1, marked (proposed).\n\nLeave alone:\n- Every locked rule card.\n\nDone when:\n- One card changed.",
+        references: [
+          { ref: "Image 1", what_it_shows: "Fine even grain.", take: "Grain size.", seen: "fully" },
+          { ref: "Link 1", what_it_shows: "A grain walkthrough.", take: "Settings.", seen: "partly" },
+        ],
+        questions: ["Replace a look, or add a fourth?"],
+      });
+      assert.match(out, /^Submitted/);
+      return { output: "The brief asks for one new look card.", eval_status: "passed", retry_count: 0, trace: [{ type: "text", text: "ok" }], usage: {}, eval_history: [] };
+    },
+  });
+  const start = await call("/brief", {
+    method: "POST",
+    headers: STAFF,
+    body: {
+      idea: "I like the grain on these, can we get that look for Same Work?",
+      target: { mode: "refresh", slug: "same-work" },
+      links: [{ url: "https://www.youtube.com/watch?v=4ikhg-fOfUg", caption: "grain at 0:40" }],
+      images: [{ media_type: "image/jpeg", data: PIXEL, caption: "this grain" }],
+    },
+  });
+  assert.equal(start.status, 200);
+  assert.deepEqual(start.json.references, ["Link 1", "Image 1"]);
+  const done = await waitForRun(start.json.run_id);
+  assert.equal(done.status, "completed");
+  assert.equal(done.brief.title, "Add a fine grain look");
+  assert.deepEqual(done.brief.questions, ["Replace a look, or add a fourth?"]);
+  assert.equal(done.kit, null);
+  assert.equal(done.trace, undefined, "the trace stays server-side");
+  assert.match(done.output, /^# Add a fine grain look/);
+  assert.equal(gotAttachments.filter((a) => a.type === "image").length, 1);
+  const row = db.tables.agent_runs.find((r) => r.id === start.json.run_id);
+  assert.equal(row.role, "brief-writer");
+  assert.ok(!JSON.stringify(row).includes(PIXEL.slice(0, 40)), "no photo data stored");
+  assert.ok(row.trace.some((t) => t.type === "studio_brief"));
+});
+
+test("a run left 'running' by a server restart reports as failed", async () => {
+  db.tables.agent_runs.push({ id: crypto.randomUUID(), role: "kit-refresher", status: "running", task: "x", created_at: new Date(Date.now() - 3 * 3600 * 1000).toISOString() });
+  const id = db.tables.agent_runs[db.tables.agent_runs.length - 1].id;
+  const r = await call(`/runs/${id}`, { headers: STAFF });
+  assert.equal(r.json.status, "failed");
+  assert.match(r.json.error, /server restarted/);
+});

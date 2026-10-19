@@ -83,6 +83,27 @@
   #status.on{display:block}
   .note{margin-top:26px;color:var(--dim);font-size:13.5px}
   .note li{margin-bottom:6px}
+  /* Brief Writer */
+  textarea.short{min-height:70px}
+  .drop{border:1.5px dashed rgba(200,152,72,.5);border-radius:12px;padding:16px;background:var(--bg-2);text-align:center}
+  .drop.over{border-color:var(--gold-b);background:rgba(200,152,72,.08)}
+  .drop p{margin:4px 0}
+  .drop button{padding:5px 10px;font-weight:600}
+  .refs{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:10px;margin-top:12px}
+  .ref{display:grid;grid-template-columns:64px 1fr auto;gap:10px;align-items:start;background:var(--bg-2);border:1px solid var(--line);border-radius:10px;padding:10px}
+  .ref .thumb{width:64px;height:64px;border-radius:6px;object-fit:cover;background:var(--bg-4);display:flex;align-items:center;justify-content:center;font:600 11px/1.2 'JetBrains Mono',monospace;color:var(--dim);text-align:center;overflow:hidden}
+  .ref .tag{font:600 10.5px/1 'JetBrains Mono',monospace;letter-spacing:.08em;text-transform:uppercase;color:var(--gold-b)}
+  .ref .meta2{font-size:12px;color:var(--dimmer);margin:3px 0 6px;overflow-wrap:anywhere}
+  .ref input{padding:7px 9px;font-size:13px}
+  .ref .x{background:transparent;color:var(--dim);border:1px solid var(--line);padding:4px 8px;font-weight:400}
+  .ref.err{border-color:rgba(230,112,82,.5)}
+  .actions{margin-top:14px;display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+  #bwStatus{margin-top:12px}
+  .bw-result{margin-top:16px;border-top:1px solid var(--line);padding-top:14px}
+  .bw-result h3{margin:0 0 4px;font-size:17px}
+  .bw-result textarea{min-height:260px;font:13px/1.55 'JetBrains Mono',ui-monospace,monospace}
+  .bw-result ul{padding-left:18px;margin:6px 0}
+  .bw-result li{margin-bottom:5px}
   @media (max-width:640px){ .ver{grid-template-columns:1fr} .acts{justify-content:flex-start} .row2{grid-template-columns:1fr} }
 </style>
 </head>
@@ -96,7 +117,37 @@
   <h2>Kits</h2>
   <div id="kits" class="panel">Loading kits…</div>
 
-  <h2>Start a run</h2>
+  <h2>Write the brief with me</h2>
+  <div class="panel" id="briefPanel">
+    <p class="muted" style="margin-top:0">Say your idea in your own words and show it what you mean. The Brief Writer turns it into a brief the kit agents can act on, naming the exact cards to change and putting what's in your photos and videos into words. <b>Photos and video stills are used for this run only and are never saved.</b></p>
+    <div class="row2">
+      <div>
+        <label for="bwFor">What's it for?</label>
+        <select id="bwFor"><option value="either">Not sure, you decide</option></select>
+      </div>
+    </div>
+    <label for="idea">Your idea</label>
+    <textarea id="idea" placeholder="Say it the way you'd say it to a person. For example: 'I like the grain on these. Can we get that look for Same Work?'"></textarea>
+
+    <label>Show it what you mean</label>
+    <div class="drop" id="drop">
+      <p><b>Drop photos, videos or a PDF here</b>, or <button type="button" class="ghost" id="pick">choose files</button></p>
+      <p class="muted">Photos (JPG, PNG, WebP): it sees them. Videos: it sees up to 6 still frames, without sound. PDFs and text files: it reads the text.</p>
+      <input type="file" id="refFiles" multiple accept="image/jpeg,image/png,image/webp,image/gif,video/*,.pdf,.txt,.md,application/pdf,text/plain" hidden>
+    </div>
+    <label for="links">Links <span class="muted">(one per line; add a note after the link if you like)</span></label>
+    <textarea id="links" class="short" placeholder="https://www.instagram.com/p/DekBItesvN2/ the sit-down at the mic&#10;https://www.youtube.com/watch?v=... the grain at 0:40"></textarea>
+    <div id="refs" class="refs"></div>
+    <div class="muted" id="budget" style="margin-top:8px;font-size:12.5px"></div>
+    <div class="actions">
+      <button type="button" id="writeBrief">Write the brief</button>
+      <span class="muted">Usually 1 to 3 minutes.</span>
+    </div>
+    <div id="bwStatus" role="status" aria-live="polite"></div>
+    <div id="bwResult" class="bw-result" hidden></div>
+  </div>
+
+  <h2 id="startRun">Start a run</h2>
   <div class="panel">
     <div class="modes" role="group" aria-label="What should the agent do?">
       <button type="button" class="mode" data-role="kit-refresher" aria-pressed="true">
@@ -192,6 +243,7 @@
       kitsCache = d.kits || [];
       renderKits(d);
       fillSlugs();
+      fillBwFor();
       fillAssets(d.template_sets || []);
     } catch (e) {
       box.innerHTML = "<span class='err'>Could not load kits (" + esc(e.message) + ").</span>" + (e.status === 401 || e.status === 403 ? " Log in as staff first." : "");
@@ -367,41 +419,278 @@
     });
     return pdfjsReady;
   }
+  // A PDF (read in this browser with pdf.js) or a text file, as plain text.
+  async function readFileText(f) {
+    if (/\.pdf$/i.test(f.name) || f.type === "application/pdf") {
+      var pdfjs = await loadPdfJs();
+      var doc = await pdfjs.getDocument({ data: await f.arrayBuffer() }).promise;
+      var pages = [];
+      for (var i = 1; i <= doc.numPages; i++) {
+        var page = await doc.getPage(i);
+        var content = await page.getTextContent();
+        var line = "", out = [], lastY = null;
+        content.items.forEach(function (it) {
+          var y = it.transform ? Math.round(it.transform[5]) : null;
+          if (lastY !== null && y !== lastY) { out.push(line); line = ""; }
+          line += it.str;
+          lastY = y;
+        });
+        out.push(line);
+        pages.push(out.map(function (l) { return l.replace(/\s+$/, ""); }).join("\n").replace(/\n{3,}/g, "\n\n").trim());
+      }
+      return { text: pages.join("\n\n"), pages: doc.numPages };
+    }
+    return { text: await f.text(), pages: null };
+  }
   $("file").addEventListener("change", async function () {
     var f = this.files && this.files[0];
     var note = $("fileNote");
     if (!f) return;
     note.textContent = "Reading " + f.name + "…";
     try {
-      var text;
-      if (/\.pdf$/i.test(f.name) || f.type === "application/pdf") {
-        var pdfjs = await loadPdfJs();
-        var doc = await pdfjs.getDocument({ data: await f.arrayBuffer() }).promise;
-        var pages = [];
-        for (var i = 1; i <= doc.numPages; i++) {
-          var page = await doc.getPage(i);
-          var content = await page.getTextContent();
-          var line = "", out = [], lastY = null;
-          content.items.forEach(function (it) {
-            var y = it.transform ? Math.round(it.transform[5]) : null;
-            if (lastY !== null && y !== lastY) { out.push(line); line = ""; }
-            line += it.str;
-            lastY = y;
-          });
-          out.push(line);
-          pages.push(out.map(function (l) { return l.replace(/\s+$/, ""); }).join("\n").replace(/\n{3,}/g, "\n\n").trim());
-        }
-        text = pages.join("\n\n");
-        note.textContent = f.name + ": " + doc.numPages + " pages, " + text.length.toLocaleString() + " characters. Check the text below before you run.";
-      } else {
-        text = await f.text();
-        note.textContent = f.name + ": " + text.length.toLocaleString() + " characters.";
-      }
-      $("source").value = text;
+      var r = await readFileText(f);
+      note.textContent = f.name + ": " + (r.pages ? r.pages + " pages, " : "") + r.text.length.toLocaleString() + " characters." + (r.pages ? " Check the text below before you run." : "");
+      $("source").value = r.text;
     } catch (e) {
       note.textContent = "Couldn't read that file (" + e.message + "). Paste the text instead.";
     }
   });
+
+
+  // ── Brief Writer ─────────────────────────────────────────────────────
+  var BUDGET = 4400000; // base64 characters of images per request
+  var MAX = { photos: 12, videos: 4, files: 3, links: 10 };
+  var refs = []; // { id, kind, name (shown here only, never sent), caption, thumb, images:[{media_type,data,at}], duration, text, error }
+  var refSeq = 0;
+
+  function fillBwFor() {
+    var sel = $("bwFor");
+    var cur = sel.value;
+    var seen = {};
+    var opts = kitsCache.filter(function (k) { return k.status === "approved" && !seen[k.slug] && (seen[k.slug] = true); })
+      .map(function (k) { return "<option value='refresh:" + esc(k.slug) + "'>" + esc(k.title) + " (refresh)</option>"; });
+    sel.innerHTML = opts.join("") + "<option value='build'>A new kit</option><option value='either'>Not sure, you decide</option>";
+    if (bwForTouched && Array.prototype.some.call(sel.options, function (o) { return o.value === cur; })) sel.value = cur;
+  }
+  var bwForTouched = false;
+  $("bwFor").addEventListener("change", function () { bwForTouched = true; });
+
+  function used() {
+    return refs.reduce(function (n, r) { return n + (r.images || []).reduce(function (m, i) { return m + i.data.length; }, 0); }, 0);
+  }
+  function count(kind) { return refs.filter(function (r) { return r.kind === kind && !r.error; }).length; }
+  function mb(chars) { return (chars * 0.75 / 1048576).toFixed(1); }
+
+  function renderRefs() {
+    var box = $("refs");
+    var n = { image: 0, video: 0, file: 0 };
+    box.innerHTML = refs.map(function (r) {
+      var label = r.error ? "Couldn't add" : (r.kind === "image" ? "Image " : r.kind === "video" ? "Video " : "File ") + (++n[r.kind]);
+      var thumb = r.thumb ? "<img class='thumb' src='" + r.thumb + "' alt=''>" : "<div class='thumb'>" + (r.kind === "file" ? "PDF / TXT" : r.error ? "!" : "…") + "</div>";
+      var meta = r.error ? esc(r.error) :
+        r.kind === "video" ? (r.images ? r.images.length + " stills · " + Math.round(r.duration) + "s" : "Reading the video…") :
+        r.kind === "file" ? (r.text != null ? r.text.length.toLocaleString() + " characters" : "Reading…") : "Ready";
+      return "<div class='ref" + (r.error ? " err" : "") + "' data-id='" + r.id + "'>" + thumb +
+        "<div><div class='tag'>" + label + "</div><div class='meta2'>" + esc(r.name) + " · " + meta + "</div>" +
+        (r.error ? "" : "<input type='text' maxlength='300' data-cap='" + r.id + "' placeholder='What should it notice here?' value='" + esc(r.caption || "") + "'>") +
+        "</div><button type='button' class='x' data-rm='" + r.id + "' aria-label='Remove'>×</button></div>";
+    }).join("");
+    var u = used();
+    $("budget").textContent = refs.length ? "Photos and stills: " + mb(u) + " MB of " + mb(BUDGET) + " MB" : "";
+  }
+  $("refs").addEventListener("input", function (e) {
+    var id = e.target.dataset && e.target.dataset.cap;
+    if (!id) return;
+    var r = refs.find(function (x) { return String(x.id) === id; });
+    if (r) r.caption = e.target.value;
+  });
+  $("refs").addEventListener("click", function (e) {
+    var b = e.target.closest("button[data-rm]");
+    if (!b) return;
+    refs = refs.filter(function (x) { return String(x.id) !== b.dataset.rm; });
+    renderRefs();
+  });
+
+  function toJpeg(source, w, h, max, q) {
+    var scale = Math.min(1, max / Math.max(w, h));
+    var c = document.createElement("canvas");
+    c.width = Math.max(1, Math.round(w * scale));
+    c.height = Math.max(1, Math.round(h * scale));
+    var ctx = c.getContext("2d");
+    ctx.fillStyle = "#fff";
+    ctx.fillRect(0, 0, c.width, c.height);
+    ctx.drawImage(source, 0, 0, c.width, c.height);
+    var url = c.toDataURL("image/jpeg", q);
+    return { url: url, data: url.slice(url.indexOf(",") + 1) };
+  }
+
+  async function addPhoto(f, r) {
+    var bmp = await createImageBitmap(f);
+    var j = toJpeg(bmp, bmp.width, bmp.height, 1280, 0.82);
+    r.thumb = j.url;
+    r.images = [{ media_type: "image/jpeg", data: j.data }];
+  }
+
+  function once(el, ev, ms) {
+    return new Promise(function (res, rej) {
+      var t = setTimeout(function () { rej(new Error("timed out")); }, ms);
+      el.addEventListener(ev, function h() { clearTimeout(t); el.removeEventListener(ev, h); res(); });
+      el.addEventListener("error", function () { clearTimeout(t); rej(new Error("this browser can't play that video")); }, { once: true });
+    });
+  }
+  async function addVideo(f, r) {
+    var v = document.createElement("video");
+    v.muted = true; v.playsInline = true; v.preload = "auto";
+    var src = URL.createObjectURL(f);
+    v.src = src;
+    try {
+      await once(v, "loadeddata", 15000);
+      var d = v.duration;
+      if (!isFinite(d) || d <= 0) throw new Error("couldn't read its length");
+      var n = d < 6 ? 3 : 6;
+      var frames = [];
+      for (var i = 0; i < n; i++) {
+        var at = d * (i + 0.5) / n;
+        v.currentTime = at;
+        await once(v, "seeked", 10000);
+        var j = toJpeg(v, v.videoWidth, v.videoHeight, 768, 0.72);
+        if (i === 0) r.thumb = j.url;
+        frames.push({ media_type: "image/jpeg", data: j.data, at: at });
+      }
+      r.images = frames;
+      r.duration = d;
+    } finally {
+      URL.revokeObjectURL(src);
+    }
+  }
+
+  async function addFiles(list) {
+    for (var k = 0; k < list.length; k++) {
+      var f = list[k];
+      var kind = /^image\//.test(f.type) ? "image" : /^video\//.test(f.type) ? "video" : /\.(pdf|txt|md)$/i.test(f.name) || f.type === "application/pdf" || /^text\//.test(f.type) ? "file" : null;
+      var r = { id: ++refSeq, kind: kind || "file", name: f.name, caption: "" };
+      if (!kind) { r.error = "Not a photo, video, PDF or text file."; refs.push(r); renderRefs(); continue; }
+      if (/heic|heif/i.test(f.type) || /\.(heic|heif)$/i.test(f.name)) { r.error = "iPhone HEIC photos don't open here: export it as JPG first."; refs.push(r); renderRefs(); continue; }
+      var limit = kind === "image" ? MAX.photos : kind === "video" ? MAX.videos : MAX.files;
+      if (count(kind) >= limit) { r.error = "That's the most " + kind + "s one brief can take (" + limit + ")."; refs.push(r); renderRefs(); continue; }
+      refs.push(r);
+      renderRefs();
+      try {
+        if (kind === "image") await addPhoto(f, r);
+        else if (kind === "video") await addVideo(f, r);
+        else { var t = await readFileText(f); r.text = t.text.slice(0, 60000); }
+        if (used() > BUDGET) { r.images = null; r.thumb = null; r.error = "Too much to send at once. Remove a video or a few photos."; }
+      } catch (e) {
+        r.images = null;
+        r.error = "Couldn't read it here (" + e.message + "). Add a screenshot instead.";
+      }
+      renderRefs();
+    }
+  }
+  $("pick").addEventListener("click", function () { $("refFiles").click(); });
+  $("refFiles").addEventListener("change", function () { addFiles(Array.prototype.slice.call(this.files || [])); this.value = ""; });
+  ["dragenter", "dragover"].forEach(function (ev) { $("drop").addEventListener(ev, function (e) { e.preventDefault(); $("drop").classList.add("over"); }); });
+  ["dragleave", "drop"].forEach(function (ev) { $("drop").addEventListener(ev, function (e) { e.preventDefault(); $("drop").classList.remove("over"); }); });
+  $("drop").addEventListener("drop", function (e) { addFiles(Array.prototype.slice.call((e.dataTransfer && e.dataTransfer.files) || [])); });
+
+  function parseLinks() {
+    return $("links").value.split("\n").map(function (l) { return l.trim(); }).filter(Boolean).map(function (l) {
+      var m = l.match(/^(\S+)\s*(.*)$/);
+      return { url: m[1], caption: m[2] || "" };
+    });
+  }
+
+  function bwSay(html) { $("bwStatus").innerHTML = html; }
+
+  $("writeBrief").addEventListener("click", async function () {
+    var btn = this;
+    var idea = $("idea").value.trim();
+    if (idea.length < 10) return bwSay("<span class='err'>Tell it your idea first, a sentence or two is plenty.</span>");
+    if (refs.some(function (r) { return !r.error && ((r.kind !== "file" && !r.images) || (r.kind === "file" && r.text == null)); })) return bwSay("<span class='warn'>Still reading a file. Try again in a moment.</span>");
+    var links = parseLinks();
+    if (links.length > MAX.links) return bwSay("<span class='err'>Ten links at most.</span>");
+    var bad = links.find(function (l) { return !/^https?:\/\/\S+\.\S+/.test(l.url); });
+    if (bad) return bwSay("<span class='err'>This doesn't look like a link: " + esc(bad.url) + "</span>");
+    var forVal = $("bwFor").value;
+    var target = forVal.indexOf("refresh:") === 0 ? { mode: "refresh", slug: forVal.slice(8) } : { mode: forVal };
+    var images = [], files = [], vg = 0;
+    refs.filter(function (r) { return !r.error; }).forEach(function (r) {
+      if (r.kind === "image") images.push({ media_type: r.images[0].media_type, data: r.images[0].data, caption: r.caption || "" });
+      else if (r.kind === "video") { vg++; r.images.forEach(function (fr) { images.push({ media_type: fr.media_type, data: fr.data, caption: r.caption || "", video: { group: vg, at: fr.at, duration: r.duration } }); }); }
+      else files.push({ caption: r.caption || "", text: r.text });
+    });
+    btn.disabled = true;
+    var nRefs = refs.filter(function (r) { return !r.error; }).length + links.length;
+    bwSay("Sending your idea" + (nRefs ? " and " + nRefs + " reference" + (nRefs === 1 ? "" : "s") : "") + "…");
+    $("bwResult").hidden = true;
+    try {
+      var d = await api("/brief", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ idea: idea, target: target, links: links, images: images, files: files }) });
+      store("studio.brief", d.run_id);
+      pollBrief(d.run_id);
+    } catch (e) {
+      btn.disabled = false;
+      bwSay("<span class='err'>Couldn't start the Brief Writer: " + esc(e.message) + (e.data && e.data.max ? " (limit " + esc(e.data.max) + ")" : "") + ".</span>");
+    }
+  });
+
+  async function pollBrief(runId) {
+    $("writeBrief").disabled = true;
+    while (true) {
+      try {
+        var d = await api("/runs/" + encodeURIComponent(runId));
+        if (d.status === "running") {
+          var since = d.created_at ? new Date(d.created_at).getTime() : Date.now();
+          bwSay("The Brief Writer is looking at your references. " + Math.max(1, Math.round((Date.now() - since) / 1000)) + "s so far.");
+        } else {
+          store("studio.brief", null);
+          $("writeBrief").disabled = false;
+          if (!d.brief) { bwSay("<span class='err'>No brief came back. " + esc(d.error || "") + "</span>"); return; }
+          bwSay(d.status === "waiting" ? "<span class='warn'>Here's the brief, but it didn't pass the Brief Writer's own check (" + esc(d.eval_biggest_miss || "see below") + "). Read it closely before you use it.</span>" : "<span class='ok'>Here's your brief. Edit anything, then use it.</span>");
+          showBrief(d.brief);
+          return;
+        }
+      } catch (e) {
+        if (e.status === 404) { store("studio.brief", null); $("writeBrief").disabled = false; bwSay("<span class='err'>That brief run can't be found.</span>"); return; }
+      }
+      await new Promise(function (r) { setTimeout(r, 4000); });
+    }
+  }
+
+  var lastBrief = null;
+  function showBrief(b) {
+    lastBrief = b;
+    var box = $("bwResult");
+    var kitLine = b.mode === "refresh" ? "Refresh · " + esc(b.slug) : "New kit · " + esc(b.slug) + (b.needs_source ? " · needs the playbook as source material" : "");
+    var h = "<h3>" + esc(b.title) + "</h3><p class='muted' style='margin:0 0 10px'>" + kitLine + "</p>" +
+      "<label for='bwText'>The brief <span class='muted'>(edit it here)</span></label><textarea id='bwText'>" + esc(b.brief) + "</textarea>";
+    if (b.references && b.references.length) {
+      h += "<h4 style='margin:14px 0 4px;color:var(--gold-b)'>What it took from your references</h4><ul>" + b.references.map(function (r) {
+        return "<li><b>" + esc(r.ref) + "</b>" + (r.seen !== "fully" ? " <span class='warn'>(" + esc(r.seen) + ")</span>" : "") + ": " + esc(r.what_it_shows) + " <i>Take:</i> " + esc(r.take) + (r.leave ? " <i>Leave:</i> " + esc(r.leave) : "") + "</li>";
+      }).join("") + "</ul>";
+    }
+    if (b.questions && b.questions.length) {
+      h += "<h4 style='margin:14px 0 4px;color:var(--gold-b)'>Questions for you</h4><ul>" + b.questions.map(function (q) { return "<li>" + esc(q) + "</li>"; }).join("") + "</ul><p class='muted'>Answer them in the brief above, or leave them: the brief works without them.</p>";
+    }
+    h += "<div class='actions'><button type='button' id='useBrief'>Use this brief</button><button type='button' class='ghost' id='useAndRun'>Use it and start the run</button></div>";
+    box.innerHTML = h;
+    box.hidden = false;
+    $("useBrief").addEventListener("click", function () { useBrief(false); });
+    $("useAndRun").addEventListener("click", function () { useBrief(true); });
+  }
+
+  function useBrief(andRun) {
+    var b = lastBrief;
+    if (!b) return;
+    setRole(b.mode === "build" ? "kit-builder" : "kit-refresher");
+    if (b.mode === "build") $("slugNew").value = b.slug;
+    else if (Array.prototype.some.call($("slugSel").options, function (o) { return o.value === b.slug; })) $("slugSel").value = b.slug;
+    $("brief").value = $("bwText").value.trim();
+    var fileText = refs.filter(function (r) { return r.kind === "file" && !r.error && r.text; }).map(function (r) { return r.text; }).join("\n\n");
+    if (b.mode === "build" && fileText && !$("source").value.trim()) $("source").value = fileText;
+    $("startRun").scrollIntoView({ behavior: "smooth", block: "start" });
+    if (andRun) $("run").click();
+    else $("brief").focus({ preventScroll: true });
+  }
 
   function say(html) { var s = $("status"); s.classList.add("on"); s.innerHTML = html; }
 
@@ -462,6 +751,8 @@
   loadKits();
   var pending = load("studio.run");
   if (pending) poll(pending);
+  var pendingBrief = load("studio.brief");
+  if (pendingBrief) pollBrief(pendingBrief);
 })();
 </script>
 </body>

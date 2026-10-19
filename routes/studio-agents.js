@@ -3,7 +3,8 @@
 //   GET  /api/studio-agents/roles                 → public metadata
 //   GET  /api/studio-agents/skills                → public metadata
 //   POST /api/studio-agents/run                   → start a run → { run_id }
-//   GET  /api/studio-agents/runs/:id              → poll a run (and the draft it saved)
+//   POST /api/studio-agents/brief                 → idea + references → a brief (Brief Writer) → { run_id }
+//   GET  /api/studio-agents/runs/:id              → poll a run (and the draft or brief it made)
 //   GET  /api/studio-agents/kits                  → every kit version (built-in + saved)
 //   GET  /api/studio-agents/kits/:id              → one kit version, its check, its changes
 //   GET  /api/studio-agents/kits/:id/page         → the Milanote kit page (copy buttons)
@@ -25,6 +26,9 @@ const { requireStaff, requireStaffOrApiKey, isStaff } = require("../utils/staff"
 
 const router = express.Router();
 const STUDIO_ROLES = ["kit-builder", "kit-refresher"];
+const POLL_ROLES = [...STUDIO_ROLES, "brief-writer"];
+// A run still "running" after this long died with a server restart.
+const STALE_RUN_MS = 90 * 60 * 1000;
 
 let studio = null;
 function orchestrator() {
@@ -34,6 +38,13 @@ function orchestrator() {
 let runAgentImpl = null;
 function runAgent(args) {
   return (runAgentImpl || orchestrator().runAgent)(args);
+}
+let briefPack = null;
+let runBriefImpl = null;
+function runBrief(args) {
+  if (runBriefImpl) return runBriefImpl(args);
+  if (!briefPack) briefPack = require("../agents/studio-brief/orchestrator");
+  return briefPack.runAgent(args);
 }
 
 let supabase = null;
@@ -52,9 +63,10 @@ function getSupabase() {
 }
 
 // Tests swap in a fake database and agent.
-router._setDeps = ({ sb, run } = {}) => {
+router._setDeps = ({ sb, run, brief } = {}) => {
   if (sb !== undefined) supabase = sb;
   if (run !== undefined) runAgentImpl = run;
+  if (brief !== undefined) runBriefImpl = brief;
 };
 
 // Staff session OR the STUDIO_API_KEY header for automation (e.g. a monthly refresh).
@@ -319,14 +331,108 @@ router.get("/runs/:id", requireAuth, async (req, res) => {
   if (!S.isUuid(req.params.id)) return res.status(404).json({ error: "not_found" });
   const { data, error } = await sb
     .from("agent_runs")
-    .select("id,role,status,output,usage,error,created_at,completed_at,eval_status,retry_count,eval_summary,eval_biggest_miss")
+    .select("id,role,status,output,trace,usage,error,created_at,completed_at,eval_status,retry_count,eval_summary,eval_biggest_miss")
     .eq("id", req.params.id)
-    .in("role", STUDIO_ROLES)
+    .in("role", POLL_ROLES)
     .maybeSingle();
   if (error) return fail(res, error, "poll_run");
   if (!data) return res.status(404).json({ error: "not_found" });
-  const { data: kits } = await sb.from("studio_kits").select("id,slug,version,status").eq("source_run_id", data.id).limit(1);
-  res.json({ ...data, kit: (kits && kits[0]) || null });
+  const { trace, ...run } = data;
+  if (run.status === "running" && Date.now() - new Date(run.created_at).getTime() > STALE_RUN_MS) {
+    run.status = "failed";
+    run.error = "The server restarted while this run was going, so it stopped. Start it again.";
+  }
+  const briefEntry = Array.isArray(trace) ? trace.find((t) => t && t.type === "studio_brief") : null;
+  let kit = null;
+  if (run.role !== "brief-writer") {
+    const { data: kits } = await sb.from("studio_kits").select("id,slug,version,status").eq("source_run_id", run.id).limit(1);
+    kit = (kits && kits[0]) || null;
+  }
+  res.json({ ...run, kit, brief: briefEntry ? briefEntry.brief : null });
+});
+
+// ── Brief Writer ─────────────────────────────────────────────────────────
+// An idea plus references (photos, video stills, links, file text) in; one
+// brief for a kit run out. Photos and stills go to the model for this run
+// only and are never stored (agents/studio-brief/request.js).
+router.post("/brief", requireAuth, async (req, res) => {
+  const BR = require("../agents/studio-brief/request");
+  const parsed = BR.parseBriefRequest(req.body || {});
+  if (!parsed.ok) {
+    const { ok, ...rest } = parsed;
+    return res.status(400).json(rest);
+  }
+  const sb = getSupabase();
+  if (!sb) return res.status(503).json({ error: "supabase_unavailable" });
+
+  const task = BR.buildBriefTask(parsed, S.today());
+  const { data: runRow, error: insErr } = await sb
+    .from("agent_runs")
+    .insert({ role: "brief-writer", client_id: null, task, status: "running" })
+    .select("id")
+    .single();
+  if (insErr) return fail(res, insErr, "start_brief");
+  res.json({ ok: true, run_id: runRow.id, namespace: "studio-brief", references: parsed.refs.map((r) => r.ref) });
+
+  const scope = {
+    idea: parsed.idea,
+    target: parsed.target,
+    references: parsed.refs.map(({ ref, kind, caption, url }) => ({ ref, kind, caption, url })),
+    listApproved: async () =>
+      (await S.listKits(sb)).filter((k) => k.status === "approved").map((k) => ({ slug: k.slug, title: k.title, version: k.version })),
+    approvedKit: (slug) => S.approvedKit(sb, slug),
+    slugTaken: (slug) => S.slugExists(sb, slug),
+  };
+  setImmediate(async () => {
+    const startedAt = Date.now();
+    let stage = null;
+    try {
+      const result = await runBrief({
+        role: "brief-writer",
+        task,
+        attachments: parsed.attachments,
+        scope: { ...scope, onStage: (s) => (stage = s) },
+      });
+      const brief = stage && stage.submitted ? stage.submitted : null;
+      const passed = !!brief && ["passed", "passed_after_retry", "not_run"].includes(result.eval_status);
+      const { briefText } = require("../agents/studio-brief/tools");
+      await sb
+        .from("agent_runs")
+        .update({
+          status: passed ? "completed" : brief ? "waiting" : "failed",
+          output: brief ? `${briefText(brief)}\n\n---\n${result.output || ""}` : result.output || "",
+          error: brief ? null : "The Brief Writer didn't hand back a brief.",
+          trace: [...(result.trace || []), ...(brief ? [{ type: "studio_brief", brief }] : [])],
+          usage: result.usage,
+          eval_status: result.eval_status,
+          retry_count: result.retry_count || 0,
+          eval_summary: result.eval_summary,
+          eval_biggest_miss: result.eval_biggest_miss,
+          completed_at: new Date().toISOString(),
+        })
+        .eq("id", runRow.id);
+      if (result.eval_history && result.eval_history.length) {
+        await sb.from("eval_runs").insert(
+          result.eval_history.map((h) => ({
+            agent_run_id: runRow.id,
+            attempt: h.attempt,
+            verdict: h.verdict,
+            total_score: h.total_score,
+            biggest_miss: h.biggest_miss,
+            auto_fail_triggered: h.auto_fail_triggered,
+            evaluator_model: h.evaluator_model,
+          }))
+        );
+      }
+      console.log(`[studio] brief ${runRow.id} ${passed ? "completed" : "waiting"} · ${Date.now() - startedAt}ms · eval=${result.eval_status} · refs=${parsed.refs.length}`);
+    } catch (e) {
+      console.error(`[studio] brief ${runRow.id} failed:`, e.message);
+      await sb
+        .from("agent_runs")
+        .update({ status: "failed", error: String(e.message).slice(0, 1000), completed_at: new Date().toISOString() })
+        .eq("id", runRow.id);
+    }
+  });
 });
 
 module.exports = router;
