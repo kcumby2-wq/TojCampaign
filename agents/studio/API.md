@@ -6,16 +6,16 @@ The studio pack turns production playbooks into **Milanote kits**: one board wri
 - **Kit Builder** (`kit-builder`) builds a new kit from a playbook (pasted, or a PDF read in the browser) and a brief.
 - **Brief Writer** (`brief-writer`, pack `agents/studio-brief`) turns an idea plus references (photos, video stills, links, PDF or text) into the brief for either of them. It reads the approved kits and the links, and changes nothing. "Use this brief" puts it in the run form.
 
-Console: `/admin/studio-agents.html` (Command Center → Studio Kits).
+In the TOJ app: tojcampaign.com/app → Studio. The older console is `/admin/studio-agents.html`.
 
 ## The safety model
 
 1. **The approved kit is never edited.** A run stages its work in memory and saves a **new draft version** when it finishes. Nothing an agent does touches an existing version.
-2. **A person approves.** `POST /kits/:id/approve` needs a staff session (an API key can't approve). Approving retires the previous approved version to `superseded` in one transaction (`studio_kit_approve`, migration 018).
+2. **A person approves.** `POST /kits/:id/approve` needs an approver or the owner, signed in (an API key can't approve). Approving retires the previous approved version to `superseded` in one transaction (`studio_kit_approve`, migration 018).
 3. **The first Same Work kit ships in the repo**, read-only: `kits/same-work.v1.json` (id `builtin:same-work:v1`). Until a newer version is approved, it is the approved Same Work kit.
 4. **Locked rule cards** (who owns what, the seven rules, minors on set, tools not approved for footage, what the editor never does, the honesty rule for vintage looks) can't be changed by a refresh unless the person starting it ticks *Allow rule changes*. An API key can't set that.
 5. **Checked twice.** Every write is checked as it's made (`kit.js` `checkCard`): banned words, HTML a Milanote paste can't take, https-only links, known template images. The judge (`evals/studio-principles.js`) then scores the staged kit itself (not just the agent's closing text) and auto-fails on any kit-check blocker, banned word, invented quote, identified minor, banned tool presented as allowed, or a claim to have published. A run that fails after 3 attempts still saves its draft, marked *failed the judge*, so Kyron can see what went wrong; approval also refuses a draft with blockers.
-6. **The page is staff-only.** Template images (placeholders and silhouettes, no real people) load from signed URLs so a dragged image still reaches Milanote.
+6. **The page is for the team only** (viewer or above). Template images (placeholders and silhouettes, no real people) load from signed URLs so a dragged image still reaches Milanote.
 
 `tests/studio-kit.test.js` renders the approved kit and checks the page is **byte-identical** to the page published on Oct 19, 2026 (sha256 `b49734…37e8`).
 
@@ -26,14 +26,14 @@ All under `/api/studio-agents`. Auth is by team role (utils/team.js, the TOJ app
 | Method | Path | Auth | What it does |
 |---|---|---|---|
 | GET | `/roles`, `/skills` | none | Metadata |
-| GET | `/kits` | staff or key | Every version: built-in and saved (no kit bodies) |
-| GET | `/kits/:id` | staff or key | One version: the kit, its check, its diff against the version it started from, the change log and the agent's summary |
-| GET | `/kits/:id/page` | staff or key | The Milanote kit page, with a status bar (Approved / Draft / Superseded) |
+| GET | `/kits` | team or key | Every version: built-in and saved (no kit bodies) |
+| GET | `/kits/:id` | team or key | One version: the kit, its check, its diff against the version it started from, the change log and the agent's summary |
+| GET | `/kits/:id/page` | team or key | The Milanote kit page, with a status bar (Approved / Draft / Superseded) |
 | POST | `/kits/:id/approve` | **approver or owner** | Approve a draft (refused while it has blockers, or if a newer version was approved since) |
 | POST | `/kits/:id/discard` | **approver or owner** | Discard a draft |
-| GET | `/assets/:set/:file` | signed URL or staff | A template image |
-| POST | `/run` | staff or key | Start a run → `{ run_id }` |
-| POST | `/brief` | staff or key | Start the Brief Writer → `{ run_id, references }` |
+| GET | `/assets/:set/:file` | signed URL or team | A template image |
+| POST | `/run` | member or key | Start a run → `{ run_id }` |
+| POST | `/brief` | member or key | Start the Brief Writer → `{ run_id, references }` |
 | GET | `/runs` | team or key | Recent studio runs (for the app's Today) |
 | GET | `/runs/:id` | team or key | Poll: `running` → `completed` / `waiting` / `failed`, plus the draft it saved |
 
@@ -111,7 +111,7 @@ The result is a draft waiting for approval. Nothing reaches the crew until Kyron
 
 ## Setup
 
-1. Apply `db/migrations/018_studio_kits.sql` to Supabase.
+1. Apply `db/migrations/018_studio_kits.sql` and `019_team.sql` to Supabase (both applied Oct 19, 2026).
 2. The server needs `ANTHROPIC_API_KEY`, `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `ADMIN_EMAILS` and `SESSION_SECRET` (already used by the other packs). Optional: `STUDIO_API_KEY` for scheduled refreshes; `STUDIO_ASSET_SECRET` to sign image URLs with their own secret.
 3. Web search and web fetch must be enabled for the Anthropic organization behind `ANTHROPIC_API_KEY` (an organization admin setting in the Claude Console). If they're off, runs still work from the approved kit and the reference library, but nothing gets re-checked.
 
