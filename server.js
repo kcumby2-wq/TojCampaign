@@ -68,6 +68,7 @@ app.use((req, res, next) => {
 // Session store. Postgres-backed (connect-pg-simple) when DATABASE_URL is set —
 // sessions then survive Render restarts/redeploys and scale past one process.
 // Falls back to the in-memory store (dev / not-yet-configured) with a warning.
+let sessionStoreKind = "memory";
 const sessionOpts = {
   secret: process.env.SESSION_SECRET || "toj-dev-secret-change-me",
   resave: false,
@@ -85,9 +86,26 @@ if (process.env.DATABASE_URL) {
       }),
       createTableIfMissing: true,
     });
+    sessionStoreKind = "postgres";
     console.log("[session] Postgres-backed store active (survives redeploys)");
   } catch (e) {
     console.warn("[session] DATABASE_URL set but pg store failed — MemoryStore:", e.message);
+  }
+} else if (process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY) {
+  // No DATABASE_URL: keep sessions in Supabase's public.session table through
+  // the service-role client, so sign-ins still survive restarts and deploys.
+  try {
+    const { createClient } = require("@supabase/supabase-js");
+    const { SupabaseSessionStore } = require("./utils/supabase-session-store");
+    sessionOpts.store = new SupabaseSessionStore({
+      client: createClient(process.env.SUPABASE_URL.trim(), process.env.SUPABASE_SERVICE_ROLE_KEY.trim(), {
+        auth: { persistSession: false, autoRefreshToken: false },
+      }),
+    });
+    sessionStoreKind = "supabase";
+    console.log("[session] Supabase-backed store active (survives redeploys)");
+  } catch (e) {
+    console.warn("[session] Supabase store failed — MemoryStore:", e.message);
   }
 } else {
   console.warn("[session] no DATABASE_URL — MemoryStore (sessions reset on restart). Set DATABASE_URL to persist logins.");
@@ -186,7 +204,7 @@ app.get("/api/health", (req, res) => {
     backend: supa ? "supabase" : "json",
     voyage: !!process.env.VOYAGE_API_KEY,
     anthropic: !!process.env.ANTHROPIC_API_KEY,
-    sessionStore: process.env.DATABASE_URL ? "postgres" : "memory",
+    sessionStore: sessionStoreKind,
     ts: new Date().toISOString(),
   });
 });
