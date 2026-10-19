@@ -33,7 +33,8 @@
     "pg": "^8.23.0",
     "qrcode": "^1.5.3",
     "stripe": "^15.12.0",
-    "uuid": "^9.0.1"
+    "uuid": "^9.0.1",
+    "web-push": "^3.6.7"
   },
   "devDependencies": {
     "newman": "^6.2.2",

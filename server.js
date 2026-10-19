@@ -168,7 +168,11 @@ app.use("/api/performance-agents", require("./routes/performance-agents"));
 // Studio agents — build and refresh Milanote kits. Runs save drafts only;
 // a staff member approves (agents/studio/API.md).
 app.use("/api/studio-agents", require("./routes/studio-agents"));
-app.get(["/studio", "/studio/"], (_req, res) => res.redirect(302, "/admin/studio-agents.html"));
+// The team: invites, roles, activity (utils/team.js). Owner-only consoles keep requireStaff.
+app.use("/api/team", require("./routes/team"));
+// Web push for the TOJ app (utils/push.js).
+app.use("/api/push", require("./routes/push"));
+app.get(["/studio", "/studio/"], (_req, res) => res.redirect(302, "/app/#studio"));
 // Campaign deal graph + campaign agents — staff only; membership checked per
 // campaign inside the route. Needs CAMPAIGN_DATABASE_URL (503 until set).
 app.use("/api/campaign", require("./utils/staff").requireStaff, require("./routes/campaign"));
@@ -210,12 +214,18 @@ app.get("/api/health", (req, res) => {
 });
 
 // Small helper to check auth from frontend
-app.get("/api/me", (req, res) => {
+app.get("/api/me", async (req, res) => {
   if (req.session && req.session.userEmail) {
+    let team = null;
+    try {
+      const a = await require("./utils/team").accessFor(req);
+      if (a) team = { role: a.role, tools: a.tools, owner: a.owner, name: a.name };
+    } catch {}
     return res.json({
       authenticated: true,
       email: req.session.userEmail,
       staff: require("./utils/staff").isStaff(req),
+      team,
     });
   }
   res.json({ authenticated: false });
