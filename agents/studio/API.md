@@ -10,7 +10,7 @@ Console: `/admin/studio-agents.html` (Command Center → Studio Kits).
 ## The safety model
 
 1. **The approved kit is never edited.** A run stages its work in memory and saves a **new draft version** when it finishes. Nothing an agent does touches an existing version.
-2. **A person approves.** `POST /kits/:id/approve` needs a staff session (an API key can't approve). Approving retires the previous approved version to `superseded` in one transaction (`studio_kit_approve`, migration 016).
+2. **A person approves.** `POST /kits/:id/approve` needs a staff session (an API key can't approve). Approving retires the previous approved version to `superseded` in one transaction (`studio_kit_approve`, migration 018).
 3. **The first Same Work kit ships in the repo**, read-only: `kits/same-work.v1.json` (id `builtin:same-work:v1`). Until a newer version is approved, it is the approved Same Work kit.
 4. **Locked rule cards** (who owns what, the seven rules, minors on set, tools not approved for footage, what the editor never does, the honesty rule for vintage looks) can't be changed by a refresh unless the person starting it ticks *Allow rule changes*. An API key can't set that.
 5. **Checked twice.** Every write is checked as it's made (`kit.js` `checkCard`): banned words, HTML a Milanote paste can't take, https-only links, known template images. The judge (`evals/studio-principles.js`) then scores the staged kit itself (not just the agent's closing text) and auto-fails on any kit-check blocker, banned word, invented quote, identified minor, banned tool presented as allowed, or a claim to have published. A run that fails after 3 attempts still saves its draft, marked *failed the judge*, so Kyron can see what went wrong; approval also refuses a draft with blockers.
@@ -88,7 +88,7 @@ The result is a draft waiting for approval. Nothing reaches the crew until Kyron
 
 ## Setup
 
-1. Apply `db/migrations/016_studio_kits.sql` to Supabase.
+1. Apply `db/migrations/018_studio_kits.sql` to Supabase.
 2. The server needs `ANTHROPIC_API_KEY`, `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `ADMIN_EMAILS` and `SESSION_SECRET` (already used by the other packs). Optional: `STUDIO_API_KEY` for scheduled refreshes; `STUDIO_ASSET_SECRET` to sign image URLs with their own secret.
 3. Web search and web fetch must be enabled for the Anthropic organization behind `ANTHROPIC_API_KEY` (an organization admin setting in the Claude Console). If they're off, runs still work from the approved kit and the reference library, but nothing gets re-checked.
 

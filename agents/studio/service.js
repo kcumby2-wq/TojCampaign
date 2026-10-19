@@ -1,6 +1,6 @@
 // Studio service — kit storage and run plumbing shared by
 // routes/studio-agents.js and its tests. Storage is public.studio_kits
-// (migration 016) through the Supabase service-role client; the approved
+// (migration 018) through the Supabase service-role client; the approved
 // baselines that ship in the repo (agents/studio/kits/*.json) are read-only.
 
 "use strict";

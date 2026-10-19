@@ -1,5 +1,9 @@
--- 016: Studio kits — versioned Milanote kits made by the studio agents
+-- 018: Studio kits — versioned Milanote kits made by the studio agents
 -- (agents/studio, routes/studio-agents.js).
+--
+-- Numbered 018 because the Supabase project already records a 016
+-- (lock_match_client_chunks) and a 017 (session_store) applied outside this
+-- folder.
 --
 -- Every agent run saves a NEW row as a draft. Nothing an agent does edits an
 -- existing row. A person (staff session, not an API key) approves a draft;
