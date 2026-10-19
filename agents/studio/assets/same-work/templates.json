@@ -1,0 +1,66 @@
+[
+ {
+  "id": "01-in-their-own-words-quote-card",
+  "title": "In Their Own Words quote card",
+  "ratio": "4:5",
+  "shows": "Big serif headline line with one word in italics, two or three sentences under it, small caps credit bottom right. Silhouette placeholder.",
+  "file": "01-in-their-own-words-quote-card.jpg",
+  "used_by": "Template: In Their Own Words quote card"
+ },
+ {
+  "id": "02-parent-card-photo-only",
+  "title": "Parent card, photo only",
+  "ratio": "4:5",
+  "shows": "No words on the photo: one person, real light, a real place. The story goes in the caption.",
+  "file": "02-parent-card-photo-only.jpg",
+  "used_by": "Template: parent card"
+ },
+ {
+  "id": "03-title-card",
+  "title": "Title card",
+  "ratio": "9:16",
+  "shows": "Film title in condensed caps over a soft frame, chapter line under it, app-button safe line.",
+  "file": "03-title-card.jpg",
+  "used_by": "Template: title card"
+ },
+ {
+  "id": "04-on-the-mic-frame",
+  "title": "On the Mic frame",
+  "ratio": "9:16",
+  "shows": "The question box top left, speaker silhouette at a mic, their take verbatim in two lines at most.",
+  "file": "04-on-the-mic-frame.jpg",
+  "used_by": "Template: On the Mic frame"
+ },
+ {
+  "id": "05-same-drill-year-labels",
+  "title": "Same Drill year labels",
+  "ratio": "9:16",
+  "shows": "Split frame, then and now, year labels top left, feet-to-feet framing that works for unidentifiable athletes.",
+  "file": "05-same-drill-year-labels.jpg",
+  "used_by": "Template: Same Drill year labels"
+ },
+ {
+  "id": "06-letter-slide",
+  "title": "Letter slide",
+  "ratio": "4:5",
+  "shows": "Typewriter letter on paper: 'Dear fourteen-year-old me,' one idea per slide, first name only as cleared.",
+  "file": "06-letter-slide.jpg",
+  "used_by": "Template: letter slide"
+ },
+ {
+  "id": "07-end-card",
+  "title": "End card",
+  "ratio": "9:16",
+  "shows": "Two seconds, black, the Coached by Hooks mark only. No GFS, TOJ or Subject marks.",
+  "file": "07-end-card.jpg",
+  "used_by": "Template: end card"
+ },
+ {
+  "id": "08-looks-board",
+  "title": "Four looks, one scene",
+  "ratio": "wide",
+  "shows": "The same frame in the base look, 16mm feel, Super 8 and camcorder, for picking a look.",
+  "file": "08-looks-board.jpg",
+  "used_by": "Four looks, one scene"
+ }
+]

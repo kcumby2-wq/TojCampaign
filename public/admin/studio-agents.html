@@ -1,0 +1,468 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>Studio Kits · Admin</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Anton&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#0A1420; --bg-2:#141F30; --bg-3:#1E2B3D; --bg-4:#28374B;
+    --paper:#F5F1E8; --dim:rgba(245,241,232,.72); --dimmer:rgba(245,241,232,.5);
+    --line:rgba(245,241,232,.14); --gold:#C89848; --gold-b:#e0b452;
+    --ok:#7BA07B; --warn:#E6BA47; --err:#E67052; --blue:#7fb8e6;
+  }
+  *{box-sizing:border-box}
+  [hidden]{display:none !important}
+  body{margin:0;background:var(--bg);color:var(--paper);font:400 14px/1.55 Inter,system-ui,-apple-system,sans-serif;-webkit-font-smoothing:antialiased}
+  a{color:var(--gold-b)}
+  .wrap{max-width:1080px;margin:0 auto;padding:22px 16px 80px}
+  .crumbs{display:flex;gap:14px;align-items:center;font:600 11px/1 'JetBrains Mono',ui-monospace,monospace;letter-spacing:.1em;text-transform:uppercase;margin-bottom:18px;padding-bottom:12px;border-bottom:1px solid var(--line)}
+  .crumbs a{color:var(--gold);text-decoration:none}
+  h1{font:400 34px/1 Anton,Impact,sans-serif;letter-spacing:.02em;text-transform:uppercase;margin:6px 0 10px}
+  h2{font:600 12px/1.3 'JetBrains Mono',ui-monospace,monospace;letter-spacing:.18em;text-transform:uppercase;color:var(--gold);margin:34px 0 12px}
+  .lede{color:var(--dim);max-width:72ch;margin:0 0 6px;border-left:2px solid var(--gold);padding-left:14px}
+  .lede b{color:var(--gold-b)}
+  .panel{background:var(--bg-3);border:1px solid var(--line);border-radius:12px;padding:18px}
+  .authwarn{display:none;margin:16px 0 0;padding:12px 14px;border-radius:10px;background:rgba(200,152,72,.1);border:1px solid rgba(200,152,72,.35)}
+  .muted{color:var(--dimmer)}
+  .mono{font-family:'JetBrains Mono',ui-monospace,monospace}
+  button,select,input,textarea{font:inherit;color:var(--paper)}
+  button{cursor:pointer;border:0;border-radius:8px;padding:9px 13px;font-weight:600;background:var(--gold);color:var(--bg)}
+  button.ghost{background:transparent;color:var(--paper);border:1px solid var(--line)}
+  button.ghost:hover{border-color:var(--gold);color:var(--gold-b)}
+  a.btnlink{display:inline-block;border-radius:8px;padding:9px 13px;font-weight:600;border:1px solid var(--line);color:var(--paper);text-decoration:none}
+  a.btnlink:hover{border-color:var(--gold);color:var(--gold-b)}
+  button.danger{background:transparent;color:var(--err);border:1px solid rgba(230,112,82,.45)}
+  button:disabled{opacity:.5;cursor:wait}
+  select,input,textarea{width:100%;background:#0B1524;border:1px solid var(--line);border-radius:8px;padding:10px 12px}
+  textarea{min-height:110px;resize:vertical}
+  label{display:block;font-weight:600;margin:14px 0 6px}
+  label .muted{font-weight:400}
+  :focus-visible{outline:2px solid var(--gold);outline-offset:2px}
+
+  /* Kits */
+  .slug{margin-bottom:16px}
+  .slug-head{display:flex;justify-content:space-between;align-items:baseline;gap:10px;flex-wrap:wrap;margin-bottom:8px}
+  .slug-head h3{margin:0;font-size:18px}
+  .ver{display:grid;grid-template-columns:auto 1fr auto;gap:12px;align-items:center;padding:12px 0;border-top:1px solid var(--line)}
+  .ver:first-of-type{border-top:0}
+  .badge{font:600 10.5px/1 'JetBrains Mono',ui-monospace,monospace;letter-spacing:.1em;text-transform:uppercase;padding:6px 9px;border-radius:999px;border:1px solid var(--line);white-space:nowrap}
+  .badge.approved{color:var(--ok);border-color:rgba(123,160,123,.5);background:rgba(123,160,123,.1)}
+  .badge.draft{color:var(--warn);border-color:rgba(230,186,71,.5);background:rgba(230,186,71,.08)}
+  .badge.superseded,.badge.discarded{color:var(--dimmer)}
+  .meta{min-width:0}
+  .meta b{font-size:15px}
+  .meta .line{color:var(--dim);font-size:13px;overflow-wrap:anywhere}
+  .acts{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
+  .review{grid-column:1/-1;background:var(--bg-2);border:1px solid var(--line);border-radius:10px;padding:14px;display:none}
+  .review.on{display:block}
+  .review pre{white-space:pre-wrap;font:12.5px/1.5 'JetBrains Mono',ui-monospace,monospace;margin:0;color:var(--dim);max-height:340px;overflow:auto}
+  .review h4{margin:12px 0 6px;font-size:13px;color:var(--gold-b)}
+  .review h4:first-child{margin-top:0}
+  .review ul{margin:0;padding-left:18px}
+  .ok{color:var(--ok)} .warn{color:var(--warn)} .err{color:var(--err)}
+
+  /* Run */
+  .modes{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:10px}
+  .mode{display:flex;flex-direction:column;justify-content:flex-start;border:1px solid var(--line);border-radius:10px;padding:14px;background:var(--bg-2);cursor:pointer;text-align:left;color:var(--paper);font-weight:400}
+  .mode h3{margin:0 0 4px;font-size:15px}
+  .mode p{margin:0;color:var(--dim);font-size:13px}
+  .mode[aria-pressed="true"]{border-color:var(--gold);background:rgba(200,152,72,.1)}
+  .presets{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
+  .presets button{font-weight:500;font-size:12.5px;padding:6px 10px}
+  .row2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  .check{display:flex;gap:10px;align-items:flex-start;margin-top:14px;font-weight:400}
+  .check input{width:auto;margin-top:3px}
+  .file{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:8px}
+  .file input{width:auto;padding:6px}
+  #status{margin-top:16px;display:none;white-space:pre-wrap;background:var(--bg-2);border:1px solid var(--line);border-radius:10px;padding:14px;font-size:13.5px}
+  #status.on{display:block}
+  .note{margin-top:26px;color:var(--dim);font-size:13.5px}
+  .note li{margin-bottom:6px}
+  @media (max-width:640px){ .ver{grid-template-columns:1fr} .acts{justify-content:flex-start} .row2{grid-template-columns:1fr} }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <nav class="crumbs" aria-label="Breadcrumb"><a href="/admin/command-center.html">⌂ Command Center</a><span class="muted">Studio</span></nav>
+  <h1>Studio Kits</h1>
+  <p class="lede">Production playbooks as <b>Milanote kits</b>: columns of cards you copy onto a board. An agent drafts a new version; you open it, compare it with the approved one and approve it. <b>The approved kit never changes until you approve a new version.</b></p>
+  <div id="authwarn" class="authwarn">You're not signed in as staff. <a href="/login.html">Log in</a> first.</div>
+
+  <h2>Kits</h2>
+  <div id="kits" class="panel">Loading kits…</div>
+
+  <h2>Start a run</h2>
+  <div class="panel">
+    <div class="modes" role="group" aria-label="What should the agent do?">
+      <button type="button" class="mode" data-role="kit-refresher" aria-pressed="true">
+        <h3>Refresh a kit</h3>
+        <p>Start from the approved kit and change only what the brief asks: re-check gear lists and sources, add a card, fold in a new playbook revision.</p>
+      </button>
+      <button type="button" class="mode" data-role="kit-builder" aria-pressed="false">
+        <h3>Build a new kit</h3>
+        <p>A new production: paste or load its playbook and the agent lays it out as a Milanote kit, with references, gear, looks and sources.</p>
+      </button>
+    </div>
+
+    <div id="refreshFields">
+      <label for="slugSel">Kit to refresh</label>
+      <select id="slugSel"></select>
+    </div>
+    <div id="buildFields" hidden>
+      <div class="row2">
+        <div>
+          <label for="slugNew">Short name <span class="muted">(lower case, dashes)</span></label>
+          <input id="slugNew" placeholder="e.g. pylon-signature-series" autocomplete="off" spellcheck="false">
+        </div>
+        <div>
+          <label for="assets">Template images</label>
+          <select id="assets"><option value="">None (the agent describes images for a designer)</option></select>
+        </div>
+      </div>
+    </div>
+
+    <label for="brief">Brief</label>
+    <textarea id="brief" placeholder="What should this run do? Be specific: what to re-check, what to add, what to leave alone."></textarea>
+    <div class="presets" id="presets"></div>
+
+    <label for="source">Source material <span class="muted" id="sourceHint">(optional for a refresh: paste a new playbook revision)</span></label>
+    <textarea id="source" placeholder="Paste the playbook text, or load a PDF or text file below."></textarea>
+    <div class="file">
+      <input type="file" id="file" accept=".pdf,.txt,.md,text/plain,application/pdf" aria-label="Load a PDF or text file">
+      <span class="muted" id="fileNote"></span>
+    </div>
+
+    <label class="check" id="unlockRow"><input type="checkbox" id="unlock"> <span>Allow rule changes. <span class="muted">Locked cards (who owns what, the seven rules, minors on set, tools that may not touch footage) stay as they are unless you tick this for this one run.</span></span></label>
+
+    <div style="margin-top:16px;display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+      <button type="button" id="run">Start the run</button>
+      <span class="muted" id="runHint">Runs take about 5 to 20 minutes. You can leave this page; the draft shows up under Kits.</span>
+    </div>
+    <div id="status" role="status" aria-live="polite"></div>
+  </div>
+
+  <ul class="note">
+    <li><b>Safe by design.</b> A run only ever saves a new <i>draft</i>. Approving is your click, from a staff login; an API key can start a refresh but can't approve or unlock rules.</li>
+    <li><b>Checked twice.</b> Every draft runs the kit check (banned words, HTML Milanote can't paste, missing links, no Sources card) and the studio judge before it reaches you. A draft that failed the judge is still saved, marked, so you can see what went wrong.</li>
+    <li><b>What still needs a person.</b> New template images (the agent describes them; a designer makes them), and anything behind an Instagram login, which the agent marks as not re-checked.</li>
+  </ul>
+</div>
+
+<script>
+(function () {
+  "use strict";
+  var API = "/api/studio-agents";
+  var role = "kit-refresher";
+  var kitsCache = [];
+
+  function $(id) { return document.getElementById(id); }
+  function esc(s) { return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]; }); }
+  function store(k, v) { try { if (v == null) localStorage.removeItem(k); else localStorage.setItem(k, v); } catch (e) {} }
+  function load(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
+
+  async function api(path, opts) {
+    var r = await fetch(API + path, Object.assign({ credentials: "same-origin" }, opts || {}));
+    var text = await r.text();
+    var d;
+    try { d = JSON.parse(text); } catch (e) { throw new Error("Server returned " + r.status + ": " + text.slice(0, 120)); }
+    if (!r.ok) { var err = new Error(d.error || ("HTTP " + r.status)); err.data = d; err.status = r.status; throw err; }
+    return d;
+  }
+
+  fetch("/api/me", { credentials: "same-origin" }).then(function (r) { return r.json(); }).then(function (d) {
+    if (!d || !d.authenticated) $("authwarn").style.display = "block";
+  }).catch(function () {});
+
+  // ── Kits ───────────────────────────────────────────────────────────────
+  var STATUS_LABEL = { approved: "Approved", draft: "Draft", superseded: "Superseded", discarded: "Discarded" };
+  var ROLE_LABEL = { "kit-builder": "Kit Builder", "kit-refresher": "Kit Refresher" };
+  var EVAL_LABEL = { passed: "passed the judge", passed_after_retry: "passed the judge on a retry", failed_after_retries: "FAILED the judge, review closely", not_run: "judge not run" };
+
+  function fmtDate(s) { if (!s) return ""; var d = new Date(s); return isNaN(d) ? "" : d.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" }); }
+
+  async function loadKits() {
+    var box = $("kits");
+    try {
+      var d = await api("/kits");
+      kitsCache = d.kits || [];
+      renderKits(d);
+      fillSlugs();
+      fillAssets(d.template_sets || []);
+    } catch (e) {
+      box.innerHTML = "<span class='err'>Could not load kits (" + esc(e.message) + ").</span>" + (e.status === 401 || e.status === 403 ? " Log in as staff first." : "");
+    }
+  }
+
+  function renderKits(d) {
+    var box = $("kits");
+    var bySlug = {};
+    kitsCache.forEach(function (k) { (bySlug[k.slug] = bySlug[k.slug] || []).push(k); });
+    var slugs = Object.keys(bySlug);
+    if (!slugs.length) { box.textContent = "No kits yet."; return; }
+    var html = d.storage !== "ok" ? "<p class='warn'>Saved drafts are unavailable (the database isn't connected), so only built-in kits show.</p>" : "";
+    slugs.forEach(function (slug) {
+      var rows = bySlug[slug].sort(function (a, b) { return b.version - a.version; });
+      var approved = rows.find(function (r) { return r.status === "approved"; });
+      html += "<div class='slug'><div class='slug-head'><h3>" + esc(approved ? approved.title : rows[0].title) + "</h3><span class='mono muted'>" + esc(slug) + "</span></div>";
+      rows.forEach(function (r) {
+        var made = r.builtin ? "Built and approved in the Oct 19, 2026 session" : (ROLE_LABEL[r.role] || r.role || "") + (r.base_version ? " from v" + r.base_version : "") + (r.created_by ? " · started by " + r.created_by : "") + " · " + fmtDate(r.created_at);
+        var checks = r.builtin ? "" : (EVAL_LABEL[r.eval_status] || "") + (r.check_blockers ? " · " + r.check_blockers + " blocker(s)" : "");
+        var acts = "<a class='btnlink' href='" + API + "/kits/" + encodeURIComponent(r.id) + "/page' target='_blank' rel='noopener'>Open kit page</a>" +
+          "<button type='button' class='ghost' data-review='" + esc(r.id) + "'>Review</button>";
+        if (r.status === "draft") {
+          acts += "<button type='button' data-approve='" + esc(r.id) + "'>Approve v" + r.version + "</button>" +
+                  "<button type='button' class='danger' data-discard='" + esc(r.id) + "'>Discard</button>";
+        }
+        html += "<div class='ver'><span class='badge " + esc(r.status) + "'>" + esc(STATUS_LABEL[r.status] || r.status) + "</span>" +
+          "<div class='meta'><b>v" + r.version + "</b> <span class='line'>" + esc(made) + "</span>" + (checks ? "<div class='line " + (r.eval_status === "failed_after_retries" || r.check_blockers ? "err" : "") + "'>" + esc(checks) + "</div>" : "") +
+          (r.status === "approved" && r.approved_by && !r.builtin ? "<div class='line ok'>Approved by " + esc(r.approved_by) + " · " + esc(fmtDate(r.approved_at)) + "</div>" : "") + "</div>" +
+          "<div class='acts'>" + acts + "</div>" +
+          "<div class='review' id='rv-" + esc(r.id) + "'></div></div>";
+      });
+      html += "</div>";
+    });
+    box.innerHTML = html;
+  }
+
+  $("kits").addEventListener("click", async function (e) {
+    var b = e.target.closest("button");
+    if (!b) return;
+    if (b.dataset.review) return toggleReview(b.dataset.review);
+    if (b.dataset.approve) return approve(b.dataset.approve, b);
+    if (b.dataset.discard) return discard(b.dataset.discard, b);
+  });
+
+  async function toggleReview(id) {
+    var el = document.getElementById("rv-" + id);
+    if (el.classList.contains("on")) { el.classList.remove("on"); return; }
+    el.classList.add("on");
+    el.textContent = "Loading…";
+    try {
+      var d = await api("/kits/" + encodeURIComponent(id));
+      var h = "";
+      var c = d.check || {};
+      h += "<h4>Kit check</h4><p class='" + (c.ok ? "ok" : "err") + "'>" + (c.ok ? "No blockers." : (c.blockers || []).length + " blocker(s) to fix before it can be approved.") +
+        " <span class='muted'>" + (c.counts ? c.counts.columns + " columns · " + c.counts.cards + " cards · " + c.counts.images + " images · " + c.counts.locked + " locked rule cards" : "") + "</span></p>";
+      if ((c.blockers || []).length) h += "<ul>" + c.blockers.map(function (x) { return "<li class='err'>" + esc(x.where) + ": " + esc(x.issue) + "</li>"; }).join("") + "</ul>";
+      if ((c.warnings || []).length) h += "<ul>" + c.warnings.map(function (x) { return "<li class='warn'>" + esc(x.where) + ": " + esc(x.issue) + "</li>"; }).join("") + "</ul>";
+      if (d.diff) {
+        var t = d.diff.totals;
+        h += "<h4>Against v" + esc(d.base_version) + "</h4><p>" + t.changed + " changed · " + t.added + " added · " + t.removed + " removed · " + t.same + " untouched" + (d.diff.meta.length ? " · header: " + d.diff.meta.map(function (m) { return esc(m.field); }).join(", ") : "") + "</p><ul>";
+        d.diff.columns.filter(function (col) { return col.status !== "same"; }).forEach(function (col) {
+          var parts = [];
+          if (col.changed.length) parts.push("changed: " + col.changed.map(esc).join("; "));
+          if (col.added.length) parts.push("added: " + col.added.map(esc).join("; "));
+          if (col.removed.length) parts.push("removed: " + col.removed.map(esc).join("; "));
+          if (col.header && col.header.length) parts.push("column " + col.header.map(esc).join(", "));
+          h += "<li><b>" + esc(col.name) + "</b> (" + esc(col.status) + ") " + parts.join(" · ") + "</li>";
+        });
+        h += "</ul>";
+      }
+      if (Array.isArray(d.changes) && d.changes.length) {
+        h += "<h4>Why (the agent's change log)</h4><ul>" + d.changes.map(function (o) {
+          return "<li>" + esc(o.op.replace(/_/g, " ")) + (o.column ? " · " + esc(o.column) : "") + (o.title ? " · “" + esc(o.title) + "”" : "") + (o.reason ? ": " + esc(o.reason) : "") + "</li>";
+        }).join("") + "</ul>";
+      }
+      if (d.summary) h += "<h4>The agent's summary</h4><pre>" + esc(d.summary) + "</pre>";
+      if (d.builtin) h += "<p class='muted'>This is the kit as built and approved on Oct 19, 2026. It ships with the app and can't be edited; a refresh makes a new draft from it.</p>";
+      el.innerHTML = h;
+    } catch (e) {
+      el.innerHTML = "<span class='err'>" + esc(e.message) + "</span>";
+    }
+  }
+
+  async function approve(id, btn) {
+    var row = kitsCache.find(function (k) { return k.id === id; });
+    if (!row) return;
+    if (!btn.dataset.armed) {
+      btn.dataset.armed = "1";
+      btn.textContent = "Click again to approve v" + row.version;
+      setTimeout(function () { delete btn.dataset.armed; btn.textContent = "Approve v" + row.version; }, 5000);
+      return;
+    }
+    btn.disabled = true;
+    try {
+      await api("/kits/" + encodeURIComponent(id) + "/approve", { method: "POST" });
+      await loadKits();
+    } catch (e) {
+      btn.disabled = false;
+      var extra = e.data && e.data.blockers ? " " + e.data.blockers.length + " blocker(s): open Review." : e.data && e.data.hint ? ": " + e.data.hint : "";
+      btn.textContent = "Couldn't approve (" + e.message + ")" + extra;
+    }
+  }
+
+  async function discard(id, btn) {
+    if (!btn.dataset.armed) {
+      btn.dataset.armed = "1";
+      btn.textContent = "Click again to discard";
+      setTimeout(function () { delete btn.dataset.armed; btn.textContent = "Discard"; }, 5000);
+      return;
+    }
+    btn.disabled = true;
+    try { await api("/kits/" + encodeURIComponent(id) + "/discard", { method: "POST" }); await loadKits(); }
+    catch (e) { btn.disabled = false; btn.textContent = "Couldn't discard (" + e.message + ")"; }
+  }
+
+  // ── Run form ───────────────────────────────────────────────────────────
+  var PRESETS = {
+    "kit-refresher": [
+      ["Re-check gear and sources", "Re-check the Gear and Edit suite columns against the current sources: Netflix's approved camera list (via Lensrentals or Netflix's own page), the camera specs, and the transcription and caption tools. Change a card only where something has moved, update the dates, and update the Sources card to match. Leave every other card as it is."],
+      ["Re-check the reference pages", "Re-check the reference pages in The feel (follower counts, what each page is doing now). If a page is behind a login, keep the card and mark it not re-checked. Update the dates in the Sources card."],
+      ["Add a card", "Add one card to the [column] column: [what it should say, and where it comes from]. Change nothing else."],
+      ["Fold in a playbook revision", "The playbook has a new revision (pasted below). Find what changed against the approved kit and carry only those changes onto the cards, with the revision as the reason. Leave everything else as it is."]
+    ],
+    "kit-builder": [
+      ["Same treatment as Same Work", "Rebuild this playbook as a Milanote kit the way Same Work was built: the playbook's rules and roles first, then the pages we learn from, the formats, the look and sound, graphics, gear from Netflix's approved list, the edit suite, each role's playbook, and handoffs and checklists with Sources last."]
+    ]
+  };
+
+  function setRole(r) {
+    role = r;
+    document.querySelectorAll(".mode").forEach(function (b) { b.setAttribute("aria-pressed", String(b.dataset.role === r)); });
+    $("refreshFields").hidden = r !== "kit-refresher";
+    $("buildFields").hidden = r !== "kit-builder";
+    $("unlockRow").hidden = r !== "kit-refresher";
+    $("sourceHint").textContent = r === "kit-builder" ? "(required: the playbook this kit is built from)" : "(optional for a refresh: paste a new playbook revision)";
+    $("presets").innerHTML = (PRESETS[r] || []).map(function (p, i) { return "<button type='button' class='ghost' data-preset='" + i + "'>" + esc(p[0]) + "</button>"; }).join("");
+  }
+  document.querySelectorAll(".mode").forEach(function (b) { b.addEventListener("click", function () { setRole(b.dataset.role); }); });
+  $("presets").addEventListener("click", function (e) {
+    var b = e.target.closest("button[data-preset]");
+    if (!b) return;
+    $("brief").value = PRESETS[role][Number(b.dataset.preset)][1];
+    $("brief").focus();
+  });
+
+  function fillSlugs() {
+    var sel = $("slugSel");
+    var seen = {};
+    var opts = kitsCache.filter(function (k) { return k.status === "approved" && !seen[k.slug] && (seen[k.slug] = true); })
+      .map(function (k) { return "<option value='" + esc(k.slug) + "'>" + esc(k.title) + " (approved v" + k.version + ")</option>"; });
+    sel.innerHTML = opts.join("") || "<option value=''>No approved kits yet</option>";
+  }
+  function fillAssets(sets) {
+    var sel = $("assets");
+    sel.innerHTML = "<option value=''>None (the agent describes images for a designer)</option>" +
+      sets.map(function (s) { return "<option value='" + esc(s) + "'>" + esc(s) + " templates</option>"; }).join("");
+  }
+
+  // Load a PDF (read in this browser with pdf.js) or a text file into the source box.
+  var pdfjsReady = null;
+  function loadPdfJs() {
+    if (pdfjsReady) return pdfjsReady;
+    pdfjsReady = new Promise(function (resolve, reject) {
+      var s = document.createElement("script");
+      s.src = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js";
+      s.onload = function () {
+        window.pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+        resolve(window.pdfjsLib);
+      };
+      s.onerror = function () { pdfjsReady = null; reject(new Error("couldn't load the PDF reader")); };
+      document.head.appendChild(s);
+    });
+    return pdfjsReady;
+  }
+  $("file").addEventListener("change", async function () {
+    var f = this.files && this.files[0];
+    var note = $("fileNote");
+    if (!f) return;
+    note.textContent = "Reading " + f.name + "…";
+    try {
+      var text;
+      if (/\.pdf$/i.test(f.name) || f.type === "application/pdf") {
+        var pdfjs = await loadPdfJs();
+        var doc = await pdfjs.getDocument({ data: await f.arrayBuffer() }).promise;
+        var pages = [];
+        for (var i = 1; i <= doc.numPages; i++) {
+          var page = await doc.getPage(i);
+          var content = await page.getTextContent();
+          var line = "", out = [], lastY = null;
+          content.items.forEach(function (it) {
+            var y = it.transform ? Math.round(it.transform[5]) : null;
+            if (lastY !== null && y !== lastY) { out.push(line); line = ""; }
+            line += it.str;
+            lastY = y;
+          });
+          out.push(line);
+          pages.push(out.map(function (l) { return l.replace(/\s+$/, ""); }).join("\n").replace(/\n{3,}/g, "\n\n").trim());
+        }
+        text = pages.join("\n\n");
+        note.textContent = f.name + ": " + doc.numPages + " pages, " + text.length.toLocaleString() + " characters. Check the text below before you run.";
+      } else {
+        text = await f.text();
+        note.textContent = f.name + ": " + text.length.toLocaleString() + " characters.";
+      }
+      $("source").value = text;
+    } catch (e) {
+      note.textContent = "Couldn't read that file (" + e.message + "). Paste the text instead.";
+    }
+  });
+
+  function say(html) { var s = $("status"); s.classList.add("on"); s.innerHTML = html; }
+
+  $("run").addEventListener("click", async function () {
+    var btn = this;
+    var body = { role: role, brief: $("brief").value.trim(), source_text: $("source").value.trim() };
+    if (role === "kit-refresher") {
+      body.slug = $("slugSel").value;
+      body.allow_rule_changes = $("unlock").checked;
+    } else {
+      body.slug = $("slugNew").value.trim().toLowerCase();
+      body.assets = $("assets").value || null;
+    }
+    if (!body.slug) return say("<span class='err'>Pick a kit, or give the new kit a short name.</span>");
+    if (body.brief.length < 10) return say("<span class='err'>Write a brief: what should this run do?</span>");
+    if (role === "kit-builder" && body.source_text.length < 200) return say("<span class='err'>A new kit needs its playbook: paste it or load the PDF.</span>");
+    btn.disabled = true;
+    say("Starting…");
+    try {
+      var d = await api("/run", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+      store("studio.run", d.run_id);
+      poll(d.run_id);
+    } catch (e) {
+      var hint = e.data && e.data.hint ? " " + e.data.hint + "." : "";
+      say("<span class='err'>Couldn't start the run: " + esc(e.message) + "." + esc(hint) + "</span>");
+      btn.disabled = false;
+    }
+  });
+
+  async function poll(runId) {
+    var started = Date.now();
+    $("run").disabled = true;
+    while (true) {
+      try {
+        var d = await api("/runs/" + encodeURIComponent(runId));
+        if (d.status === "running") {
+          var since = d.created_at ? new Date(d.created_at).getTime() : started;
+          say("The agent is working. " + Math.round((Date.now() - since) / 60000) + " min so far. You can leave this page; the draft shows up under Kits when it's done.");
+        } else {
+          store("studio.run", null);
+          $("run").disabled = false;
+          var head = d.status === "failed" ? "<b class='err'>The run failed.</b> " + esc(d.error || "") :
+            d.status === "waiting" ? "<b class='warn'>Finished, but it failed the judge after retries.</b> " + esc(d.eval_biggest_miss || "") :
+            "<b class='ok'>Finished.</b> " + esc(EVAL_LABEL[d.eval_status] || "");
+          var kit = d.kit ? "<p>Saved as <b>draft v" + d.kit.version + "</b>. <a href='" + API + "/kits/" + encodeURIComponent(d.kit.id) + "/page' target='_blank' rel='noopener'>Open the kit page</a>, then review and approve it under Kits.</p>" : "";
+          say(head + kit + (d.output ? "<pre style='white-space:pre-wrap;margin:10px 0 0;font:12.5px/1.5 JetBrains Mono,monospace'>" + esc(d.output) + "</pre>" : ""));
+          loadKits();
+          return;
+        }
+      } catch (e) {
+        if (e.status === 404) { store("studio.run", null); $("run").disabled = false; say("<span class='err'>That run can't be found.</span>"); return; }
+      }
+      await new Promise(function (r) { setTimeout(r, 6000); });
+    }
+  }
+
+  setRole("kit-refresher");
+  loadKits();
+  var pending = load("studio.run");
+  if (pending) poll(pending);
+})();
+</script>
+</body>
+</html>

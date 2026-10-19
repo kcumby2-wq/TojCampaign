@@ -1,0 +1,482 @@
+{
+ "schema": "toj.studio.kit/v1",
+ "slug": "same-work",
+ "version": 1,
+ "as_of": "2026-10-19",
+ "title": "Same Work Milanote Kit",
+ "eyebrow": "Same Work · Coached by Hooks · production playbook",
+ "lead_html": "The director and editor playbook, rebuilt as Milanote cards, with gear from Netflix's approved list, vintage looks, a graphics system and two new formats. Copy a card here and paste it onto the board.",
+ "board_name": "Same Work: Production Playbook",
+ "stats_label": "Rebuilt Oct 19, 2026",
+ "footer_html": "Rebuilt from <i>Same Work Production Playbook: Director and Editor</i> (Oct 17, 2026). New on Oct 19: gear, vintage looks, the graphics system, <i>In Their Own Words</i> and <i>On the Mic</i>. The graphics system and the two new formats start next season, after Kyron and Hooks approve them. Sources are on the last card.",
+ "assets": "same-work",
+ "source": {
+  "title": "Same Work Production Playbook: Director and Editor",
+  "date": "2026-10-17"
+ },
+ "columns": [
+  {
+   "name": "Start here",
+   "color": "Red",
+   "lead": "What Same Work is, who owns what, and the rules that never bend.",
+   "cards": [
+    {
+     "type": "note",
+     "title": "What Same Work makes",
+     "body": "\n<p>Same Work makes one kind of film: real athletes and parents telling the truth about the work, cut so a parent believes it in the first three seconds.</p>\n<p>Kyron produces. The director gets the story on camera. The editor turns it into films that work on Instagram and TikTok.</p>\n<p>This board is the playbook. Each film still gets its own board from the <b>Same Work</b> template.</p>"
+    },
+    {
+     "type": "note",
+     "title": "Who owns what",
+     "body": "\n<ul>\n<li><b>Producer (Kyron):</b> the campaign plan, releases and consent, schedule, budget, approvals, publishing. Signs off on shoot briefs, final cuts and anything that goes public.</li>\n<li><b>Director:</b> the story and the shoot: the one-sentence story, the film's Milanote board, interviews, shot list, set safety. Signs off on the shot list before the shoot and the selects before the edit.</li>\n<li><b>Editor:</b> the films: selects, structure, color, sound, captions, every format. Signs off on technical delivery.</li>\n<li><b>Coach Hooks:</b> his brand, his voice, his athletes. Signs off on anything published under Coached by Hooks.</li>\n<li><b>The speaker:</b> their own words. Signs off on their own cut before it goes out.</li>\n</ul>",
+     "locked": true
+    },
+    {
+     "type": "note",
+     "title": "The seven rules nobody breaks",
+     "body": "\n<ol>\n<li><b>Real words only.</b> Trim for length, never change meaning. No AI voices, no AI-written quotes, no composite people, no synthetic edits of any athlete.</li>\n<li><b>No release, no camera.</b> The producer confirms the consent scopes before the shoot. Texas youth athletes appear only unidentifiable (hands, cleats, backs; no face, name or jersey number) until counsel clears it.</li>\n<li><b>No promises.</b> Nothing implies an offer, a scholarship, or that the NFL is a typical result.</li>\n<li><b>No marks you don't own.</b> No team logos, NFL marks or broadcast footage, and no school logos on minors.</li>\n<li><b>Never alone with a minor.</b> No unsupervised contact, no filming in locker rooms or training rooms, and no recording a one-to-one session with a minor unless a parent is present or has consented.</li>\n<li><b>A pulled consent means a pulled film.</b> When a family withdraws, the footage comes down everywhere within 72 hours.</li>\n<li><b>Nothing publishes without the producer's approval,</b> plus Hooks's for anything under his name.</li>\n</ol>\n<p>Rules 1, 2, 5 and 6 are also in the Ground Floor Sports and Sky's the Limit agreement (Sections 8 and 9). Breaking them is a contract breach.</p>",
+     "locked": true
+    },
+    {
+     "type": "note",
+     "title": "What's new on this board (Oct 19, 2026)",
+     "body": "\n<ul>\n<li><b>Gear:</b> cameras from Netflix's approved list, plus lenses, audio, light and backup.</li>\n<li><b>Vintage looks:</b> three ways to get them, and an honesty rule so new footage never passes for old.</li>\n<li><b>Graphics:</b> a small system built from Humans of New York, The Players' Tribune and MADE Athletes, with eight templates to drag in.</li>\n<li><b>Two new formats:</b> <i>In Their Own Words</i> (athletes write their own story) and <i>On the Mic</i> (an UNINTERRUPTED-style sit-down where adults argue one real question).</li>\n</ul>\n<p>The playbook changes its look only between seasons, so the graphics system and both new formats start next season, once Kyron and Hooks approve them.</p>"
+    }
+   ]
+  },
+  {
+   "name": "The feel",
+   "color": "Blue",
+   "lead": "The pages we learn from: what to take and what to leave.",
+   "cards": [
+    {
+     "type": "note",
+     "title": "The vision",
+     "body": "\n<p>Same Work should feel like MADE Athletes' honesty, opened like a Players' Tribune story, shot like a Mark Bone film and packaged for the feed the way Overtime does it.</p>\n<p>Parent stories borrow Humans of New York's stillness. <i>On the Mic</i> borrows UNINTERRUPTED's sit-down, where athletes say what they actually think.</p>"
+    },
+    {
+     "type": "link",
+     "title": "Humans of New York",
+     "url": "https://www.instagram.com/humansofny/",
+     "body": "\n<p><b>What it is:</b> one person, one photo, their words. About 12.6 million followers.</p>\n<p><b>Take this:</b> no text on the photo. Natural light, a real place, nobody posed. The caption starts mid-thought, in the first person, with no adjectives from us.</p>\n<p><b>Use it for:</b> parent cards and parent stories.</p>\n<p><b>Leave this:</b> nothing. It's the cleanest model we have.</p>"
+    },
+    {
+     "type": "link",
+     "title": "The Players' Tribune",
+     "url": "https://www.instagram.com/playerstribune/",
+     "body": "\n<p><b>What it is:</b> first-person athlete stories, \"The voice of the game.\"</p>\n<p><b>Take this:</b> the headline is the athlete's own line in a big serif, often with one word in italic. A short quote sits under it and a small caps credit sits bottom right. First lines drop you into a moment: \"Training camp, 2009. My rookie year.\"</p>\n<p><b>Use it for:</b> <i>In Their Own Words</i> quote cards and letters.</p>\n<p><b>Leave this:</b> long essays in the caption. Our captions stay under 60 words; a letter goes on the slides.</p>"
+    },
+    {
+     "type": "link",
+     "title": "MADE Athletes",
+     "url": "https://www.instagram.com/made.athletes/",
+     "body": "\n<p><b>What it is:</b> a \"mentorship-first\" athlete development and NIL agency (<a href=\"https://madeathletes.com/\">madeathletes.com</a>): \"Selective roster · Intentional support · No hype.\"</p>\n<p><b>Take this:</b> documentary frames with a muted, warm grade. Wide-tracked condensed caps across the frame (\"Build the athlete behind the athlete\"). Landscape openers and black title cards. Their <a href=\"https://www.instagram.com/made.athletes/reel/Da34AWXPXE8/\">Samoa film</a> opens on a hard fact, then lets a coach and a mom talk. Manifesto: <a href=\"https://www.instagram.com/made.athletes/reel/DcgzUViRgNv/\">\"Legacy is built, not given.\"</a></p>\n<p><b>Use it for:</b> title cards and the grade.</p>\n<p><b>Leave this:</b> betting-style posts on a high schooler's stats (<a href=\"https://www.instagram.com/made.athletes/p/DeKunUrErvZ/\">this one</a>), and full names and tags on minors.</p>"
+    },
+    {
+     "type": "link",
+     "title": "UNINTERRUPTED: the Oct 16 reel",
+     "url": "https://www.instagram.com/p/DekBItesvN2/",
+     "body": "\n<p><b>What it is:</b> an <i>UNINTERRUPTED Weekly</i> clip. A host sits on the show set at a mic and gives a strong opinion, cut with game footage. Captions are bold, one line at a time. The post ends on a question (\"team Go Dawgs or team Roll Tide?\"), so the comments carry the argument. The account (<a href=\"https://www.instagram.com/uninterrupted/\">@uninterrupted</a>) pins its named series to the profile.</p>\n<p><b>Take this:</b> the set, the mic, a real opinion, and a question people want to answer. Named series a parent can binge.</p>\n<p><b>Use it for:</b> <i>On the Mic</i>.</p>\n<p><b>Leave this:</b> broadcast footage and team logos (rule 4), and any take that runs down another athlete.</p>"
+    },
+    {
+     "type": "link",
+     "title": "Mark Bone",
+     "url": "https://www.youtube.com/@markbone",
+     "body": "\n<p><b>What it is:</b> a documentary director who plans every shoot in Milanote.</p>\n<p><b>Take this:</b> the craft. Want, obstacle and change; first and last frames that rhyme; shooting rules; cinematic shots you earn.</p>\n<p><b>Leave this:</b> long runtimes. Our hero films run 60 to 90 seconds.</p>"
+    },
+    {
+     "type": "link",
+     "title": "Overtime",
+     "url": "https://www.instagram.com/overtime/",
+     "body": "\n<p><b>What it is:</b> youth and high school sports media built for vertical feeds.</p>\n<p><b>Take this:</b> the mechanics. The payoff in the first second, the athlete tagged once cleared, the footage source credited (\"via @…\"), captions of one line.</p>\n<p><b>Leave this:</b> the roasting and the slang. That isn't the Coached by Hooks voice.</p>"
+    },
+    {
+     "type": "note",
+     "title": "What it adds up to",
+     "body": "\n<ul>\n<li><b>Open with a fact or a moment, never a logo.</b> \"He ran this drill in 2017. He runs it on Sundays now.\"</li>\n<li><b>Let the person talk.</b> No narrator unless it's Hooks, and no music louder than the voice.</li>\n<li><b>One story per film,</b> told in the speaker's own words, cut to a point.</li>\n<li><b>Look like a film, behave like a post:</b> cinematic frames, vertical first, captions burned in, the athlete tagged once they've signed a release.</li>\n<li><b>Their words, their way.</b> Athletes write or approve every word we publish as theirs.</li>\n</ul>"
+    }
+   ]
+  },
+  {
+   "name": "The formats",
+   "color": "Purple",
+   "lead": "Seven formats. The last two are new and start next season.",
+   "cards": [
+    {
+     "type": "note",
+     "title": "Hero film",
+     "body": "\n<p><b>60–90 seconds · 9:16, plus a 4:5 feed cut</b></p>\n<p>One speaker, one story. Open on a fact or a moment; close on the Same Drill pair.</p>"
+    },
+    {
+     "type": "note",
+     "title": "Cutdowns",
+     "body": "\n<p><b>15–30 seconds · three per hero film · 9:16</b></p>\n<p>One line and one beat each, with the line in the first two seconds.</p>"
+    },
+    {
+     "type": "note",
+     "title": "Parent Sit-Down and the parent card",
+     "body": "\n<p><b>Sit-Down: 3–5 minutes, plus a 60–90 second cut · 9:16</b></p>\n<p>The parent talks; B-roll shows the work. For Texas youth, the athlete is never seen in a way that identifies them.</p>\n<p><b>Parent card (new): one still · 4:5</b></p>\n<p>The Humans of New York model. One portrait in real light, no text on the photo, and a first-person caption under 60 words that starts mid-thought. Template in Graphics.</p>"
+    },
+    {
+     "type": "note",
+     "title": "Quote card",
+     "body": "\n<p><b>A still, or 5–7 seconds · 4:5 and 9:16</b></p>\n<p>One verbatim line, credited only as far as the release allows.</p>"
+    },
+    {
+     "type": "note",
+     "title": "Same Drill",
+     "body": "\n<p><b>10–20 seconds · 9:16</b></p>\n<p>Then and now, match cut, with true year labels. The campaign's signature move.</p>"
+    },
+    {
+     "type": "note",
+     "title": "In Their Own Words (new)",
+     "body": "\n<p><b>A carousel of 5–7 slides · 4:5</b></p>\n<p>The athlete's story, told by the athlete, in the Players' Tribune style. Slide 1 is their best line as a headline. Slides 2 to 5 are a short letter in their words (\"Dear fourteen-year-old me,\"). The last slide is the end card.</p>\n<p><b>How it's made:</b> they write it, or tell it on camera and we transcribe it. We fix spelling and cut for length. We never add a line or change a meaning. They approve every slide in writing before it posts.</p>\n<p><b>Who:</b> adults first: NFL and college athletes, coaches, parents. A minor only with a parent's sign-off on every word and counsel's clearance. Texas youth stay unnamed and unshown.</p>\n<p><b>Caption:</b> under 60 words, their line first.</p>"
+    },
+    {
+     "type": "note",
+     "title": "On the Mic (new, working name)",
+     "body": "\n<p><b>45–75 seconds · 9:16</b></p>\n<p>A sit-down where two or three adults argue one question the game actually argues about. Built from the UNINTERRUPTED Weekly reel.</p>\n<p><b>The shape:</b> one question per episode, about training, the process or the culture, never about a person. Hooks hosts, or a guest does. The strongest take opens the cut. The post caption ends on the question, so the comments become the conversation.</p>\n<p><b>Questions for Hooks to pick from:</b></p>\n<ul>\n<li>Is speed training overrated for receivers?</li>\n<li>Should a 14-year-old play one sport year-round?</li>\n<li>Do camps help, or do they just cost families money?</li>\n</ul>\n<p><b>Guardrails:</b></p>\n<ul>\n<li>Adults only on the mic.</li>\n<li>Disagree about ideas, never about a named player, a school or a family. No comparing one athlete unfavorably to another.</li>\n<li>No talk of offers, NIL money or anyone's eligibility.</li>\n<li>No broadcast footage or team logos. Cut to our own training footage.</li>\n<li>Every speaker approves their cut before it posts.</li>\n</ul>"
+    }
+   ]
+  },
+  {
+   "name": "The look and sound",
+   "color": "Yellow",
+   "lead": "One look, one sound, one type style across every film. Change them only between seasons.",
+   "cards": [
+    {
+     "type": "note",
+     "title": "Shooting rules",
+     "body": "\n<ul>\n<li><b>Framing:</b> interviews on one camera, the speaker a little off center, eyes in the top third. Close-ups on hands, cleats and eyes. At least one extreme wide of every field or gym.</li>\n<li><b>Movement:</b> interviews on a tripod. Training handheld but steady; the camera shakes only during a live rep, matching the athlete's effort.</li>\n<li><b>Character presence:</b> adults appear full face. Texas youth athletes appear only as hands, cleats, backs and silhouettes until counsel clears it.</li>\n<li><b>Payoff:</b> every film ends on a frame that rhymes with its first: the same drill, years apart.</li>\n<li><b>Frame for vertical.</b> Shoot horizontal, but keep the subject inside the middle third so a 9:16 crop works.</li>\n<li><b>Real time over slow motion.</b> One slow-motion hero rep per film at most.</li>\n<li><b>Available light first.</b> Interviews by a window or in shade, on the sandwich schedule: B-roll, interview, more B-roll.</li>\n</ul>"
+    },
+    {
+     "type": "note",
+     "title": "Color: the base look",
+     "body": "\n<ul>\n<li><b>Naturalistic:</b> true skin, restrained saturation, warm light where it exists. It suits a campaign built on an honest read.</li>\n<li><b>Grade global to granular:</b> exposure, white balance, contrast, then saturation. Use subtractive saturation, not the slider.</li>\n<li><b>Leave archive footage its age.</b> A light correction and a year label. The gap between then and now is the point.</li>\n</ul>"
+    },
+    {
+     "type": "image",
+     "title": "Four looks, one scene",
+     "img": "08-looks-board",
+     "body": "\n<p>Drag this image onto the board. It shows the direction of each grade on one drawn scene: naturalistic (every hero film), 16mm feel, Super 8 and camcorder. It's an illustration, not footage.</p>"
+    },
+    {
+     "type": "note",
+     "title": "Vintage looks: three ways to get them",
+     "body": "\n<ol>\n<li><b>In camera, on an approved camera.</b> Vintage glass on an adapter (a Helios 44-2 58mm, Canon FD or Super Takumar primes) and a light diffusion filter (Black Pro-Mist 1/8 or 1/4). This still counts toward Netflix's 90%.</li>\n<li><b>Real old formats, inside the 10%.</b> Super 8 film, a MiniDV or Hi8 camcorder, and 35mm stills (Portra 400 for color, Tri-X 400 for black and white) for parent portraits.</li>\n<li><b>In the grade.</b> DaVinci Resolve Studio's Film Look Creator (halation, bloom, grain, gate weave, film gate, flicker; Studio only), or the Dehancer or FilmConvert plugins. Grain goes on last.</li>\n</ol>"
+    },
+    {
+     "type": "note",
+     "title": "The honesty rule for vintage looks",
+     "body": "\n<p>A vintage look never makes new footage pass for old.</p>\n<ul>\n<li>Year labels are always true. Archive keeps its real age.</li>\n<li>A \"vintage\" shot from this year never sits in the \"then\" half of a Same Drill.</li>\n<li>A camcorder date stamp shows the real date, or nothing.</li>\n</ul>\n<p>It's rule 1 applied to pictures: real moments only.</p>",
+     "locked": true
+    },
+    {
+     "type": "note",
+     "title": "Sound",
+     "body": "\n<ul>\n<li><b>The voice is the product.</b> A lav plus a backup recorder, audio monitored on headphones, and 30 seconds of room tone at every location.</li>\n<li><b>Music sits under the voice,</b> never over it. Choose the right song, then go find another one.</li>\n<li><b>Licensed music only,</b> or each app's commercial library. Coached by Hooks is a business account, so trending songs may not be cleared for it.</li>\n</ul>"
+    },
+    {
+     "type": "note",
+     "title": "Type and on-screen text",
+     "body": "\n<ul>\n<li><b>Captions: one font, white, with a soft shadow.</b> Burned in, verbatim, never more than two lines.</li>\n<li><b>Keep text clear of the app's buttons:</b> out of the bottom fifth and away from the right edge.</li>\n<li><b>Year labels on every archive clip,</b> small, in the top corner.</li>\n<li><b>The end card runs 2 seconds:</b> the Coached by Hooks mark only. No Ground Floor Sports, TOJ or Subject marks on screen.</li>\n<li><b>No hype words,</b> and none of the banned list, in any on-screen text or caption.</li>\n</ul>"
+    }
+   ]
+  },
+  {
+   "name": "Graphics",
+   "color": "Orange",
+   "lead": "Proposed for next season. Drag each template image onto the board.",
+   "cards": [
+    {
+     "type": "note",
+     "title": "The graphics system (proposed)",
+     "body": "\n<p><b>Captions don't change:</b> one font, white, soft shadow.</p>\n<p><b>Cards get a small type system:</b></p>\n<ul>\n<li>A serif for headlines and quotes: <b>Playfair Display</b> (the Players' Tribune feel).</li>\n<li>Condensed caps for title cards: <b>Oswald</b>, widely tracked (the MADE feel).</li>\n<li>A typewriter face for letters: <b>Courier Prime</b>.</li>\n</ul>\n<p>All three are free Google Fonts under an open licence. One accent: cream (#EFE3C8) on dark frames. No other colors, stickers or emoji on graphics.</p>\n<p>Starts next season, after Kyron and Hooks approve it.</p>"
+    },
+    {
+     "type": "image",
+     "title": "Template: In Their Own Words quote card",
+     "img": "01-in-their-own-words-quote-card",
+     "body": "\n<p><b>4:5.</b> Full-bleed photo. Their own line as the headline in Playfair Display, one word in italic. Two or three more sentences from the same answer under it. Credit bottom right in small caps: the name only as far as the release allows, then \"Coached by Hooks\".</p>"
+    },
+    {
+     "type": "image",
+     "title": "Template: parent card",
+     "img": "02-parent-card-photo-only",
+     "body": "\n<p><b>4:5.</b> One portrait, real light, a real place. No words on the photo; the blue box is a guide to delete. The story goes in the caption, first person, under 60 words.</p>"
+    },
+    {
+     "type": "image",
+     "title": "Template: letter slide",
+     "img": "06-letter-slide",
+     "body": "\n<p><b>4:5, slides 2 to 5 of In Their Own Words.</b> Courier Prime on paper. One idea per slide, their words, spelling fixed and meaning untouched. Page count bottom right.</p>"
+    },
+    {
+     "type": "image",
+     "title": "Template: title card",
+     "img": "03-title-card",
+     "body": "\n<p><b>9:16.</b> A cinematic wide with a muted, warm grade. One line in Oswald caps, cream, widely tracked. Keep it above the app-button line (the blue guides).</p>"
+    },
+    {
+     "type": "image",
+     "title": "Template: On the Mic frame",
+     "img": "04-on-the-mic-frame",
+     "body": "\n<p><b>9:16.</b> The series name top left, the question under it, the mic in shot. Their take as a caption: white, soft shadow, two lines at most, above the app-button line.</p>"
+    },
+    {
+     "type": "image",
+     "title": "Template: Same Drill year labels",
+     "img": "05-same-drill-year-labels",
+     "body": "\n<p><b>9:16.</b> Then and now share a horizon, a height and a side of the field. Year labels small, top corner, always true. Feet-to-feet works as well as face-to-face, so Texas youth stay unidentifiable.</p>"
+    },
+    {
+     "type": "image",
+     "title": "Template: end card",
+     "img": "07-end-card",
+     "body": "\n<p><b>9:16, 2 seconds.</b> The Coached by Hooks mark only. No Ground Floor Sports, TOJ or Subject marks.</p>"
+    }
+   ]
+  },
+  {
+   "name": "Gear",
+   "color": "Green",
+   "lead": "Cameras from Netflix's 2026 approved list, plus everything around them.",
+   "cards": [
+    {
+     "type": "note",
+     "title": "What \"Netflix approved\" means",
+     "body": "\n<p><b>Netflix's capture floor</b> (Lensrentals, February 2026):</p>\n<ul>\n<li>At least 3,840 photosites wide.</li>\n<li>Raw, or an intra-frame codec at 4:2:2 or better.</li>\n<li>10-bit or more, and at least 240 Mbps at 24fps.</li>\n<li>A log curve (S-Log3, V-Log, Log C and the like) and timecode.</li>\n</ul>\n<p>At least 90% of a show's runtime comes from an approved camera. The other 10% can be drones, crash cams and other specialty cameras (Shotkit, updated January 2026).</p>\n<p><b>Why it matters for us:</b> Instagram doesn't need it, but it's a quality floor, and footage shot this way can go into a longer series later. Check Netflix's own list before buying; it changes.</p>"
+    },
+    {
+     "type": "note",
+     "title": "Cameras",
+     "body": "\n<p><b>Recommended pair:</b> a Sony FX6 for interviews (full frame, built-in variable ND) and a Sony FX3 for training B-roll and handheld. Same S-Log3, one LUT, one look.</p>\n<p><b>Other approved bodies at the same level:</b> Canon EOS C70, C80 and R5 C; Panasonic S1H and BS1H; RED Komodo 6K.</p>\n<p><b>Rent for a hero day:</b> ARRI Alexa 35 or Alexa Mini LF; Sony Venice 2 or Burano.</p>\n<p><b>Settings:</b> log, 10-bit 4:2:2 or raw, UHD or above, 23.98 or 24fps.</p>"
+    },
+    {
+     "type": "note",
+     "title": "Lenses and filters",
+     "body": "\n<ul>\n<li>A 24–70mm f/2.8 zoom for most of the day.</li>\n<li>A 35mm and an 85mm prime for interviews.</li>\n<li>One or two vintage primes on an adapter for the look: a Helios 44-2 58mm, a Canon FD 50mm f/1.4.</li>\n<li>A variable ND for the FX3. The FX6 has one built in.</li>\n<li>Black Pro-Mist 1/8 or 1/4 for softer highlights.</li>\n</ul>"
+    },
+    {
+     "type": "note",
+     "title": "Audio",
+     "body": "\n<ul>\n<li>A wireless lav kit that also records inside the transmitter, so the backup recorder is built in. The Rode Wireless PRO records 32-bit float on board.</li>\n<li>A shotgun mic on camera for room sound.</li>\n<li>A 32-bit float field recorder for sit-downs, such as the Zoom F3.</li>\n<li>Closed-back headphones, such as the Sony MDR-7506.</li>\n<li>Thirty seconds of room tone at every location.</li>\n</ul>"
+    },
+    {
+     "type": "note",
+     "title": "Light and grip",
+     "body": "\n<ul>\n<li>Available light first.</li>\n<li>One soft key for interviews: a 300W-class LED in a large softbox.</li>\n<li>A 5-in-1 reflector and a black flag for negative fill.</li>\n<li>A tripod with a fluid head for every interview.</li>\n<li>A shoulder rig or top handle for steady handheld, and sandbags.</li>\n</ul>"
+    },
+    {
+     "type": "note",
+     "title": "Vintage capture (the 10%)",
+     "body": "\n<ul>\n<li><b>Super 8:</b> Kodak's Super 8 camera ($5,495 MSRP at launch; the film scanner is sold separately), or a used Super 8 camera plus a lab that processes and scans.</li>\n<li><b>Tape:</b> a MiniDV or Hi8 camcorder.</li>\n<li><b>Stills:</b> a 35mm film camera for parent portraits.</li>\n<li><b>Behind the scenes:</b> a phone, shot vertical.</li>\n</ul>\n<p>Every one of these follows the clearance card, the same as any camera.</p>"
+    },
+    {
+     "type": "note",
+     "title": "Media, backup and drones",
+     "body": "\n<ul>\n<li>Fast cards and two SSDs per shoot. Copy twice before you leave, in folders named by athlete ID.</li>\n<li>Drones: commercial flights need an FAA Part 107 certificate, and we never fly over people. The DJI Inspire 3 is the drone on Netflix's list.</li>\n</ul>"
+    }
+   ]
+  },
+  {
+   "name": "Edit suite",
+   "color": "Teal",
+   "lead": "Software, look tools, settings, and which tools may touch Same Work footage.",
+   "cards": [
+    {
+     "type": "note",
+     "title": "Software",
+     "body": "\n<ul>\n<li><b>DaVinci Resolve Studio:</b> edit, color, Fairlight audio, local speech-to-text and subtitles. Studio is needed for Film Look Creator.</li>\n<li><b>Adobe Premiere Pro and After Effects:</b> build each graphics template once as an Essential Graphics template (MOGRT), so the editor only swaps the words.</li>\n<li><b>Final Cut Pro:</b> local captions, if that station is in use.</li>\n<li><b>Photoshop or Figma:</b> stills and carousel slides.</li>\n</ul>"
+    },
+    {
+     "type": "note",
+     "title": "Look tools",
+     "body": "\n<ul>\n<li><b>Film Look Creator</b> in Resolve Studio: film-style color with halation, bloom, grain, gate weave, film gate and flicker.</li>\n<li><b>Dehancer Pro</b> or <b>FilmConvert Nitrate:</b> film stock emulation plugins for Resolve and Premiere.</li>\n</ul>\n<p>All three process on the editor's machine. No footage leaves it.</p>"
+    },
+    {
+     "type": "note",
+     "title": "Color and sound settings",
+     "body": "\n<ul>\n<li><b>Color management first:</b> timeline in DaVinci Wide Gamut, output Rec.709 Gamma 2.4.</li>\n<li><b>Grade in this order:</b> base look, exposure, white balance (printer lights), contrast, subtractive saturation, black level, grain last. Save the season's look as one PowerGrade and adjust per shot. Never drop a LUT on everything and walk away.</li>\n<li><b>Archive</b> gets a light correction and a year label, nothing more.</li>\n<li><b>Mix the dialogue first.</b> Voice clearly above music, room tone in every gap, about −14 LUFS.</li>\n<li><b>Licensed music only.</b> Keep the license file in the project folder.</li>\n</ul>"
+    },
+    {
+     "type": "note",
+     "title": "Approved tools (draft, Kyron re-approves each quarter)",
+     "body": "\n<p><b>Transcription:</b></p>\n<ul>\n<li>DaVinci Resolve speech-to-text. Local. Version 18.5 or newer.</li>\n<li>Adobe Premiere Pro speech-to-text. Confirm Content Analysis is off and save a screenshot each quarter.</li>\n<li>Rev human transcription, only with a signed Rev Enterprise agreement. Not Rev AI.</li>\n</ul>\n<p><b>Captions:</b></p>\n<ul>\n<li>DaVinci Resolve subtitle track. Preferred for minor footage. Burned in or SRT.</li>\n<li>Adobe Premiere Pro captions. Hand-check the text before burn-in.</li>\n<li>Final Cut Pro captions. Local.</li>\n</ul>\n<p>Governed by STL agreement Section 9: no tool may train on Hooks footage, and no minor footage goes to a cloud tool whose training opt-out hasn't been checked and saved this quarter.</p>"
+    },
+    {
+     "type": "note",
+     "title": "Not approved for Same Work footage",
+     "body": "\n<ul>\n<li><b>CapCut and any ByteDance tool.</b> No minor footage, ever.</li>\n<li><b>Otter.ai.</b> Trains on uploaded audio by default.</li>\n<li><b>Submagic, Opus Clip, AutoCap, VEED, Kapwing</b> and other cloud auto-caption or auto-clip tools, until the producer reviews each one's terms.</li>\n<li><b>Any generative or face-aware \"enhancement\":</b> AI upscaling that redraws faces, beauty filters, voice clones, generated B-roll, auto-reframe that crops around a face.</li>\n<li><b>Any free online transcription tool</b> without a published no-training policy.</li>\n</ul>\n<p><b>If a tool isn't on either list:</b> ask the producer before uploading anything. The producer checks the terms, confirms the opt-out, saves a screenshot and adds the tool to one list with a one-line reason.</p>",
+     "locked": true
+    },
+    {
+     "type": "note",
+     "title": "Review and delivery",
+     "body": "\n<ul>\n<li><b>Name files</b> <code>SW_[lane]_[athleteID]_[format]_[ratio]_v[##]_[YYYYMMDD]</code>, for example <code>SW_YTH_A0142_HERO_9x16_v03_20261017.mp4</code>.</li>\n<li><b>Export</b> 1080×1920 for 9:16 and 1080×1350 for 4:5. Check each app's current limits before delivery.</li>\n<li><b>Deliver only to the producer's folder.</b> No public links, no personal drives.</li>\n<li><b>Review copies</b> go to the speaker through the producer, marked REVIEW COPY, on a link that expires. For a minor, the parent approves.</li>\n<li><b>Frame.io</b> would suit review links, but Kyron checks its terms and adds it to the approved list first.</li>\n</ul>"
+    }
+   ]
+  },
+  {
+   "name": "Director's playbook",
+   "color": "Grey",
+   "lead": "The director owns the story before the shoot and the selects after it.",
+   "cards": [
+    {
+     "type": "note",
+     "title": "1. Build the board",
+     "body": "\n<p>One Milanote board per film, from the <b>Same Work</b> template, shared with the producer and editor. Keep it live, not a PDF. Six columns:</p>\n<ol>\n<li><b>The film:</b> the one-sentence story, the lane (NFL, college, youth or parent), the athlete ID and the format.</li>\n<li><b>Clearance:</b> the producer's consent card. No card, no shoot.</li>\n<li><b>References:</b> two or three from The feel, plus one song.</li>\n<li><b>The speaker:</b> their role in life, how the world sees them, how Hooks sees them, what they want, what's at stake.</li>\n<li><b>Quotes, then questions:</b> the lines you expect, each with the question that should prompt it.</li>\n<li><b>Shots and schedule:</b> three must-have shots, the opening and closing frame pair, the time map, location photos.</li>\n</ol>\n<p><b>The one-sentence story:</b> <i>[Speaker] wanted [what they wanted]; the work was [the drill, the habit or the hour]; now [what it means to them].</i> If you can't fill the brackets, the film isn't ready.</p>"
+    },
+    {
+     "type": "note",
+     "title": "2. Prep the interview, quotes first",
+     "body": "\n<ul>\n<li><b>Pre-interview by phone</b> a week out, 15–20 minutes. For a minor, the parent is on the call.</li>\n<li><b>Write the quotes you expect, then the questions that would prompt them.</b> This doesn't script anyone. What they actually say goes in, word for word.</li>\n<li><b>Cover three areas, in order:</b> where they've been, what they want, what it means now. Closers: \"Looking back, what do you understand now that you couldn't then?\" and \"What would you tell yourself at twelve?\"</li>\n<li><b>For parents:</b> what they saw change at home, what it cost the family in time and driving, what they'd tell another parent.</li>\n<li><b>Ask about the work, never the outcome.</b> No \"Will he make the NFL?\"</li>\n<li><b>For a minor, send the question list to the parent ahead of time.</b> The parent can strike any question and stop the interview at any point.</li>\n</ul>"
+    },
+    {
+     "type": "note",
+     "title": "3. Thirteen interview rules",
+     "body": "\n<ol>\n<li><b>The best question is the follow-up.</b> \"That was a tough year.\" → \"What made it tough?\"</li>\n<li><b>Listen for unusual words.</b> \"I felt embarrassed when I won.\" Ask about <i>embarrassed</i>.</li>\n<li><b>Stop talking.</b> The good line often comes after the pause.</li>\n<li><b>One question at a time.</b></li>\n<li><b>Challenge simple answers.</b> \"It was easy.\" → \"Was it?\"</li>\n<li><b>Follow the nouns:</b> pressure, my father, that summer, the cut.</li>\n<li><b>Get information, emotion and meaning.</b> A take with only the first isn't done.</li>\n<li><b>Don't ask for the conclusion early.</b> The first answers are rehearsed.</li>\n<li><b>Repeat the last few words back as a question.</b> \"Let everyone down?\"</li>\n<li><b>Don't break a moment to get a clean sentence.</b> Get clean lines at the end.</li>\n<li><b>Earn the hard questions.</b> Never open with the injury, the cut or the money.</li>\n<li><b>Follow changes in energy.</b> A short, flat answer usually means it matters.</li>\n<li><b>Use present tense for archive moments.</b> \"Take me back to that first session. What are you feeling?\"</li>\n</ol>"
+    },
+    {
+     "type": "note",
+     "title": "4. Run the day",
+     "body": "\n<ul>\n<li><b>Sandwich schedule:</b> B-roll in low morning light, then the interview, then more B-roll or a scene.</li>\n<li><b>Easy scenes first:</b> the warm-up, the drive in, the weekly drill. Save the staged cinematic shot for the end of the day. You earn it.</li>\n<li><b>One camera on the interview,</b> covered with B-roll in the edit.</li>\n<li><b>Check the board before you wrap:</b> the three must-haves, the frame pair, every style group from the shooting rules.</li>\n</ul>"
+    },
+    {
+     "type": "note",
+     "title": "5. The Same Drill match cut",
+     "body": "\n<p>A drill Hooks has run for years, then the same drill today, cut so the two frames line up.</p>\n<ul>\n<li><b>Bring the archive frame to set</b> on a phone. Match the angle, height, side of the field, direction of travel and lens feel.</li>\n<li><b>Shoot it three ways:</b> matched, one tighter, one wider.</li>\n<li><b>For Texas youth, match on what you can show:</b> cleats, hands, a shadow or a back.</li>\n</ul>"
+    },
+    {
+     "type": "note",
+     "title": "6. Minors on set",
+     "body": "\n<ul>\n<li><b>Never alone.</b> A parent or guardian is on set the whole time. No crew member is ever alone with a minor.</li>\n<li><b>No locker rooms, training rooms or changing areas.</b></li>\n<li><b>Confirm the clearance card before you roll.</b> If anything is missing, shoot B-roll that doesn't show the athlete and call the producer.</li>\n<li><b>Texas youth stay unidentifiable:</b> no face, name, jersey number, school or team logo, street sign or license plate.</li>\n<li><b>No face-tracking or biometric tools.</b></li>\n<li><b>No pay, gifts or perks</b> to a youth athlete for appearing until counsel clears it.</li>\n<li><b>The athlete can stop at any time,</b> and nobody asks why.</li>\n</ul>",
+     "locked": true
+    },
+    {
+     "type": "note",
+     "title": "7. Archive footage",
+     "body": "\n<ul>\n<li><b>Log every archive clip you select:</b> who shot it, the year, and the rights note showing Hooks owns it. No note, no clip.</li>\n<li><b>Every NFL or college player shown needs their own release.</b> Six or more NFL players across the campaign triggers the NFLPA group license; the producer keeps the count.</li>\n<li><b>Training footage only.</b> No game broadcasts, league music or highlight packages.</li>\n<li><b>Crop out every mark we don't own.</b> If it can't be cropped, the clip stays out.</li>\n</ul>"
+    },
+    {
+     "type": "note",
+     "title": "8. On set for the new formats",
+     "body": "\n<p><b>On the Mic:</b></p>\n<ul>\n<li>One camera per speaker plus a wide; a lav on everyone and a room mic.</li>\n<li>The question on a card on the table.</li>\n<li>Let them disagree. Step in only if it turns personal or names someone.</li>\n</ul>\n<p><b>In Their Own Words:</b></p>\n<ul>\n<li>Film the telling, even when they write it. It doubles as B-roll and as a record that the words are theirs.</li>\n</ul>"
+    }
+   ]
+  },
+  {
+   "name": "Editor's playbook",
+   "color": "Grey",
+   "lead": "Build each film out of real words and real moments, and nothing else.",
+   "cards": [
+    {
+     "type": "note",
+     "title": "1. Start from the board",
+     "body": "\n<ul>\n<li><b>Read the one-sentence story first.</b> Lay out the scenes as cards in Milanote before opening the timeline. Moving cards on a call with the director is the fastest rough cut there is.</li>\n<li><b>Pull interview selects</b> for lines that carry information, emotion and meaning. Mark each on the transcript.</li>\n<li><b>Use only approved transcription and caption tools.</b> Never upload footage of a minor to a tool that isn't on the list.</li>\n</ul>"
+    },
+    {
+     "type": "note",
+     "title": "2. Build scenes, not montages",
+     "body": "\n<ul>\n<li><b>Each scene has four parts:</b> the intro (one wide that sets the place), the setup (medium shots that build), the button (the point) and the out. When you hit the button, leave.</li>\n<li><b>Know the kind of scene.</b> A progress scene moves time forward; an information scene is the big beat. Don't stack three of one kind.</li>\n<li><b>After a montage, give a moment of rest:</b> a few seconds of real time with no music and no talking.</li>\n<li><b>Real time over slow motion.</b> One slow-motion rep per film at most.</li>\n<li><b>Build toward the payoff.</b> Hold the Same Drill pair and the best line until the end.</li>\n<li><b>The middle of the edit always feels bad.</b> Stay in the pocket and finish the cut.</li>\n</ul>"
+    },
+    {
+     "type": "note",
+     "title": "3. Words on screen",
+     "body": "\n<ul>\n<li><b>Captions are verbatim.</b> A cut between sentences is fine. A cut inside a sentence that changes what it says is not. Never join words from two answers into a new sentence.</li>\n<li><b>Names go on screen only when the clearance card clears the name.</b> Texas youth get no name and no number. Otherwise use what the card allows: a full name, a first name, or \"a Coached by Hooks parent.\"</li>\n<li><b>Draft the post caption at under 60 words,</b> leading with the speaker's own line. The producer approves it.</li>\n<li><b>Disclose the connection.</b> If the card shows the speaker was paid or got training free, the producer's disclosure line goes on screen and in the caption. FTC rules require it.</li>\n</ul>"
+    },
+    {
+     "type": "note",
+     "title": "4. What the editor never does",
+     "body": "\n<ul>\n<li>No AI voices, voice cloning, face swaps, lip-sync or generated footage of any real person.</li>\n<li>No generative fill, beauty filters or AI tools that change a person's face or body.</li>\n<li>No un-hiding: never reframe, unblur or brighten a shot to make a Texas youth athlete identifiable.</li>\n<li>No marks we don't own, even small ones.</li>\n<li>No vintage look that makes new footage pass for old.</li>\n<li>No athlete names in file, project or bin names. Use the athlete ID.</li>\n</ul>",
+     "locked": true
+    },
+    {
+     "type": "note",
+     "title": "5. Delivery and the clip log",
+     "body": "\n<ul>\n<li>Name, export and deliver per the Edit suite card.</li>\n<li><b>Nothing goes to the producer for final</b> until the speaker (or a minor's parent) has said yes to the review copy.</li>\n<li><b>Keep a clip log</b> of every shot of every person and every cutdown it appears in. When someone pulls consent, the producer has 72 hours to take down every film that uses them. The log is how we find them all.</li>\n</ul>"
+    }
+   ]
+  },
+  {
+   "name": "Handoffs and checklists",
+   "color": "Grey",
+   "lead": "Every film goes through the same ten steps. Each step has one owner.",
+   "cards": [
+    {
+     "type": "note",
+     "title": "The ten steps",
+     "body": "\n<ol>\n<li><b>Brief</b> · producer · story, lane and athlete ID</li>\n<li><b>Board</b> · director · six columns, one sentence</li>\n<li><b>Clearance card</b> · producer · no card, no shoot</li>\n<li><b>Shoot</b> · director · parent on set for minors</li>\n<li><b>Selects</b> · director · best lines, the drill pair</li>\n<li><b>Rough cut</b> · editor · scenes, captions, clip log</li>\n<li><b>Speaker review</b> · speaker (parent for a minor) · a no goes back to the editor</li>\n<li><b>Rights check</b> · producer · consent, marks and archive</li>\n<li><b>Final sign-off</b> · producer and Coach Hooks · both say yes, or it waits</li>\n<li><b>Publish</b> · producer · Instagram and TikTok</li>\n</ol>\n<p><b>Takedown:</b> if consent is pulled, the producer takes every version down within 72 hours.</p>"
+    },
+    {
+     "type": "note",
+     "title": "What each handoff carries",
+     "body": "\n<ul>\n<li><b>Brief, producer to director:</b> lane, athlete ID, format, a draft one-sentence story, the post date. Done when the director can say the story back in one sentence.</li>\n<li><b>Board, director to producer:</b> board link, shoot date, locations, question list. Done when the producer has filled the clearance card.</li>\n<li><b>Clearance, producer to director:</b> release on file, what it covers, the face call, the parent contact. No card, no shoot.</li>\n<li><b>Selects, director to editor:</b> selects, a marked transcript, the archive log with rights notes, the frame pair. Done when the editor can cut without calling the director.</li>\n<li><b>Review copy, editor to speaker through the producer:</b> a REVIEW COPY on a link that expires. Done when the speaker, or a minor's parent, says yes in writing.</li>\n<li><b>Rights check, producer:</b> the screen checked against the release, marks cropped, archive notes, the NFLPA count, any disclosure line.</li>\n<li><b>Final sign-off, producer and Hooks:</b> the final file and post caption. Done when both approvals are saved in writing.</li>\n</ul>\n<p>Story and shots go to the director. Cut and format go to the editor. Consent, rights, money, NIL, contracts and eligibility go to the producer, who flags them for counsel.</p>"
+    },
+    {
+     "type": "todo",
+     "title": "Shoot day: director",
+     "items": [
+      "A clearance card is on the board for every person on camera: release, what it covers, the face call and the parent contact.",
+      "The question list went to the parent ahead of time, for every minor.",
+      "A parent or guardian is on set the whole time a minor is there, and no crew member is ever alone with one.",
+      "No locker rooms, training rooms or changing areas are on the location list.",
+      "The archive frame for the Same Drill is on a phone.",
+      "Audio kit: a lav, a backup recorder, headphones, charged batteries and empty cards.",
+      "30 seconds of room tone recorded at every location.",
+      "All three must-have shots.",
+      "The opening and closing frame pair.",
+      "The Same Drill, shot three ways: matched, tighter and wider.",
+      "Every style group from the shooting rules: interview, handheld training, close-ups and one extreme wide.",
+      "Playback reviewed before wrap: no Texas youth athlete identifiable in any frame, and no marks we don't own left in shot.",
+      "Cards copied twice to the producer's storage before leaving, with folders named by athlete ID."
+     ]
+    },
+    {
+     "type": "todo",
+     "title": "Edit delivery: editor",
+     "items": [
+      "The one-sentence story is still true of the cut.",
+      "Every scene has an intro, a setup, a button and an out.",
+      "Every montage is followed by a moment of rest.",
+      "Captions are verbatim, burned in, two lines at most, and clear of the app's buttons.",
+      "No cut changes what a sentence says, and no sentence is joined from two answers.",
+      "No AI voice, face swap, generated footage, or filter that changes a face or body.",
+      "No vintage look makes new footage pass for old, and every year label is true.",
+      "Names and credits only as far as the clearance card allows. Texas youth unidentifiable after a full scrub of the cut.",
+      "No marks we don't own. The end card is the Coached by Hooks mark only.",
+      "Every archive clip has a year label and an entry in the archive log with its rights note.",
+      "Music is licensed, and the license file is in the project folder.",
+      "Voice sits clearly above music, at about −14 LUFS.",
+      "The season look is applied, and skin tones have been checked on a phone.",
+      "Exports at 1080×1920 for 9:16 and 1080×1350 for 4:5, named by athlete ID.",
+      "A disclosure line on screen and in the caption wherever the card calls for one.",
+      "Post caption drafted, under 60 words.",
+      "The clip log lists every version this footage appears in.",
+      "The review copy went through the producer, and the speaker's (or parent's) yes is saved."
+     ]
+    },
+    {
+     "type": "todo",
+     "title": "Release: producer",
+     "items": [
+      "The release is on file, and what's on screen matches what it covers: face, name and platforms.",
+      "Every minor has a guardian signature on file. Texas youth stay unidentifiable unless counsel has cleared otherwise.",
+      "The speaker's written yes is saved.",
+      "Every archive clip has a rights note, and every NFL or college player shown has a release.",
+      "The NFL player count is under six, or the NFLPA group license is in place.",
+      "A disclosure line is included wherever there's a paid or free-service connection.",
+      "No promises and no banned words in the film or the caption.",
+      "Coach Hooks's approval is saved in writing.",
+      "The clip log entry is complete, so a takedown can find every version."
+     ]
+    },
+    {
+     "type": "note",
+     "title": "Sources",
+     "body": "\n<p><b>Reference pages</b> (follower counts checked Oct 17, 2026; the UNINTERRUPTED reel checked Oct 19, 2026): <a href=\"https://www.instagram.com/made.athletes/\">MADE Athletes</a>, <a href=\"https://www.instagram.com/playerstribune/\">The Players' Tribune</a>, <a href=\"https://www.instagram.com/humansofny/\">Humans of New York</a>, <a href=\"https://www.instagram.com/overtime/\">Overtime</a>, <a href=\"https://www.instagram.com/uninterrupted/\">UNINTERRUPTED</a>, <a href=\"https://www.instagram.com/p/DekBItesvN2/\">the Oct 16 reel</a>.</p>\n<p><b>Mark Bone's videos</b> (<a href=\"https://www.youtube.com/@markbone\">channel</a>): <a href=\"https://www.youtube.com/watch?v=8-VeHecv6hs\">The Story System for great films</a> · <a href=\"https://www.youtube.com/watch?v=ahDTLrz2LCQ\">How to Shoot a Documentary in One Day</a> · <a href=\"https://www.youtube.com/watch?v=dLP1DJOEnCw\">Documentary pre-production made simple</a> · <a href=\"https://www.youtube.com/watch?v=QPVjlY1729c\">Full pre-production breakdown with Gareth Edwards</a> · <a href=\"https://www.youtube.com/watch?v=v-L4_AUNGAk\">Every great film must have this</a> · <a href=\"https://www.youtube.com/watch?v=xTR-5KG8cCE\">Everything you need to know about interviews in 8 minutes</a> · <a href=\"https://www.youtube.com/watch?v=TiW5zMTEU5M\">CBUM: How we filmed this documentary</a> · <a href=\"https://www.youtube.com/watch?v=F7uqrzjuPzE\">What I wish someone told me when I started filmmaking</a> · <a href=\"https://www.youtube.com/watch?v=G8AN19XNPiI\">Filmmaking advice that needs to die</a> · <a href=\"https://www.youtube.com/watch?v=_MbHN-9d30Y\">Foundations of Documentary Editing</a> · <a href=\"https://www.youtube.com/watch?v=4ikhg-fOfUg\">DaVinci Resolve cinematic mini masterclass</a> · <a href=\"https://www.youtube.com/watch?v=ptRgIKqY1Ns\">Breaking Down Every Major Color Grade in Film</a></p>\n<p><b>Gear and looks:</b> <a href=\"https://www.lensrentals.com/blog/2026/02/the-netflix-approved-camera-list-for-2026/\">Lensrentals, The Netflix Approved Camera List for 2026</a> · <a href=\"https://shotkit.com/netflix-approved-cameras/\">Shotkit, Netflix approved cameras</a> (90% rule) · <a href=\"https://davinciresolveclub.com/davinci-resolve-film-look-creator/\">DaVinci Resolve Club, Film Look Creator</a> · <a href=\"https://www.digitalcameraworld.com/news/kodak-brings-new-life-to-super-8-with-limited-edition-camera-with-a-5k-price-tag\">Digital Camera World, Kodak Super 8 camera</a></p>\n<p><b>Our own documents:</b> <a href=\"https://claude.ai/code/artifact/ae5aad9a-8e34-4ec2-a5c8-35354f73f913\">Hooks Testimonial Campaign and the TOJ Agent Studio</a> · <a href=\"https://claude.ai/code/artifact/431ed175-c59d-450a-bdf8-fb7838e39ee6\">Mark Bone's Story System, Built for Your Milanote</a> · <a href=\"https://claude.ai/code/artifact/238200d3-e8ae-4751-ba48-4504913b12db\">Same Work Production Playbook</a> · the STL and Ground Floor Sports agreement, Sections 8 and 9 (ask the producer for a copy).</p>"
+    }
+   ]
+  }
+ ]
+}
