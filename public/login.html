@@ -77,7 +77,10 @@ document.getElementById("authForm").addEventListener("submit", async e => {
     if (!r.ok) throw new Error(d.error || "Failed");
     msg.className = "msg ok";
     msg.textContent = "Signed in as " + d.email + ". Redirecting…";
-    setTimeout(() => location.href = "/admin/agents.html", 700);
+    // ?next=/admin/... sends you back where you came from (same-site paths only).
+    const next = new URLSearchParams(location.search).get("next") || "";
+    const dest = /^\/(?!\/)[\w\-./?=&#%]*$/.test(next) ? next : "/admin/agents.html";
+    setTimeout(() => location.href = dest, 700);
   } catch (err) {
     msg.className = "msg err";
     msg.textContent = err.message;

@@ -82,6 +82,13 @@
   .card:hover .open{color:var(--gold-b)}
   .stat-inline{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--sage);letter-spacing:.04em}
 
+  .launch{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;margin:22px 0 4px;padding:18px 20px;border-radius:14px;border:1px solid rgba(200,152,72,.55);background:linear-gradient(100deg,rgba(200,152,72,.16),rgba(200,152,72,.04) 60%),var(--bg-3);color:var(--paper);text-decoration:none;transition:border-color .18s,transform .18s}
+  .launch:hover{border-color:var(--gold-b);transform:translateY(-2px)}
+  .launch .new{font-family:'JetBrains Mono',monospace;font-size:9.5px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:var(--bg);background:var(--gold);border-radius:5px;padding:4px 7px;margin-right:10px;vertical-align:3px}
+  .launch h2{display:inline;font-family:'Anton',sans-serif;font-size:22px;letter-spacing:.02em;text-transform:uppercase;font-weight:400}
+  .launch p{color:var(--dim);font-size:13px;margin-top:6px;max-width:68ch}
+  .launch .go{font-weight:700;color:var(--gold-b);white-space:nowrap}
+  .launch .go small{display:block;font:400 10.5px/1.4 'JetBrains Mono',monospace;color:var(--dimmer);letter-spacing:.04em;text-align:right}
   .legend{display:flex;gap:16px;flex-wrap:wrap;margin-top:6px;font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.08em;color:var(--dimmer);text-transform:uppercase}
   .legend span{display:inline-flex;align-items:center;gap:6px}
   .legend i{width:9px;height:9px;border-radius:3px;display:inline-block}
@@ -134,6 +141,15 @@
       <span><i style="background:var(--blue)"></i> public site</span>
       <span><i style="background:var(--line)"></i> not live yet</span>
     </div>
+
+    <!-- QUICK LAUNCH -->
+    <a class="launch" href="/admin/studio-agents.html">
+      <div>
+        <span class="new">New</span><h2>Studio <span style="color:var(--gold)">Kits</span></h2>
+        <p>Your Same Work Milanote kit, kept current by an agent. Refresh the gear and sources, or build a new kit from a playbook PDF. It drafts; you approve.</p>
+      </div>
+      <span class="go">Open Studio Kits →<small>tojcampaign.com/studio</small></span>
+    </a>
 
     <!-- CRMs & OPS -->
     <div class="section-kicker">CRMs &amp; Ops Dashboards <span class="count" id="crmCount"></span></div>
@@ -188,7 +204,7 @@
         <p>Every deal term in one versioned record. Documents are checked against it; you approve every change.</p>
         <div class="foot"><span class="path">/admin/campaign</span><span class="open">Open →</span></div>
       </a>
-      <a class="card" href="/admin/studio-agents.html">
+      <a class="card star" href="/admin/studio-agents.html">
         <div class="card-top"><h3>Studio <span class="em">Kits</span></h3><span class="tag one">one login</span></div>
         <p>Production playbooks as Milanote kits — build a new kit from a playbook, or refresh Same Work's gear and sources. Agents draft; you approve.</p>
         <div class="foot"><span class="path">/admin/studio-agents</span><span class="open">Open →</span></div>

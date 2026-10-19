@@ -150,6 +150,7 @@ app.use("/api/performance-agents", require("./routes/performance-agents"));
 // Studio agents — build and refresh Milanote kits. Runs save drafts only;
 // a staff member approves (agents/studio/API.md).
 app.use("/api/studio-agents", require("./routes/studio-agents"));
+app.get(["/studio", "/studio/"], (_req, res) => res.redirect(302, "/admin/studio-agents.html"));
 // Campaign deal graph + campaign agents — staff only; membership checked per
 // campaign inside the route. Needs CAMPAIGN_DATABASE_URL (503 until set).
 app.use("/api/campaign", require("./utils/staff").requireStaff, require("./routes/campaign"));
