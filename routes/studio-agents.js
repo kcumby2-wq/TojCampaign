@@ -22,7 +22,9 @@ const crypto = require("crypto");
 const K = require("../agents/studio/kit");
 const S = require("../agents/studio/service");
 const { renderDocument } = require("../agents/studio/kit-render");
-const { requireStaff, requireStaffOrApiKey, isStaff } = require("../utils/staff");
+const T = require("../utils/team");
+const P = require("../utils/push");
+const isPerson = (e) => !!e && e !== "api-key" && e.includes("@");
 
 const router = express.Router();
 const STUDIO_ROLES = ["kit-builder", "kit-refresher"];
@@ -69,11 +71,16 @@ router._setDeps = ({ sb, run, brief } = {}) => {
   if (brief !== undefined) runBriefImpl = brief;
 };
 
-// Staff session OR the STUDIO_API_KEY header for automation (e.g. a monthly refresh).
-const requireAuth = requireStaffOrApiKey("x-studio-api-key", "STUDIO_API_KEY");
+// Who may do what (utils/team.js): viewers open kits; members write briefs
+// and start runs; approvers and the owner approve. The STUDIO_API_KEY header
+// acts as a member for automation (e.g. a monthly refresh): it can start runs
+// but never approve or unlock rule cards.
+const viewer = T.requireTeamOrApiKey("x-studio-api-key", "STUDIO_API_KEY", "studio", "viewer");
+const member = T.requireTeamOrApiKey("x-studio-api-key", "STUDIO_API_KEY", "studio", "member");
+const approver = T.requireTeam("studio", "approver");
 
 function who(req) {
-  if (req._apiKeyAuth) return "api-key";
+  if (req.team) return req.team.email;
   return (req.session && req.session.userEmail) || null;
 }
 
@@ -86,7 +93,7 @@ router.get("/roles", (_req, res) => res.json({ roles: orchestrator().listRoles()
 router.get("/skills", (_req, res) => res.json({ skills: orchestrator().listSkills() }));
 
 // ── Kits ─────────────────────────────────────────────────────────────────
-router.get("/kits", requireAuth, async (_req, res) => {
+router.get("/kits", viewer, async (_req, res) => {
   try {
     const sb = getSupabase();
     const kits = await S.listKits(sb || null);
@@ -96,7 +103,7 @@ router.get("/kits", requireAuth, async (_req, res) => {
   }
 });
 
-router.get("/kits/:id", requireAuth, async (req, res) => {
+router.get("/kits/:id", viewer, async (req, res) => {
   try {
     const sb = getSupabase();
     const row = await S.getKit(sb || null, req.params.id);
@@ -113,7 +120,7 @@ router.get("/kits/:id", requireAuth, async (req, res) => {
   }
 });
 
-router.get("/kits/:id/page", requireAuth, async (req, res) => {
+router.get("/kits/:id/page", viewer, async (req, res) => {
   try {
     const sb = getSupabase();
     const row = await S.getKit(sb || null, req.params.id);
@@ -142,7 +149,7 @@ router.get("/kits/:id/page", requireAuth, async (req, res) => {
   }
 });
 
-router.post("/kits/:id/approve", requireStaff, async (req, res) => {
+router.post("/kits/:id/approve", approver, async (req, res) => {
   const sb = getSupabase();
   if (!sb) return res.status(503).json({ error: "supabase_unavailable" });
   if (!S.isUuid(req.params.id)) return res.status(400).json({ error: "only_saved_drafts_can_be_approved" });
@@ -166,13 +173,18 @@ router.post("/kits/:id/approve", requireStaff, async (req, res) => {
     const { error } = await sb.rpc("studio_kit_approve", { p_id: row.id, p_by: who(req) });
     if (error) return res.status(409).json({ error: error.message });
     console.log(`[studio] kit ${row.id} (${row.slug} v${row.version}) approved`);
+    await T.logActivity(who(req), "approved_kit", `${row.slug} v${row.version}`, { kit_id: row.id });
+    P.notifySoon(
+      P.teamEmails("viewer").then((list) => list.filter((e) => e !== who(req))),
+      { title: `${String(row.title || row.slug).replace(/ Milanote Kit$/, "")} v${row.version} is approved`, body: "It's the kit everyone uses now.", url: `/app/#kit/${row.id}`, tag: `kit-${row.slug}` }
+    );
     res.json({ ok: true, id: row.id, slug: row.slug, version: row.version, status: "approved" });
   } catch (e) {
     fail(res, e, "approve_kit");
   }
 });
 
-router.post("/kits/:id/discard", requireStaff, async (req, res) => {
+router.post("/kits/:id/discard", approver, async (req, res) => {
   const sb = getSupabase();
   if (!sb) return res.status(503).json({ error: "supabase_unavailable" });
   if (!S.isUuid(req.params.id)) return res.status(400).json({ error: "only_saved_drafts_can_be_discarded" });
@@ -185,6 +197,7 @@ router.post("/kits/:id/discard", requireStaff, async (req, res) => {
       .select("id,slug,version,status");
     if (error) throw new Error(error.message);
     if (!data || !data.length) return res.status(409).json({ error: "not_a_draft" });
+    await T.logActivity(who(req), "discarded_kit", `${data[0].slug} v${data[0].version}`, { kit_id: data[0].id });
     res.json({ ok: true, ...data[0] });
   } catch (e) {
     fail(res, e, "discard_kit");
@@ -193,17 +206,17 @@ router.post("/kits/:id/discard", requireStaff, async (req, res) => {
 
 // Template images. Staff, or anyone holding the signed URL from a kit page
 // (so a dragged image still loads when Milanote fetches it).
-router.get("/assets/:set/:file", (req, res) => {
+router.get("/assets/:set/:file", async (req, res) => {
   const file = S.assetPath(req.params.set, req.params.file);
   if (!file) return res.status(404).end();
   const signed = S.verifyAsset(req.params.set, req.params.file, req.query.sig);
-  if (!signed && !isStaff(req)) return res.status(403).end();
+  if (!signed && !T.can(await T.accessFor(req).catch(() => null), "studio", "viewer")) return res.status(403).end();
   res.set("Cache-Control", "private, max-age=86400");
   res.sendFile(file);
 });
 
 // ── Runs ─────────────────────────────────────────────────────────────────
-router.post("/run", requireAuth, async (req, res) => {
+router.post("/run", member, async (req, res) => {
   const body = req.body || {};
   const role = body.role;
   if (!STUDIO_ROLES.includes(role)) return res.status(400).json({ error: "invalid_role" });
@@ -216,6 +229,7 @@ router.post("/run", requireAuth, async (req, res) => {
   if (!K.SLUG_RE.test(slug)) return res.status(400).json({ error: "invalid_slug" });
   const allowLocked = body.allow_rule_changes === true;
   if (allowLocked && req._apiKeyAuth) return res.status(403).json({ error: "rule_changes_need_a_person" });
+  if (allowLocked && !(req.team && req.team.owner)) return res.status(403).json({ error: "rule_changes_need_the_owner" });
 
   const sb = getSupabase();
   if (!sb) return res.status(503).json({ error: "supabase_unavailable" });
@@ -259,12 +273,13 @@ router.post("/run", requireAuth, async (req, res) => {
 
   const { data: runRow, error: insErr } = await sb
     .from("agent_runs")
-    .insert({ role, client_id: null, task, status: "running" })
+    .insert({ role, client_id: null, task, status: "running", created_by: who(req) })
     .select("id")
     .single();
   if (insErr) return fail(res, insErr, "start_run");
 
   res.json({ ok: true, run_id: runRow.id, namespace: "studio", mode: scope.mode, slug });
+  T.logActivity(who(req), "started_run", slug, { role, run_id: runRow.id });
 
   const requestedBy = who(req);
   setImmediate(async () => {
@@ -315,8 +330,28 @@ router.post("/run", requireAuth, async (req, res) => {
       console.log(
         `[studio] run ${runRow.id} ${passed ? "completed" : "waiting"} · ${role} · ${Date.now() - startedAt}ms · eval=${result.eval_status} · draft=${saved.saved ? saved.id : saved.reason}`
       );
+      const kitName = (stage && stage.kit && stage.kit.title ? stage.kit.title : slug).replace(/ Milanote Kit$/, "");
+      if (saved.saved) {
+        P.notifySoon(
+          P.teamEmails("approver").then((list) => (isPerson(requestedBy) ? list.concat(requestedBy) : list)),
+          {
+            title: `Draft v${saved.version} of ${kitName} is ready`,
+            body: passed ? "It passed its checks. See what changed." : "It didn't pass its checks. Look closely before approving.",
+            url: `/app/#review/${saved.id}`,
+            tag: `draft-${saved.id}`,
+          }
+        );
+      } else if (isPerson(requestedBy)) {
+        P.notifySoon([requestedBy], {
+          title: saved.reason === "no_changes" ? `${kitName}: nothing needed changing` : `${kitName}: no draft was saved`,
+          body: saved.reason === "no_changes" ? "The refresh checked everything and left the kit as it is." : "Open the run to see why.",
+          url: `/app/#run/${runRow.id}`,
+          tag: `run-${runRow.id}`,
+        });
+      }
     } catch (e) {
       console.error(`[studio] run ${runRow.id} failed:`, e.message);
+      if (isPerson(requestedBy)) P.notifySoon([requestedBy], { title: "Your kit run stopped", body: "Open it to see what happened.", url: `/app/#run/${runRow.id}`, tag: `run-${runRow.id}` });
       await sb
         .from("agent_runs")
         .update({ status: "failed", error: String(e.message).slice(0, 1000), completed_at: new Date().toISOString() })
@@ -325,19 +360,61 @@ router.post("/run", requireAuth, async (req, res) => {
   });
 });
 
-router.get("/runs/:id", requireAuth, async (req, res) => {
+// Recent studio runs (kit runs and briefs), newest first, for the app.
+router.get("/runs", viewer, async (req, res) => {
+  const sb = getSupabase();
+  if (!sb) return res.status(503).json({ error: "supabase_unavailable" });
+  const { data, error } = await sb
+    .from("agent_runs")
+    .select("id,role,status,task,output,created_at,completed_at,created_by,eval_status")
+    .in("role", POLL_ROLES)
+    .order("created_at", { ascending: false })
+    .limit(Math.min(50, Number(req.query.limit) || 20));
+  if (error) return fail(res, error, "list_runs");
+  res.json({
+    runs: (data || []).map((r) => {
+      let status = r.status;
+      if (status === "running" && Date.now() - new Date(r.created_at).getTime() > STALE_RUN_MS) status = "failed";
+      return {
+        id: r.id,
+        role: r.role,
+        status,
+        eval_status: r.eval_status,
+        created_at: r.created_at,
+        completed_at: r.completed_at,
+        by_you: !!(req.team && r.created_by && r.created_by === req.team.email),
+        label: runLabel(r),
+      };
+    }),
+  });
+});
+
+function runLabel(r) {
+  const task = String(r.task || "");
+  if (r.role === "brief-writer") {
+    const head = String(r.output || "").split("\n")[0];
+    if (head.startsWith("# ")) return head.slice(2, 90);
+    const m = task.match(/Kyron's idea:\n([^\n]+)/);
+    return m ? m[1].slice(0, 90) : "A new brief";
+  }
+  const m = task.match(/Brief from Kyron:\n([^\n]+)/);
+  return m ? m[1].replace(/^Goal:\s*/i, "").slice(0, 90) : r.role === "kit-builder" ? "A new kit" : "A kit refresh";
+}
+
+router.get("/runs/:id", viewer, async (req, res) => {
   const sb = getSupabase();
   if (!sb) return res.status(503).json({ error: "supabase_unavailable" });
   if (!S.isUuid(req.params.id)) return res.status(404).json({ error: "not_found" });
   const { data, error } = await sb
     .from("agent_runs")
-    .select("id,role,status,output,trace,usage,error,created_at,completed_at,eval_status,retry_count,eval_summary,eval_biggest_miss")
+    .select("id,role,status,task,output,trace,usage,error,created_at,completed_at,eval_status,retry_count,eval_summary,eval_biggest_miss")
     .eq("id", req.params.id)
     .in("role", POLL_ROLES)
     .maybeSingle();
   if (error) return fail(res, error, "poll_run");
   if (!data) return res.status(404).json({ error: "not_found" });
-  const { trace, ...run } = data;
+  const { trace, task, ...run } = data;
+  run.label = runLabel({ role: run.role, task, output: run.output });
   if (run.status === "running" && Date.now() - new Date(run.created_at).getTime() > STALE_RUN_MS) {
     run.status = "failed";
     run.error = "The server restarted while this run was going, so it stopped. Start it again.";
@@ -355,7 +432,7 @@ router.get("/runs/:id", requireAuth, async (req, res) => {
 // An idea plus references (photos, video stills, links, file text) in; one
 // brief for a kit run out. Photos and stills go to the model for this run
 // only and are never stored (agents/studio-brief/request.js).
-router.post("/brief", requireAuth, async (req, res) => {
+router.post("/brief", member, async (req, res) => {
   const BR = require("../agents/studio-brief/request");
   const parsed = BR.parseBriefRequest(req.body || {});
   if (!parsed.ok) {
@@ -368,11 +445,12 @@ router.post("/brief", requireAuth, async (req, res) => {
   const task = BR.buildBriefTask(parsed, S.today());
   const { data: runRow, error: insErr } = await sb
     .from("agent_runs")
-    .insert({ role: "brief-writer", client_id: null, task, status: "running" })
+    .insert({ role: "brief-writer", client_id: null, task, status: "running", created_by: who(req) })
     .select("id")
     .single();
   if (insErr) return fail(res, insErr, "start_brief");
   res.json({ ok: true, run_id: runRow.id, namespace: "studio-brief", references: parsed.refs.map((r) => r.ref) });
+  T.logActivity(who(req), "started_brief", parsed.target.slug || parsed.target.mode, { run_id: runRow.id, references: parsed.refs.length });
 
   const scope = {
     idea: parsed.idea,
@@ -425,6 +503,12 @@ router.post("/brief", requireAuth, async (req, res) => {
         );
       }
       console.log(`[studio] brief ${runRow.id} ${passed ? "completed" : "waiting"} · ${Date.now() - startedAt}ms · eval=${result.eval_status} · refs=${parsed.refs.length}`);
+      const starter = who(req);
+      if (isPerson(starter)) {
+        P.notifySoon([starter], brief
+          ? { title: "Your brief is ready", body: `${brief.title}${brief.questions && brief.questions.length ? " · it has a question for you" : ""}`, url: `/app/#brief/${runRow.id}`, tag: `brief-${runRow.id}` }
+          : { title: "The Brief Writer stopped", body: "Open it to see why.", url: `/app/#brief/${runRow.id}`, tag: `brief-${runRow.id}` });
+      }
     } catch (e) {
       console.error(`[studio] brief ${runRow.id} failed:`, e.message);
       await sb

@@ -21,7 +21,7 @@ Console: `/admin/studio-agents.html` (Command Center → Studio Kits).
 
 ## Endpoints
 
-All under `/api/studio-agents`. Auth: staff session, or `X-Studio-API-Key: $STUDIO_API_KEY` where noted.
+All under `/api/studio-agents`. Auth is by team role (utils/team.js, the TOJ app's Team tab): viewers open kits; members write briefs and start runs; approvers and the owner approve and discard; only the owner allows rule changes. `X-Studio-API-Key: $STUDIO_API_KEY` acts as a member (it can start runs, never approve).
 
 | Method | Path | Auth | What it does |
 |---|---|---|---|
@@ -29,12 +29,13 @@ All under `/api/studio-agents`. Auth: staff session, or `X-Studio-API-Key: $STUD
 | GET | `/kits` | staff or key | Every version: built-in and saved (no kit bodies) |
 | GET | `/kits/:id` | staff or key | One version: the kit, its check, its diff against the version it started from, the change log and the agent's summary |
 | GET | `/kits/:id/page` | staff or key | The Milanote kit page, with a status bar (Approved / Draft / Superseded) |
-| POST | `/kits/:id/approve` | **staff only** | Approve a draft (refused while it has blockers) |
-| POST | `/kits/:id/discard` | **staff only** | Discard a draft |
+| POST | `/kits/:id/approve` | **approver or owner** | Approve a draft (refused while it has blockers, or if a newer version was approved since) |
+| POST | `/kits/:id/discard` | **approver or owner** | Discard a draft |
 | GET | `/assets/:set/:file` | signed URL or staff | A template image |
 | POST | `/run` | staff or key | Start a run → `{ run_id }` |
 | POST | `/brief` | staff or key | Start the Brief Writer → `{ run_id, references }` |
-| GET | `/runs/:id` | staff or key | Poll: `running` → `completed` / `waiting` / `failed`, plus the draft it saved |
+| GET | `/runs` | team or key | Recent studio runs (for the app's Today) |
+| GET | `/runs/:id` | team or key | Poll: `running` → `completed` / `waiting` / `failed`, plus the draft it saved |
 
 ### POST /run
 
