@@ -15,12 +15,24 @@
 // agents/campaign). ctx = { role, client_id, scope }.
 //
 // Roles live in <baseDir>/roles/*.js; skills in <baseDir>/skills/*.md.
-// Each role: { id, label, tagline, skills: [], persona, model?, tools? }
+// Each role: { id, label, tagline, skills: [], persona, model?, tools?,
+//              max_tokens?, max_iterations? }
 //   tools — optional allow-list of tool names. A role that lists tools gets
 //           only those; a role without the list gets every tool the run allows.
+//   max_tokens / max_iterations — optional per-role overrides of the
+//           defaults below (8000 / 20), for roles that write long output.
 //   cross_client — true for a cross-roster report role: in an unscoped run it
 //           may read any client it lists (see agents/tool-scope.js).
 // System prompt = persona + "\n\n---\n\n" + skill contents joined.
+//
+// Server tools (web_search, web_fetch) can sit in a pack's tool list as plain
+// objects; the API runs them. A long server-tool turn can come back with
+// stop_reason "pause_turn" — the runner is told to continue it.
+//
+// evalView — optional (agentResult, { role, client_id, scope }) => agentResult.
+// What the judge scores, when the agent's work is more than its final text
+// (agents/studio: the kit it staged). The run still returns the agent's own
+// result; only the eval sees the view.
 //
 // Which tools a run gets is decided per run (agents/tool-scope.js): a run
 // scoped to one client can only read that client; an unscoped run gets the
@@ -35,6 +47,8 @@ const { resolveTools, toolName } = require("./tool-scope");
 const DEFAULT_MODEL = "claude-opus-4-8";
 const MAX_ITERATIONS = 20;
 const MAX_EVAL_RETRIES = 3;
+const MAX_TOKENS = 8000;
+const MAX_PAUSE_CONTINUES = 4;
 
 function loadDir(dir, matcher, mapper) {
   if (!fs.existsSync(dir)) return {};
@@ -47,7 +61,7 @@ function loadDir(dir, matcher, mapper) {
   return out;
 }
 
-function createOrchestrator({ namespace, baseDir, tools, defaultModel = DEFAULT_MODEL }) {
+function createOrchestrator({ namespace, baseDir, tools, defaultModel = DEFAULT_MODEL, evalView = null }) {
   const ROLES = loadDir(
     path.join(baseDir, "roles"),
     (f) => f.endsWith(".js"),
@@ -121,21 +135,31 @@ function createOrchestrator({ namespace, baseDir, tools, defaultModel = DEFAULT_
 
     const runner = client.beta.messages.toolRunner({
       model: cfg.model || defaultModel,
-      max_tokens: 8000,
+      max_tokens: cfg.max_tokens || MAX_TOKENS,
       system: buildSystemPrompt(cfg),
       tools: runTools,
       messages: [{ role: "user", content: userMessage }],
       thinking: { type: "adaptive" },
-      max_iterations: MAX_ITERATIONS,
+      max_iterations: cfg.max_iterations || MAX_ITERATIONS,
     });
 
     const trace = [];
     let final = null;
+    let pauses = 0;
     for await (const message of runner) {
       for (const block of message.content) {
         if (block.type === "text") trace.push({ type: "text", text: block.text });
         else if (block.type === "tool_use")
           trace.push({ type: "tool_use", name: block.name, input: block.input });
+        else if (block.type === "server_tool_use")
+          trace.push({ type: "tool_use", name: block.name, input: block.input, server: true });
+      }
+      // A server tool (web search / fetch) ran long: send the turn back so
+      // the API continues it, instead of ending the run mid-thought.
+      if (message.stop_reason === "pause_turn" && pauses < MAX_PAUSE_CONTINUES) {
+        pauses++;
+        runner.pushMessages({ role: message.role, content: message.content });
+        continue;
       }
       if (message.stop_reason === "end_turn") final = message;
     }
@@ -192,7 +216,8 @@ function createOrchestrator({ namespace, baseDir, tools, defaultModel = DEFAULT_
         ? { ...EVAL_SPEC, questions: [...EVAL_SPEC.questions, ...cfg.eval_additions] }
         : EVAL_SPEC;
 
-      lastEval = await evaluate(roleSpec, lastResult, {
+      const judged = evalView ? evalView(lastResult, { role, client_id, scope }) : lastResult;
+      lastEval = await evaluate(roleSpec, judged, {
         client_id_present: !!client_id,
       });
       evalHistory.push({

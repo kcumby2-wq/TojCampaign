@@ -6,6 +6,7 @@
     { "source": "/api/:path*", "destination": "https://toj-csv-app.onrender.com/api/:path*" }
   ],
   "redirects": [
+    { "source": "/studio", "destination": "/admin/studio-agents.html", "permanent": false },
     { "source": "/sports.html", "destination": "/authority.html", "permanent": true },
     { "source": "/smallbusiness.html", "destination": "/personal-brand.html", "permanent": true },
     { "source": "/bigbusiness.html", "destination": "/nonprofit.html", "permanent": true },

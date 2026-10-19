@@ -1,0 +1,332 @@
+// Studio Agents API — build and refresh Milanote kits (agents/studio).
+//
+//   GET  /api/studio-agents/roles                 → public metadata
+//   GET  /api/studio-agents/skills                → public metadata
+//   POST /api/studio-agents/run                   → start a run → { run_id }
+//   GET  /api/studio-agents/runs/:id              → poll a run (and the draft it saved)
+//   GET  /api/studio-agents/kits                  → every kit version (built-in + saved)
+//   GET  /api/studio-agents/kits/:id              → one kit version, its check, its changes
+//   GET  /api/studio-agents/kits/:id/page         → the Milanote kit page (copy buttons)
+//   POST /api/studio-agents/kits/:id/approve      → staff session only
+//   POST /api/studio-agents/kits/:id/discard      → staff session only
+//   GET  /api/studio-agents/assets/:set/:file     → template image (signed URL or staff)
+//
+// Safety model: an agent run can only save a NEW draft version. Approving is a
+// person's act (staff session; an API key can't approve or allow rule
+// changes). The approved kit is never edited in place, and the first approved
+// Same Work kit ships read-only in the repo. See agents/studio/API.md.
+
+const express = require("express");
+const crypto = require("crypto");
+const K = require("../agents/studio/kit");
+const S = require("../agents/studio/service");
+const { renderDocument } = require("../agents/studio/kit-render");
+const { requireStaff, requireStaffOrApiKey, isStaff } = require("../utils/staff");
+
+const router = express.Router();
+const STUDIO_ROLES = ["kit-builder", "kit-refresher"];
+
+let studio = null;
+function orchestrator() {
+  if (!studio) studio = require("../agents/studio/orchestrator");
+  return studio;
+}
+let runAgentImpl = null;
+function runAgent(args) {
+  return (runAgentImpl || orchestrator().runAgent)(args);
+}
+
+let supabase = null;
+function getSupabase() {
+  if (supabase !== null) return supabase;
+  const url = process.env.SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!url || !key) return (supabase = false);
+  try {
+    const { createClient } = require("@supabase/supabase-js");
+    supabase = createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false } });
+    return supabase;
+  } catch {
+    return (supabase = false);
+  }
+}
+
+// Tests swap in a fake database and agent.
+router._setDeps = ({ sb, run } = {}) => {
+  if (sb !== undefined) supabase = sb;
+  if (run !== undefined) runAgentImpl = run;
+};
+
+// Staff session OR the STUDIO_API_KEY header for automation (e.g. a monthly refresh).
+const requireAuth = requireStaffOrApiKey("x-studio-api-key", "STUDIO_API_KEY");
+
+function who(req) {
+  if (req._apiKeyAuth) return "api-key";
+  return (req.session && req.session.userEmail) || null;
+}
+
+function fail(res, e, what) {
+  console.error(`[studio] ${what} failed:`, e && e.message);
+  return res.status(500).json({ error: `${what}_failed` });
+}
+
+router.get("/roles", (_req, res) => res.json({ roles: orchestrator().listRoles() }));
+router.get("/skills", (_req, res) => res.json({ skills: orchestrator().listSkills() }));
+
+// ── Kits ─────────────────────────────────────────────────────────────────
+router.get("/kits", requireAuth, async (_req, res) => {
+  try {
+    const sb = getSupabase();
+    const kits = await S.listKits(sb || null);
+    res.json({ kits, storage: sb ? "ok" : "unavailable", template_sets: K.assetSets() });
+  } catch (e) {
+    fail(res, e, "list_kits");
+  }
+});
+
+router.get("/kits/:id", requireAuth, async (req, res) => {
+  try {
+    const sb = getSupabase();
+    const row = await S.getKit(sb || null, req.params.id);
+    if (!row) return res.status(404).json({ error: "not_found" });
+    const check = K.checkKit(row.kit);
+    let diff = null;
+    if (row.base_kit_id) {
+      const base = await S.getKit(sb || null, row.base_kit_id);
+      if (base) diff = K.diffKits(base.kit, row.kit);
+    }
+    res.json({ ...row, check: { ok: check.ok, blockers: check.blockers, warnings: check.warnings, counts: check.counts }, diff });
+  } catch (e) {
+    fail(res, e, "get_kit");
+  }
+});
+
+router.get("/kits/:id/page", requireAuth, async (req, res) => {
+  try {
+    const sb = getSupabase();
+    const row = await S.getKit(sb || null, req.params.id);
+    if (!row) return res.status(404).send("Not found");
+    const nonce = crypto.randomBytes(16).toString("base64");
+    const html = renderDocument(row.kit, { imgSrc: S.imgSrcFor(row.kit), banner: S.bannerFor(row), nonce });
+    res.set({
+      "Content-Type": "text/html; charset=utf-8",
+      "Cache-Control": "no-store",
+      "X-Robots-Tag": "noindex, nofollow",
+      "Referrer-Policy": "same-origin",
+      "Content-Security-Policy": [
+        "default-src 'none'",
+        "img-src 'self'",
+        "style-src 'unsafe-inline' https://fonts.googleapis.com",
+        "font-src https://fonts.gstatic.com",
+        `script-src 'nonce-${nonce}'`,
+        "base-uri 'none'",
+        "form-action 'none'",
+        "frame-ancestors 'self'",
+      ].join("; "),
+    });
+    res.send(html);
+  } catch (e) {
+    fail(res, e, "kit_page");
+  }
+});
+
+router.post("/kits/:id/approve", requireStaff, async (req, res) => {
+  const sb = getSupabase();
+  if (!sb) return res.status(503).json({ error: "supabase_unavailable" });
+  if (!S.isUuid(req.params.id)) return res.status(400).json({ error: "only_saved_drafts_can_be_approved" });
+  try {
+    const row = await S.getKit(sb, req.params.id);
+    if (!row) return res.status(404).json({ error: "not_found" });
+    if (row.status !== "draft") return res.status(409).json({ error: "not_a_draft", status: row.status });
+    const check = K.checkKit(row.kit);
+    if (!check.ok) return res.status(409).json({ error: "fix_blockers_first", blockers: check.blockers });
+    // A draft made from an older approved version would quietly undo what was
+    // approved since. Refuse it; a fresh refresh starts from the current one.
+    const current = await S.approvedKit(sb, row.slug);
+    if (current && current.id !== row.base_kit_id) {
+      return res.status(409).json({
+        error: "stale_draft",
+        hint: `this draft started from v${row.base_version || "none"}, but v${current.version} is approved now; run a new refresh`,
+        base_version: row.base_version || null,
+        approved_version: current.version,
+      });
+    }
+    const { error } = await sb.rpc("studio_kit_approve", { p_id: row.id, p_by: who(req) });
+    if (error) return res.status(409).json({ error: error.message });
+    console.log(`[studio] kit ${row.id} (${row.slug} v${row.version}) approved`);
+    res.json({ ok: true, id: row.id, slug: row.slug, version: row.version, status: "approved" });
+  } catch (e) {
+    fail(res, e, "approve_kit");
+  }
+});
+
+router.post("/kits/:id/discard", requireStaff, async (req, res) => {
+  const sb = getSupabase();
+  if (!sb) return res.status(503).json({ error: "supabase_unavailable" });
+  if (!S.isUuid(req.params.id)) return res.status(400).json({ error: "only_saved_drafts_can_be_discarded" });
+  try {
+    const { data, error } = await sb
+      .from("studio_kits")
+      .update({ status: "discarded", discarded_by: who(req), discarded_at: new Date().toISOString() })
+      .eq("id", req.params.id)
+      .eq("status", "draft")
+      .select("id,slug,version,status");
+    if (error) throw new Error(error.message);
+    if (!data || !data.length) return res.status(409).json({ error: "not_a_draft" });
+    res.json({ ok: true, ...data[0] });
+  } catch (e) {
+    fail(res, e, "discard_kit");
+  }
+});
+
+// Template images. Staff, or anyone holding the signed URL from a kit page
+// (so a dragged image still loads when Milanote fetches it).
+router.get("/assets/:set/:file", (req, res) => {
+  const file = S.assetPath(req.params.set, req.params.file);
+  if (!file) return res.status(404).end();
+  const signed = S.verifyAsset(req.params.set, req.params.file, req.query.sig);
+  if (!signed && !isStaff(req)) return res.status(403).end();
+  res.set("Cache-Control", "private, max-age=86400");
+  res.sendFile(file);
+});
+
+// ── Runs ─────────────────────────────────────────────────────────────────
+router.post("/run", requireAuth, async (req, res) => {
+  const body = req.body || {};
+  const role = body.role;
+  if (!STUDIO_ROLES.includes(role)) return res.status(400).json({ error: "invalid_role" });
+  const brief = typeof body.brief === "string" ? body.brief.trim() : "";
+  if (brief.length < 10) return res.status(400).json({ error: "missing_brief" });
+  if (brief.length > S.BRIEF_MAX) return res.status(400).json({ error: "brief_too_long", max: S.BRIEF_MAX });
+  const source = typeof body.source_text === "string" ? body.source_text.replace(/\r\n/g, "\n").trim() : "";
+  if (source.length > S.SOURCE_MAX) return res.status(400).json({ error: "source_too_long", max: S.SOURCE_MAX });
+  const slug = String(body.slug || "").trim();
+  if (!K.SLUG_RE.test(slug)) return res.status(400).json({ error: "invalid_slug" });
+  const allowLocked = body.allow_rule_changes === true;
+  if (allowLocked && req._apiKeyAuth) return res.status(403).json({ error: "rule_changes_need_a_person" });
+
+  const sb = getSupabase();
+  if (!sb) return res.status(503).json({ error: "supabase_unavailable" });
+
+  let scope;
+  try {
+    if (role === "kit-builder") {
+      if (source.length < 200) return res.status(400).json({ error: "source_required", hint: "paste the playbook text (or load the PDF) for a new kit" });
+      if (await S.slugExists(sb, slug)) {
+        return res.status(409).json({ error: "slug_exists", hint: "use kit-refresher to update this kit, or pick a new slug" });
+      }
+      const assets = body.assets ? String(body.assets) : null;
+      if (assets && !K.assetSets().includes(assets)) return res.status(400).json({ error: "unknown_template_set" });
+      scope = { mode: "build", slug, assets, allow_locked: false };
+    } else {
+      const base = await S.approvedKit(sb, slug);
+      if (!base) return res.status(404).json({ error: "no_approved_kit_for_slug" });
+      scope = {
+        mode: "refresh",
+        slug,
+        assets: base.kit.assets || null,
+        base: { id: base.id, version: base.version, kit: base.kit },
+        allow_locked: allowLocked,
+      };
+    }
+  } catch (e) {
+    return fail(res, e, "start_run");
+  }
+
+  const task = S.buildTask({
+    mode: scope.mode,
+    slug,
+    brief,
+    source,
+    base: scope.base || null,
+    assets: scope.assets,
+    allowLocked,
+    today: S.today(),
+  });
+  scope.source_excerpt = source.slice(0, S.SOURCE_EXCERPT);
+
+  const { data: runRow, error: insErr } = await sb
+    .from("agent_runs")
+    .insert({ role, client_id: null, task, status: "running" })
+    .select("id")
+    .single();
+  if (insErr) return fail(res, insErr, "start_run");
+
+  res.json({ ok: true, run_id: runRow.id, namespace: "studio", mode: scope.mode, slug });
+
+  const requestedBy = who(req);
+  setImmediate(async () => {
+    const startedAt = Date.now();
+    let stage = null;
+    try {
+      const result = await runAgent({ role, task, scope: { ...scope, onStage: (s) => (stage = s) } });
+      const passed = ["passed", "passed_after_retry", "not_run"].includes(result.eval_status);
+      let saved = { saved: false, reason: "nothing_staged" };
+      try {
+        saved = await S.saveDraft(sb, { stage, runId: runRow.id, role, result, slug, requestedBy });
+      } catch (e) {
+        console.error(`[studio] run ${runRow.id} could not save its draft:`, e.message);
+        saved = { saved: false, reason: "save_failed" };
+      }
+      const note = saved.saved
+        ? `\n\n---\nSaved as draft v${saved.version} of "${slug}" (kit ${saved.id}). Nothing is approved until a person approves it.`
+        : saved.reason === "no_changes"
+          ? "\n\n---\nNo changes were needed, so no new draft was saved."
+          : `\n\n---\nNo draft was saved (${saved.reason}).`;
+      await sb
+        .from("agent_runs")
+        .update({
+          status: passed ? "completed" : "waiting",
+          output: `${result.output || ""}${note}`,
+          trace: result.trace,
+          usage: result.usage,
+          eval_status: result.eval_status,
+          retry_count: result.retry_count || 0,
+          eval_summary: result.eval_summary,
+          eval_biggest_miss: result.eval_biggest_miss,
+          completed_at: new Date().toISOString(),
+        })
+        .eq("id", runRow.id);
+      if (result.eval_history && result.eval_history.length) {
+        await sb.from("eval_runs").insert(
+          result.eval_history.map((h) => ({
+            agent_run_id: runRow.id,
+            attempt: h.attempt,
+            verdict: h.verdict,
+            total_score: h.total_score,
+            biggest_miss: h.biggest_miss,
+            auto_fail_triggered: h.auto_fail_triggered,
+            evaluator_model: h.evaluator_model,
+          }))
+        );
+      }
+      console.log(
+        `[studio] run ${runRow.id} ${passed ? "completed" : "waiting"} · ${role} · ${Date.now() - startedAt}ms · eval=${result.eval_status} · draft=${saved.saved ? saved.id : saved.reason}`
+      );
+    } catch (e) {
+      console.error(`[studio] run ${runRow.id} failed:`, e.message);
+      await sb
+        .from("agent_runs")
+        .update({ status: "failed", error: String(e.message).slice(0, 1000), completed_at: new Date().toISOString() })
+        .eq("id", runRow.id);
+    }
+  });
+});
+
+router.get("/runs/:id", requireAuth, async (req, res) => {
+  const sb = getSupabase();
+  if (!sb) return res.status(503).json({ error: "supabase_unavailable" });
+  if (!S.isUuid(req.params.id)) return res.status(404).json({ error: "not_found" });
+  const { data, error } = await sb
+    .from("agent_runs")
+    .select("id,role,status,output,usage,error,created_at,completed_at,eval_status,retry_count,eval_summary,eval_biggest_miss")
+    .eq("id", req.params.id)
+    .in("role", STUDIO_ROLES)
+    .maybeSingle();
+  if (error) return fail(res, error, "poll_run");
+  if (!data) return res.status(404).json({ error: "not_found" });
+  const { data: kits } = await sb.from("studio_kits").select("id,slug,version,status").eq("source_run_id", data.id).limit(1);
+  res.json({ ...data, kit: (kits && kits[0]) || null });
+});
+
+module.exports = router;
