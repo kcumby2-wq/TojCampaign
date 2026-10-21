@@ -180,6 +180,7 @@ app.use("/api/studio-agents", require("./routes/studio-agents"));
 // and the creators' public pages at /c/<slug>.
 app.use("/api/creators", require("./routes/creators"));
 app.use("/c", require("./routes/creators").pageRouter);
+app.use("/api/os", require("./routes/os"));
 // The team: invites, roles, activity (utils/team.js). Owner-only consoles keep requireStaff.
 app.use("/api/team", require("./routes/team"));
 // Web push for the TOJ app (utils/push.js).
