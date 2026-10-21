@@ -1,0 +1,22 @@
+{
+  "name": "toj-ios",
+  "private": true,
+  "version": "1.0.0",
+  "description": "The TOJ app for iPhone: a Capacitor shell around tojcampaign.com/app with the camera, notifications and a Share extension.",
+  "scripts": {
+    "bundle": "esbuild src/native.js --bundle --minify --format=iife --target=safari15 --outfile=../public/app/native.js --legal-comments=none --banner:js=\"/* TOJ iPhone app native layer. Built from mobile/src/native.js (npm run bundle). Includes @capacitor/core, app, camera and push-notifications (MIT). */\"",
+    "sync": "cap sync ios",
+    "check": "node scripts/check.js"
+  },
+  "dependencies": {
+    "@capacitor/app": "8.1.2",
+    "@capacitor/camera": "8.2.6",
+    "@capacitor/core": "8.5.3",
+    "@capacitor/ios": "8.5.3",
+    "@capacitor/push-notifications": "8.1.3"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "8.5.3",
+    "esbuild": "0.28.2"
+  }
+}

@@ -1,0 +1,68 @@
+# Builds the TOJ iPhone app, signs it and uploads it to TestFlight.
+# Runs on GitHub's Macs (.github/workflows/ios.yml); nothing here needs a Mac
+# of Kyron's. Signing certificates and profiles are made once by `match` with
+# the App Store Connect API key and kept, encrypted with MATCH_PASSWORD, in a
+# private GitHub repo (MATCH_GIT_URL). See mobile/README.md.
+
+default_platform(:ios)
+
+APP_ID = ENV.fetch("TOJ_BUNDLE_ID", "com.tojcampaign.app")
+SHARE_ID = "#{APP_ID}.share"
+
+platform :ios do
+  desc "Build, sign and upload a build to TestFlight"
+  lane :beta do
+    setup_ci
+
+    api_key = app_store_connect_api_key(
+      key_id: ENV.fetch("ASC_KEY_ID"),
+      issuer_id: ENV.fetch("ASC_ISSUER_ID"),
+      key_content: ENV.fetch("ASC_KEY_P8"),
+      in_house: false
+    )
+
+    # The first run makes the distribution certificate and both App Store
+    # profiles; later runs reuse them. MATCH_READONLY=true to never make new ones.
+    match(
+      type: "appstore",
+      app_identifier: [APP_ID, SHARE_ID],
+      team_id: ENV.fetch("APPLE_TEAM_ID"),
+      api_key: api_key,
+      git_url: ENV.fetch("MATCH_GIT_URL"),
+      git_basic_authorization: ENV.fetch("MATCH_GIT_BASIC_AUTHORIZATION"),
+      readonly: ENV["MATCH_READONLY"] == "true"
+    )
+
+    profiles = {
+      APP_ID => ENV["sigh_#{APP_ID}_appstore_profile-name"] || "match AppStore #{APP_ID}",
+      SHARE_ID => ENV["sigh_#{SHARE_ID}_appstore_profile-name"] || "match AppStore #{SHARE_ID}"
+    }
+    { "App" => APP_ID, "ShareExtension" => SHARE_ID }.each do |target, id|
+      update_code_signing_settings(
+        path: "App.xcodeproj",
+        use_automatic_signing: false,
+        team_id: ENV.fetch("APPLE_TEAM_ID"),
+        targets: [target],
+        build_configurations: ["Release"],
+        code_sign_identity: "Apple Distribution",
+        profile_name: profiles[id]
+      )
+    end
+
+    build_app(
+      project: "App.xcodeproj",
+      scheme: "App",
+      configuration: "Release",
+      export_method: "app-store",
+      export_options: { provisioningProfiles: profiles },
+      xcargs: "CURRENT_PROJECT_VERSION=#{ENV.fetch('BUILD_NUMBER', '1')} TOJ_BUNDLE_ID=#{APP_ID}",
+      output_directory: "build",
+      clean: true
+    )
+
+    upload_to_testflight(
+      api_key: api_key,
+      skip_waiting_for_build_processing: true
+    )
+  end
+end
