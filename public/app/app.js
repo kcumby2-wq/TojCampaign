@@ -199,6 +199,13 @@
     exported_sales: "exported sales",
     started_stripe: "started payouts setup",
     changed_creator: "changed a creator's settings",
+    started_os: "started an operating system for",
+    approved_os_scores: "approved the five-pillar scores for",
+    approved_os_transcript: "approved the transcript for",
+    started_os_install: "started installing systems for",
+    updated_os_systems: "updated the systems for",
+    generated_os_brain: "generated the operating brain for",
+    os_running: "handed off",
   };
   function actorName(a) {
     if (a.actor && state.me && a.actor === state.me.email) return "You";
@@ -209,10 +216,11 @@
     var me = state.me;
     var date = new Date().toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" });
     show("today", '<div class="screen"><div class="head"><div><p class="kicker">' + h(date) + '</p><h1 class="title">Today</h1></div><a class="avatar" href="#team" aria-label="Your team">' + h(initials({ name: me.team.name, email: me.email })) + '</a></div><div class="spin" aria-label="Loading"></div></div>');
-    var res = await settled([api("/api/studio-agents/kits"), api("/api/studio-agents/runs?limit=20"), api("/api/team/activity?limit=8")]);
+    var res = await settled([api("/api/studio-agents/kits"), api("/api/studio-agents/runs?limit=20"), api("/api/team/activity?limit=8"), hasTool("os") && atLeast("approver") ? api("/api/os") : Promise.resolve({ builds: [] })]);
     var kits = res[0].status === "fulfilled" ? res[0].value.kits || [] : [];
     var runs = res[1].status === "fulfilled" ? res[1].value.runs || [] : [];
     var acts = res[2].status === "fulfilled" ? res[2].value.activity || [] : [];
+    var osWaiting = res[3].status === "fulfilled" ? (res[3].value.builds || []).filter(function (b) { return b.waiting; }) : [];
     state.kits = kits;
 
     var drafts = kits.filter(function (k) { return k.status === "draft"; });
@@ -221,7 +229,7 @@
     var running = runs.filter(function (r) { return r.status === "running"; });
     var approved = kits.find(function (k) { return k.status === "approved"; });
     try {
-      var waiting = atLeast("approver") ? drafts.length : 0;
+      var waiting = atLeast("approver") ? drafts.length + osWaiting.length : 0;
       if (navigator.setAppBadge) { if (waiting) navigator.setAppBadge(waiting); else navigator.clearAppBadge(); }
     } catch (e) {}
 
@@ -232,6 +240,9 @@
         (canApprove ? '<span class="badge gold">Review</span>' : '<span class="badge">Waiting</span>') + "</div>" +
         '<div class="btn-row"><a class="btn" href="#review/' + h(d.id) + '">See what changed</a></div>' +
         (canApprove ? "" : '<p class="sub" style="margin:0">An approver or Kyron approves this.</p>') + "</article>";
+    });
+    osWaiting.forEach(function (b) {
+      needs += '<article class="card"><div class="row"><div class="ico">' + I.grid + '</div><div class="grow"><div class="name">' + h(b.name) + '</div><div class="sub">' + (b.waiting === "scores" ? "Five-pillar scores to approve" : "Operational Transcript to approve") + '</div></div><span class="badge gold">Review</span></div><div class="btn-row"><a class="btn" href="#osb/' + h(b.id) + '">Open it</a></div></article>';
     });
     briefs.forEach(function (b) {
       needs += '<article class="card"><div class="row" style="color:var(--gold);font:700 13px/1 var(--text)"><span style="width:18px;height:18px;display:inline-flex">' + I.question + '</span>Your brief is ready</div><p class="body" style="font-weight:600;color:var(--ink)">' + h(b.label) + '</p><div class="btn-row"><a class="btn soft" href="#brief/' + h(b.id) + '">Open the brief</a></div></article>';
@@ -250,7 +261,7 @@
 
     var actRows = acts.slice(0, 6).map(function (a) {
       var what = ACT[a.action] || a.action.replace(/_/g, " ");
-      var subj = /kit/.test(a.action) && a.subject ? " " + a.subject : "";
+      var subj = /kit|(^|_)os(_|$)/.test(a.action) && a.subject ? " " + a.subject : "";
       return '<div class="row" style="padding:8px 0;border-bottom:1px solid #1E2C40"><span class="avatar" style="width:32px;height:32px;border-width:0;background:#22364F;font-size:12px">' + h(initials({ name: actorName(a) })) + '</span><div class="grow body" style="font-size:14px"><b style="color:var(--ink)">' + h(actorName(a)) + "</b> " + h(what + subj) + ' <span class="sub">· ' + h(ago(a.created_at)) + "</span></div></div>";
     }).join("");
 
@@ -258,7 +269,7 @@
       '<div class="screen">' +
       '<div class="head"><div><p class="kicker">' + h(date) + '</p><h1 class="title">Today</h1></div><a class="avatar" href="#team" aria-label="Your team">' + h(initials({ name: me.team.name, email: me.email })) + "</a></div>" +
       (installHint()) +
-      '<section class="sec"><h2 class="sec-h">Needs you' + (drafts.length + briefs.length ? " · " + (drafts.length + briefs.length) : "") + "</h2>" + (needs || '<p class="empty">Nothing waiting on you.</p>') + "</section>" +
+      '<section class="sec"><h2 class="sec-h">Needs you' + (drafts.length + briefs.length + osWaiting.length ? " · " + (drafts.length + briefs.length + osWaiting.length) : "") + "</h2>" + (needs || '<p class="empty">Nothing waiting on you.</p>') + "</section>" +
       (runRows ? '<section class="sec"><h2 class="sec-h">Running</h2><div class="list">' + runRows + "</div></section>" : "") +
       '<section class="sec"><h2 class="sec-h">Start something</h2><div class="tile-grid">' + tiles + "</div></section>" +
       (actRows ? '<section class="sec"><h2 class="sec-h">Team activity</h2><div>' + actRows + "</div></section>" : "") +
@@ -773,7 +784,8 @@
     var make = '<div class="list"><a class="li" href="#studio"><div class="ico" style="width:36px;height:36px;border-radius:9px">' + I.layers + '</div><div class="grow"><div class="name" style="font-size:15.5px">Studio Kits</div><div class="sub">Milanote kits, briefs, refreshes</div></div>' + I.chev + "</a>" +
       (atLeast("member") ? '<a class="li" href="#new"><div class="ico" style="width:36px;height:36px;border-radius:9px">' + I.plus + '</div><div class="grow"><div class="name" style="font-size:15.5px">Brief Writer</div><div class="sub">An idea plus photos, videos, links</div></div>' + I.chev + "</a>" : "") +
       toolRow("studio-console").replace('class="li"', 'class="li"') +
-      (hasTool("creators") ? '<a class="li" href="#creators"><div class="ico" style="width:36px;height:36px;border-radius:9px">' + I.people + '</div><div class="grow"><div class="name" style="font-size:15.5px">Creators</div><div class="sub">The Creator Club: pages, QR codes, event sales</div></div>' + I.chev + "</a>" : "") + "</div>";
+      (hasTool("creators") ? '<a class="li" href="#creators"><div class="ico" style="width:36px;height:36px;border-radius:9px">' + I.people + '</div><div class="grow"><div class="name" style="font-size:15.5px">Creators</div><div class="sub">The Creator Club: pages, QR codes, event sales</div></div>' + I.chev + "</a>" : "") +
+      (hasTool("os") ? '<a class="li" href="#os"><div class="ico" style="width:36px;height:36px;border-radius:9px">' + I.grid + '</div><div class="grow"><div class="name" style="font-size:15.5px">Operating Systems</div><div class="sub">Door, Foundation Score, five pillars, transcript, systems</div></div>' + I.chev + "</a>" : "") + "</div>";
     var rest = isOwner() ? TOOL_GROUPS.map(function (g) { return '<section class="sec"><h2 class="sec-h">' + h(g[0]) + '</h2><div class="list">' + g[1].map(toolRow).join("") + "</div></section>"; }).join("") :
       '<p class="empty">More tools show up here as they move into the app. The CRMs and anything holding minors\' data stay with Kyron.</p>';
     show("tools", '<div class="screen"><div><h1 class="title">Tools</h1><p class="lede">' + (isOwner() ? "Everything from the Command Center, opened inside the app." : "What your role can open.") + '</p></div><section class="sec"><h2 class="sec-h">Make</h2>' + make + "</section>" + rest + "</div>");
@@ -782,6 +794,7 @@
     var t, path;
     if (key.indexOf("kitpage:") === 0) { path = "/api/studio-agents/kits/" + encodeURIComponent(key.slice(8)) + "/page"; t = { name: "Kit page" }; }
     else if (key.indexOf("cpreview:") === 0) { path = "/api/creators/" + encodeURIComponent(key.slice(9)) + "/page/preview"; t = { name: "Page preview" }; }
+    else if (key.indexOf("ostx:") === 0) { var op = key.slice(5).split(":"); path = "/api/os/" + encodeURIComponent(op[0]) + "/transcript.html?v=" + (op[1] === "draft" ? "draft" : "approved"); t = { name: op[1] === "draft" ? "Transcript draft" : "Operational Transcript" }; }
     else if (key.indexOf("ccard:") === 0) { var cp = key.slice(6).split(":"); path = "/api/creators/" + encodeURIComponent(cp[0]) + "/events/" + encodeURIComponent(cp[1] || "") + "/card" + (cp[2] ? "?crew=" + encodeURIComponent(cp[2]) : ""); t = { name: "QR card" }; }
     else { t = TOOLS[key]; if (!t) return go("#tools"); if (!t.team && !isOwner()) return go("#tools"); path = t.path; }
     tabsEl.hidden = true;
@@ -870,7 +883,7 @@
 
   async function invite() {
     if (!isOwner()) return go("#team");
-    var role = "member", toolsPicked = { studio: true, creators: false };
+    var role = "member", toolsPicked = { studio: true, creators: false, os: false };
     function draw() {
       show(null,
         '<div class="screen"><div class="head"><a class="back" href="#team">' + I.back + 'Cancel</a></div><h1 class="title sm">Invite someone</h1>' +
@@ -879,7 +892,7 @@
         '<div class="field"><span class="label">Role</span><div role="radiogroup" aria-label="Role" style="display:flex;flex-direction:column;gap:8px">' +
         ["approver", "member", "viewer"].map(function (r) { return '<button type="button" role="radio" class="radio" data-r="' + r + '" aria-checked="' + (role === r) + '"><span class="r"></span><span><b style="display:block;font-size:15.5px">' + r[0].toUpperCase() + r.slice(1) + '</b><span class="sub">' + h(ROLE_DESC[r]) + "</span></span></button>"; }).join("") + "</div></div>" +
         '<div class="field"><span class="label">Can open</span>' +
-        [["studio", "Studio Kits", "Kits, briefs, refreshes"], ["creators", "Creators", "Creator pages, QR codes, event sales (members see buyers' contact details)"]].map(function (x) { return '<label class="li" style="cursor:pointer;border-radius:14px;border:1px solid var(--line)"><input type="checkbox" class="switch" data-tool="' + x[0] + '"' + (toolsPicked[x[0]] ? " checked" : "") + '><div class="grow"><div class="name" style="font-size:15px">' + h(x[1]) + '</div><div class="sub">' + h(x[2]) + "</div></div></label>"; }).join("") +
+        [["studio", "Studio Kits", "Kits, briefs, refreshes"], ["creators", "Creators", "Creator pages, QR codes, event sales (members see buyers' contact details)"], ["os", "Operating Systems", "Client operating systems: scores, transcripts, systems (Authority stays with you)"]].map(function (x) { return '<label class="li" style="cursor:pointer;border-radius:14px;border:1px solid var(--line)"><input type="checkbox" class="switch" data-tool="' + x[0] + '"' + (toolsPicked[x[0]] ? " checked" : "") + '><div class="grow"><div class="name" style="font-size:15px">' + h(x[1]) + '</div><div class="sub">' + h(x[2]) + "</div></div></label>"; }).join("") +
         '<p class="sub" style="margin:0;display:flex;gap:6px;align-items:center"><span style="width:16px;height:16px;display:inline-flex;color:var(--faint)">' + I.lock + "</span>The CRMs and anything holding minors' data stay owner-only.</p></div>" +
         '<p id="invMsg" class="body" role="status"></p></div>' +
         '<div class="dock"><div class="dock-inner"><button type="button" class="btn block" id="send">Make the invite link</button><span class="note">You send the link yourself, by text or email. It works once, for 7 days.</span></div></div>');
