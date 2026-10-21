@@ -37,8 +37,8 @@ jobs:
       run:
         working-directory: mobile
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
           node-version: 22
           cache: npm
@@ -97,7 +97,7 @@ jobs:
       FASTLANE_SKIP_UPDATE_CHECK: "1"
       FASTLANE_HIDE_CHANGELOG: "1"
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Check the Apple secrets are set
         run: |
           missing=0
@@ -105,7 +105,7 @@ jobs:
             if [ -z "${!v}" ]; then echo "::error::The secret $v isn't set. See mobile/README.md, step 6."; missing=1; fi
           done
           exit $missing
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: 22
           cache: npm
