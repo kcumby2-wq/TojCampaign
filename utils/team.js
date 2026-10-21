@@ -17,7 +17,7 @@ const { getSupabase } = require("./supabase");
 const ROLE_RANK = Object.freeze({ viewer: 1, member: 2, approver: 3, owner: 4 });
 const MEMBER_ROLES = Object.freeze(["approver", "member", "viewer"]);
 // Tools a member can be given. Others stay owner-only until they move into the app.
-const GRANTABLE_TOOLS = Object.freeze({ studio: "Studio Kits" });
+const GRANTABLE_TOOLS = Object.freeze({ studio: "Studio Kits", creators: "Creators" });
 
 const CACHE_MS = 30 * 1000;
 const cache = new Map(); // email -> { at, member }
