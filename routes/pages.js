@@ -1,7 +1,7 @@
 const express = require("express");
 const fs = require("fs");
 const path = require("path");
-const { v4: uuidv4 } = require("uuid");
+const { randomUUID } = require("crypto");
 
 const router = express.Router();
 const PAGES_FILE = path.join(__dirname, "..", "db", "landing_pages.json");
@@ -114,7 +114,7 @@ router.post("/", (req, res) => {
   }
 
   const newPage = {
-    id: uuidv4(),
+    id: randomUUID(),
     ownerEmail: req.session.userEmail,
     templateId,
     pageTitle,
