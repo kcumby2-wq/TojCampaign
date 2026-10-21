@@ -29,7 +29,15 @@ const { initializeSchedulers } = require("./utils/reportScheduler");
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-app.use(express.json({ limit: "5mb" }));
+// The Creator Club's Stripe webhook needs the exact bytes Stripe signed.
+app.use(
+  express.json({
+    limit: "5mb",
+    verify: (req, _res, buf) => {
+      if (req.originalUrl && req.originalUrl.startsWith("/api/creators/stripe/webhook")) req.rawBody = Buffer.from(buf);
+    },
+  })
+);
 app.use(express.urlencoded({ extended: true, limit: "5mb" }));
 
 // CORS allowlist. In production the marketing site (tojcampaign.com on Vercel)
@@ -168,6 +176,10 @@ app.use("/api/performance-agents", require("./routes/performance-agents"));
 // Studio agents — build and refresh Milanote kits. Runs save drafts only;
 // a staff member approves (agents/studio/API.md).
 app.use("/api/studio-agents", require("./routes/studio-agents"));
+// The Creator Club (phase 1): the Creators tool, checkout, the Stripe webhook,
+// and the creators' public pages at /c/<slug>.
+app.use("/api/creators", require("./routes/creators"));
+app.use("/c", require("./routes/creators").pageRouter);
 // The team: invites, roles, activity (utils/team.js). Owner-only consoles keep requireStaff.
 app.use("/api/team", require("./routes/team"));
 // Web push for the TOJ app (utils/push.js).

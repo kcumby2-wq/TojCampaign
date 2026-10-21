@@ -3,7 +3,8 @@
   "framework": null,
   "outputDirectory": "public",
   "rewrites": [
-    { "source": "/api/:path*", "destination": "https://toj-csv-app.onrender.com/api/:path*" }
+    { "source": "/api/:path*", "destination": "https://toj-csv-app.onrender.com/api/:path*" },
+    { "source": "/c/:slug", "destination": "https://toj-csv-app.onrender.com/c/:slug" }
   ],
   "redirects": [
     { "source": "/studio", "destination": "/app/#studio", "permanent": false },

@@ -10,6 +10,7 @@
  *   #tools, #tool/<k> the other consoles, opened inside the app
  *   #team, #invite    people, roles, invites (Owner)
  *   #join/<token>     accept an invite; #signin
+ *   #creators …       the Creator Club tool (creators.js registers its screens)
  *
  * Photos and video stills go to the Brief Writer for one run and are never
  * stored. File names never leave the phone.
@@ -103,6 +104,7 @@
   var RANK = { viewer: 1, member: 2, approver: 3, owner: 4 };
   function atLeast(role) { var t = state.me && state.me.team; return !!t && RANK[t.role] >= RANK[role]; }
   function isOwner() { return !!(state.me && state.me.team && state.me.team.owner); }
+  function hasTool(t) { var m = state.me && state.me.team; return !!m && (m.owner || (m.tools || []).indexOf(t) >= 0); }
   function standalone() { return !!window.TOJNative || window.matchMedia("(display-mode: standalone)").matches || window.navigator.standalone === true; }
   var N = window.TOJNative || null;
 
@@ -165,7 +167,7 @@
       if (N && !state.nativeReady) { state.nativeReady = true; await nativeStart(); if (my !== gen) return; }
       if (name !== "new" && state.shared && atLeast("member")) return openShared();
     }
-    var screens = { today: today, studio: studio, kit: kit, "new": newIdea, brief: brief, run: run, review: review, tools: tools, tool: tool, team: team, invite: invite, join: join, signin: signin };
+    var screens = Object.assign({ today: today, studio: studio, kit: kit, "new": newIdea, brief: brief, run: run, review: review, tools: tools, tool: tool, team: team, invite: invite, join: join, signin: signin }, window.TOJScreens || {});
     var fn = screens[name] || today;
     window.scrollTo(0, 0);
     try { await fn(arg); } catch (e) { if (e.stale || my !== gen) return; show(null, '<div class="screen"><h1 class="title sm">Something went wrong</h1><p class="body err">' + h(e.message) + '</p><a class="btn ghost" href="#today">Back to Today</a></div>'); }
@@ -189,6 +191,14 @@
     removed_member: "removed someone from the team",
     cancelled_invite: "cancelled an invite",
     deleted_account: "deleted their account",
+    added_creator: "added a creator",
+    requested_page: "asked for a landing page",
+    approved_page: "put a landing page live",
+    page_off: "took a landing page down",
+    added_event: "added an event",
+    exported_sales: "exported sales",
+    started_stripe: "started payouts setup",
+    changed_creator: "changed a creator's settings",
   };
   function actorName(a) {
     if (a.actor && state.me && a.actor === state.me.email) return "You";
@@ -762,7 +772,8 @@
   async function tools() {
     var make = '<div class="list"><a class="li" href="#studio"><div class="ico" style="width:36px;height:36px;border-radius:9px">' + I.layers + '</div><div class="grow"><div class="name" style="font-size:15.5px">Studio Kits</div><div class="sub">Milanote kits, briefs, refreshes</div></div>' + I.chev + "</a>" +
       (atLeast("member") ? '<a class="li" href="#new"><div class="ico" style="width:36px;height:36px;border-radius:9px">' + I.plus + '</div><div class="grow"><div class="name" style="font-size:15.5px">Brief Writer</div><div class="sub">An idea plus photos, videos, links</div></div>' + I.chev + "</a>" : "") +
-      toolRow("studio-console").replace('class="li"', 'class="li"') + "</div>";
+      toolRow("studio-console").replace('class="li"', 'class="li"') +
+      (hasTool("creators") ? '<a class="li" href="#creators"><div class="ico" style="width:36px;height:36px;border-radius:9px">' + I.people + '</div><div class="grow"><div class="name" style="font-size:15.5px">Creators</div><div class="sub">The Creator Club: pages, QR codes, event sales</div></div>' + I.chev + "</a>" : "") + "</div>";
     var rest = isOwner() ? TOOL_GROUPS.map(function (g) { return '<section class="sec"><h2 class="sec-h">' + h(g[0]) + '</h2><div class="list">' + g[1].map(toolRow).join("") + "</div></section>"; }).join("") :
       '<p class="empty">More tools show up here as they move into the app. The CRMs and anything holding minors\' data stay with Kyron.</p>';
     show("tools", '<div class="screen"><div><h1 class="title">Tools</h1><p class="lede">' + (isOwner() ? "Everything from the Command Center, opened inside the app." : "What your role can open.") + '</p></div><section class="sec"><h2 class="sec-h">Make</h2>' + make + "</section>" + rest + "</div>");
@@ -770,6 +781,8 @@
   async function tool(key) {
     var t, path;
     if (key.indexOf("kitpage:") === 0) { path = "/api/studio-agents/kits/" + encodeURIComponent(key.slice(8)) + "/page"; t = { name: "Kit page" }; }
+    else if (key.indexOf("cpreview:") === 0) { path = "/api/creators/" + encodeURIComponent(key.slice(9)) + "/page/preview"; t = { name: "Page preview" }; }
+    else if (key.indexOf("ccard:") === 0) { var cp = key.slice(6).split(":"); path = "/api/creators/" + encodeURIComponent(cp[0]) + "/events/" + encodeURIComponent(cp[1] || "") + "/card" + (cp[2] ? "?crew=" + encodeURIComponent(cp[2]) : ""); t = { name: "QR card" }; }
     else { t = TOOLS[key]; if (!t) return go("#tools"); if (!t.team && !isOwner()) return go("#tools"); path = t.path; }
     tabsEl.hidden = true;
     app.innerHTML = '<div class="frame-wrap"><div class="frame-bar"><button type="button" class="back" id="frameBack">' + I.back + 'Back</button><div class="t">' + h(t.name) + '</div><a class="back" href="' + h(path) + '" target="_blank" rel="noopener" aria-label="Open in the browser">' + I.out + '</a></div><iframe src="' + h(path) + '" title="' + h(t.name) + '"></iframe></div>';
@@ -857,7 +870,7 @@
 
   async function invite() {
     if (!isOwner()) return go("#team");
-    var role = "member";
+    var role = "member", toolsPicked = { studio: true, creators: false };
     function draw() {
       show(null,
         '<div class="screen"><div class="head"><a class="back" href="#team">' + I.back + 'Cancel</a></div><h1 class="title sm">Invite someone</h1>' +
@@ -865,15 +878,20 @@
         '<div class="field"><label class="label" for="nm">Name <small>(optional)</small></label><input class="input" id="nm" type="text" placeholder="What the team calls them"></div>' +
         '<div class="field"><span class="label">Role</span><div role="radiogroup" aria-label="Role" style="display:flex;flex-direction:column;gap:8px">' +
         ["approver", "member", "viewer"].map(function (r) { return '<button type="button" role="radio" class="radio" data-r="' + r + '" aria-checked="' + (role === r) + '"><span class="r"></span><span><b style="display:block;font-size:15.5px">' + r[0].toUpperCase() + r.slice(1) + '</b><span class="sub">' + h(ROLE_DESC[r]) + "</span></span></button>"; }).join("") + "</div></div>" +
-        '<div class="card tight"><div class="row"><div class="grow"><div class="name" style="font-size:15px">Can open: Studio Kits</div><div class="sub">The CRMs and anything holding minors\' data stay owner-only.</div></div><span style="width:18px;height:18px;color:var(--faint)">' + I.lock + "</span></div></div>" +
+        '<div class="field"><span class="label">Can open</span>' +
+        [["studio", "Studio Kits", "Kits, briefs, refreshes"], ["creators", "Creators", "Creator pages, QR codes, event sales (members see buyers' contact details)"]].map(function (x) { return '<label class="li" style="cursor:pointer;border-radius:14px;border:1px solid var(--line)"><input type="checkbox" class="switch" data-tool="' + x[0] + '"' + (toolsPicked[x[0]] ? " checked" : "") + '><div class="grow"><div class="name" style="font-size:15px">' + h(x[1]) + '</div><div class="sub">' + h(x[2]) + "</div></div></label>"; }).join("") +
+        '<p class="sub" style="margin:0;display:flex;gap:6px;align-items:center"><span style="width:16px;height:16px;display:inline-flex;color:var(--faint)">' + I.lock + "</span>The CRMs and anything holding minors' data stay owner-only.</p></div>" +
         '<p id="invMsg" class="body" role="status"></p></div>' +
         '<div class="dock"><div class="dock-inner"><button type="button" class="btn block" id="send">Make the invite link</button><span class="note">You send the link yourself, by text or email. It works once, for 7 days.</span></div></div>');
       app.querySelectorAll("[data-r]").forEach(function (b) { b.addEventListener("click", function () { var em = document.getElementById("em").value, nm = document.getElementById("nm").value; role = b.dataset.r; draw(); document.getElementById("em").value = em; document.getElementById("nm").value = nm; }); });
+      app.querySelectorAll("[data-tool]").forEach(function (c) { c.addEventListener("change", function () { toolsPicked[c.dataset.tool] = c.checked; }); });
       document.getElementById("send").addEventListener("click", async function () {
         var btn = this;
         btn.disabled = true;
         try {
-          var d = await post("/api/team/invites", { email: document.getElementById("em").value.trim(), name: document.getElementById("nm").value.trim(), role: role, tools: ["studio"] });
+          var picked = Object.keys(toolsPicked).filter(function (k) { return toolsPicked[k]; });
+          if (!picked.length) { btn.disabled = false; document.getElementById("invMsg").innerHTML = '<span class="err">Pick at least one tool.</span>'; return; }
+          var d = await post("/api/team/invites", { email: document.getElementById("em").value.trim(), name: document.getElementById("nm").value.trim(), role: role, tools: picked });
           showLink(d.invite.email, d.path);
         } catch (e) { btn.disabled = false; document.getElementById("invMsg").innerHTML = '<span class="err">' + h(e.message) + "</span>"; }
       });
@@ -1013,6 +1031,6 @@
   if ("serviceWorker" in navigator) {
     window.addEventListener("load", function () { navigator.serviceWorker.register("/app/sw.js", { scope: "/app/" }).catch(function () {}); });
   }
-  window.TOJ = { api: api, post: post, toast: toast, state: state, h: h };
+  window.TOJ = { api: api, post: post, toast: toast, state: state, h: h, show: show, go: go, later: later, backBtn: backBtn, I: I, atLeast: atLeast, isOwner: isOwner, hasTool: hasTool, ago: ago, copy: copy, friendly: friendly };
   render();
 })();
