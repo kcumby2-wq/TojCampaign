@@ -13,6 +13,10 @@
  *
  * Photos and video stills go to the Brief Writer for one run and are never
  * stored. File names never leave the phone.
+ *
+ * Inside the iPhone app (window.TOJNative, from native.js): the native camera,
+ * notifications from Apple, and things shared to TOJ from other apps, which
+ * open in New idea.
  */
 (function () {
   "use strict";
@@ -31,9 +35,22 @@
   function store(k, v) { try { if (v == null) localStorage.removeItem(k); else localStorage.setItem(k, v); } catch (e) {} }
   function load(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
 
+  // Each screen change bumps gen. A reply that lands after the person has
+  // moved to another screen is dropped (the request itself still happened),
+  // so a slow screen can't draw over the one they're on now.
+  var gen = 0;
+  function staleError() { var e = new Error("stale"); e.stale = true; return e; }
+  // Promise.allSettled, except a stale reply still stops the screen.
+  async function settled(list) {
+    var res = await Promise.allSettled(list);
+    if (res.some(function (r) { return r.status === "rejected" && r.reason && r.reason.stale; })) throw staleError();
+    return res;
+  }
   async function api(path, opts) {
+    var my = gen;
     var r = await fetch(path, Object.assign({ credentials: "same-origin", cache: "no-store" }, opts || {}));
     var text = await r.text();
+    if (my !== gen) throw staleError();
     var d = null;
     try { d = text ? JSON.parse(text) : {}; } catch (e) { var err0 = new Error("The server sent something unexpected (" + r.status + ")."); err0.status = r.status; throw err0; }
     if (!r.ok) { var err = new Error(friendly(d.error) || ("HTTP " + r.status)); err.status = r.status; err.data = d; throw err; }
@@ -55,6 +72,7 @@
     fix_blockers_first: "This draft has problems to fix before it can be approved.",
     stale_draft: "A newer version was approved since this draft was made. Start a new refresh.",
     rule_changes_need_the_owner: "Only Kyron can allow rule changes.",
+    owner_account: "The owner account can't be deleted from the app.",
     supabase_unavailable: "The server can't reach its database right now.",
     too_many_tries: "Too many tries. Wait a few minutes.",
   };
@@ -85,7 +103,8 @@
   var RANK = { viewer: 1, member: 2, approver: 3, owner: 4 };
   function atLeast(role) { var t = state.me && state.me.team; return !!t && RANK[t.role] >= RANK[role]; }
   function isOwner() { return !!(state.me && state.me.team && state.me.team.owner); }
-  function standalone() { return window.matchMedia("(display-mode: standalone)").matches || window.navigator.standalone === true; }
+  function standalone() { return !!window.TOJNative || window.matchMedia("(display-mode: standalone)").matches || window.navigator.standalone === true; }
+  var N = window.TOJNative || null;
 
   // ── Icons (inline, stroke) ───────────────────────────────────────────
   var I = {
@@ -132,20 +151,24 @@
   var PUBLIC = { join: 1, signin: 1 };
   async function render() {
     stopPolling();
+    var my = ++gen;
     var parts = location.hash.replace(/^#\/?/, "").split("/");
     var name = parts[0] || "today";
     var arg = parts.slice(1).join("/");
     if (!state.me) {
-      try { state.me = await api("/api/me"); } catch (e) { state.me = { authenticated: false }; }
+      try { state.me = await api("/api/me"); } catch (e) { if (e.stale) return; state.me = { authenticated: false }; }
     }
+    if (my !== gen) return;
     if (!PUBLIC[name]) {
       if (!state.me.authenticated) return go("#signin");
       if (!state.me.team) return notOnTeam();
+      if (N && !state.nativeReady) { state.nativeReady = true; await nativeStart(); if (my !== gen) return; }
+      if (name !== "new" && state.shared && atLeast("member")) return openShared();
     }
     var screens = { today: today, studio: studio, kit: kit, "new": newIdea, brief: brief, run: run, review: review, tools: tools, tool: tool, team: team, invite: invite, join: join, signin: signin };
     var fn = screens[name] || today;
     window.scrollTo(0, 0);
-    try { await fn(arg); } catch (e) { show(null, '<div class="screen"><h1 class="title sm">Something went wrong</h1><p class="body err">' + h(e.message) + '</p><a class="btn ghost" href="#today">Back to Today</a></div>'); }
+    try { await fn(arg); } catch (e) { if (e.stale || my !== gen) return; show(null, '<div class="screen"><h1 class="title sm">Something went wrong</h1><p class="body err">' + h(e.message) + '</p><a class="btn ghost" href="#today">Back to Today</a></div>'); }
   }
   window.addEventListener("hashchange", render);
 
@@ -165,6 +188,7 @@
     changed_member: "changed someone's role",
     removed_member: "removed someone from the team",
     cancelled_invite: "cancelled an invite",
+    deleted_account: "deleted their account",
   };
   function actorName(a) {
     if (a.actor && state.me && a.actor === state.me.email) return "You";
@@ -175,7 +199,7 @@
     var me = state.me;
     var date = new Date().toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" });
     show("today", '<div class="screen"><div class="head"><div><p class="kicker">' + h(date) + '</p><h1 class="title">Today</h1></div><a class="avatar" href="#team" aria-label="Your team">' + h(initials({ name: me.team.name, email: me.email })) + '</a></div><div class="spin" aria-label="Loading"></div></div>');
-    var res = await Promise.allSettled([api("/api/studio-agents/kits"), api("/api/studio-agents/runs?limit=20"), api("/api/team/activity?limit=8")]);
+    var res = await settled([api("/api/studio-agents/kits"), api("/api/studio-agents/runs?limit=20"), api("/api/team/activity?limit=8")]);
     var kits = res[0].status === "fulfilled" ? res[0].value.kits || [] : [];
     var runs = res[1].status === "fulfilled" ? res[1].value.runs || [] : [];
     var acts = res[2].status === "fulfilled" ? res[2].value.activity || [] : [];
@@ -391,7 +415,8 @@
   async function newIdea(preset) {
     if (!atLeast("member")) return go("#today");
     if (!state.kits) { try { state.kits = (await api("/api/studio-agents/kits")).kits || []; } catch (e) { state.kits = []; } }
-    if (!state.idea || preset) state.idea = freshIdea(preset);
+    if (!state.idea || (preset && preset !== "shared")) state.idea = freshIdea(preset);
+    if (state.shared) addShared();
     drawIdea();
   }
   function drawIdea() {
@@ -416,13 +441,13 @@
       '<div class="field"><span class="label">What\'s it for?</span><div class="seg" role="group" aria-label="What\'s it for?">' + targets.map(function (t) { return '<button type="button" data-target="' + h(t[0]) + '" aria-pressed="' + (s.target === t[0]) + '">' + h(t[1]) + "</button>"; }).join("") + "</div></div>" +
       '<div class="field"><label class="label" for="idea">Your idea</label><textarea class="textarea" id="idea" placeholder="Say it the way you\'d say it to a person.">' + h(s.idea) + "</textarea></div>" +
       '<div class="field"><span class="label">Show it what you mean</span><div class="attach">' +
-      '<label>' + I.camera + 'Camera<input type="file" accept="image/*" capture="environment" data-pick hidden></label>' +
+      (N ? '<button type="button" id="nativeCam">' + I.camera + "Camera</button>" : '<label>' + I.camera + 'Camera<input type="file" accept="image/*" capture="environment" data-pick hidden></label>') +
       '<label>' + I.photo + 'Photos<input type="file" accept="image/jpeg,image/png,image/webp,image/gif,video/*" multiple data-pick hidden></label>' +
       '<label>' + I.file + 'PDF<input type="file" accept=".pdf,.txt,.md,application/pdf,text/plain" data-pick hidden></label>' +
       '<button type="button" id="addLink">' + I.link + "Link</button></div>" +
       '<div id="linkRow" class="row" hidden><input class="input" id="linkUrl" type="url" inputmode="url" placeholder="https://…" autocomplete="off"><button type="button" class="btn small" id="linkAdd">Add</button></div>' +
       (refs ? '<div style="display:flex;flex-direction:column;gap:8px">' + refs + "</div>" : "") +
-      '<p class="privacy">' + I.lock + "Photos and video stills are used for this brief only and never saved. File names stay on your phone. Videos: it sees 6 stills, not the sound.</p></div>" +
+      '<p class="privacy">' + I.lock + "Photos and video stills are used for this brief only and never saved. File names stay on your phone. Videos: it sees 6 stills, not the sound." + (N ? " Things you share to TOJ from other apps wait on this phone until you open them here." : "") + "</p></div>" +
       '<p id="ideaMsg" class="body" role="status"></p>' +
       "</div>" +
       '<div class="dock"><div class="dock-inner"><button type="button" class="btn block" id="write">Write the brief</button><span class="note">Usually 1 to 3 minutes.</span></div></div>');
@@ -437,6 +462,18 @@
     });
     app.querySelectorAll("[data-rm]").forEach(function (b) {
       b.addEventListener("click", function () { s.idea = document.getElementById("idea").value; s.refs = s.refs.filter(function (x) { return String(x.id) !== b.dataset.rm; }); drawIdea(); });
+    });
+    var cam = document.getElementById("nativeCam");
+    if (cam) cam.addEventListener("click", async function () {
+      s.idea = document.getElementById("idea").value;
+      if (s.refs.filter(function (x) { return x.kind === "image" && !x.error; }).length >= MAX.image) return say("That's the most photos one brief can take.");
+      try {
+        var p = await N.takePhoto();
+        if (!p) return;
+        s.refs.push({ id: ++s.seq, kind: "image", caption: "", thumb: "data:" + p.media_type + ";base64," + p.data, images: [p] });
+        if (used() > BUDGET) { s.refs.pop(); return say("Too much to send at once. Remove a video or a few photos."); }
+        drawIdea();
+      } catch (e) { say(e.message); }
     });
     document.getElementById("addLink").addEventListener("click", function () { var row = document.getElementById("linkRow"); row.hidden = !row.hidden; if (!row.hidden) document.getElementById("linkUrl").focus(); });
     document.getElementById("linkAdd").addEventListener("click", function () {
@@ -748,7 +785,7 @@
   };
   async function team() {
     show("team", '<div class="screen"><h1 class="title">Team</h1><div class="spin"></div></div>');
-    var res = await Promise.allSettled([api("/api/team"), isOwner() ? api("/api/team/invites") : Promise.resolve({ invites: [] })]);
+    var res = await settled([api("/api/team"), isOwner() ? api("/api/team/invites") : Promise.resolve({ invites: [] })]);
     var people = res[0].status === "fulfilled" ? res[0].value.people : [];
     var invites = res[1].status === "fulfilled" ? res[1].value.invites : [];
     var me = state.me;
@@ -770,13 +807,32 @@
       ["owner", "approver", "member", "viewer"].map(function (r) { return "<b style=\"color:var(--ink)\">" + r[0].toUpperCase() + r.slice(1) + "</b><span>" + h(ROLE_DESC[r]) + "</span>"; }).join("") + "</div></section>" +
       '<section class="sec"><h2 class="sec-h">You</h2><div class="list"><div class="li" style="cursor:default"><div class="grow"><div class="name" style="font-size:15.5px">' + h(me.team.name || me.email) + '</div><div class="sub">' + h(me.email) + " · " + h(me.team.role) + "</div></div></div>" +
       '<div id="pushRow"></div>' +
-      '<button type="button" class="li" id="signout"><div class="grow name err" style="font-size:15.5px">Sign out</div></button></div></section>' +
+      '<button type="button" class="li" id="signout"><div class="grow name err" style="font-size:15.5px">Sign out</div></button>' +
+      (isOwner() ? "" : '<button type="button" class="li" id="deleteMe"><div class="grow"><div class="name err" style="font-size:15.5px">Delete my account</div><div class="sub">Removes your sign-in and takes you off the team. Kits you approved stay approved.</div></div></button>') +
+      "</div></section>" +
       installHint() + "</div>");
     document.getElementById("signout").addEventListener("click", async function () {
       try { await post("/api/auth/logout"); } catch (e) {}
       state.me = null; go("#signin");
     });
     if (window.TOJPush) window.TOJPush.row(document.getElementById("pushRow"));
+    var del = document.getElementById("deleteMe");
+    if (del) del.addEventListener("click", async function () {
+      if (!del.dataset.armed) {
+        del.dataset.armed = "1";
+        del.querySelector(".name").textContent = "Tap again to delete your account";
+        setTimeout(function () { if (del.isConnected) { delete del.dataset.armed; del.querySelector(".name").textContent = "Delete my account"; } }, 5000);
+        return;
+      }
+      del.disabled = true;
+      try {
+        if (N) { try { await N.push.disable(post); } catch (e) {} }
+        await post("/api/team/me", { confirm: true }, "DELETE");
+        state.me = null;
+        toast("Your account is deleted.");
+        go("#signin");
+      } catch (e) { del.disabled = false; toast(e.message); }
+    });
     if (!isOwner()) return;
     app.querySelectorAll("[data-role]").forEach(function (sel) {
       sel.addEventListener("change", async function () {
@@ -890,6 +946,67 @@
   function notOnTeam() {
     show(null, '<div class="screen" style="padding-top:40px;text-align:center;align-items:center">' + appIcon() + '<h1 class="title sm">Not on the team yet</h1><p class="lede">You\'re signed in as ' + h(state.me.email) + ", but this account isn't on the TOJ team. Ask Kyron for an invite link.</p><button type=\"button\" class=\"btn ghost\" id=\"so\">Sign out</button></div>");
     document.getElementById("so").addEventListener("click", async function () { try { await post("/api/auth/logout"); } catch (e) {} state.me = null; go("#signin"); });
+  }
+
+  // ── The iPhone app ───────────────────────────────────────────────────
+  // Runs once, after sign-in: re-sends the notification token (Apple can
+  // change it) and picks up things shared to TOJ from other apps, now and
+  // whenever the app comes back to the front.
+  async function nativeStart() {
+    N.push.refresh(post);
+    window.addEventListener("toj:resume", onResume);
+    await takeShared();
+  }
+  async function takeShared() {
+    if (!atLeast("member")) return false;
+    try {
+      if (!(await N.sharedCount())) return false;
+      var shares = await N.takeShared();
+      if (!shares.length) return false;
+      state.shared = (state.shared || []).concat(shares);
+      return true;
+    } catch (e) { return false; }
+  }
+  async function onResume() {
+    if (!state.me || !state.me.team) return;
+    if (!(await takeShared())) return;
+    if (location.hash.indexOf("#new") === 0 && state.idea) { addShared(); drawIdea(); }
+    else openShared();
+  }
+  function openShared() {
+    state.idea = freshIdea();
+    addShared();
+    go("#new");
+  }
+  // Shared items become references, the same as ones picked in New idea.
+  function addShared() {
+    var shares = state.shared || [];
+    state.shared = null;
+    if (!state.idea) state.idea = freshIdea();
+    var s = state.idea, dropped = 0, vg = 0, notes = [];
+    function room(kind) { return s.refs.filter(function (x) { return x.kind === kind && !x.error; }).length < MAX[kind]; }
+    shares.forEach(function (sh) {
+      if (sh.note) notes.push(sh.note);
+      (sh.items || []).forEach(function (it) {
+        if (it.kind === "text") { if (it.text) notes.push(it.text); return; }
+        var kind = it.kind === "link" ? "link" : it.kind === "video" ? "video" : it.kind === "file" ? "file" : it.kind === "image" ? "image" : null;
+        if (!kind || !room(kind)) { dropped++; return; }
+        var r = { id: ++s.seq, kind: kind, caption: "" };
+        if (kind === "link") { if (!/^https?:\/\//.test(it.url || "")) { dropped++; return; } r.url = it.url; }
+        else if (kind === "file") { r.text = String(it.text || "").slice(0, 60000); }
+        else {
+          var imgs = (it.images || []).filter(Boolean);
+          if (!imgs.length) { dropped++; return; }
+          r.images = imgs.map(function (d, i) { return { media_type: "image/jpeg", data: d, at: it.at ? it.at[i] : undefined }; });
+          r.thumb = "data:image/jpeg;base64," + imgs[0];
+          if (kind === "video") { vg++; r.duration = it.duration || 0; }
+        }
+        s.refs.push(r);
+        if (used() > BUDGET) { s.refs.pop(); dropped++; }
+      });
+    });
+    if (notes.length) s.idea = (s.idea ? s.idea + "\n\n" : "") + notes.join("\n\n");
+    toast(dropped ? "Added what was shared. " + dropped + " item" + (dropped > 1 ? "s" : "") + " didn't fit in one brief." : "Added what you shared. Add your idea and write the brief.");
   }
 
   // ── Start ────────────────────────────────────────────────────────────

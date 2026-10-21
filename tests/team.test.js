@@ -176,3 +176,32 @@ test("an API key acts as a member: it can't approve", () => {
   assert.equal(T.can({ role: "approver", tools: [], owner: false }, "studio", "viewer"), false, "needs the tool");
   assert.equal(T.can({ role: "owner", tools: [], owner: true }, "studio", "approver"), true);
 });
+
+test("you can delete your own account from the app; the owner's can't be", async () => {
+  const inv = await owner("/api/team/invites", { method: "POST", body: { email: "leaving@example.com", name: "Leaving", role: "approver" } });
+  const me = client();
+  assert.equal((await me("/api/team/join", { method: "POST", body: { token: inv.json.token, password: "leaving-password-1", name: "Leaving" } })).status, 200);
+  db.tables.agent_runs = db.tables.agent_runs || [];
+  db.tables.agent_runs.push({ id: "r-leaving", role: "kit-refresher", status: "completed", created_by: "leaving@example.com" });
+  db.tables.studio_kits = db.tables.studio_kits || [];
+  db.tables.studio_kits.push({ id: "k-leaving", slug: "same-work", version: 9, status: "approved", created_by: "leaving@example.com", approved_by: "leaving@example.com" });
+  db.tables.push_subscriptions = [{ id: "p1", email: "leaving@example.com", endpoint: "apns:" + "a".repeat(64), kind: "apns" }];
+
+  assert.equal((await me("/api/team/me", { method: "DELETE", body: {} })).json.error, "confirm_required");
+  assert.equal((await owner("/api/team/me", { method: "DELETE", body: { confirm: true } })).json.error, "owner_account");
+
+  const del = await me("/api/team/me", { method: "DELETE", body: { confirm: true } });
+  assert.equal(del.status, 200);
+  assert.equal(db.tables.users.some((u) => u.email === "leaving@example.com"), false, "the sign-in is gone");
+  assert.equal(db.tables.team_members.some((m) => m.email === "leaving@example.com"), false);
+  assert.equal(db.tables.team_invites.some((i) => i.email === "leaving@example.com"), false);
+  assert.equal(db.tables.push_subscriptions.length, 0);
+  assert.equal(JSON.stringify(db.tables.team_activity).includes("leaving@example.com"), false, "the activity log no longer names them");
+  assert.equal(db.tables.agent_runs.find((r) => r.id === "r-leaving").created_by, null);
+  const kit = db.tables.studio_kits.find((k) => k.id === "k-leaving");
+  assert.equal(kit.status, "approved", "what they approved stays approved");
+  assert.equal(kit.approved_by, "former teammate");
+  assert.equal((await me("/api/team/me")).status, 401, "signed out");
+  const acts = (await owner("/api/team/activity")).json.activity;
+  assert.ok(acts.some((a) => a.action === "deleted_account" && a.actor_name === "A former teammate"));
+});

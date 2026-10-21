@@ -1,0 +1,2 @@
+app_identifier(ENV.fetch("TOJ_BUNDLE_ID", "com.tojcampaign.app"))
+team_id(ENV["APPLE_TEAM_ID"])

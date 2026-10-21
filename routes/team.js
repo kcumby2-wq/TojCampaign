@@ -1,6 +1,7 @@
 // Team API — who's on the team, invites, roles, and the activity log.
 //
 //   GET    /api/team/me                 → your access: role, tools, owner?
+//   DELETE /api/team/me                 → delete your own account (not the owner's)
 //   GET    /api/team                    → the team (any member; emails for owners only)
 //   GET    /api/team/activity           → who did what (any member)
 //   GET    /api/team/invites            → pending invites (owner)
@@ -27,6 +28,7 @@ const router = express.Router();
 const INVITE_DAYS = 7;
 const PASSWORD_MIN = 10;
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const FORMER = "former teammate"; // stands in for a deleted account's email
 
 const hashToken = (t) => crypto.createHash("sha256").update(String(t)).digest("hex");
 const newToken = () => crypto.randomBytes(32).toString("base64url");
@@ -120,7 +122,7 @@ router.get("/activity", T.requireTeam(null, "viewer"), async (req, res) => {
   res.json({
     activity: (data || []).map((a) => ({
       ...a,
-      actor_name: names.get(a.actor) || (a.actor === "api-key" ? "Automation" : staffEmails().has(a.actor) ? "Owner" : null),
+      actor_name: names.get(a.actor) || (a.actor === "api-key" ? "Automation" : a.actor === FORMER ? "A former teammate" : staffEmails().has(a.actor) ? "Owner" : null),
       actor: req.team.owner || a.actor === req.team.email ? a.actor : null,
     })),
   });
@@ -237,6 +239,46 @@ router.delete("/members/:email", requireStaff, async (req, res) => {
   T.forget(email);
   await T.logActivity(T.emailOf(req), "removed_member", email);
   res.json({ ok: true });
+});
+
+// ── Deleting your own account ────────────────────────────────────────────
+// Apple requires an app that creates accounts to let people delete them from
+// inside the app (App Review Guideline 5.1.1(v)). This removes the sign-in,
+// the team membership, pending invites and notification devices, and takes
+// the email off the activity log and run records. Kits a person approved
+// stay approved, credited to "a former teammate". The owner account is
+// managed on the server (ADMIN_EMAILS) and can't be deleted from the app.
+
+router.delete("/me", T.requireTeam(null, "viewer"), async (req, res) => {
+  if (req.team.apiKey) return res.status(400).json({ error: "not_an_account" });
+  if (req.team.owner) return res.status(400).json({ error: "owner_account" });
+  if (!req.body || req.body.confirm !== true) return res.status(400).json({ error: "confirm_required" });
+  const sb = getSupabase();
+  if (!sb) return sb503(res);
+  const email = req.team.email;
+  try {
+    const steps = [
+      sb.from("push_subscriptions").delete().eq("email", email),
+      sb.from("team_invites").delete().eq("email", email),
+      sb.from("team_members").delete().eq("email", email),
+      sb.from("team_activity").update({ actor: FORMER }).eq("actor", email),
+      sb.from("team_activity").update({ subject: FORMER }).eq("subject", email),
+      sb.from("agent_runs").update({ created_by: null }).eq("created_by", email),
+      sb.from("studio_kits").update({ created_by: FORMER }).eq("created_by", email),
+      sb.from("studio_kits").update({ approved_by: FORMER }).eq("approved_by", email),
+    ];
+    for (const step of steps) {
+      const { error } = await step;
+      if (error) throw new Error(error.message);
+    }
+    const { error: uErr } = await sb.from("users").delete().eq("email", email);
+    if (uErr) throw new Error(uErr.message);
+    T.forget(email);
+    await T.logActivity(FORMER, "deleted_account", null);
+    req.session.destroy(() => res.json({ ok: true }));
+  } catch (e) {
+    fail(res, e, "delete_account");
+  }
 });
 
 // ── Joining (public, token holder) ───────────────────────────────────────

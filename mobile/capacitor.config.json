@@ -1,0 +1,21 @@
+{
+  "appId": "com.tojcampaign.app",
+  "appName": "TOJ",
+  "webDir": "www",
+  "server": {
+    "url": "https://tojcampaign.com/app/",
+    "allowNavigation": ["tojcampaign.com", "www.tojcampaign.com"],
+    "errorPath": "offline.html"
+  },
+  "ios": {
+    "contentInset": "never",
+    "appendUserAgent": "TOJApp/1",
+    "backgroundColor": "#0A1420",
+    "scheme": "TOJ"
+  },
+  "plugins": {
+    "PushNotifications": {
+      "presentationOptions": ["badge", "sound", "alert"]
+    }
+  }
+}

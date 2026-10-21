@@ -1,0 +1,117 @@
+# The TOJ iPhone app (mobile/). Apple only builds iPhone apps on a Mac, so
+# this runs on GitHub's Macs, which are free for a public repo.
+#
+#   compile   every change to mobile/: builds for the iPhone simulator, no
+#             signing, so a broken project shows up on the pull request.
+#   testflight  only when Kyron runs it by hand (Actions → iOS app → Run
+#             workflow → tick "Upload to TestFlight"). Signs with the Apple
+#             secrets and uploads a build to TestFlight. See mobile/README.md.
+name: iOS app
+
+on:
+  pull_request:
+    paths: ["mobile/**", ".github/workflows/ios.yml"]
+  push:
+    branches: [main]
+    paths: ["mobile/**", ".github/workflows/ios.yml"]
+  workflow_dispatch:
+    inputs:
+      testflight:
+        description: "Upload to TestFlight (needs the Apple secrets in mobile/README.md)"
+        type: boolean
+        default: false
+
+concurrency:
+  group: ios-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  compile:
+    name: compile for the iPhone simulator
+    runs-on: macos-26
+    timeout-minutes: 45
+    defaults:
+      run:
+        working-directory: mobile
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+      - run: npm ci
+      - run: npx cap sync ios
+      - name: Xcode
+        run: xcodebuild -version
+      - name: Build
+        run: |
+          set +e
+          xcodebuild -project ios/App/App.xcodeproj -scheme App -configuration Debug \
+            -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath build CODE_SIGNING_ALLOWED=NO build > build.log 2>&1
+          code=$?
+          # Errors (and warnings in our own Swift) as annotations on the run.
+          grep -E "error:" build.log | sort -u | head -40 | while IFS= read -r l; do echo "::error::${l}"; done
+          grep -E "warning:.*(ShareViewController|SharedInboxPlugin|TOJInbox|MainViewController|AppDelegate)" build.log | sort -u | head -20 | while IFS= read -r l; do echo "::warning::${l}"; done
+          tail -n 25 build.log
+          exit $code
+      - name: Check what's in the app
+        run: |
+          APP=build/Build/Products/Debug-iphonesimulator/App.app
+          test -d "$APP/PlugIns/ShareExtension.appex" || { echo "::error::The Share extension isn't inside the app"; exit 1; }
+          plutil -extract CFBundleIdentifier raw "$APP/Info.plist"
+          plutil -extract CFBundleIdentifier raw "$APP/PlugIns/ShareExtension.appex/Info.plist"
+          test "$(plutil -extract TOJAppGroup raw "$APP/Info.plist")" = "group.com.tojcampaign.app"
+          test "$(plutil -extract TOJAppGroup raw "$APP/PlugIns/ShareExtension.appex/Info.plist")" = "group.com.tojcampaign.app"
+          plutil -extract NSCameraUsageDescription raw "$APP/Info.plist" > /dev/null
+          echo "App and Share extension built; App Group set in both."
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: ios-build-log
+          path: mobile/build.log
+          retention-days: 7
+
+  testflight:
+    name: upload to TestFlight
+    if: github.event_name == 'workflow_dispatch' && inputs.testflight
+    needs: compile
+    runs-on: macos-26
+    timeout-minutes: 60
+    defaults:
+      run:
+        working-directory: mobile
+    env:
+      APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+      ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+      ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+      ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
+      MATCH_PASSWORD: ${{ secrets.MATCH_PASSWORD }}
+      MATCH_GIT_URL: ${{ secrets.MATCH_GIT_URL }}
+      MATCH_GIT_BASIC_AUTHORIZATION: ${{ secrets.MATCH_GIT_BASIC_AUTHORIZATION }}
+      BUILD_NUMBER: ${{ github.run_number }}
+      FASTLANE_SKIP_UPDATE_CHECK: "1"
+      FASTLANE_HIDE_CHANGELOG: "1"
+    steps:
+      - uses: actions/checkout@v5
+      - name: Check the Apple secrets are set
+        run: |
+          missing=0
+          for v in APPLE_TEAM_ID ASC_KEY_ID ASC_ISSUER_ID ASC_KEY_P8 MATCH_PASSWORD MATCH_GIT_URL MATCH_GIT_BASIC_AUTHORIZATION; do
+            if [ -z "${!v}" ]; then echo "::error::The secret $v isn't set. See mobile/README.md, step 6."; missing=1; fi
+          done
+          exit $missing
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+      - run: npm ci
+      - run: npx cap sync ios
+      - name: Build, sign and upload
+        working-directory: mobile/ios/App
+        run: fastlane beta

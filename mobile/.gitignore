@@ -1,0 +1,6 @@
+node_modules/
+build/
+build.log
+ios/App/build/
+ios/App/fastlane/report.xml
+ios/App/fastlane/README.md
