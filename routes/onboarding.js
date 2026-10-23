@@ -48,11 +48,28 @@ const VALID_BRANCHES = new Set([
   "subject-report",
   "subject-skillz",
   "coached-by-hooks",
-  "flippa-highlights",
+  "sportsclippers",
   "optimum-grading",
   "pylon",
   "trail-of-joy",
 ]);
+// SportsClippers replaced Flippa Highlights as the marketplace in Oct 2026.
+// Old forms and saved links may still send the old value: accept it, store it
+// under the new one, and match old rows when filtering. Migration
+// 023_sportsclippers_branch.sql moves existing rows.
+const LEGACY_BRANCHES = { "flippa-highlights": "sportsclippers" };
+function normalizeBranch(value) {
+  if (value === undefined || value === null || value === "") return null;
+  const v = value.toString();
+  return LEGACY_BRANCHES[v] || v;
+}
+// Every stored value that means this branch, old names included.
+function branchesFor(branch) {
+  const legacy = Object.keys(LEGACY_BRANCHES).filter(
+    (k) => LEGACY_BRANCHES[k] === branch
+  );
+  return [branch, ...legacy];
+}
 const VALID_STATUS = new Set([
   "new",
   "reviewing",
@@ -196,7 +213,7 @@ router.post("/", async (req, res) => {
   if (!VALID_AUDIENCES.has(audience))
     return res.status(400).json({ error: "invalid_audience" });
 
-  const branch = raw.branch ? raw.branch.toString() : null;
+  const branch = normalizeBranch(raw.branch);
   if (branch && !VALID_BRANCHES.has(branch))
     return res.status(400).json({ error: "invalid_branch" });
 
@@ -310,7 +327,8 @@ router.post("/", async (req, res) => {
 //  Query: audience?, branch?, status?, consent?, limit?
 // =====================================================================
 router.get("/list", requireAdmin, async (req, res) => {
-  const { audience, branch, status, consent } = req.query;
+  const { audience, status, consent } = req.query;
+  const branch = normalizeBranch(req.query.branch);
   const limit = Math.min(parseInt(req.query.limit || "500", 10) || 500, 2000);
 
   const sb = getSupabase();
@@ -321,7 +339,8 @@ router.get("/list", requireAdmin, async (req, res) => {
       .order("created_at", { ascending: false })
       .limit(limit);
     if (audience && VALID_AUDIENCES.has(audience)) q = q.eq("audience", audience);
-    if (branch && VALID_BRANCHES.has(branch)) q = q.eq("branch", branch);
+    if (branch && VALID_BRANCHES.has(branch))
+      q = q.in("branch", branchesFor(branch));
     if (status && VALID_STATUS.has(status)) q = q.eq("status", status);
     if (consent && VALID_CONSENT_STATUS.has(consent))
       q = q.eq("consent_status", consent);
@@ -332,7 +351,7 @@ router.get("/list", requireAdmin, async (req, res) => {
 
   let list = loadJson().slice().reverse();
   if (audience) list = list.filter((r) => r.audience === audience);
-  if (branch) list = list.filter((r) => r.branch === branch);
+  if (branch) list = list.filter((r) => normalizeBranch(r.branch) === branch);
   if (status) list = list.filter((r) => r.status === status);
   if (consent) list = list.filter((r) => r.consent_status === consent);
   res.json({ entries: list.slice(0, limit), backend: "json" });
@@ -355,9 +374,9 @@ router.get("/stats", requireAdmin, async (_req, res) => {
   } else {
     rows = loadJson();
   }
-  const tally = (key) =>
+  const tally = (key, norm = (v) => v) =>
     rows.reduce((acc, r) => {
-      const k = r[key] || "unknown";
+      const k = norm(r[key]) || "unknown";
       acc[k] = (acc[k] || 0) + 1;
       return acc;
     }, {});
@@ -369,7 +388,7 @@ router.get("/stats", requireAdmin, async (_req, res) => {
       (r) => r.is_minor && r.consent_status === "pending"
     ).length,
     byAudience: tally("audience"),
-    byBranch: tally("branch"),
+    byBranch: tally("branch", normalizeBranch),
     byStatus: tally("status"),
     byConsent: tally("consent_status"),
   });
@@ -496,5 +515,10 @@ router.post("/consent/:token", async (req, res) => {
   saveJson(list);
   res.json({ ok: true, consent_level: level, embedded_queued: false });
 });
+
+// Test hooks (same pattern as routes/campaign.js and routes/studio-agents.js).
+router._normalizeBranch = normalizeBranch;
+router._branchesFor = branchesFor;
+router._VALID_BRANCHES = VALID_BRANCHES;
 
 module.exports = router;
