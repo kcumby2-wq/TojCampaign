@@ -12,7 +12,7 @@ into the three-vertical hierarchy per Strategy Memo v1.1.
 | `smallbusiness.html` | `/personal-brand.html`                   | Four-avenue architecture retired |
 | `bigbusiness.html`   | `/nonprofit.html` (Advisory kept internal per §5) | TOJ Big Business department retired per Memo §5 |
 | `advisory.html`      | `/personal-brand.html` (individuals) or `/authority.html` (NIL / athlete education) | TOJ Advisory as a public door retired; residual work sourced by referral per §5 |
-| `intake.html`        | `/foundation-score.html`                 | Foundation Score is the Entry offer per Memo §3.2 |
+| `intake.html`        | `/foundation-score.html` (until Oct 2026) | Foundation Score is the Entry offer per Memo §3.2. Since Oct 2026 `/intake.html` is the campaign intake again (`docs/campaign-intake.md`); the Foundation Score stays at `/foundation-score.html` |
 | `instructors.html`   | `/how-we-work.html`                      | TOJ Advisory as a public door retired per §5 |
 
 ## Notes for the copy edit

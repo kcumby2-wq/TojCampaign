@@ -145,12 +145,14 @@ const legacyRedirects = {
   "/smallbusiness.html": "/personal-brand.html",
   "/bigbusiness.html": "/nonprofit.html",
   "/advisory.html": "/personal-brand.html",
-  "/intake.html": "/foundation-score.html",
   "/instructors.html": "/how-we-work.html",
 };
 Object.entries(legacyRedirects).forEach(([from, to]) => {
   app.get(from, (req, res) => res.redirect(301, to));
 });
+// /intake.html is the campaign intake again (it used to redirect to the
+// Foundation Score, which stays at /foundation-score.html). Short link: /intake.
+app.get(["/intake", "/intake/"], (_req, res) => res.redirect(302, "/intake.html"));
 
 // Serve static frontend
 app.use(express.static(path.join(__dirname, "public")));
