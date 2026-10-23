@@ -214,6 +214,8 @@ test("/intake.html is the campaign intake again; the Foundation Score keeps its 
   assert.match(srv, /res\.redirect\(302, "\/intake\.html"\)/);
   assert.ok(fs.existsSync(path.join(ROOT, "public", "foundation-score.html")));
   assert.match(read("middleware.js"), /'score\.tojcampaign\.com': '\/foundation-score\.html'/);
+  // Listed with the other front doors in the Command Center.
+  assert.match(read("public", "admin", "command-center.html"), /<a class="card" href="\/intake\.html"/);
 });
 
 test("the page submits as TOJ's own campaign intake", () => {
