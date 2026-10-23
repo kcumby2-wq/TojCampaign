@@ -129,10 +129,17 @@ nav.top .shell{display:flex;align-items:center;justify-content:space-between;hei
 .check-item input{margin-top:2px;accent-color:var(--gold);flex-shrink:0}
 .check-item.selected{background:var(--gold-soft);border-color:var(--gold);color:var(--ink)}
 .check-item strong{display:block;color:var(--ink);font-weight:600;font-size:13.5px}
+/* Option boxes sit inside .field: keep the field-label and text-input styles off them. */
+.field label.check-item{display:flex;font-family:inherit;font-size:13.5px;letter-spacing:normal;text-transform:none;margin-bottom:0;font-weight:inherit;color:var(--ink-3)}
+.field label.check-item.selected{color:var(--ink)}
+.field .check-item input{width:auto;padding:0;border:0;background:none}
 
 .pill-group{display:flex;flex-wrap:wrap;gap:8px}
 .pill{background:var(--paper);border:1.5px solid var(--line);padding:10px 16px;font-family:'JetBrains Mono',monospace;font-size:10.5px;color:var(--ink-3);letter-spacing:.12em;text-transform:uppercase;font-weight:600;cursor:pointer;border-radius:2px;transition:all .15s;display:inline-block}
-.pill input{display:none}
+/* Hidden but still focusable, so the choices work from a keyboard. */
+.pill{position:relative}
+.pill input{position:absolute;opacity:0;width:1px;height:1px;margin:0;padding:0;border:0;pointer-events:none}
+.pill:focus-within{outline:2px solid var(--gold);outline-offset:2px}
 .pill:hover{border-color:var(--gold);color:var(--ink)}
 .pill.selected{background:var(--ink);color:var(--gold);border-color:var(--ink)}
 

@@ -93,6 +93,30 @@
   .safety { background: rgba(230,112,82,0.10); border: 1px solid rgba(230,112,82,0.28); border-left: 3px solid var(--alert); border-radius: 8px; padding: 0.7rem 0.95rem; font-size: 0.8rem; color: var(--ink-soft); margin-bottom: 1.4rem; }
   .safety strong { color: var(--alert); }
 
+  /* Campaign intakes (/intake.html): the 31 answers, readable here and copyable for TOJ. */
+  .chip.campaign { background: #8a6d3b; }
+  .btn.small { padding: 0.26rem 0.6rem; font-size: 0.62rem; margin-top: 0.35rem; }
+  .modal-back { position: fixed; inset: 0; background: rgba(5,10,18,0.72); display: flex; align-items: flex-start; justify-content: center; padding: 3vh 1rem; z-index: 50; overflow-y: auto; }
+  .modal-back[hidden] { display: none; }
+  .modal { background: var(--card); border: 1px solid var(--rule-strong); border-radius: 12px; width: 100%; max-width: 820px; box-shadow: 0 20px 60px rgba(0,0,0,0.45); }
+  .modal-head { display: flex; gap: 1rem; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; padding: 1.2rem 1.4rem; border-bottom: 1px solid var(--rule); position: sticky; top: 0; background: var(--card); border-radius: 12px 12px 0 0; }
+  .modal-kicker { font-family: 'JetBrains Mono', monospace; font-size: 0.66rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--score); }
+  .modal h2 { font-size: 1.5rem; margin: 0.15rem 0 0.25rem; }
+  .modal-sub { font-size: 0.8rem; color: var(--ink-mute); overflow-wrap: anywhere; }
+  .modal-actions { display: flex; gap: 0.5rem; align-items: center; }
+  .modal-body { padding: 0.4rem 1.4rem 1.4rem; }
+  .am-note { font-size: 0.76rem; color: var(--ink-mute); margin-top: 0.8rem; }
+  .am-step { margin-top: 1.1rem; }
+  .am-step h3 { font-family: 'JetBrains Mono', monospace; font-size: 0.7rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--score); font-weight: 600; margin-bottom: 0.2rem; border-bottom: 1px solid var(--rule); padding-bottom: 0.35rem; }
+  .am-step h3 span { color: var(--ink-mute); margin-left: 0.5rem; }
+  .am-q { padding: 0.55rem 0; border-bottom: 1px solid var(--rule); }
+  .am-q:last-child { border-bottom: 0; }
+  .am-q .qt { font-size: 0.8rem; color: var(--ink-mute); }
+  .am-q .qt b { font-family: 'JetBrains Mono', monospace; color: var(--score); margin-right: 0.4rem; }
+  .am-q .qa { font-size: 0.92rem; color: var(--ink); white-space: pre-wrap; overflow-wrap: anywhere; margin-top: 0.15rem; }
+  .am-q .qa.blank { color: var(--ink-mute); font-style: italic; }
+  .am-fallback { width: 100%; min-height: 220px; margin-top: 0.8rem; background: var(--parchment); color: var(--ink); border: 1px solid var(--rule-strong); border-radius: 8px; padding: 0.7rem; font-family: 'JetBrains Mono', monospace; font-size: 0.72rem; }
+
   #gate { display: none; max-width: 420px; margin: 5rem auto; background: var(--card); border: 1px solid var(--rule); border-radius: 12px; padding: 2rem; text-align: center; }
   #gate.on { display: block; }
   #gate h1 { font-size: 1.4rem; margin-bottom: 0.5rem; }
@@ -115,8 +139,9 @@
   <h1>Intake <em>CRM</em>.</h1>
   <p class="lede">
     Every athlete, coach/trainer, and branch intake lands here — one board to
-    work every submission from the whole ecosystem. Move a row's status, assign
-    an agent, or open it in the agent platform. <span class="backend-tag" id="backend-tag"></span>
+    work every submission from the whole ecosystem, including campaign intakes
+    from <a href="/intake.html">/intake.html</a> (open <em>Answers</em> to read them or copy them for TOJ).
+    Move a row's status, assign an agent, or open it in the agent platform. <span class="backend-tag" id="backend-tag"></span>
   </p>
 
   <div class="safety">
@@ -196,6 +221,28 @@
   <a href="/app.html?return=/admin/intake-crm.html" class="btn primary" style="text-decoration:none; display:inline-block;">Go to sign-in →</a>
 </div>
 
+<div class="modal-back" id="answersModal" hidden>
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="amTitle">
+    <div class="modal-head">
+      <div>
+        <div class="modal-kicker">Campaign intake · <span id="amWhen"></span></div>
+        <h2 id="amTitle">—</h2>
+        <div class="modal-sub" id="amContact"></div>
+      </div>
+      <div class="modal-actions">
+        <button class="btn primary" id="amCopy" type="button">Copy for TOJ</button>
+        <button class="btn" id="amClose" type="button">Close</button>
+      </div>
+    </div>
+    <div class="modal-body">
+      <p class="am-note">Copy for TOJ copies the numbered answers as Markdown, with no contact details. Paste it to TOJ after the prompt in the agency brief. Blank answers stay blank, so TOJ asks about them instead of guessing.</p>
+      <textarea class="am-fallback" id="amFallback" readonly hidden aria-label="Answers as Markdown"></textarea>
+      <div id="amBody"></div>
+    </div>
+  </div>
+</div>
+
+<script src="/js/campaign-intake-questions.js"></script>
 <script>
 (function () {
   var AUD_LABEL = { athlete:'Athlete', coach:'Coach', branch:'Branch', business:'Business', creator:'Creator' };
@@ -212,9 +259,19 @@
     if (!d) return '—';
     var dt = new Date(d);
     if (isNaN(dt)) return '—';
-    return dt.toISOString().slice(0,10) + ' ' + dt.toTimeString().slice(0,5);
+    // Local date and local time (the UTC date beside a local time showed the
+    // wrong day for evening intakes).
+    var p2 = function (n) { return (n < 10 ? '0' : '') + n; };
+    return dt.getFullYear() + '-' + p2(dt.getMonth() + 1) + '-' + p2(dt.getDate()) + ' ' + p2(dt.getHours()) + ':' + p2(dt.getMinutes());
   }
   function esc(s) { return (s == null ? '' : String(s)).replace(/</g,'&lt;'); }
+  // Full escape for intake answers (public form input) shown in the Answers view.
+  function escHtml(s) {
+    return (s == null ? '' : String(s)).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  }
+  function isCampaign(r) { return String(r.intake_version || '').indexOf('campaign') === 0 && !!window.TOJ_CAMPAIGN_INTAKE; }
   function audChip(a) { return '<span class="chip '+a+'">'+(AUD_LABEL[a]||a)+'</span>'; }
   function consentChip(c) { return '<span class="chip c-'+c+'">'+c.replace('_',' ')+'</span>'; }
 
@@ -275,11 +332,19 @@
       } else {
         agentCell = '<span class="sub2" title="Guardian consent required first">consent first</span>';
       }
+      var campaign = isCampaign(r);
+      var p = r.payload || {};
+      var campaignTag = campaign
+        ? ' <span class="chip campaign">Campaign</span><div><button class="btn small answers-btn" type="button" data-id="'+escHtml(r.id)+'">Answers</button></div>'
+        : '';
+      var who = campaign && (p.contact_name || p.contact_method)
+        ? '<div class="sub2">'+ escHtml([p.contact_name, p.contact_method ? 'prefers ' + p.contact_method : ''].filter(Boolean).join(' · ')) +'</div>'
+        : '';
       html += '<tr>' +
-        '<td><span class="name">'+ (esc(r.subject_name) || '—') +'</span>'+minorTag+'</td>' +
+        '<td><span class="name">'+ (esc(r.subject_name) || '—') +'</span>'+minorTag+campaignTag+'</td>' +
         '<td>'+ audChip(r.audience) +'</td>' +
         '<td class="mono">'+ (r.branch || '—') +'</td>' +
-        '<td class="mono">'+ contact + (r.contact_phone ? '<div class="sub2">'+esc(r.contact_phone)+'</div>':'') +'</td>' +
+        '<td class="mono">'+ contact + (r.contact_phone ? '<div class="sub2">'+esc(r.contact_phone)+'</div>':'') + who +'</td>' +
         '<td>'+ consentChip(r.consent_status) + (r.consent_level ? ' <span class="sub2">'+r.consent_level+'</span>':'') +'</td>' +
         '<td>'+ statusSelect(r) +'</td>' +
         '<td>'+ agentSelect(r) +'</td>' +
@@ -312,6 +377,10 @@
       });
     });
 
+    box.querySelectorAll('.answers-btn').forEach(function (btn) {
+      btn.addEventListener('click', function () { openAnswers(btn.getAttribute('data-id'), btn); });
+    });
+
     // Copy the guardian consent link for a pending-minor row.
     box.querySelectorAll('.consent-copy').forEach(function (btn) {
       btn.addEventListener('click', function () {
@@ -325,6 +394,65 @@
     });
   }
 
+  // ---- Answers view (campaign intakes) ----
+  var modal = document.getElementById('answersModal');
+  var openRow = null, returnFocus = null;
+  function openAnswers(id, opener) {
+    var r = cache.find(function (x) { return x.id === id; });
+    if (!r) return;
+    var Q = window.TOJ_CAMPAIGN_INTAKE, p = r.payload || {};
+    openRow = r; returnFocus = opener || null;
+    document.getElementById('amTitle').textContent = r.subject_name || p.q09_name || 'Unnamed brand';
+    document.getElementById('amWhen').textContent = 'received ' + fmt(r.created_at);
+    document.getElementById('amContact').textContent = [
+      p.contact_name, p.contact_role, r.contact_email, r.contact_phone,
+      p.contact_method ? 'prefers ' + p.contact_method : ''
+    ].filter(Boolean).join(' · ');
+    var out = '';
+    Q.STEPS.forEach(function (st) {
+      var qs = Q.QUESTIONS.filter(function (q) { return q.step === st.n; });
+      var answered = qs.filter(function (q) { return Q.answerText(q, p); }).length;
+      out += '<div class="am-step"><h3>' + escHtml(st.topic) + '<span>' + answered + ' of ' + qs.length + ' answered</span></h3>';
+      qs.forEach(function (q) {
+        var a = Q.answerText(q, p);
+        out += '<div class="am-q"><div class="qt"><b>' + (q.n < 10 ? '0' : '') + q.n + '</b>' + escHtml(q.q) + '</div>' +
+          (a ? '<div class="qa">' + escHtml(a) + '</div>' : '<div class="qa blank">Blank</div>') + '</div>';
+      });
+      out += '</div>';
+    });
+    document.getElementById('amBody').innerHTML = out;
+    var fb = document.getElementById('amFallback');
+    fb.hidden = true; fb.value = '';
+    document.getElementById('amCopy').textContent = 'Copy for TOJ';
+    modal.hidden = false;
+    document.body.style.overflow = 'hidden';
+    document.getElementById('amCopy').focus();
+  }
+  function closeAnswers() {
+    modal.hidden = true;
+    document.body.style.overflow = '';
+    openRow = null;
+    if (returnFocus && document.body.contains(returnFocus)) returnFocus.focus();
+  }
+  document.getElementById('amClose').addEventListener('click', closeAnswers);
+  modal.addEventListener('click', function (e) { if (e.target === modal) closeAnswers(); });
+  document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && !modal.hidden) closeAnswers(); });
+  document.getElementById('amCopy').addEventListener('click', function () {
+    if (!openRow) return;
+    var btn = this;
+    var md = window.TOJ_CAMPAIGN_INTAKE.toMarkdown(openRow.payload || {}, {
+      brand: openRow.subject_name, received: fmt(openRow.created_at)
+    });
+    var done = function () { btn.textContent = 'Copied ✓'; setTimeout(function () { btn.textContent = 'Copy for TOJ'; }, 1800); };
+    var fallback = function () {
+      var fb = document.getElementById('amFallback');
+      fb.value = md; fb.hidden = false; fb.focus(); fb.select();
+      btn.textContent = 'Select all, then copy';
+    };
+    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(md).then(done).catch(fallback);
+    else fallback();
+  });
+
   function renderStats(s) {
     document.getElementById('s-total').textContent = s.total || 0;
     document.getElementById('s-minors').textContent = s.minors || 0;
@@ -337,7 +465,7 @@
   function csvEscape(s) { s = (s==null?'':String(s)); return /["\n,]/.test(s) ? '"'+s.replace(/"/g,'""')+'"' : s; }
   function exportCsv() {
     var rows = filtered();
-    var header = ['subject_name','audience','branch','is_minor','contact_email','guardian_email','consent_status','consent_level','status','assigned_agent','created_at'];
+    var header = ['subject_name','audience','branch','intake_version','is_minor','contact_email','guardian_email','consent_status','consent_level','status','assigned_agent','created_at'];
     var lines = [header.join(',')];
     rows.forEach(function (r) {
       lines.push(header.map(function (k) { return csvEscape(r[k]); }).join(','));

@@ -13,7 +13,9 @@
 //     audience: 'athlete' | 'coach' | 'branch' | 'business' | 'creator',
 //     branch:   'subject-medias' | 'coached-by-hooks' | ... (optional),
 //     endpoint: 'https://...'      // optional override
-//     showSuccess: function () { ... },   // page's own success screen
+//     timeoutMs: 30000,            // optional; default 8000
+//     showSuccess: function (result) { ... }, // runs on success AND failure;
+//                                             // check result.ok
 //     onError:     function (err) { ... } // optional
 //   };
 //   // then, at final submit, with the collected answers:
@@ -87,9 +89,10 @@
       if (typeof cfg.showSuccess === "function") cfg.showSuccess(result);
     };
 
+    var timeoutMs = cfg.timeoutMs > 0 ? cfg.timeoutMs : 8000;
     var timer = setTimeout(function () {
       finish({ ok: false, error: "timeout" });
-    }, 8000);
+    }, timeoutMs);
 
     fetch(endpoint, {
       method: "POST",

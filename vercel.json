@@ -13,7 +13,7 @@
     { "source": "/smallbusiness.html", "destination": "/personal-brand.html", "permanent": true },
     { "source": "/bigbusiness.html", "destination": "/nonprofit.html", "permanent": true },
     { "source": "/advisory.html", "destination": "/personal-brand.html", "permanent": true },
-    { "source": "/intake.html", "destination": "/foundation-score.html", "permanent": true },
+    { "source": "/intake", "destination": "/intake.html", "permanent": false },
     { "source": "/instructors.html", "destination": "/how-we-work.html", "permanent": true }
   ]
 }

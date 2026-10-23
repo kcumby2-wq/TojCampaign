@@ -73,6 +73,9 @@ const VALID_CONSENT_STATUS = new Set([
 // agent RAG. c3 = named-internal, c4 = named-public. c0-c2 never embed.
 const EMBED_OK_MINOR_LEVELS = new Set(["c3", "c4"]);
 
+// Payload keys never embedded to the agent RAG (see ingestIntakeRow).
+const CONTACT_KEYS = /^contact_/;
+
 // ---- Supabase (lazy) ----
 let supabase = null;
 function getSupabase() {
@@ -133,11 +136,13 @@ function ingestIntakeRow(sb, row) {
   const publicNamed = row.is_minor && row.consent_level === "c4";
   const nameLine =
     !row.is_minor || publicNamed ? `Subject: ${row.subject_name || "n/a"}\n` : "";
+  // Contact details stay in the CRM row; agents get the answers, not how to
+  // reach the person (contact_name, contact_role, contact_method, ...).
   const prose =
     `Audience: ${row.audience}\n` +
     (row.branch ? `Branch: ${row.branch}\n` : "") +
     nameLine +
-    payloadToProse(row.payload || {});
+    payloadToProse(row.payload || {}, { omit: CONTACT_KEYS });
   ingestClientDocument(sb, {
     client_id: row.id, // client_documents.client_id doubles as the intake scope id
     source_type: "onboarding_intake",

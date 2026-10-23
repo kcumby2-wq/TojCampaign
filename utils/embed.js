@@ -55,10 +55,14 @@ function chunkText(str, wordsPerChunk = 400, overlapWords = 50) {
 
 // Flatten an intake payload into searchable prose so the transcript agent
 // can retrieve "what did they say about pricing?" without knowing the schema.
-function payloadToProse(payload) {
+// opts.omit (a RegExp) drops matching keys, e.g. /^contact_/ keeps how to
+// reach someone out of the agent RAG.
+function payloadToProse(payload, opts = {}) {
   if (!payload || typeof payload !== "object") return "";
+  const omit = opts.omit instanceof RegExp ? opts.omit : null;
   const lines = [];
   for (const [k, v] of Object.entries(payload)) {
+    if (omit && omit.test(k)) continue;
     if (v === null || v === undefined || v === "") continue;
     const label = k.replace(/_/g, " ");
     if (typeof v === "object") {
