@@ -769,6 +769,12 @@ router.patch("/events/:id", member, async (req, res) => {
     patch.ends_at = G.endsAt(merged);
     const updated = await run(sb.from("gfs_events").update(patch).eq("id", ev.id).select("*").single());
     if (["starts_on", "ends_on", "wraps_at", "tz"].some((k) => patch[k] !== undefined)) await resyncDeliverables(sb, updated);
+    // A stop that moves region takes its library assets with it (migration
+    // 027 does it in the database too). Nothing to move before 027.
+    if (updated.region !== ev.region) {
+      const { error } = await sb.from("gfs_assets").update({ region: updated.region }).eq("event_id", ev.id);
+      if (error && !/gfs_asset/.test(String(error.message || ""))) throw error;
+    }
     await T.logActivity(actor(req), "gfs_event_changed", updated.code, { region: updated.region, fields: Object.keys(patch).filter((k) => k !== "ends_at") });
     res.json({ event: eventView(updated, req) });
   } catch (e) {
@@ -2062,7 +2068,7 @@ router.get("/scorecards", viewer, async (req, res) => {
 // A takedown follows the athlete (one Sports Thread ID at every event), so who
 // sees it, and whose clips it reaches, comes from every event the athlete is
 // on: the region it was logged in, plus the regions of those events now.
-function takedownView(t, events, outClips, req, regions) {
+function takedownView(t, events, outClips, req, regions, outAssets) {
   const ev = events.get(t.event_id);
   const member = !req || atLeast(req, "member");
   const steps = [
@@ -2072,6 +2078,7 @@ function takedownView(t, events, outClips, req, regions) {
   ];
   const open = steps.filter((s) => !s.done_at);
   const out = outClips ? outClips.get(t.roster_id) || [] : [];
+  const live = outAssets ? outAssets.get(t.roster_id) || [] : [];
   const mine = req ? new Set(G.regionsOf(req.team)) : null;
   return {
     id: t.id,
@@ -2091,6 +2098,12 @@ function takedownView(t, events, outClips, req, regions) {
     overdue: open.some((s) => new Date(s.due_at).getTime() < Date.now()),
     clips_out: out.length,
     clips_out_yours: mine ? out.filter((c) => mine.has((events.get(c.event_id) || {}).region)).length : out.length,
+    // Live assets in the library that show the athlete (027), and which stops
+    // and regions hold them, so a director can see who has to retire them.
+    assets_live: live.length,
+    assets_live_yours: mine ? live.filter((a) => mine.has(a.region)).length : live.length,
+    assets_live_events: member ? [...new Set(live.map((a) => a.code).filter(Boolean))] : [],
+    assets_live_regions: member ? [...new Set(live.map((a) => a.region).filter(Boolean))].sort() : [],
     note: member ? t.note || null : null,
   };
 }
@@ -2108,6 +2121,34 @@ async function outClipsFor(sb, rosterIds) {
     const k = rid.get(c.roster_row);
     if (!out.has(k)) out.set(k, []);
     out.get(k).push(c);
+  }
+  return out;
+}
+// The athlete's live assets in the library (027), at every event: roster ID
+// → [{ id, event_id, region, code }]. Nothing before migration 027.
+async function outAssetsFor(sb, rosterIds) {
+  const out = new Map();
+  if (!rosterIds.length) return out;
+  try {
+    const rows = await inChunks(rosterIds, (chunk) => all(() => sb.from("gfs_roster").select("id,roster_id").in("roster_id", chunk)));
+    const rid = new Map(rows.map((r) => [r.id, r.roster_id]));
+    const ids = rows.map((r) => r.id);
+    const links = ids.length ? await inChunks(ids, (chunk) => run(sb.from("gfs_asset_athletes").select("asset_id,roster_row").in("roster_row", chunk))) : [];
+    const assetIds = [...new Set(links.map((l) => l.asset_id))];
+    const assets = assetIds.length ? await inChunks(assetIds, (chunk) => run(sb.from("gfs_assets").select("id,stage,event_id,region").in("id", chunk))) : [];
+    const live = new Map(assets.filter((a) => a.stage === "live").map((a) => [a.id, a]));
+    const evIds = [...new Set([...live.values()].map((a) => a.event_id).filter(Boolean))];
+    const evs = evIds.length ? await inChunks(evIds, (chunk) => run(sb.from("gfs_events").select("id,code").in("id", chunk))) : [];
+    const codes = new Map(evs.map((e) => [e.id, e.code]));
+    for (const l of links) {
+      const a = live.get(l.asset_id);
+      if (!a) continue;
+      const k = rid.get(l.roster_row);
+      if (!out.has(k)) out.set(k, []);
+      out.get(k).push({ id: a.id, event_id: a.event_id, region: a.region || null, code: codes.get(a.event_id) || null });
+    }
+  } catch (e) {
+    if (!/gfs_asset/.test(String((e && e.message) || ""))) throw e;
   }
   return out;
 }
@@ -2153,8 +2194,10 @@ router.get("/takedowns", viewer, async (req, res) => {
     if (!regions.length) return res.json({ takedowns: [] });
     const status = String(req.query.status || "open");
     const { list: rows, scope, events } = await visibleTakedowns(sb, req, { status: status === "all" ? "all" : status === "done" ? "done" : "open", regions });
-    const out = await outClipsFor(sb, [...new Set(rows.filter((t) => t.status === "open").map((t) => t.roster_id))]);
-    const list = rows.slice(0, 200).map((t) => takedownView(t, events, out, req, scope.get(t.id)));
+    const openIds = [...new Set(rows.filter((t) => t.status === "open").map((t) => t.roster_id))];
+    const out = await outClipsFor(sb, openIds);
+    const outAssets = await outAssetsFor(sb, openIds);
+    const list = rows.slice(0, 200).map((t) => takedownView(t, events, out, req, scope.get(t.id), outAssets));
     list.sort((a, b) => (a.status === b.status ? String(a.next_due_at || "~").localeCompare(String(b.next_due_at || "~")) : a.status === "open" ? -1 : 1));
     res.json({ takedowns: list, windows: G.TAKEDOWN });
   } catch (e) {
@@ -2202,7 +2245,7 @@ router.post("/takedowns", member, async (req, res) => {
     events.set(ev.id, ev);
     const reach = scope.get(t.id);
     const out = await outClipsFor(sb, [row.roster_id]);
-    const view = takedownView(t, events, out, req, reach);
+    const view = takedownView(t, events, out, req, reach, await outAssetsFor(sb, [row.roster_id]));
     await T.logActivity(actor(req), "gfs_takedown_logged", ev.code, { region: ev.region, number: t.number || undefined });
     const w = G.TAKEDOWN[b.reason];
     // Everyone running an event this athlete is on hears about it.
@@ -2241,12 +2284,21 @@ router.patch("/takedowns/:id", member, async (req, res) => {
         if (e) await rematch(sb, e, await rosterRows(sb, e.id));
       }
       const left = out.filter((c) => !here.includes(c));
-      if (!left.length) Object.assign(patch, { other_done_at: at, other_done_by: actor(req) });
+      // A live asset in the library that shows the athlete is out too, and
+      // only retiring it (once the file is down) takes it off. It may be in
+      // another region, where this director can't see it: say which stops
+      // hold it, and tell their directors.
+      const liveAssets = (await outAssetsFor(sb, [t.roster_id])).get(t.roster_id) || [];
+      if (!left.length && !liveAssets.length) Object.assign(patch, { other_done_at: at, other_done_by: actor(req) });
       else {
         const regions = [...new Set(left.map((c) => (events.get(c.event_id) || {}).region).filter(Boolean))];
         const codes = [...new Set(left.map((c) => (events.get(c.event_id) || {}).code).filter(Boolean))];
-        partial = { removed: here.length, still_out: left.length, regions, events: codes };
-        notify(regionEmails(regions, "member"), { title: `Takedown${t.number ? " #" + t.number : ""} · clips still out`, body: `${left.length} still out at ${codes.join(", ")}: take them down, then mark the step done`, url: `/app/#gfs-desk`, tag: `gfs-takedown-${t.id}` });
+        const assetRegions = [...new Set(liveAssets.map((a) => a.region).filter(Boolean))].sort();
+        const assetCodes = [...new Set(liveAssets.map((a) => a.code).filter(Boolean))];
+        partial = { removed: here.length, still_out: left.length, regions, events: codes, assets_live: liveAssets.length, asset_regions: assetRegions, asset_events: assetCodes };
+        const label = `Takedown${t.number ? " #" + t.number : ""}`;
+        if (left.length) notify(regionEmails(regions, "member"), { title: `${label} · clips still out`, body: `${left.length} still out at ${codes.join(", ")}: take them down, then mark the step done`, url: `/app/#gfs-desk`, tag: `gfs-takedown-${t.id}` });
+        if (liveAssets.length) notify(regionEmails(assetRegions, "member"), { title: `${label} · assets still live`, body: `${liveAssets.length} live in the asset library${assetCodes.length ? " at " + assetCodes.join(", ") : ""}: take the file down where it lives, then retire it`, url: `/app/#gfs-assets`, tag: `gfs-takedown-assets-${t.id}` });
       }
     }
     if (b.offsite_requested === true && !t.offsite_requested_at) Object.assign(patch, { offsite_requested_at: at, offsite_requested_by: actor(req) });
@@ -2260,7 +2312,7 @@ router.patch("/takedowns/:id", member, async (req, res) => {
     }
     const ev = events.get(updated.event_id) || {};
     await T.logActivity(actor(req), "gfs_takedown_step", ev.code || null, { region: mine.has(t.region) ? t.region : [...reach].find((r) => mine.has(r)), number: updated.number || undefined, steps: Object.keys(patch).filter((k) => k.endsWith("_at")), removed: partial ? partial.removed : undefined });
-    res.json({ takedown: takedownView(updated, events, await outClipsFor(sb, [t.roster_id]), req, reach), partial });
+    res.json({ takedown: takedownView(updated, events, await outClipsFor(sb, [t.roster_id]), req, reach, await outAssetsFor(sb, [t.roster_id])), partial });
   } catch (e) {
     fail(res, e, "update_takedown");
   }
@@ -2357,8 +2409,11 @@ router.get("/desk", viewer, async (req, res) => {
     const below = pool
       .map((c) => ({ id: c.id, name: c.name, region: c.region, scorecard: cards.get(c.id), badges: G.credentialBadges(c) }))
       .filter((c) => (c.scorecard.games && !c.scorecard.on_standard) || c.badges.some((b) => !b.ok && b.key !== "youth"));
-    const outNow = await outClipsFor(sb, [...new Set(tds.map((t) => t.roster_id))]);
-    const tdViews = tds.map((t) => takedownView(t, td.events, outNow, req, td.scope.get(t.id))).sort((a, b) => String(a.next_due_at || "~").localeCompare(String(b.next_due_at || "~")));
+    const tdIds = [...new Set(tds.map((t) => t.roster_id))];
+    const outNow = await outClipsFor(sb, tdIds);
+    // Live library assets still showing the athlete, wherever they are (027).
+    const assetsNow = await outAssetsFor(sb, tdIds);
+    const tdViews = tds.map((t) => takedownView(t, td.events, outNow, req, td.scope.get(t.id), assetsNow)).sort((a, b) => String(a.next_due_at || "~").localeCompare(String(b.next_due_at || "~")));
     res.json({
       window: { from, to, name: win },
       regions,
@@ -2383,3 +2438,5 @@ router.get("/desk", viewer, async (req, res) => {
 });
 
 module.exports = router;
+// The clip counts per event, for the asset library (routes/gfs-assets.js).
+module.exports.eventCounts = eventCounts;
