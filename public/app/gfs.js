@@ -67,6 +67,7 @@
     gfs_takedown_clips_out: "Clips are still out somewhere. Take them down first.",
     featured_not_used: "This one doesn't name athletes.",
     gfs_qr_not_set_up: "The stop page isn't set up on the server yet (migration 025).",
+    gfs_qr_no_address: "Codes need a Ground Floor Sports or Pylon web address first. Ask Kyron.",
     youth_no_public_link: "A youth creator never appears on a stop's page, so they don't get a public link.",
   };
   // Field-level messages for the stop page's links.
@@ -433,7 +434,7 @@
     function codeCard(c) {
       var img = base + encodeURIComponent(c.key) + ".svg";
       var title = c.kind === "creator" ? "Filmed by " + c.first : c.label;
-      var sub = c.kind === "creator" ? c.creator.name + " · " + (c.status === "confirmed" ? "confirmed" : "invited") : c.use || (c.custom ? "Added for this stop" : "");
+      var sub = c.kind === "creator" ? c.creator.name + " · " + (c.status === "confirmed" ? "confirmed" : "invited, so on the page once confirmed") : c.use || (c.custom ? "Added for this stop" : "");
       return '<article class="card tight"><div class="row" style="align-items:flex-start"><img src="' + h(img) + '" alt="QR code: ' + h(title) + '" width="88" height="88" loading="lazy" style="background:#fff;border-radius:10px;padding:4px;flex:none">' +
         '<div class="grow"><div class="name" style="font-size:15px">' + h(title) + '</div><div class="sub">' + h(sub) + '</div><div class="sub mono" style="font-size:11.5px;margin-top:4px">' + h(countLine(c.counts)) + "</div></div></div>" +
         '<div class="btn-row" style="flex-wrap:wrap"><button type="button" class="btn small soft" data-dl="' + h(c.key) + '" data-ext="png">PNG</button><button type="button" class="btn small soft" data-dl="' + h(c.key) + '" data-ext="svg">SVG</button>' +
@@ -441,6 +442,7 @@
         '<button type="button" class="btn small ghost" data-copy="' + h(c.url) + '" aria-label="Copy link">Copy</button>' +
         (c.custom && member ? '<button type="button" class="btn small ghost" data-unplace="' + h(c.placement) + '">Remove</button>' : "") + "</div></article>";
     }
+    var noAddress = !!d.page.address_problem;
     var stopCodes = d.codes.filter(function (c) { return c.kind !== "creator"; });
     var creatorCodes = d.codes.filter(function (c) { return c.kind === "creator"; });
     var noLink = d.creators_without_link.map(function (c) {
@@ -457,13 +459,14 @@
       head(ev.name, "QR codes", "", "Each code opens this stop's page: footage on SportsClippers, the creator's own page for a creator's code, and help from Ground Floor Sports.") +
       (d.page.live ? "" : '<section class="card tight" style="border-color:var(--bad)"><div class="name" style="font-size:15px">This stop was cancelled</div><p class="sub" style="margin:0">Its page now says so and keeps only the help links.</p></section>') +
       (d.page.footage_link || !d.page.live ? "" : '<section class="card tight" style="border-color:var(--warn)"><div class="name" style="font-size:15px">No footage link yet</div><p class="sub" style="margin:0">Until this stop\'s SportsClippers page is added, the page shows help only. The codes already work, so you can print them now.</p></section>') +
-      '<section class="card"><div class="row"><div class="grow"><div class="name">The stop page</div><div class="sub mono" style="font-size:11.5px;word-break:break-all">' + h(d.page.url) + '</div></div><a class="btn small soft" href="' + h(d.page.url) + '" target="_blank" rel="noopener">Open</a></div>' +
+      (noAddress ? '<section class="card tight" style="border-color:var(--warn)"><div class="name" style="font-size:15px">No codes yet</div><p class="sub" style="margin:0">Codes need a Ground Floor Sports or Pylon web address first, so TOJ\'s name never prints on Pylon\'s signs. A printed code can\'t be changed. Kyron sets the address on the server (<span class="mono">GFS_PAGE_BASE</span>). You can save this stop\'s links now.</p></section>' : "") +
+      '<section class="card"><div class="row"><div class="grow"><div class="name">The stop page</div>' + (d.page.url ? '<div class="sub mono" style="font-size:11.5px;word-break:break-all">' + h(d.page.url) + "</div>" : '<div class="sub">Its address comes with the codes.</div>') + "</div>" + (d.page.url ? '<a class="btn small soft" href="' + h(d.page.url) + '" target="_blank" rel="noopener">Open</a>' : "") + "</div>" +
       '<div class="stats" style="grid-template-columns:repeat(3,minmax(0,1fr))"><div class="stat"><b>' + tot.scan + '</b><span>Scans</span></div><div class="stat"><b>' + tot.footage + '</b><span>To footage</span></div><div class="stat"><b>' + tot.creator + '</b><span>To creators</span></div></div>' +
       (d.counts_ready ? "" : '<p class="sub" style="margin:0">Counts start once the server is set up for them (migration 025).</p>') +
       links +
       '<p class="sub" style="margin:0">Help email on the page: <b style="color:var(--ink)">' + h(d.help.email) + "</b> (Ground Floor Sports). Takedown requests go there too.</p>" +
       '<p id="qrMsg" class="body" role="status"></p></section>' +
-      '<section class="sec"><h2 class="sec-h">The stop and its placements</h2>' + stopCodes.map(codeCard).join("") +
+      (noAddress ? "" : '<section class="sec"><h2 class="sec-h">The stop and its placements</h2>' + stopCodes.map(codeCard).join("") +
       (member ? '<div class="card tight"><div class="name" style="font-size:15px">Add a placement</div><p class="sub" style="margin:0">A code of its own for one spot, like "Field 3 sign" or "Team tent", so its scans count apart.</p><div class="row"><input class="input grow" id="qrNew" type="text" maxlength="24" placeholder="Field 3 sign" autocomplete="off"' + (d.placements_left ? "" : " disabled") + '><button type="button" class="btn small" id="qrAdd"' + (d.placements_left ? "" : " disabled") + ">Add</button></div><p id=\"qrAddMsg\" class=\"body\" role=\"status\"></p></div>" : "") +
       "</section>" +
       '<section class="sec"><h2 class="sec-h">Creators on the crew</h2>' +
@@ -471,8 +474,8 @@
       (noLink ? '<div class="list">' + noLink + "</div>" : "") +
       (!creatorCodes.length && !noLink ? '<p class="sub" style="margin:0">Crew the stop, and each adult creator with a SportsClippers page gets a code for their lanyard.</p>' : "") +
       (d.youth_on_crew ? '<p class="sub" style="margin:0">' + d.youth_on_crew + (d.youth_on_crew === 1 ? " youth creator on this crew gets" : " youth creators on this crew get") + " no code: a youth creator never appears on a public page.</p>" : "") +
-      "</section>" +
-      (member ? '<section class="card tight"><div class="row"><span class="tick' + (d.ready ? " on" : "") + '">' + (d.ready ? ICON.check : "") + '</span><div class="grow"><div class="name" style="font-size:15px">' + (d.ready ? "Marked ready" : "Ready to go?") + '</div><div class="sub">Ticks "QR code and storefront page" on the event plan.</div></div><button type="button" class="btn small ' + (d.ready ? "ghost" : "") + '" id="qrReady">' + (d.ready ? "Undo" : "Mark ready") + "</button></div></section>" : "") +
+      "</section>") +
+      (member && (!noAddress || d.ready) ? '<section class="card tight"><div class="row"><span class="tick' + (d.ready ? " on" : "") + '">' + (d.ready ? ICON.check : "") + '</span><div class="grow"><div class="name" style="font-size:15px">' + (d.ready ? "Marked ready" : "Ready to go?") + '</div><div class="sub">Ticks "QR code and storefront page" on the event plan.</div></div><button type="button" class="btn small ' + (d.ready ? "ghost" : "") + '" id="qrReady">' + (d.ready ? "Undo" : "Mark ready") + "</button></div></section>" : "") +
       "</div>");
 
     bind("[data-dl]", "click", function (b) { download(base + encodeURIComponent(b.dataset.dl) + "." + b.dataset.ext + "?download=1", ev.code + "-" + b.dataset.dl + "." + b.dataset.ext); });
@@ -1084,10 +1087,10 @@
       '<div class="screen"><div class="head"><a class="back" href="#gfs-creators">' + t.I.back + "Cancel</a></div>" + head(isNew ? null : "Code " + c.code, isNew ? "Add a creator" : c.name) +
       input("c_name", "Name", 'type="text" maxlength="80"' + (locked ? " disabled" : ""), c.name) +
       input("c_email", "Email <small>(a parent's, for a youth creator)</small>", 'type="email" inputmode="email" autocomplete="off"' + (locked ? " disabled" : ""), c.email) +
-      (locked ? '<p class="sub" style="margin:-8px 0 0">Their screening is on file, so Kyron changes their name or email.</p>' : "") +
+      (locked ? '<p class="sub" style="margin:-8px 0 0">Their screening is on file, so Kyron changes their name, email or SportsClippers page.</p>' : "") +
       '<div class="field"><span class="label">Region</span><div class="chips" role="radiogroup" aria-label="Region" style="flex-wrap:wrap;margin:0;padding:0">' + meta.you.regions.map(function (r) { return '<button type="button" role="radio" class="chip" data-creg="' + r + '" aria-pressed="' + (c.region === r) + '">' + h(rname(r)) + "</button>"; }).join("") + "</div></div>" +
       input("c_city", "Home city", 'type="text" maxlength="80"', c.home_city) +
-      '<div id="scWrap"' + (c.tier === "youth" ? " hidden" : "") + ">" + input("c_sc", "SportsClippers page <small>(optional)</small>", 'type="url" inputmode="url" autocomplete="off" placeholder="https://sportsclippers.com/…"', c.sportsclippers_url, "Shown on a stop's page when their code is scanned, with their first name. Adults only.") + "</div>" +
+      '<div id="scWrap"' + (c.tier === "youth" ? " hidden" : "") + ">" + input("c_sc", "SportsClippers page <small>(optional)</small>", 'type="url" inputmode="url" autocomplete="off" placeholder="https://sportsclippers.com/…"' + (locked ? " disabled" : ""), c.sportsclippers_url, "Shown on a stop's page when their code is scanned, with their first name. Adults only.") + "</div>" +
       '<section class="card"><div class="name">Screening' + (owner ? "" : " · Kyron records this") + '</div>' +
       (c.badges.length ? '<div class="pill-row">' + c.badges.map(function (b) { return badge(b.label + (b.until && b.ok ? " · to " + day(b.until, { month: "short", year: "numeric" }) : ""), b.ok ? "ok" : "warn"); }).join("") + "</div>" : "") +
       dateIn("contract_signed_on", "Contract signed") + dateIn("background_check_on", "Background check") + dateIn("safety_training_on", "Minor-safety training") +
@@ -1108,7 +1111,9 @@
       act(btn, async function () {
         var v = function (k) { var el = document.getElementById(k); return el ? el.value.trim() : undefined; };
         var body = { name: v("c_name"), email: v("c_email"), region: region, home_city: v("c_city"), notes: v("c_notes") };
-        if (tier !== "youth") body.sportsclippers_url = v("c_sc") || null;
+        // Sent only when it changed (and never for a youth creator).
+        var sc = v("c_sc") || null;
+        if (tier !== "youth" && !locked && sc !== (c.sportsclippers_url || null)) body.sportsclippers_url = sc;
         if (!isNew) body.status = status;
         if (owner) {
           body.contract_signed_on = v("c_contract_signed_on") || null;

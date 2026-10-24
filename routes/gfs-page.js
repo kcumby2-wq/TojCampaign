@@ -6,10 +6,10 @@
 //   GET /e/:code/go/creator/:creator    counted, then on to that creator's SportsClippers page
 //
 // The page shows nothing about an athlete. A creator appears only when the
-// code is theirs, and only if they're an active adult on the stop's crew with
-// their own SportsClippers page. Counts are per code per day; nothing about a
-// visitor is stored, and redirects go only to links stored on the event or
-// creator (which must be on sportsclippers.com).
+// code is theirs, and only if they're an active adult confirmed on the stop's
+// crew with their own SportsClippers page. Counts are per code per day;
+// nothing about a visitor is stored, and redirects go only to links stored on
+// the event or creator (which must be on sportsclippers.com).
 
 "use strict";
 
@@ -31,7 +31,7 @@ function pageHeaders(res, n) {
   res.setHeader("Cache-Control", "no-store");
   res.setHeader("X-Content-Type-Options", "nosniff");
   res.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
-  res.setHeader("Content-Security-Policy", `default-src 'none'; style-src 'nonce-${n}' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data:; script-src 'none'; form-action 'none'; base-uri 'none'; frame-ancestors 'none'`);
+  res.setHeader("Content-Security-Policy", `default-src 'none'; style-src 'nonce-${n}'; img-src 'self' data:; script-src 'none'; form-action 'none'; base-uri 'none'; frame-ancestors 'none'`);
 }
 function missing(res) {
   const n = nonce();
@@ -39,24 +39,42 @@ function missing(res) {
   res.status(404).send(GP.renderMissingPage(n));
 }
 
-// Counting is capped per visitor address (60 a minute), in memory only and
-// keyed by a hash, so a refresh loop can't run up the numbers or the writes.
+// Counting is capped, so a refresh loop can't run up the numbers or the
+// writes: 300 a minute from one address (a venue's shared Wi-Fi stays well
+// under that), and 2,000 a minute for one stop. The address is used only
+// here: keyed through an HMAC with a key made fresh each time the server
+// starts, held in memory for a minute, never stored or logged. Behind Vercel
+// the first X-Forwarded-For entry is the visitor; someone calling the server
+// directly can set it themselves, so counts are a guide, not an audit.
+const SALT = crypto.randomBytes(32);
+const PER_ADDRESS = 300;
+const PER_STOP = 2000;
 const buckets = new Map();
-function mayCount(req) {
-  const ip = String(req.headers["x-forwarded-for"] || "").split(",")[0].trim() || req.socket.remoteAddress || "";
-  const key = crypto.createHash("sha256").update(ip).digest("base64").slice(0, 16);
-  const nowMs = Date.now();
+let sweptAt = 0;
+function sweep(nowMs) {
+  if (nowMs - sweptAt < 60000) return;
+  sweptAt = nowMs;
+  for (const [k, b] of buckets) if (nowMs > b.reset) buckets.delete(k);
+}
+function hit(key, limit, nowMs) {
   const b = buckets.get(key);
   if (!b || nowMs > b.reset) {
-    if (buckets.size > 20000) buckets.clear();
+    if (buckets.size > 50000) buckets.clear();
     buckets.set(key, { n: 1, reset: nowMs + 60000 });
     return true;
   }
   b.n++;
-  return b.n <= 60;
+  return b.n <= limit;
+}
+function mayCount(req, ev) {
+  const nowMs = Date.now();
+  sweep(nowMs);
+  const ip = String(req.headers["x-forwarded-for"] || "").split(",")[0].trim() || req.socket.remoteAddress || "";
+  const key = "a:" + crypto.createHmac("sha256", SALT).update(ip).digest("base64").slice(0, 22);
+  return hit("e:" + ev.id, PER_STOP, nowMs) && hit(key, PER_ADDRESS, nowMs);
 }
 function count(sb, req, ev, source, kind) {
-  if (!mayCount(req)) return;
+  if (!mayCount(req, ev)) return;
   Promise.resolve(sb.rpc("gfs_count_hit", { p_event: ev.id, p_source: source, p_kind: kind }))
     .then((r) => { if (r && r.error) console.error("[gfs-page] count failed:", r.error.message); })
     .catch((e) => console.error("[gfs-page] count failed:", e.message));
@@ -69,7 +87,7 @@ async function stopFor(sb, code) {
   return data || null;
 }
 // The creator a code belongs to, if they can appear on this stop's page: an
-// active adult, invited or confirmed on its crew, with their own page.
+// active adult, confirmed on its crew, with their own page.
 async function creatorFor(sb, ev, code) {
   if (!CREATOR_CODE.test(String(code || ""))) return null;
   const { data: c, error } = await sb.from("gfs_creators").select("id,code,name,tier,status,sportsclippers_url").eq("code", code).maybeSingle();
@@ -77,7 +95,7 @@ async function creatorFor(sb, ev, code) {
   if (!c || c.tier !== "adult" || c.status !== "active" || !c.sportsclippers_url || !GP.SC_URL.test(c.sportsclippers_url)) return null;
   const { data: rows, error: e2 } = await sb.from("gfs_crew").select("id,status").eq("event_id", ev.id).eq("creator_id", c.id);
   if (e2) throw e2;
-  if (!(rows || []).some((r) => r.status === "invited" || r.status === "confirmed")) return null;
+  if (!(rows || []).some((r) => r.status === "confirmed")) return null;
   return c;
 }
 const live = (ev) => ev.status !== "cancelled";

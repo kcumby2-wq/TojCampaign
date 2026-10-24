@@ -806,7 +806,9 @@ async function qrCodes(sb, ev) {
   for (const p of GP.placementsOf(ev)) codes.push(codeOf(ev, { kind: "placement", placement: p.key }, { placement: p.key, label: p.label, use: p.use, custom: p.custom }));
   const { shown, withoutLink, youth } = await qrCreators(sb, ev);
   for (const { c, row } of shown) {
-    codes.push(codeOf(ev, { kind: "creator", creator: c.code }, { label: c.name, first: GP.firstName(c.name), role: row.role, status: row.status, creator: { id: c.id, name: c.name, code: c.code, sportsclippers_url: c.sportsclippers_url } }));
+    // An invited creator's code can be printed ahead; the page shows them
+    // once they're confirmed.
+    codes.push(codeOf(ev, { kind: "creator", creator: c.code }, { label: c.name, first: GP.firstName(c.name), role: row.role, status: row.status, on_page: row.status === "confirmed", creator: { id: c.id, name: c.name, code: c.code, sportsclippers_url: c.sportsclippers_url } }));
   }
   return { codes, withoutLink, youth };
 }
@@ -827,12 +829,17 @@ async function qrCode(sb, ev, key) {
   return codes.find((c) => c.key === GP.keyOf(src)) || null;
 }
 
+// No code is made until GFS_PAGE_BASE is a Ground Floor Sports or Pylon
+// address (utils/gfs-page.js): a printed code can't be recalled.
+const NO_ADDRESS = { error: "gfs_qr_no_address", hint: "Set GFS_PAGE_BASE on the server to a Ground Floor Sports or Pylon address first." };
+
 router.get("/events/:id/qr", viewer, async (req, res) => {
   const sb = getSupabase();
   try {
     const ev = await loadEvent(sb, req, res);
     if (!ev) return;
-    const { codes, withoutLink, youth } = await qrCodes(sb, ev);
+    const problem = GP.pageBaseProblem();
+    const { codes, withoutLink, youth } = problem ? { codes: [], withoutLink: [], youth: 0 } : await qrCodes(sb, ev);
     // Counts, per code: scans of the page, and clicks on to SportsClippers.
     const zero = () => ({ scan: 0, footage: 0, creator: 0 });
     const bySource = new Map();
@@ -853,7 +860,7 @@ router.get("/events/:id/qr", viewer, async (req, res) => {
     const sourceOf = (c) => (c.kind === "placement" ? "s:" + c.placement : c.kind === "creator" ? "c:" + c.creator.code : "stop");
     res.json({
       event: eventView(ev, req),
-      page: { url: GP.stopUrl(ev, { kind: "stop" }), base: GP.pageBase(), live: ev.status !== "cancelled", footage_link: !!ev.sportsclippers_url },
+      page: { url: GP.stopUrl(ev, { kind: "stop" }), base: GP.pageBase(), address_problem: problem, live: ev.status !== "cancelled", footage_link: !!ev.sportsclippers_url },
       help: { email: GP.helpEmail(), phone: ev.help_phone || null },
       ready: !!ev.storefront_ready_at,
       codes: codes.map((c) => ({ ...c, counts: bySource.get(sourceOf(c)) || zero() })),
@@ -873,12 +880,14 @@ router.get("/events/:id/qr/:key.:ext(svg|png)", viewer, async (req, res) => {
   try {
     const ev = await loadEvent(sb, req, res);
     if (!ev) return;
+    if (GP.pageBaseProblem()) return res.status(503).json(NO_ADDRESS);
     const code = await qrCode(sb, ev, req.params.key);
     if (!code) return res.status(404).json({ error: "not_found" });
+    const ext = String(req.params.ext).toLowerCase();
     res.setHeader("Cache-Control", "private, no-store");
     res.setHeader("X-Content-Type-Options", "nosniff");
-    if (req.query.download === "1") res.setHeader("Content-Disposition", `attachment; filename="${ev.code}-${code.key}.${req.params.ext}"`);
-    if (req.params.ext === "svg") {
+    if (req.query.download === "1") res.setHeader("Content-Disposition", `attachment; filename="${ev.code}-${code.key}.${ext}"`);
+    if (ext === "svg") {
       res.setHeader("Content-Type", "image/svg+xml");
       return res.send(await QRCode.toString(code.url, { type: "svg", margin: 2, errorCorrectionLevel: "M" }));
     }
@@ -894,6 +903,7 @@ router.get("/events/:id/qr/:key/card", viewer, async (req, res) => {
   try {
     const ev = await loadEvent(sb, req, res);
     if (!ev) return;
+    if (GP.pageBaseProblem()) return res.status(503).json(NO_ADDRESS);
     const code = await qrCode(sb, ev, req.params.key);
     if (!code) return res.status(404).json({ error: "not_found" });
     const svg = await QRCode.toString(code.url, { type: "svg", margin: 1, errorCorrectionLevel: "M" });
@@ -901,7 +911,7 @@ router.get("/events/:id/qr/:key/card", viewer, async (req, res) => {
     res.setHeader("Content-Type", "text/html; charset=utf-8");
     res.setHeader("Cache-Control", "private, no-store");
     res.setHeader("X-Content-Type-Options", "nosniff");
-    res.setHeader("Content-Security-Policy", `default-src 'none'; style-src 'nonce-${n}' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data:; script-src 'nonce-${n}'; base-uri 'none'; form-action 'none'; frame-ancestors 'self'`);
+    res.setHeader("Content-Security-Policy", `default-src 'none'; style-src 'nonce-${n}'; img-src 'self' data:; script-src 'nonce-${n}'; base-uri 'none'; form-action 'none'; frame-ancestors 'self'`);
     res.send(GP.renderPrintCard(ev, { nonce: n, qrSvg: svg, url: code.url, kind: code.kind, label: code.label, creatorFirst: code.first || null }));
   } catch (e) {
     fail(res, e, "qr_card");
@@ -1899,18 +1909,19 @@ function readCreator(b, req, prev) {
   if (tier === "youth" && lead) errors.push("youth_lead_scout");
   // Their own SportsClippers page, shown on a stop's page when their code is
   // scanned. A youth creator never appears on a public page (migration 025).
+  // Only a change is written, so the form works before migration 025 runs.
   if (b.sportsclippers_url !== undefined) {
     const r = GP.sportsClippersUrl(b.sportsclippers_url);
     if (r.error) errors.push("sportsclippers_url");
     else if (r.url && tier === "youth") errors.push("youth_no_public_link");
-    else out.sportsclippers_url = r.url;
+    else if ((r.url || null) !== ((prev && prev.sportsclippers_url) || null)) out.sportsclippers_url = r.url;
   } else if (out.tier === "youth" && prev && prev.sportsclippers_url) {
     out.sportsclippers_url = null;
   }
   if (prev && !req.team.owner) {
     // Once screening is on file it belongs to a person: a director can't
-    // point the record at someone else.
-    if (G.screeningOnFile(prev) && ((out.name !== undefined && out.name !== prev.name) || (out.email !== undefined && (out.email || null) !== (prev.email || null)))) errors.push("identity_owner_only");
+    // point the record at someone else, or send families somewhere else.
+    if (G.screeningOnFile(prev) && ((out.name !== undefined && out.name !== prev.name) || (out.email !== undefined && (out.email || null) !== (prev.email || null)) || (out.sportsclippers_url !== undefined && b.sportsclippers_url !== undefined))) errors.push("identity_owner_only");
     // Pausing is anyone's call; putting someone back to work is Kyron's.
     if (out.status === "active" && prev.status !== "active") errors.push("reactivate_owner_only");
   }
@@ -1918,7 +1929,7 @@ function readCreator(b, req, prev) {
 }
 const OWNER_ONLY = {
   credentials_owner_only: "Kyron records contracts, background checks and training.",
-  identity_owner_only: "This creator's screening is on file, so Kyron changes their name or email.",
+  identity_owner_only: "This creator's screening is on file, so Kyron changes their name, email or SportsClippers page.",
   reactivate_owner_only: "Kyron puts a paused or inactive creator back to work.",
 };
 function ownerOnly(res, errors) {

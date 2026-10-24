@@ -31,10 +31,27 @@ function h(s) {
   return String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
 }
 
-// Where the pages live. Set GFS_PAGE_BASE to a GFS address before codes are
-// printed, so TOJ's own domain stays off Pylon's signs.
+// Where the pages live: GFS_PAGE_BASE, a Ground Floor Sports or Pylon address
+// pointed at the app. There's no fallback. A printed code can't be recalled,
+// so until a non-TOJ address is set no code is made at all, and TOJ's own
+// domain never lands on Pylon's signs. The page itself answers on any host.
+const TOJ_HOST = /toj|trail-?of-?joy|onrender\.com$|vercel\.app$/i;
+function pageBaseProblem() {
+  const raw = String(process.env.GFS_PAGE_BASE || "").trim();
+  if (!raw) return "not_set";
+  let u;
+  try {
+    u = new URL(raw);
+  } catch (_) {
+    return "not_a_link";
+  }
+  if (!["https:", "http:"].includes(u.protocol) || u.username || u.password || (u.pathname && u.pathname !== "/") || u.search || u.hash) return "not_an_address";
+  if (u.protocol !== "https:" && !/^(localhost|127\.0\.0\.1)$/.test(u.hostname)) return "not_https";
+  if (TOJ_HOST.test(u.hostname)) return "toj_address";
+  return null;
+}
 function pageBase() {
-  return String(process.env.GFS_PAGE_BASE || process.env.CREATOR_PAGE_BASE || "https://tojcampaign.com").trim().replace(/\/+$/, "");
+  return pageBaseProblem() ? null : new URL(String(process.env.GFS_PAGE_BASE).trim()).origin;
 }
 function helpEmail() {
   const e = String(process.env.GFS_HELP_EMAIL || "").trim().toLowerCase();
@@ -115,9 +132,11 @@ function sourceFromQuery(q, ev) {
   return { kind: "stop", source: "stop" };
 }
 
-// The page a code opens.
+// The page a code opens, or null while there's no address to put on it.
 function stopUrl(ev, src) {
-  const base = `${pageBase()}/e/${encodeURIComponent(ev.code)}`;
+  const origin = pageBase();
+  if (!origin) return null;
+  const base = `${origin}/e/${encodeURIComponent(ev.code)}`;
   if (src && src.kind === "placement") return `${base}?s=${encodeURIComponent(src.placement)}`;
   if (src && src.kind === "creator") return `${base}?c=${encodeURIComponent(src.creator)}`;
   return base;
@@ -133,8 +152,15 @@ function tagged(url, ev, src) {
   return u.toString();
 }
 
+// The first name to show for a creator. Handles "Lopez, Ana" and a leading
+// title ("Dr. Ana Lopez", "Coach Ana Lopez").
+const TITLES = /^(dr|mr|mrs|ms|mx|coach|prof|rev|sir)\.?$/i;
 function firstName(name) {
-  return String(name || "").trim().split(/\s+/)[0].replace(/[^\p{L}\p{M}'’-]/gu, "").slice(0, 30);
+  let s = String(name || "").trim();
+  if (s.includes(",")) s = s.slice(s.indexOf(",") + 1).trim();
+  const words = s.split(/\s+/).filter(Boolean);
+  while (words.length > 1 && TITLES.test(words[0])) words.shift();
+  return (words[0] || "").replace(/[^\p{L}\p{M}'’-]/gu, "").slice(0, 30);
 }
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 function dateSpan(ev) {
@@ -161,15 +187,17 @@ function mailto(email, subject, body) {
   return `mailto:${email}?subject=${encodeURIComponent(subject)}${body ? "&body=" + encodeURIComponent(body) : ""}`;
 }
 
-const FONTS = "https://fonts.googleapis.com/css2?family=Anton&family=Inter:wght@400;500;600;700;800&display=swap";
+// System fonts only: no font host learns who opened the page.
+const DISPLAY = `"Avenir Next Condensed","Helvetica Neue Condensed",Impact,"Arial Narrow",sans-serif`;
+const TEXT = `system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif`;
 const BASE_CSS = `:root{--black:#0A0A0A;--surface:#161616;--line:#2A2A2A;--white:#FFFFFF;--muted:#B5B5B5;--yellow:#F4C82E}
 *{box-sizing:border-box;margin:0;padding:0}
-body{background:var(--black);color:var(--white);font-family:Inter,system-ui,-apple-system,sans-serif;font-size:16px;line-height:1.5;-webkit-text-size-adjust:100%}
+body{background:var(--black);color:var(--white);font-family:${TEXT};font-size:16px;line-height:1.5;-webkit-text-size-adjust:100%}
 a{color:inherit}
 .wrap{max-width:560px;margin:0 auto;padding:28px 16px 48px}
-.mark{font-family:Anton,Impact,sans-serif;font-size:28px;letter-spacing:.06em;color:var(--yellow);text-transform:uppercase;line-height:1}
+.mark{font-family:${DISPLAY};font-weight:800;font-size:28px;letter-spacing:.06em;color:var(--yellow);text-transform:uppercase;line-height:1}
 .kicker{margin-top:22px;font-size:13px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
-h1{font-family:Anton,Impact,sans-serif;font-weight:400;font-size:44px;line-height:1.02;text-transform:uppercase;margin-top:6px}
+h1{font-family:${DISPLAY};font-weight:800;font-size:44px;line-height:1.02;text-transform:uppercase;margin-top:6px;overflow-wrap:anywhere}
 .where{margin-top:8px;color:var(--muted);font-size:15px}
 .lede{margin-top:18px;font-size:16px}
 .btn{display:block;margin-top:18px;padding:16px 18px;border-radius:12px;background:var(--yellow);color:var(--black);font-weight:800;font-size:17px;text-align:center;text-decoration:none}
@@ -198,7 +226,7 @@ function renderStopPage(ev, opts = {}) {
   const help = [
     `<a href="${h(mailto(email, `Footage help · ${ev.name}`, "Team:\nJersey number:\nWhat you need:\n"))}">Email Ground Floor Sports<span>Tell us the team and jersey number, and what you're looking for.</span></a>`,
     opts.phone ? `<a href="sms:${h(opts.phone)}">Text the on-site team<span>${h(phoneWords(opts.phone))}</span></a>` : "",
-    cr ? `<a href="${h(opts.creatorHref)}">Reach ${h(cr.first)} on SportsClippers<span>${h(cr.first)} filmed at this stop.</span></a>` : "",
+    cr ? `<a href="${h(opts.creatorHref)}">Reach ${h(cr.first)} on SportsClippers<span>${h(cr.first)} is on this stop's crew.</span></a>` : "",
   ].filter(Boolean).join("");
   const footage = cancelled
     ? `<p class="note">This stop was cancelled. If you have footage from it or a question, email Ground Floor Sports below.</p>`
@@ -208,22 +236,21 @@ function renderStopPage(ev, opts = {}) {
   return `<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="robots" content="noindex, nofollow">
 <title>${h(ev.name)} · Find your footage</title>
-<link rel="stylesheet" href="${FONTS}">
 <style nonce="${n}">${BASE_CSS}</style></head><body><main class="wrap">
 <p class="mark">Pylon</p>
 <p class="kicker">${h(ev.series || "Pylon")} · ${h(dateSpan(ev))}</p>
 <h1>${h(titleOf(ev))}</h1>
 <p class="where">${h(placeWords(ev))}</p>
-<p class="lede">Ground Floor Sports films this stop for Pylon. Clips are sold on SportsClippers, Pylon's official storefront.</p>
+<p class="lede">Ground Floor Sports films this stop for Pylon. Clips are sold on SportsClippers.</p>
 ${footage}
-${cr ? `<section class="card"><h2>Filmed by ${h(cr.first)}</h2><p>${h(cr.first)} is one of the Ground Floor Sports creators at this stop.</p><a class="btn ghost" href="${h(opts.creatorHref)}">See ${h(cr.first)}'s SportsClippers page</a></section>` : ""}
+${cr ? `<section class="card"><h2>${h(cr.first)} is on the crew</h2><p>${h(cr.first)} films this stop for Ground Floor Sports.</p><a class="btn ghost" href="${h(opts.creatorHref)}">See ${h(cr.first)}'s SportsClippers page</a></section>` : ""}
 <section class="card"><h2>How clips reach you</h2><ul>
-<li>Clips go up after each game is filmed, tagged by jersey number and checked.</li>
+<li>Clips go up after the event, once they're tagged by jersey number and checked.</li>
 <li>An athlete's clips are listed only with the permissions a parent gave at registration.</li>
 <li>Clips of an athlete under 13, or of one whose parent didn't choose public display, aren't on the public storefront. They reach the family by a private link.</li>
 </ul></section>
 <section class="card"><h2>Need help?</h2><div class="links">${help}</div></section>
-<section class="card"><h2>Want a clip taken down?</h2><p>Email us the team and jersey number, and which clip. Clips come down within 72 hours of a request, and sooner for a safety concern.</p>
+<section class="card"><h2>Want a clip taken down?</h2><p>Email us the team and jersey number, and which clip, and we'll take it down. Tell us if it's a safety concern, and it comes first.</p>
 <div class="links"><a href="${h(mailto(email, `Takedown request · ${ev.name}`, "Team:\nJersey number:\nThe clip (a link or what it shows):\n"))}">Ask for a takedown<span>${h(email)}</span></a></div></section>
 <footer>Filmed by Ground Floor Sports for Pylon. Sales run on SportsClippers.</footer>
 </main></body></html>`;
@@ -234,7 +261,7 @@ function renderMissingPage(nonce) {
   const email = helpEmail();
   return `<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="robots" content="noindex, nofollow"><title>Pylon · Footage</title>
-<link rel="stylesheet" href="${FONTS}"><style nonce="${h(nonce || "")}">${BASE_CSS}</style></head><body><main class="wrap">
+<style nonce="${h(nonce || "")}">${BASE_CSS}</style></head><body><main class="wrap">
 <p class="mark">Pylon</p><h1>This page isn't here</h1>
 <p class="lede">Check the code you scanned, or email Ground Floor Sports and we'll point you to your stop's footage.</p>
 <div class="links top"><a href="${h(mailto(email, "Footage help"))}">Email Ground Floor Sports<span>${h(email)}</span></a></div>
@@ -247,18 +274,20 @@ function renderPrintCard(ev, opts = {}) {
   const n = h(opts.nonce || "");
   const creator = opts.kind === "creator" && opts.creatorFirst;
   const short = String(opts.url || "").replace(/^https?:\/\//, "");
+  // Printed at the exact page size with no margins, so the browser adds no
+  // header or footer (it would print this page's own address) and the sign
+  // stays on one page.
   const css = creator
-    ? `.sheet{width:min(4in,100%);min-height:6in;padding:26px 22px}.qr{width:min(2.7in,100%)}.big{font-size:30px}`
-    : `.sheet{width:min(8.5in,100%);min-height:11in;padding:56px 48px}.qr{width:min(5.2in,100%)}.big{font-size:clamp(34px,10vw,64px)}@media print{.sheet{padding:56px 48px}}@media screen and (max-width:600px){.sheet{min-height:0;padding:28px 18px}}`;
+    ? `@page{size:4in 6in;margin:0}.sheet{width:min(4in,100%);min-height:6in;padding:26px 22px}.qr{width:min(2.7in,100%)}.big{font-size:30px}@media print{.sheet{width:4in;height:6in;min-height:0;overflow:hidden}}`
+    : `@page{size:letter;margin:0}.sheet{width:min(8.5in,100%);min-height:11in;padding:56px 48px}.qr{width:min(5.2in,100%)}.big{font-size:clamp(34px,10vw,64px)}@media print{.sheet{width:8.5in;height:11in;min-height:0;overflow:hidden;padding:56px 48px}}@media screen and (max-width:600px){.sheet{min-height:0;padding:28px 18px}}`;
   return `<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="robots" content="noindex, nofollow">
 <title>${h(ev.name)} · ${h(creator ? "Card for " + opts.creatorFirst : opts.label || "Sign")}</title>
-<link rel="stylesheet" href="${FONTS}">
-<style nonce="${n}">*{box-sizing:border-box;margin:0;padding:0}body{background:#ddd;font-family:Inter,Arial,sans-serif;color:#0A0A0A;padding:24px}
+<style nonce="${n}">*{box-sizing:border-box;margin:0;padding:0}body{background:#ddd;font-family:${TEXT};color:#0A0A0A;padding:24px}
 .sheet{margin:0 auto;background:#fff;text-align:center;border-top:14px solid #F4C82E;display:flex;flex-direction:column;align-items:center}
-.mark{font-family:Anton,Impact,sans-serif;font-size:26px;letter-spacing:.06em;text-transform:uppercase}
+.mark{font-family:${DISPLAY};font-weight:800;font-size:26px;letter-spacing:.06em;text-transform:uppercase}
 .ev{margin-top:8px;font-size:15px;font-weight:600}.when{font-size:13px;color:#444;margin-top:2px}
-.big{font-family:Anton,Impact,sans-serif;font-weight:400;text-transform:uppercase;line-height:1;margin-top:22px}
+.big{font-family:${DISPLAY};font-weight:800;text-transform:uppercase;line-height:1;margin-top:22px}
 .qr{margin:22px auto 0;aspect-ratio:1/1}.qr svg{display:block;width:100%;height:100%}
 .ask{margin-top:18px;font-size:15px;font-weight:600;max-width:5.5in}.url{margin-top:10px;font-size:12px;color:#444;word-break:break-all}
 .by{margin-top:14px;font-size:12px;color:#444}
@@ -282,6 +311,7 @@ module.exports = {
   HELP_EMAIL_DEFAULT,
   SC_URL,
   pageBase,
+  pageBaseProblem,
   helpEmail,
   sportsClippersUrl,
   phone,

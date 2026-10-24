@@ -12,9 +12,10 @@ const express = require("express");
 const session = require("express-session");
 
 process.env.ADMIN_EMAILS = "kyron@example.com";
-delete process.env.GFS_PAGE_BASE;
+process.env.GFS_PAGE_BASE = "https://pages.example.com";
 delete process.env.GFS_HELP_EMAIL;
-process.env.CREATOR_PAGE_BASE = "https://pages.example.com";
+// The Creator Club's address is TOJ's own; the stop page never falls back to it.
+process.env.CREATOR_PAGE_BASE = "https://tojcampaign.com";
 
 const { fakeSupabase } = require("./helpers/fake-supabase");
 const { setSupabase } = require("../utils/supabase");
@@ -94,6 +95,8 @@ const patch = (c, path, body) => c(path, { method: "PATCH", body });
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 const visitor = client("198.51.100.20");
 const textOf = (html) => html.replace(/<style[\s\S]*?<\/style>/g, "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ");
+// TOJ's names and marks, which never go on a Pylon surface.
+const TOJ_MARKS = /Subject Media|Subject Report|Trail of Joy|\bTOJ\b|tojcampaign|Kyron/i;
 
 test("link rules: SportsClippers only, numbers families can text, placement keys", () => {
   assert.deepEqual(GP.sportsClippersUrl("https://sportsclippers.com/pylon/mecca-2027"), { url: "https://sportsclippers.com/pylon/mecca-2027" });
@@ -118,6 +121,9 @@ test("link rules: SportsClippers only, numbers families can text, placement keys
   assert.equal(GP.dateSpan({ starts_on: "2027-02-27", ends_on: "2027-02-28" }), "Feb 27–28, 2027");
   assert.equal(GP.dateSpan({ starts_on: "2027-01-30", ends_on: "2027-02-01" }), "Jan 30 – Feb 1, 2027");
   assert.equal(GP.firstName("Ana María Lopez"), "Ana");
+  assert.equal(GP.firstName("Lopez, Ana"), "Ana", "a surname-first entry still shows the first name");
+  assert.equal(GP.firstName("Dr. Ana Lopez"), "Ana");
+  assert.equal(GP.firstName("Coach Ana"), "Ana");
   const t = new URL(GP.tagged("https://sportsclippers.com/pylon?ref=gfs", { code: "LasVegas2027" }, { kind: "placement", placement: "booth" }));
   assert.equal(t.searchParams.get("ref"), "gfs", "SportsClippers' own parameters stay");
   assert.equal(t.searchParams.get("utm_campaign"), "lasvegas2027");
@@ -161,9 +167,19 @@ test("creators: an adult's own SportsClippers page; a youth creator never gets o
   assert.equal(youth.status, 400);
   assert.deepEqual(youth.json.fields, ["youth_no_public_link"]);
   assert.equal((await patch(mw, `/api/gfs/creators/${people.yuri.id}`, { sportsclippers_url: "" })).status, 200, "clearing is fine");
-  const ok = await patch(mw, `/api/gfs/creators/${people.ben.id}`, { sportsclippers_url: "https://sportsclippers.com/ben" });
+  // Ben's screening is on file, so where his page sends families is Kyron's call.
+  const locked = await patch(mw, `/api/gfs/creators/${people.ben.id}`, { sportsclippers_url: "https://sportsclippers.com/someone-else" });
+  assert.equal(locked.status, 403);
+  assert.equal(locked.json.error, "identity_owner_only");
+  assert.equal((await patch(mw, `/api/gfs/creators/${people.ben.id}`, { sportsclippers_url: "", notes: "Saturday only" })).status, 200, "sending the unchanged (empty) link is fine");
+  const ok = await patch(kyron, `/api/gfs/creators/${people.ben.id}`, { sportsclippers_url: "https://sportsclippers.com/ben" });
   assert.equal(ok.status, 200);
   assert.equal(ok.json.creator.sportsclippers_url, "https://sportsclippers.com/ben");
+  assert.equal((await patch(mw, `/api/gfs/creators/${people.ben.id}`, { sportsclippers_url: "https://sportsclippers.com/ben" })).status, 200, "the same link again changes nothing");
+  // A director adding a creator who isn't screened yet can set it.
+  const fresh = await mw("/api/gfs/creators", { method: "POST", body: { name: "Cara New", region: "midwest", sportsclippers_url: "https://sportsclippers.com/cara" } });
+  assert.equal(fresh.status, 200, JSON.stringify(fresh.json));
+  assert.equal(fresh.json.creator.sportsclippers_url, "https://sportsclippers.com/cara");
   // Kyron moves Otto (on no crew) to youth: his public link goes with it.
   const moved = await patch(kyron, `/api/gfs/creators/${people.otto.id}`, { tier: "youth" });
   assert.equal(moved.status, 200, JSON.stringify(moved.json));
@@ -216,8 +232,11 @@ test("the codes: the stop, its placements, and each adult creator with a page; n
   assert.match(sign.text, /Find your footage/);
   assert.ok(sign.text.includes(`pages.example.com/e/${ev.code}`));
   for (const html of [card.text, sign.text]) {
-    assert.ok(!/Subject Media|Subject Report|Trail of Joy|\bTOJ\b|Kyron/i.test(textOf(html)), "no TOJ or Subject marks on a Pylon surface");
+    assert.ok(!TOJ_MARKS.test(html), "no TOJ or Subject marks, or TOJ's domain, anywhere on a card");
+    assert.match(html, /@page\{size:(letter|4in 6in);margin:0\}/, "printed at the page's own size, with no browser header or footer");
+    assert.ok(!/googleapis|gstatic/.test(html), "no font host");
   }
+  assert.equal((await mw(`/api/gfs/events/${evId}/qr/stop.SVG`)).headers.get("content-type"), "image/svg+xml; charset=utf-8", "an upper-case extension still gets the SVG");
 });
 
 test("the stop page: footage on SportsClippers, the creator, help; nothing about an athlete", async () => {
@@ -227,6 +246,7 @@ test("the stop page: footage on SportsClippers, the creator, help; nothing about
   assert.equal(page.status, 200);
   const csp = page.headers.get("content-security-policy");
   assert.match(csp, /script-src 'none'/);
+  assert.ok(!/googleapis|gstatic/.test(csp + page.text), "no font host learns who opened the page");
   assert.match(csp, /frame-ancestors 'none'/);
   assert.equal(page.headers.get("cache-control"), "no-store");
   assert.match(page.text, /noindex/);
@@ -237,22 +257,24 @@ test("the stop page: footage on SportsClippers, the creator, help; nothing about
   assert.match(textOf(page.text), /Ask for a takedown/);
   const words = textOf(page.text);
   assert.match(words, /Legacy Tour · Indianapolis/);
-  for (const leak of ["ST-9001", "Indy Elite", "Ana", "Ben", "Yuri", "tojcampaign", "Trail of Joy", "Subject Media", "Kyron"]) assert.ok(!words.includes(leak), leak);
-  assert.ok(!/\bTOJ\b/.test(words));
+  for (const leak of ["ST-9001", "Indy Elite", "Ana", "Ben", "Yuri"]) assert.ok(!words.includes(leak), leak);
+  assert.ok(!TOJ_MARKS.test(page.text), "no TOJ names, marks or domain anywhere in the page");
   await wait(20);
   assert.equal(hits("scan", "s:booth"), 1, "the scan counts against the booth code");
 
   const anaPage = await visitor(`/e/${ev.code}?c=ANA01`);
-  assert.match(textOf(anaPage.text), /Filmed by Ana/);
+  assert.match(textOf(anaPage.text), /Ana is on the crew/);
   assert.ok(!anaPage.text.includes("Lopez"));
   assert.ok(anaPage.text.includes(`href="/e/${ev.code}/go/creator/ANA01"`));
   assert.ok(anaPage.text.includes(`href="/e/${ev.code}/go/footage?c=ANA01"`));
-  for (const c of ["YURI1", "PAUL1", "OTTO1", "NOPE9", "<script>"]) {
+  // Ben is only invited so far: his code works, and the page shows him once he's confirmed.
+  for (const c of ["YURI1", "PAUL1", "OTTO1", "BEN01", "NOPE9", "<script>"]) {
     const p = await visitor(`/e/${ev.code}?c=${encodeURIComponent(c)}`);
     assert.equal(p.status, 200);
-    assert.ok(!/<h2>Filmed by/.test(p.text), `${c}: no creator section`);
-    assert.ok(!p.text.includes("Yuri") && !p.text.includes("<script>"));
+    assert.ok(!/is on the crew/.test(p.text), `${c}: no creator section`);
+    assert.ok(!p.text.includes("Yuri") && !p.text.includes("Ben") && !p.text.includes("<script>"));
   }
+  assert.equal((await mw(`/api/gfs/events/${evId}/qr`)).json.codes.find((c) => c.key === "c-BEN01").on_page, false);
   await wait(20);
   assert.equal(hits("scan", "c:ANA01"), 1);
   assert.equal(hits("scan", "c:YURI1"), 0, "a youth creator's code counts as the stop's");
@@ -274,7 +296,7 @@ test("counted links go only to the stored SportsClippers pages, tagged with the 
   assert.equal(cr.status, 302);
   assert.equal(new URL(cr.headers.get("location")).origin + new URL(cr.headers.get("location")).pathname, "https://sportsclippers.com/ana-films");
   assert.equal(new URL(cr.headers.get("location")).searchParams.get("utm_content"), "c-ana01");
-  for (const c of ["YURI1", "PAUL1", "OTTO1"]) {
+  for (const c of ["YURI1", "PAUL1", "OTTO1", "BEN01"]) {
     const back = await visitor(`/e/${ev.code}/go/creator/${c}`, { redirect: "manual" });
     assert.equal(back.headers.get("location"), `/e/${ev.code}`, `${c} goes back to the page`);
   }
@@ -301,8 +323,35 @@ test("a cancelled stop keeps only help; counting is capped per visitor", async (
 
   const loud = client("192.0.2.77");
   const before = hits("scan", "stop");
-  for (let i = 0; i < 70; i++) await loud(`/e/${ev.code}`);
+  for (let i = 0; i < 310; i++) await loud(`/e/${ev.code}`);
   await wait(50);
-  assert.equal(hits("scan", "stop") - before, 60, "one address counts at most 60 a minute");
+  assert.equal(hits("scan", "stop") - before, 300, "one address counts at most 300 a minute");
   assert.equal((await loud(`/e/${ev.code}`)).status, 200, "the page itself still opens");
+});
+
+test("no codes until there's a Ground Floor Sports or Pylon address to put on them", async () => {
+  const run = async (base) => {
+    if (base === undefined) delete process.env.GFS_PAGE_BASE;
+    else process.env.GFS_PAGE_BASE = base;
+    return [await mw(`/api/gfs/events/${evId}/qr`), await mw(`/api/gfs/events/${evId}/qr/stop.png`), await mw(`/api/gfs/events/${evId}/qr/stop/card`)];
+  };
+  try {
+    for (const [base, problem] of [[undefined, "not_set"], ["https://tojcampaign.com", "toj_address"], ["https://www.tojcampaign.com", "toj_address"], ["https://toj-csv-app.onrender.com", "toj_address"], ["http://media.example.com", "not_https"], ["https://media.example.com/e", "not_an_address"]]) {
+      const [list, png, card] = await run(base);
+      assert.equal(list.status, 200, "links and counts still show");
+      assert.equal(list.json.page.address_problem, problem, String(base));
+      assert.deepEqual(list.json.codes, []);
+      assert.equal(list.json.page.url, null);
+      assert.equal(png.status, 503);
+      assert.equal(png.json.error, "gfs_qr_no_address");
+      assert.equal(card.status, 503);
+    }
+    const page = await visitor(`/e/${ev.code}`);
+    assert.equal(page.status, 200, "the page itself answers on any host, so codes printed later still work");
+  } finally {
+    process.env.GFS_PAGE_BASE = "https://pages.example.com";
+  }
+  const [list] = await run("https://pages.example.com");
+  assert.equal(list.json.page.address_problem, null);
+  assert.equal(list.json.codes[0].url, `https://pages.example.com/e/${ev.code}`);
 });

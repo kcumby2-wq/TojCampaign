@@ -27,14 +27,17 @@ alter table public.gfs_events add constraint gfs_events_sportsclippers_url_chk
 alter table public.gfs_events drop constraint if exists gfs_events_help_phone_chk;
 alter table public.gfs_events add constraint gfs_events_help_phone_chk
   check (help_phone is null or help_phone ~ '^\+[1-9][0-9]{7,14}$');
--- Placement keys: lowercase words joined by hyphens, 2 to 24 characters, at
--- most 20 of them.
+-- Placement keys: lowercase letters, digits and hyphens, 2 to 24 characters
+-- each, at most 20 of them. Checked one by one.
+create or replace function public.gfs_qr_sources_ok(s text[]) returns boolean
+language sql immutable set search_path = '' as $$
+  select cardinality(s) <= 20
+     and coalesce(bool_and(x is not null and x ~ '^[a-z0-9][a-z0-9-]{1,23}$'), true)
+    from unnest(s) as u(x)
+$$;
 alter table public.gfs_events drop constraint if exists gfs_events_qr_sources_chk;
 alter table public.gfs_events add constraint gfs_events_qr_sources_chk
-  check (cardinality(qr_sources) <= 20
-         and array_position(qr_sources, null) is null
-         and array_position(qr_sources, '') is null
-         and array_to_string(qr_sources, ',') ~ '^([a-z0-9][a-z0-9-]{1,23}(,|$))*$');
+  check (public.gfs_qr_sources_ok(qr_sources));
 
 -- ── A creator's own SportsClippers page ──────────────────────────────────
 alter table public.gfs_creators add column if not exists sportsclippers_url text;
@@ -68,11 +71,16 @@ language sql volatile set search_path = '' as $$
 $$;
 -- Callable by the server only (Supabase grants new functions to its API roles).
 revoke all on function public.gfs_count_hit(uuid, text, text) from public;
+revoke all on function public.gfs_qr_sources_ok(text[]) from public;
 do $$
+declare
+  f text;
 begin
-  if exists (select 1 from pg_roles where rolname = 'anon') then revoke all on function public.gfs_count_hit(uuid, text, text) from anon; end if;
-  if exists (select 1 from pg_roles where rolname = 'authenticated') then revoke all on function public.gfs_count_hit(uuid, text, text) from authenticated; end if;
-  if exists (select 1 from pg_roles where rolname = 'service_role') then grant execute on function public.gfs_count_hit(uuid, text, text) to service_role; end if;
+  foreach f in array array['public.gfs_count_hit(uuid, text, text)', 'public.gfs_qr_sources_ok(text[])'] loop
+    if exists (select 1 from pg_roles where rolname = 'anon') then execute format('revoke all on function %s from anon', f); end if;
+    if exists (select 1 from pg_roles where rolname = 'authenticated') then execute format('revoke all on function %s from authenticated', f); end if;
+    if exists (select 1 from pg_roles where rolname = 'service_role') then execute format('grant execute on function %s to service_role', f); end if;
+  end loop;
 end $$;
 
 alter table public.gfs_qr_hits enable row level security;

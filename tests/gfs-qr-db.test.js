@@ -22,7 +22,7 @@ if (!URL_) {
 }
 
 process.env.ADMIN_EMAILS = "kyron@example.com";
-process.env.CREATOR_PAGE_BASE = "https://pages.example.com";
+process.env.GFS_PAGE_BASE = "https://pages.example.com";
 const { makeSchema, pgSupabase } = require("./helpers/pg-supabase");
 const { setSupabase } = require("../utils/supabase");
 
@@ -66,6 +66,48 @@ after(async () => {
   if (pool) await pool.end();
 });
 
+// A request helper for the app above, signed in as Kyron.
+async function signedIn() {
+  let cookie = "";
+  const c = async (p, { method = "GET", body, redirect = "follow" } = {}) => {
+    const r = await fetch(base + p, { method, redirect, headers: { ...(body ? { "content-type": "application/json" } : {}), ...(cookie ? { cookie } : {}), "x-forwarded-for": "203.0.113.60" }, body: body ? JSON.stringify(body) : undefined });
+    const sc = r.headers.get("set-cookie");
+    if (sc) cookie = sc.split(";")[0];
+    const text = await r.text();
+    let json = null;
+    try { json = JSON.parse(text); } catch {}
+    return { status: r.status, json, text, headers: r.headers };
+  };
+  await c("/test-login", { method: "POST", body: { email: "kyron@example.com", role: "admin" } });
+  return c;
+}
+
+test("before 025 runs: creators and events keep working, and the new parts say so", async () => {
+  const old = await makeSchema(URL_, "gfs_qr_pre025_test", ["019_team.sql", "020_native_push.sql", "024_gfs_events.sql"]);
+  setSupabase(pgSupabase(old, "gfs_qr_pre025_test"));
+  try {
+    const c = await signedIn();
+    // The creator form's body, with the link left blank.
+    const add = await c("/api/gfs/creators", { method: "POST", body: { name: "Pre Creator", email: "pre@example.com", region: "south_central", home_city: "", notes: "", sportsclippers_url: null, contract_signed_on: D(-10), background_check_on: D(-10), safety_training_on: D(-10), tier: "adult", shadow_events: 0, lead_scout: false } });
+    assert.equal(add.status, 200, JSON.stringify(add.json));
+    const edit = await c(`/api/gfs/creators/${add.json.creator.id}`, { method: "PATCH", body: { name: "Pre Creator", home_city: "Waco", sportsclippers_url: "" } });
+    assert.equal(edit.status, 200, JSON.stringify(edit.json));
+    const e = await c("/api/gfs/events", { method: "POST", body: { name: "Pre Event", size: "one_day", region: "south_central", city: "Waco", state: "TX", starts_on: D(40) } });
+    assert.equal(e.status, 200, JSON.stringify(e.json));
+    const link = await c(`/api/gfs/events/${e.json.event.id}`, { method: "PATCH", body: { sportsclippers_url: "https://sportsclippers.com/pylon/waco" } });
+    assert.equal(link.status, 503);
+    assert.equal(link.json.error, "gfs_qr_not_set_up");
+    const qr = await c(`/api/gfs/events/${e.json.event.id}/qr`);
+    assert.equal(qr.status, 200, JSON.stringify(qr.json));
+    assert.equal(qr.json.counts_ready, false);
+    assert.equal((await c(`/e/${e.json.event.code}`)).status, 404, "the page waits for the migration");
+  } finally {
+    setSupabase(pgSupabase(pool, S));
+    await old.query("drop schema gfs_qr_pre025_test cascade");
+    await old.end();
+  }
+});
+
 test("025 runs twice, and the stop's links hold to its rules", async () => {
   const sql = fs.readFileSync(path.join(__dirname, "..", "db", "migrations", "025_gfs_qr.sql"), "utf8").replace(/public\./g, `${S}.`);
   await pool.query(sql);
@@ -77,7 +119,7 @@ test("025 runs twice, and the stop's links hold to its rules", async () => {
   await set("help_phone", "+15552345678");
   for (const bad of ["5552345678", "+0123", "(555) 234-5678"]) await refused(`update gfs_events set help_phone = $1 where id = $2`, [bad, ev.id], /help_phone_chk/);
   await set("qr_sources", ["field-3-sign", "vip-tent"]);
-  for (const bad of [["Field-3"], ["x"], [""], ["ok-one", null], Array.from({ length: 21 }, (_, i) => "spot-" + i), ["a".repeat(25)]]) {
+  for (const bad of [["Field-3"], ["x"], [""], ["ok-one", null], ["ab,cd"], ["ok-1,"], ["ok-1", "bad key"], Array.from({ length: 21 }, (_, i) => "spot-" + i), ["a".repeat(25)]]) {
     await refused(`update gfs_events set qr_sources = $1 where id = $2`, [bad, ev.id], /qr_sources_chk/);
   }
 });
@@ -128,7 +170,7 @@ test("the routes on Postgres: links saved, the page counted, the counts read bac
   await q(`insert into gfs_crew (event_id, creator_id, role, status, assigned_by) values ($1, $2, 'lead', 'confirmed', 'x')`, [ev.id, adult.id]);
   const page = await c(`/e/Dallas2027?c=MAYA1`);
   assert.equal(page.status, 200);
-  assert.match(page.text, /<h2>Filmed by Maya<\/h2>/);
+  assert.match(page.text, /<h2>Maya is on the crew<\/h2>/);
   assert.ok(!page.text.includes("Brooks"));
   const go = await c(`/e/Dallas2027/go/footage?s=team-tent`, { redirect: "manual" });
   assert.equal(go.status, 302);
