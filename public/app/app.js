@@ -11,6 +11,7 @@
  *   #team, #invite    people, roles, invites (Owner)
  *   #join/<token>     accept an invite; #signin
  *   #creators …       the Creator Club tool (creators.js registers its screens)
+ *   #events …         Ground Floor Sports · Pylon events (gfs.js registers its screens)
  *
  * Photos and video stills go to the Brief Writer for one run and are never
  * stored. File names never leave the phone.
@@ -76,6 +77,8 @@
     owner_account: "The owner account can't be deleted from the app.",
     supabase_unavailable: "The server can't reach its database right now.",
     too_many_tries: "Too many tries. Wait a few minutes.",
+    regions_required: "Pick at least one region for a Regional Director.",
+    gfs_not_set_up: "Pylon events aren't set up on the server yet.",
   };
   function friendly(code) { return code ? FRIENDLY[code] || String(code).replace(/_/g, " ") : ""; }
 
@@ -129,6 +132,8 @@
     question: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M9.6 9.3a2.5 2.5 0 1 1 3.5 2.3c-.7.3-1.1.9-1.1 1.6v.4"/><path d="M12 16.8h.01"/></svg>',
     share: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 15V3M8 7l4-4 4 4"/><path d="M6 11H5v10h14V11h-1"/></svg>',
     out: '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M14 4h6v6M20 4l-9 9"/><path d="M18 14v6H4V6h6"/></svg>',
+    cal: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="5" width="17" height="15.5" rx="2"/><path d="M3.5 10h17M8 3v4M16 3v4"/></svg>',
+    desk: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="13" rx="2"/><path d="M8 21h8M12 17v4"/></svg>',
   };
 
   function backBtn(href, label) { return '<a class="back" href="' + h(href) + '">' + I.back + h(label) + "</a>"; }
@@ -141,13 +146,19 @@
     function t(key, href, label, ico) {
       return '<a href="' + href + '"' + (active === key ? ' aria-current="page"' : "") + ">" + ico + "<span>" + label + "</span></a>";
     }
+    // Pylon events people get an Events tab; Tools moves into Team when
+    // Studio takes its place.
+    var gfs = hasTool("gfs"), studioTool = hasTool("studio");
+    var plus = atLeast("member") && studioTool ? '<a href="#new" class="plus" aria-label="New idea"><span class="p">' + I.plus + "</span></a>" :
+      atLeast("member") && gfs ? '<a href="#gfs-new" class="plus" aria-label="New event"><span class="p">' + I.plus + "</span></a>" : '<span aria-hidden="true"></span>';
     tabsEl.innerHTML =
       t("today", "#today", "Today", I.home) +
-      t("studio", "#studio", "Studio", I.layers) +
-      (atLeast("member") ? '<a href="#new" class="plus" aria-label="New idea"><span class="p">' + I.plus + "</span></a>" : '<span aria-hidden="true"></span>') +
-      t("tools", "#tools", "Tools", I.grid) +
+      (gfs ? t("events", "#events", "Events", I.cal) : t("studio", "#studio", "Studio", I.layers)) +
+      plus +
+      (gfs && studioTool ? t("studio", "#studio", "Studio", I.layers) : t("tools", "#tools", "Tools", I.grid)) +
       t("team", "#team", "Team", I.people);
   }
+  function toolsInTabs() { return !(hasTool("gfs") && hasTool("studio")); }
 
   // ── Router ───────────────────────────────────────────────────────────
   var PUBLIC = { join: 1, signin: 1 };
@@ -169,6 +180,7 @@
     }
     var screens = Object.assign({ today: today, studio: studio, kit: kit, "new": newIdea, brief: brief, run: run, review: review, tools: tools, tool: tool, team: team, invite: invite, join: join, signin: signin }, window.TOJScreens || {});
     var fn = screens[name] || today;
+    app.classList.remove("wide");
     window.scrollTo(0, 0);
     try { await fn(arg); } catch (e) { if (e.stale || my !== gen) return; show(null, '<div class="screen"><h1 class="title sm">Something went wrong</h1><p class="body err">' + h(e.message) + '</p><a class="btn ghost" href="#today">Back to Today</a></div>'); }
   }
@@ -206,6 +218,30 @@
     updated_os_systems: "updated the systems for",
     generated_os_brain: "generated the operating brain for",
     os_running: "handed off",
+    gfs_event_created: "added the event",
+    gfs_event_changed: "changed the event",
+    gfs_crew_added: "added to the crew for",
+    gfs_crew_confirmed: "confirmed crew for",
+    gfs_crew_declined: "marked a decline for",
+    gfs_crew_removed: "took someone off the crew for",
+    gfs_roster_loaded: "loaded the roster for",
+    gfs_uploads_loaded: "loaded the upload log for",
+    gfs_tags_approved: "approved the tags for",
+    gfs_clips_edited: "marked clips edited for",
+    gfs_clips_approved: "approved clips for",
+    gfs_clips_delivered: "sent clips to families for",
+    gfs_clips_listed: "listed clips on SportsClippers for",
+    gfs_clips_removed: "took clips down for",
+    gfs_listings_exported: "exported the SportsClippers file for",
+    gfs_families_exported: "exported family links for",
+    gfs_submitted: "sent work to approval for",
+    gfs_approved: "cleared work for",
+    gfs_changes_asked: "asked for changes on",
+    gfs_delivered: "delivered for",
+    gfs_takedown_logged: "logged a takedown for",
+    gfs_takedown_step: "moved a takedown along for",
+    gfs_creator_added: "added a creator",
+    gfs_creator_changed: "updated a creator",
   };
   function actorName(a) {
     if (a.actor && state.me && a.actor === state.me.email) return "You";
@@ -216,11 +252,14 @@
     var me = state.me;
     var date = new Date().toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" });
     show("today", '<div class="screen"><div class="head"><div><p class="kicker">' + h(date) + '</p><h1 class="title">Today</h1></div><a class="avatar" href="#team" aria-label="Your team">' + h(initials({ name: me.team.name, email: me.email })) + '</a></div><div class="spin" aria-label="Loading"></div></div>');
-    var res = await settled([api("/api/studio-agents/kits"), api("/api/studio-agents/runs?limit=20"), api("/api/team/activity?limit=8"), hasTool("os") && atLeast("approver") ? api("/api/os") : Promise.resolve({ builds: [] })]);
+    var studioTool = hasTool("studio");
+    var none = function (k) { var o = {}; o[k] = []; return Promise.resolve(o); };
+    var res = await settled([studioTool ? api("/api/studio-agents/kits") : none("kits"), studioTool ? api("/api/studio-agents/runs?limit=20") : none("runs"), api("/api/team/activity?limit=8"), hasTool("os") && atLeast("approver") ? api("/api/os") : Promise.resolve({ builds: [] }), hasTool("gfs") && window.TOJGfs ? window.TOJGfs.todayParts() : Promise.resolve(null)]);
     var kits = res[0].status === "fulfilled" ? res[0].value.kits || [] : [];
     var runs = res[1].status === "fulfilled" ? res[1].value.runs || [] : [];
     var acts = res[2].status === "fulfilled" ? res[2].value.activity || [] : [];
     var osWaiting = res[3].status === "fulfilled" ? (res[3].value.builds || []).filter(function (b) { return b.waiting; }) : [];
+    var gfsParts = res[4].status === "fulfilled" ? res[4].value : null;
     state.kits = kits;
 
     var drafts = kits.filter(function (k) { return k.status === "draft"; });
@@ -229,11 +268,12 @@
     var running = runs.filter(function (r) { return r.status === "running"; });
     var approved = kits.find(function (k) { return k.status === "approved"; });
     try {
-      var waiting = atLeast("approver") ? drafts.length + osWaiting.length : 0;
+      var waiting = (atLeast("approver") ? drafts.length + osWaiting.length : 0) + (gfsParts ? gfsParts.count : 0);
       if (navigator.setAppBadge) { if (waiting) navigator.setAppBadge(waiting); else navigator.clearAppBadge(); }
     } catch (e) {}
 
-    var needs = "";
+    var needs = gfsParts ? gfsParts.needs : "";
+    var needCount = drafts.length + briefs.length + osWaiting.length + (gfsParts ? gfsParts.count : 0);
     drafts.forEach(function (d) {
       var canApprove = atLeast("approver");
       needs += '<article class="card"><div class="row"><div class="ico">' + I.layers + '</div><div class="grow"><div class="name">' + h(d.title) + " · draft v" + d.version + '</div><div class="sub">' + h(roleLabel(d.role)) + " · " + h(evalLabel(d.eval_status)) + "</div></div>" +
@@ -254,14 +294,15 @@
     }).join("");
 
     var tiles =
-      (atLeast("member") ? '<a class="tile" href="#new">' + I.plus + "New idea</a>" : "") +
+      (hasTool("gfs") ? '<a class="tile" href="#events">' + I.cal + "Events</a>" + '<a class="tile" href="#gfs-desk">' + I.desk + "Distribution desk</a>" : "") +
+      (atLeast("member") && studioTool ? '<a class="tile" href="#new">' + I.plus + "New idea</a>" : "") +
       (atLeast("member") && approved ? '<a class="tile" href="#new/gear">' + I.refresh + "Re-check gear</a>" : "") +
       (approved ? '<a class="tile" href="#kit/' + h(approved.id) + '">' + I.layers + "Open " + h(approved.title.replace(/ Milanote Kit$/, "")) + "</a>" : "") +
       (isOwner() ? '<a class="tile" href="#invite">' + I.invite + "Invite someone</a>" : '<a class="tile" href="#team">' + I.people + "The team</a>");
 
     var actRows = acts.slice(0, 6).map(function (a) {
       var what = ACT[a.action] || a.action.replace(/_/g, " ");
-      var subj = /kit|(^|_)os(_|$)/.test(a.action) && a.subject ? " " + a.subject : "";
+      var subj = /kit|(^|_)os(_|$)|^gfs_(?!creator)/.test(a.action) && a.subject ? " " + a.subject : "";
       return '<div class="row" style="padding:8px 0;border-bottom:1px solid #1E2C40"><span class="avatar" style="width:32px;height:32px;border-width:0;background:#22364F;font-size:12px">' + h(initials({ name: actorName(a) })) + '</span><div class="grow body" style="font-size:14px"><b style="color:var(--ink)">' + h(actorName(a)) + "</b> " + h(what + subj) + ' <span class="sub">· ' + h(ago(a.created_at)) + "</span></div></div>";
     }).join("");
 
@@ -269,7 +310,8 @@
       '<div class="screen">' +
       '<div class="head"><div><p class="kicker">' + h(date) + '</p><h1 class="title">Today</h1></div><a class="avatar" href="#team" aria-label="Your team">' + h(initials({ name: me.team.name, email: me.email })) + "</a></div>" +
       (installHint()) +
-      '<section class="sec"><h2 class="sec-h">Needs you' + (drafts.length + briefs.length + osWaiting.length ? " · " + (drafts.length + briefs.length + osWaiting.length) : "") + "</h2>" + (needs || '<p class="empty">Nothing waiting on you.</p>') + "</section>" +
+      '<section class="sec"><h2 class="sec-h">Needs you' + (needCount ? " · " + needCount : "") + "</h2>" + (needs || '<p class="empty">Nothing waiting on you.</p>') + "</section>" +
+      (gfsParts ? gfsParts.next : "") +
       (runRows ? '<section class="sec"><h2 class="sec-h">Running</h2><div class="list">' + runRows + "</div></section>" : "") +
       '<section class="sec"><h2 class="sec-h">Start something</h2><div class="tile-grid">' + tiles + "</div></section>" +
       (actRows ? '<section class="sec"><h2 class="sec-h">Team activity</h2><div>' + actRows + "</div></section>" : "") +
@@ -781,14 +823,20 @@
     return '<a class="li" href="#tool/' + key + '"><div class="ico" style="width:36px;height:36px;border-radius:9px;font:700 12px/1 var(--text);color:var(--bg);background:var(--gold)">' + h(t.name.split(/\s+/).map(function (w) { return w[0]; }).join("").slice(0, 2)) + '</div><div class="grow"><div class="name" style="font-size:15.5px">' + h(t.name) + "</div>" + (t.sub ? '<div class="sub">' + h(t.sub) + "</div>" : "") + "</div>" + I.chev + "</a>";
   }
   async function tools() {
-    var make = '<div class="list"><a class="li" href="#studio"><div class="ico" style="width:36px;height:36px;border-radius:9px">' + I.layers + '</div><div class="grow"><div class="name" style="font-size:15.5px">Studio Kits</div><div class="sub">Milanote kits, briefs, refreshes</div></div>' + I.chev + "</a>" +
-      (atLeast("member") ? '<a class="li" href="#new"><div class="ico" style="width:36px;height:36px;border-radius:9px">' + I.plus + '</div><div class="grow"><div class="name" style="font-size:15.5px">Brief Writer</div><div class="sub">An idea plus photos, videos, links</div></div>' + I.chev + "</a>" : "") +
-      toolRow("studio-console").replace('class="li"', 'class="li"') +
-      (hasTool("creators") ? '<a class="li" href="#creators"><div class="ico" style="width:36px;height:36px;border-radius:9px">' + I.people + '</div><div class="grow"><div class="name" style="font-size:15.5px">Creators</div><div class="sub">The Creator Club: pages, QR codes, event sales</div></div>' + I.chev + "</a>" : "") +
-      (hasTool("os") ? '<a class="li" href="#os"><div class="ico" style="width:36px;height:36px;border-radius:9px">' + I.grid + '</div><div class="grow"><div class="name" style="font-size:15.5px">Operating Systems</div><div class="sub">Door, Foundation Score, five pillars, transcript, systems</div></div>' + I.chev + "</a>" : "") + "</div>";
+    var row = function (href, ico, name, sub) { return '<a class="li" href="' + href + '"><div class="ico" style="width:36px;height:36px;border-radius:9px">' + ico + '</div><div class="grow"><div class="name" style="font-size:15.5px">' + h(name) + '</div><div class="sub">' + h(sub) + "</div></div>" + I.chev + "</a>"; };
+    var makeRows =
+      (hasTool("studio") ? row("#studio", I.layers, "Studio Kits", "Milanote kits, briefs, refreshes") + (atLeast("member") ? row("#new", I.plus, "Brief Writer", "An idea plus photos, videos, links") : "") + toolRow("studio-console") : "") +
+      (hasTool("creators") ? row("#creators", I.people, "Creators", "The Creator Club: pages, QR codes, event sales") : "") +
+      (hasTool("os") ? row("#os", I.grid, "Operating Systems", "Door, Foundation Score, five pillars, transcript, systems") : "");
+    var make = makeRows ? '<section class="sec"><h2 class="sec-h">Make</h2><div class="list">' + makeRows + "</div></section>" : "";
+    var events = hasTool("gfs") ? '<section class="sec"><h2 class="sec-h">Events and media</h2><div class="list">' +
+      '<a class="li" href="#gfs-desk"><div class="ico" style="width:36px;height:36px;border-radius:9px">' + I.desk + '</div><div class="grow"><div class="name" style="font-size:15.5px">Distribution desk</div><div class="sub">Every event: approve, deliver, list, take down</div></div>' + I.chev + "</a>" +
+      '<a class="li" href="#events"><div class="ico" style="width:36px;height:36px;border-radius:9px">' + I.cal + '</div><div class="grow"><div class="name" style="font-size:15.5px">Events</div><div class="sub">Plans, crews, the roster, live, tags</div></div>' + I.chev + "</a>" +
+      '<a class="li" href="#gfs-creators"><div class="ico" style="width:36px;height:36px;border-radius:9px">' + I.people + '</div><div class="grow"><div class="name" style="font-size:15.5px">Creator scorecards</div><div class="sub">The standard, by region</div></div>' + I.chev + "</a>" +
+      "</div></section>" : "";
     var rest = isOwner() ? TOOL_GROUPS.map(function (g) { return '<section class="sec"><h2 class="sec-h">' + h(g[0]) + '</h2><div class="list">' + g[1].map(toolRow).join("") + "</div></section>"; }).join("") :
       '<p class="empty">More tools show up here as they move into the app. The CRMs and anything holding minors\' data stay with Kyron.</p>';
-    show("tools", '<div class="screen"><div><h1 class="title">Tools</h1><p class="lede">' + (isOwner() ? "Everything from the Command Center, opened inside the app." : "What your role can open.") + '</p></div><section class="sec"><h2 class="sec-h">Make</h2>' + make + "</section>" + rest + "</div>");
+    show(toolsInTabs() ? "tools" : "team", '<div class="screen"><div><h1 class="title">Tools</h1><p class="lede">' + (isOwner() ? "Everything from the Command Center, opened inside the app." : "What your role can open.") + "</p></div>" + events + make + rest + "</div>");
   }
   async function tool(key) {
     var t, path;
@@ -809,6 +857,15 @@
     member: "Writes briefs, starts runs, reviews drafts. Can't approve.",
     viewer: "Opens approved kits and copies cards to Milanote.",
   };
+  // The same roles in Pylon events (gfs.js).
+  var GFS_ROLE = {
+    owner: ["Admin", "Every region. Screens creators, manages the team, clears anything."],
+    approver: ["Approver", "Every region. Clears what posts on Pylon's channels and what lists on SportsClippers."],
+    member: ["Regional Director", "Their region's events: crews and rotations, booth staffing, sponsor deals under $10K. Sends work to approval."],
+    viewer: ["Viewer", "Sees their region's events. Changes nothing."],
+  };
+  var REGION_NAMES = { west: "West", south_central: "South Central", northeast: "Northeast", southeast: "Southeast", midwest: "Midwest" };
+  function regionText(list) { return (list || []).map(function (r) { return REGION_NAMES[r] || r; }).join(", "); }
   async function team() {
     show("team", '<div class="screen"><h1 class="title">Team</h1><div class="spin"></div></div>');
     var res = await settled([api("/api/team"), isOwner() ? api("/api/team/invites") : Promise.resolve({ invites: [] })]);
@@ -818,7 +875,10 @@
     var rows = people.map(function (p) {
       var who = p.name || (p.email ? p.email : "Teammate");
       var editable = isOwner() && p.role !== "owner";
-      return '<div class="li" style="cursor:default"><span class="avatar" style="width:38px;height:38px;border-width:' + (p.you ? "1.5px" : "0") + ';background:#22364F;font-size:13px">' + h(initials(p)) + '</span><div class="grow"><div class="name" style="font-size:15.5px">' + h(who) + (p.you ? ' <span class="sub">(you)</span>' : "") + "</div>" + (p.name && p.email ? '<div class="sub">' + h(p.email) + "</div>" : "") + "</div>" +
+      var pylon = (p.tools || []).indexOf("gfs") >= 0 ? GFS_ROLE[p.role][0] + (p.role === "member" || p.role === "viewer" ? " · " + (regionText(p.regions) || "no region yet") : "") : "";
+      var sub = [p.name && p.email ? p.email : null, pylon || null].filter(Boolean).join(" · ");
+      var regionBtn = editable && (p.tools || []).indexOf("gfs") >= 0 && (p.role === "member" || p.role === "viewer") ? '<button type="button" class="back" data-regions="' + h(p.email) + '" data-current="' + h((p.regions || []).join(",")) + '" style="min-height:32px;font-size:14px" aria-label="Change regions for ' + h(who) + '">Change regions</button>' : "";
+      return '<div class="li" style="cursor:default;flex-wrap:wrap"><span class="avatar" style="width:38px;height:38px;border-width:' + (p.you ? "1.5px" : "0") + ';background:#22364F;font-size:13px">' + h(initials(p)) + '</span><div class="grow"><div class="name" style="font-size:15.5px">' + h(who) + (p.you ? ' <span class="sub">(you)</span>' : "") + "</div>" + (sub ? '<div class="sub">' + h(sub) + "</div>" : "") + regionBtn + "</div>" +
         (editable ? '<select class="input" data-role="' + h(p.email) + '" aria-label="Role for ' + h(who) + '" style="width:auto;min-height:38px;padding:4px 8px;font-size:14px">' + ["approver", "member", "viewer"].map(function (r) { return '<option value="' + r + '"' + (p.role === r ? " selected" : "") + ">" + r[0].toUpperCase() + r.slice(1) + "</option>"; }).join("") + '</select><button type="button" class="x" data-remove="' + h(p.email) + '" aria-label="Remove ' + h(who) + '">×</button>' :
           '<span class="badge' + (p.role === "owner" ? " gold" : "") + '">' + h(p.role[0].toUpperCase() + p.role.slice(1)) + "</span>") + "</div>";
     }).join("");
@@ -829,6 +889,9 @@
       '<div class="screen"><div class="head"><div><h1 class="title">Team</h1><p class="lede">' + people.length + " " + (people.length === 1 ? "person" : "people") + (invites.length ? " · " + invites.length + " invite" + (invites.length > 1 ? "s" : "") + " waiting" : "") + "</p></div>" +
       (isOwner() ? '<a class="btn small" href="#invite">' + I.plus.replace("<svg", '<svg width="16" height="16"') + "Invite</a>" : "") + "</div>" +
       '<div class="list">' + rows + inv + "</div>" +
+      (toolsInTabs() ? "" : '<a class="li list" href="#tools" style="border-radius:16px"><div class="ico" style="width:36px;height:36px;border-radius:9px">' + I.grid + '</div><div class="grow"><div class="name" style="font-size:15.5px">Tools</div><div class="sub">Everything from the Command Center</div></div>' + I.chev + "</a>") +
+      (hasTool("gfs") ? '<section class="card"><h2 class="sec-h">Pylon events</h2><div style="display:grid;grid-template-columns:120px 1fr;gap:10px 12px;font-size:14px;line-height:1.45;color:var(--ink-2)">' +
+        ["owner", "approver", "member", "viewer"].map(function (r) { return "<b style=\"color:var(--ink)\">" + GFS_ROLE[r][0] + "</b><span>" + h(GFS_ROLE[r][1]) + "</span>"; }).join("") + "</div></section>" : "") +
       '<section class="card"><h2 class="sec-h">What each role can do</h2><div style="display:grid;grid-template-columns:84px 1fr;gap:10px 12px;font-size:14px;line-height:1.45;color:var(--ink-2)">' +
       ["owner", "approver", "member", "viewer"].map(function (r) { return "<b style=\"color:var(--ink)\">" + r[0].toUpperCase() + r.slice(1) + "</b><span>" + h(ROLE_DESC[r]) + "</span>"; }).join("") + "</div></section>" +
       '<section class="sec"><h2 class="sec-h">You</h2><div class="list"><div class="li" style="cursor:default"><div class="grow"><div class="name" style="font-size:15.5px">' + h(me.team.name || me.email) + '</div><div class="sub">' + h(me.email) + " · " + h(me.team.role) + "</div></div></div>" +
@@ -874,6 +937,21 @@
     app.querySelectorAll("[data-cancel]").forEach(function (b) {
       b.addEventListener("click", async function () { try { await api("/api/team/invites/" + encodeURIComponent(b.dataset.cancel), { method: "DELETE" }); toast("Invite cancelled."); team(); } catch (e) { toast(e.message); } });
     });
+    app.querySelectorAll("[data-regions]").forEach(function (b) {
+      b.addEventListener("click", function () {
+        var li = b.closest(".li");
+        if (li.querySelector(".chips")) return;
+        var picked = (b.dataset.current || "").split(",").filter(Boolean);
+        li.insertAdjacentHTML("beforeend", '<div class="chips" style="margin:6px 0 0;padding:0;width:100%;flex-wrap:wrap">' + Object.keys(REGION_NAMES).map(function (r) { return '<button type="button" class="chip" data-r="' + r + '" aria-pressed="' + (picked.indexOf(r) >= 0) + '">' + REGION_NAMES[r] + "</button>"; }).join("") + "</div>");
+        li.querySelectorAll("[data-r]").forEach(function (c) {
+          c.addEventListener("click", async function () {
+            var on = c.getAttribute("aria-pressed") !== "true";
+            var next = picked.filter(function (x) { return x !== c.dataset.r; }).concat(on ? [c.dataset.r] : []);
+            try { await post("/api/team/members/" + encodeURIComponent(b.dataset.regions), { regions: next }, "PATCH"); picked = next; c.setAttribute("aria-pressed", String(on)); b.dataset.current = next.join(","); toast("Regions saved."); } catch (e) { toast(e.message); }
+          });
+        });
+      });
+    });
     app.querySelectorAll("[data-renew]").forEach(function (b) {
       b.addEventListener("click", async function () {
         try { var d = await post("/api/team/invites/" + encodeURIComponent(b.dataset.renew) + "/renew"); showLink(d.invite.email, d.path); } catch (e) { toast(e.message); }
@@ -883,28 +961,33 @@
 
   async function invite() {
     if (!isOwner()) return go("#team");
-    var role = "member", toolsPicked = { studio: true, creators: false, os: false };
+    var role = "member", toolsPicked = { studio: true, creators: false, os: false, gfs: false }, regions = {};
     function draw() {
       show(null,
         '<div class="screen"><div class="head"><a class="back" href="#team">' + I.back + 'Cancel</a></div><h1 class="title sm">Invite someone</h1>' +
         '<div class="field"><label class="label" for="em">Email</label><input class="input" id="em" type="email" inputmode="email" autocomplete="off" placeholder="name@example.com"></div>' +
         '<div class="field"><label class="label" for="nm">Name <small>(optional)</small></label><input class="input" id="nm" type="text" placeholder="What the team calls them"></div>' +
         '<div class="field"><span class="label">Role</span><div role="radiogroup" aria-label="Role" style="display:flex;flex-direction:column;gap:8px">' +
-        ["approver", "member", "viewer"].map(function (r) { return '<button type="button" role="radio" class="radio" data-r="' + r + '" aria-checked="' + (role === r) + '"><span class="r"></span><span><b style="display:block;font-size:15.5px">' + r[0].toUpperCase() + r.slice(1) + '</b><span class="sub">' + h(ROLE_DESC[r]) + "</span></span></button>"; }).join("") + "</div></div>" +
+        ["approver", "member", "viewer"].map(function (r) { return '<button type="button" role="radio" class="radio" data-r="' + r + '" aria-checked="' + (role === r) + '"><span class="r"></span><span><b style="display:block;font-size:15.5px">' + (toolsPicked.gfs ? GFS_ROLE[r][0] : r[0].toUpperCase() + r.slice(1)) + '</b><span class="sub">' + h(toolsPicked.gfs ? GFS_ROLE[r][1] : ROLE_DESC[r]) + "</span></span></button>"; }).join("") + "</div></div>" +
         '<div class="field"><span class="label">Can open</span>' +
-        [["studio", "Studio Kits", "Kits, briefs, refreshes"], ["creators", "Creators", "Creator pages, QR codes, event sales (members see buyers' contact details)"], ["os", "Operating Systems", "Client operating systems: scores, transcripts, systems (Authority stays with you)"]].map(function (x) { return '<label class="li" style="cursor:pointer;border-radius:14px;border:1px solid var(--line)"><input type="checkbox" class="switch" data-tool="' + x[0] + '"' + (toolsPicked[x[0]] ? " checked" : "") + '><div class="grow"><div class="name" style="font-size:15px">' + h(x[1]) + '</div><div class="sub">' + h(x[2]) + "</div></div></label>"; }).join("") +
+        [["gfs", "Pylon events", "Ground Floor Sports: events, crews, the roster's consent flags, clips, deliverables, takedowns"], ["studio", "Studio Kits", "Kits, briefs, refreshes"], ["creators", "Creators", "Creator pages, QR codes, event sales (members see buyers' contact details)"], ["os", "Operating Systems", "Client operating systems: scores, transcripts, systems (Authority stays with you)"]].map(function (x) { return '<label class="li" style="cursor:pointer;border-radius:14px;border:1px solid var(--line)"><input type="checkbox" class="switch" data-tool="' + x[0] + '"' + (toolsPicked[x[0]] ? " checked" : "") + '><div class="grow"><div class="name" style="font-size:15px">' + h(x[1]) + '</div><div class="sub">' + h(x[2]) + "</div></div></label>"; }).join("") +
         '<p class="sub" style="margin:0;display:flex;gap:6px;align-items:center"><span style="width:16px;height:16px;display:inline-flex;color:var(--faint)">' + I.lock + "</span>The CRMs and anything holding minors' data stay owner-only.</p></div>" +
+        (toolsPicked.gfs && role !== "approver" ? '<div class="field"><span class="label">Region</span><div class="chips" role="group" aria-label="Region" style="flex-wrap:wrap;margin:0;padding:0">' + Object.keys(REGION_NAMES).map(function (r) { return '<button type="button" class="chip" data-ireg="' + r + '" aria-pressed="' + !!regions[r] + '">' + REGION_NAMES[r] + "</button>"; }).join("") + '</div><span class="sub">' + (role === "member" ? "A Regional Director sees and runs only the events in these regions." : "They see only these regions.") + "</span></div>" : toolsPicked.gfs ? '<p class="sub" style="margin:0">Approvers see every region.</p>' : "") +
         '<p id="invMsg" class="body" role="status"></p></div>' +
         '<div class="dock"><div class="dock-inner"><button type="button" class="btn block" id="send">Make the invite link</button><span class="note">You send the link yourself, by text or email. It works once, for 7 days.</span></div></div>');
-      app.querySelectorAll("[data-r]").forEach(function (b) { b.addEventListener("click", function () { var em = document.getElementById("em").value, nm = document.getElementById("nm").value; role = b.dataset.r; draw(); document.getElementById("em").value = em; document.getElementById("nm").value = nm; }); });
-      app.querySelectorAll("[data-tool]").forEach(function (c) { c.addEventListener("change", function () { toolsPicked[c.dataset.tool] = c.checked; }); });
+      var keep = function (fn) { var em = document.getElementById("em").value, nm = document.getElementById("nm").value; fn(); draw(); document.getElementById("em").value = em; document.getElementById("nm").value = nm; };
+      app.querySelectorAll("[data-r]").forEach(function (b) { b.addEventListener("click", function () { keep(function () { role = b.dataset.r; }); }); });
+      app.querySelectorAll("[data-tool]").forEach(function (c) { c.addEventListener("change", function () { if (c.dataset.tool === "gfs") keep(function () { toolsPicked.gfs = c.checked; }); else toolsPicked[c.dataset.tool] = c.checked; }); });
+      app.querySelectorAll("[data-ireg]").forEach(function (c) { c.addEventListener("click", function () { regions[c.dataset.ireg] = !regions[c.dataset.ireg]; c.setAttribute("aria-pressed", String(!!regions[c.dataset.ireg])); }); });
       document.getElementById("send").addEventListener("click", async function () {
         var btn = this;
         btn.disabled = true;
         try {
           var picked = Object.keys(toolsPicked).filter(function (k) { return toolsPicked[k]; });
           if (!picked.length) { btn.disabled = false; document.getElementById("invMsg").innerHTML = '<span class="err">Pick at least one tool.</span>'; return; }
-          var d = await post("/api/team/invites", { email: document.getElementById("em").value.trim(), name: document.getElementById("nm").value.trim(), role: role, tools: picked });
+          var regs = Object.keys(regions).filter(function (k) { return regions[k]; });
+          if (toolsPicked.gfs && role !== "approver" && !regs.length) { btn.disabled = false; document.getElementById("invMsg").innerHTML = '<span class="err">Pick at least one region.</span>'; return; }
+          var d = await post("/api/team/invites", { email: document.getElementById("em").value.trim(), name: document.getElementById("nm").value.trim(), role: role, tools: picked, regions: regs });
           showLink(d.invite.email, d.path);
         } catch (e) { btn.disabled = false; document.getElementById("invMsg").innerHTML = '<span class="err">' + h(e.message) + "</span>"; }
       });
@@ -931,7 +1014,9 @@
     catch (e) { show(null, '<div class="screen" style="padding-top:40px;text-align:center;align-items:center">' + appIcon() + '<h1 class="title sm">This link doesn\'t work</h1><p class="lede">' + h(e.message) + '</p><a class="btn ghost" href="#signin">Sign in instead</a></div>'); return; }
     show(null,
       '<div class="screen" style="padding-top:20px">' +
-      '<div style="display:flex;flex-direction:column;align-items:center;text-align:center;gap:14px">' + appIcon() + '<h1 class="title sm">You\'re on the team</h1><p class="lede">' + h(d.invited_by) + " invited " + h(d.email) + " to TOJ as a <b style=\"color:var(--ink)\">" + h(d.role) + "</b>. " + h(ROLE_DESC[d.role] || "") + "</p></div>" +
+      '<div style="display:flex;flex-direction:column;align-items:center;text-align:center;gap:14px">' + appIcon() + '<h1 class="title sm">You\'re on the team</h1><p class="lede">' + h(d.invited_by) + " invited " + h(d.email) + " to TOJ as " + ((d.tools || []).indexOf("gfs") >= 0 && GFS_ROLE[d.role]
+        ? "<b style=\"color:var(--ink)\">" + h((d.role === "member" && (d.regions || []).length ? regionText(d.regions) + " " : "") + GFS_ROLE[d.role][0]) + "</b> in Pylon events. " + h(d.role === "member" ? "You'll plan your region's events, set crews and send work to approval." : GFS_ROLE[d.role][1])
+        : "a <b style=\"color:var(--ink)\">" + h(d.role) + "</b>. " + h(ROLE_DESC[d.role] || "")) + "</p></div>" +
       (d.account_exists ? "" : '<div class="field"><label class="label" for="jn">Your name</label><input class="input" id="jn" type="text" autocomplete="name" value="' + h(d.name || "") + '"></div>') +
       '<div class="field"><label class="label" for="jp">' + (d.account_exists ? "Your password for " + h(d.email) : "Set a password") + '</label><input class="input" id="jp" type="password" autocomplete="' + (d.account_exists ? "current-password" : "new-password") + '" placeholder="' + (d.account_exists ? "" : "At least " + d.password_min + " characters") + '"></div>' +
       '<p id="joinMsg" class="body" role="status"></p></div>' +

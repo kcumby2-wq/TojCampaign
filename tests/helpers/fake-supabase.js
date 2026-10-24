@@ -1,6 +1,7 @@
 // A small in-memory stand-in for the Supabase client: enough of the query
 // builder for the routes under test (select/insert/update/upsert/delete with
-// eq/in/is/gt/lt/order/limit, single/maybeSingle, rpc). Not a database.
+// eq/neq/in/is/gt/gte/lt/lte/order/limit/range, single/maybeSingle, rpc, and
+// upsert on one column or a comma-separated set). Not a database.
 const crypto = require("crypto");
 
 function fakeSupabase(seed = {}, { unique = {}, rpc = {} } = {}) {
@@ -22,10 +23,14 @@ function fakeSupabase(seed = {}, { unique = {}, rpc = {} } = {}) {
     update(patch) { this.op = "update"; this.patch = patch; return this; }
     delete() { this.op = "delete"; return this; }
     eq(c, v) { this.filters.push((r) => r[c] === v); return this; }
+    neq(c, v) { this.filters.push((r) => r[c] !== v); return this; }
     in(c, vs) { this.filters.push((r) => vs.includes(r[c])); return this; }
     is(c, v) { this.filters.push((r) => (r[c] ?? null) === v); return this; }
     gt(c, v) { this.filters.push((r) => r[c] > v); return this; }
     lt(c, v) { this.filters.push((r) => r[c] < v); return this; }
+    gte(c, v) { this.filters.push((r) => r[c] >= v); return this; }
+    lte(c, v) { this.filters.push((r) => r[c] <= v); return this; }
+    range(from, to) { this.rng = [from, to]; return this; }
     order(c, { ascending = true } = {}) { this.ord = [c, ascending]; return this; }
     limit(n) { this.lim = n; return this; }
     single() { this.mode = "single"; return this; }
@@ -36,7 +41,8 @@ function fakeSupabase(seed = {}, { unique = {}, rpc = {} } = {}) {
       if (this.op === "insert" || this.op === "upsert") {
         const out = [];
         for (const r of this.rows) {
-          const existing = this.conflict ? rows.find((x) => x[this.conflict] === r[this.conflict]) : null;
+          const cols = this.conflict ? String(this.conflict).split(",").map((c) => c.trim()) : [];
+          const existing = cols.length ? rows.find((x) => cols.every((c) => x[c] === r[c])) : null;
           if (existing && this.op === "upsert") { Object.assign(existing, r); out.push(existing); continue; }
           if (keys.some((k) => rows.some((x) => x[k] === r[k]))) return { data: null, error: { code: "23505", message: "duplicate key" } };
           const row = { id: crypto.randomUUID(), created_at: new Date().toISOString(), ...r };
@@ -52,6 +58,7 @@ function fakeSupabase(seed = {}, { unique = {}, rpc = {} } = {}) {
         const [c, asc] = this.ord;
         out = [...out].sort((a, b) => (a[c] > b[c] ? 1 : a[c] < b[c] ? -1 : 0) * (asc ? 1 : -1));
       }
+      if (this.rng) out = out.slice(this.rng[0], this.rng[1] + 1);
       if (this.lim) out = out.slice(0, this.lim);
       return this.finish(out);
     }

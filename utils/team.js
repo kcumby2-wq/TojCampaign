@@ -8,6 +8,10 @@
 // Members live in public.team_members (migration 019), each with the tools
 // they may open. Owner-only consoles (the Intake CRM with minors' data, money,
 // the deal graph) still use requireStaff and are never granted here.
+//
+// Pylon events (the "gfs" tool, migration 024) add regions: a member is a
+// Regional Director for the regions on their record; approvers and the owner
+// see every region (utils/gfs.js regionsOf).
 
 "use strict";
 
@@ -17,7 +21,14 @@ const { getSupabase } = require("./supabase");
 const ROLE_RANK = Object.freeze({ viewer: 1, member: 2, approver: 3, owner: 4 });
 const MEMBER_ROLES = Object.freeze(["approver", "member", "viewer"]);
 // Tools a member can be given. Others stay owner-only until they move into the app.
-const GRANTABLE_TOOLS = Object.freeze({ studio: "Studio Kits", creators: "Creators", os: "Operating Systems" });
+const GRANTABLE_TOOLS = Object.freeze({ studio: "Studio Kits", creators: "Creators", os: "Operating Systems", gfs: "Pylon events (Ground Floor Sports)" });
+const REGION_KEYS = Object.freeze(["west", "south_central", "northeast", "southeast", "midwest"]);
+
+// A column the database doesn't have yet (Postgres 42703, or PostgREST's
+// schema-cache miss).
+function missingColumn(error) {
+  return !!error && (error.code === "42703" || error.code === "PGRST204" || /column .* does not exist|Could not find the '.*' column/i.test(String(error.message || "")));
+}
 
 const CACHE_MS = 30 * 1000;
 const cache = new Map(); // email -> { at, member }
@@ -32,11 +43,10 @@ async function memberByEmail(email) {
   if (hit && Date.now() - hit.at < CACHE_MS) return hit.member;
   const sb = getSupabase();
   if (!sb) return null;
-  const { data, error } = await sb
-    .from("team_members")
-    .select("email,name,role,tools,status,joined_at")
-    .eq("email", email)
-    .maybeSingle();
+  const lookup = (cols) => sb.from("team_members").select(cols).eq("email", email).maybeSingle();
+  let { data, error } = await lookup("email,name,role,tools,regions,status,joined_at");
+  // Before migration 024 adds regions, the old columns still sign people in.
+  if (error && missingColumn(error)) ({ data, error } = await lookup("email,name,role,tools,status,joined_at"));
   if (error) {
     console.error("[team] member lookup failed:", error.message);
     return null;
@@ -50,14 +60,21 @@ function forget(email) {
   else cache.clear();
 }
 
-// { email, name, role, tools, owner } for the signed-in person, or null.
+// { email, name, role, tools, regions, owner } for the signed-in person, or null.
 async function accessFor(req) {
   const email = emailOf(req);
   if (!email) return null;
-  if (isStaff(req)) return { email, name: null, role: "owner", tools: Object.keys(GRANTABLE_TOOLS), owner: true };
+  if (isStaff(req)) return { email, name: null, role: "owner", tools: Object.keys(GRANTABLE_TOOLS), regions: [...REGION_KEYS], owner: true };
   const m = await memberByEmail(email);
   if (!m || m.status !== "active" || !ROLE_RANK[m.role]) return null;
-  return { email, name: m.name || null, role: m.role, tools: Array.isArray(m.tools) ? m.tools : [], owner: false };
+  return {
+    email,
+    name: m.name || null,
+    role: m.role,
+    tools: Array.isArray(m.tools) ? m.tools : [],
+    regions: Array.isArray(m.regions) ? m.regions.filter((r) => REGION_KEYS.includes(r)) : [],
+    owner: false,
+  };
 }
 
 function can(access, tool, minRole) {
@@ -99,7 +116,7 @@ function requireTeamOrApiKey(headerName, envName, tool, minRole = "viewer") {
       const b = Buffer.from(String(expected));
       if (a.length === b.length && crypto.timingSafeEqual(a, b)) {
         req._apiKeyAuth = true;
-        req.team = { email: "api-key", name: "Automation", role: "member", tools: [tool], owner: false, apiKey: true };
+        req.team = { email: "api-key", name: "Automation", role: "member", tools: [tool], regions: [], owner: false, apiKey: true };
         return next();
       }
     }
@@ -123,6 +140,8 @@ module.exports = {
   ROLE_RANK,
   MEMBER_ROLES,
   GRANTABLE_TOOLS,
+  REGION_KEYS,
+  missingColumn,
   accessFor,
   can,
   requireTeam,

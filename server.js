@@ -183,6 +183,9 @@ app.use("/api/studio-agents", require("./routes/studio-agents"));
 app.use("/api/creators", require("./routes/creators"));
 app.use("/c", require("./routes/creators").pageRouter);
 app.use("/api/os", require("./routes/os"));
+// Ground Floor Sports · Pylon events: events, crews, roster consent flags,
+// the upload log, deliverables, SportsClippers listings, takedowns (024).
+app.use("/api/gfs", require("./routes/gfs"));
 // The team: invites, roles, activity (utils/team.js). Owner-only consoles keep requireStaff.
 app.use("/api/team", require("./routes/team"));
 // Web push for the TOJ app (utils/push.js).
@@ -234,7 +237,7 @@ app.get("/api/me", async (req, res) => {
     let team = null;
     try {
       const a = await require("./utils/team").accessFor(req);
-      if (a) team = { role: a.role, tools: a.tools, owner: a.owner, name: a.name };
+      if (a) team = { role: a.role, tools: a.tools, regions: a.regions || [], owner: a.owner, name: a.name };
     } catch {}
     return res.json({
       authenticated: true,
