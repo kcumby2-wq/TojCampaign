@@ -11,6 +11,7 @@
 //   GET    /api/gfs/desk                              every event's pipeline, at once       viewer
 //   GET    /api/gfs/events                            events in your regions                viewer
 //   POST   /api/gfs/events                            new event (+ its Schedule C rows)     member
+//   POST   /api/gfs/events/import                     Pylon's calendar as a CSV             approver
 //   GET    /api/gfs/events/:id                        the plan: checklist, crew, deliverables viewer
 //   PATCH  /api/gfs/events/:id                        edit, checklist, status               member
 //   GET    /api/gfs/events/:id/crew                   crew and who can be crewed            viewer
@@ -92,10 +93,11 @@ async function run(q) {
   return data;
 }
 // Every row of a query, a page at a time (Supabase returns at most 1,000).
+// The id is the last sort key, so pages don't shift between requests.
 async function all(build) {
   const out = [];
   for (let from = 0; ; from += PAGE) {
-    const rows = await run(build().range(from, from + PAGE - 1));
+    const rows = await run(build().order("id", { ascending: true }).range(from, from + PAGE - 1));
     out.push(...(rows || []));
     if (!rows || rows.length < PAGE) return out;
   }
@@ -278,15 +280,27 @@ async function eventCounts(sb, ids) {
 // this itself through migration 024; this keeps the answer right either way).
 async function refreshHolds(sb, ev, rosterById) {
   const clips = await all(() => sb.from("gfs_clips").select("id,roster_row,held,hold_reason").eq("event_id", ev.id).eq("match", "matched"));
-  let changed = 0;
+  const groups = new Map(); // one update per distinct hold
   for (const c of clips) {
-    const reason = G.holdReason(rosterById.get(c.roster_row));
-    if ((reason || null) !== (c.hold_reason || null) || !!reason !== !!c.held) {
-      await run(sb.from("gfs_clips").update({ held: !!reason, hold_reason: reason }).eq("id", c.id));
-      changed++;
-    }
+    const reason = G.holdReason(rosterById.get(c.roster_row)) || null;
+    if (reason === (c.hold_reason || null) && !!reason === !!c.held) continue;
+    if (!groups.has(reason)) groups.set(reason, []);
+    groups.get(reason).push(c.id);
+  }
+  let changed = 0;
+  for (const [reason, ids] of groups) {
+    await inChunks(ids, (chunk) => run(sb.from("gfs_clips").update({ held: !!reason, hold_reason: reason }).in("id", chunk)));
+    changed += ids.length;
   }
   return changed;
+}
+// Run fn over items, a few at a time.
+async function pool(items, size, fn) {
+  let i = 0;
+  const worker = async () => {
+    while (i < items.length) await fn(items[i++]);
+  };
+  await Promise.all(Array.from({ length: Math.min(size, items.length) }, worker));
 }
 async function rosterRows(sb, eventId) {
   return all(() => sb.from("gfs_roster").select("*").eq("event_id", eventId).order("team", { ascending: true }));
@@ -341,7 +355,7 @@ router.get("/events", viewer, async (req, res) => {
     if (req.query.series) q = q.eq("series", G.clean(req.query.series, 60));
     const events = await run(q.order("starts_on", { ascending: true }).limit(300));
     const ids = events.map((e) => e.id);
-    const crew = ids.length ? await inChunks(ids, (chunk) => run(sb.from("gfs_crew").select("event_id,role,status").in("event_id", chunk))) : [];
+    const crew = ids.length ? await inChunks(ids, (chunk) => all(() => sb.from("gfs_crew").select("event_id,role,status").in("event_id", chunk)), 50) : [];
     const names = await namesFor(sb, events.map((e) => e.director_email));
     res.json({
       events: events.map((ev) => {
@@ -434,6 +448,24 @@ async function uniqueCode(sb, base) {
   return `${clean.slice(0, 18)}${G.code(4)}`;
 }
 
+// One event and its Schedule C rows.
+async function createEvent(sb, req, ev, wanted) {
+  const row = {
+    ...ev,
+    code: await uniqueCode(sb, wanted),
+    crew_target: ev.crew_target === undefined ? G.CREW_TARGET[ev.size] : ev.crew_target,
+    clip_price_cents: ev.clip_price_cents === undefined ? 1999 : ev.clip_price_cents,
+    director_email: ev.director_email === undefined ? (req.team.role === "member" ? req.team.email : null) : ev.director_email,
+    status: "planning",
+    created_by: actor(req),
+  };
+  row.ends_at = G.endsAt(row);
+  const created = await run(sb.from("gfs_events").insert(row).select("*").single());
+  await run(sb.from("gfs_deliverables").insert(G.deliverablesFor(created).map((d) => newDeliverable(created, d))));
+  await T.logActivity(actor(req), "gfs_event_created", created.code, { region: created.region, size: created.size });
+  return created;
+}
+
 router.post("/events", member, async (req, res) => {
   const sb = getSupabase();
   if (!sb) return sb503(res);
@@ -443,23 +475,85 @@ router.post("/events", member, async (req, res) => {
   try {
     const wanted = req.body && req.body.code ? String(req.body.code) : G.eventCode(ev.city, ev.starts_on);
     if (!/^[A-Za-z0-9]{2,24}$/.test(wanted)) return res.status(400).json({ error: "invalid_event", fields: ["code"] });
-    const row = {
-      ...ev,
-      code: await uniqueCode(sb, wanted),
-      crew_target: ev.crew_target === undefined ? G.CREW_TARGET[ev.size] : ev.crew_target,
-      clip_price_cents: ev.clip_price_cents === undefined ? 1999 : ev.clip_price_cents,
-      director_email: ev.director_email === undefined ? (req.team.role === "member" ? req.team.email : null) : ev.director_email,
-      status: "planning",
-      created_by: actor(req),
-    };
-    row.ends_at = G.endsAt(row);
-    const created = await run(sb.from("gfs_events").insert(row).select("*").single());
-    const rows = G.deliverablesFor(created).map((d) => newDeliverable(created, d));
-    await run(sb.from("gfs_deliverables").insert(rows));
-    await T.logActivity(actor(req), "gfs_event_created", created.code, { region: created.region, size: created.size });
+    const created = await createEvent(sb, req, ev, wanted);
     res.json({ event: eventView(created, req) });
   } catch (e) {
     fail(res, e, "create_event");
+  }
+});
+
+// Pylon's calendar as a CSV (Schedule A of the agreement, or the 90-day
+// calendar Pylon sends): one event per row. Rows already in (same city and
+// first day) are skipped, so the same file can be loaded twice.
+const CAL_COLUMNS = {
+  name: ["name", "event", "eventname", "title"],
+  series: ["series", "tour", "program"],
+  size: ["size", "type", "eventtype", "format"],
+  region: ["region", "territory"],
+  city: ["city", "stop"],
+  state: ["state", "st"],
+  venue: ["venue", "location"],
+  starts_on: ["startson", "start", "startdate", "firstday", "date", "dates"],
+  ends_on: ["endson", "end", "enddate", "lastday"],
+  wraps_at: ["wrapsat", "wrap", "wraptime", "endtime"],
+  tz: ["tz", "timezone", "zone"],
+  director_email: ["director", "directoremail", "lead", "leademail"],
+};
+function sizeOf(v) {
+  const n = G.norm(v);
+  if (/premier|legacy|tour|2day/.test(n)) return "premier";
+  if (/clinic/.test(n)) return "clinic";
+  if (/oneday|1day|quickstrike|single|tournament/.test(n)) return "one_day";
+  return G.SIZES[v] ? v : null;
+}
+function regionOf(v) {
+  const n = G.norm(v);
+  return Object.keys(G.REGIONS).find((k) => G.norm(k) === n || G.norm(G.REGIONS[k]) === n) || null;
+}
+router.post("/events/import", approver, async (req, res) => {
+  const sb = getSupabase();
+  if (!sb) return sb503(res);
+  const text = csvText(req, res);
+  if (text == null) return;
+  const { headers, rows } = G.parseTable(text);
+  const map = {};
+  headers.forEach((h, i) => {
+    for (const [k, names] of Object.entries(CAL_COLUMNS)) if (map[k] === undefined && names.includes(G.norm(h))) map[k] = i;
+  });
+  if (map.city === undefined || map.starts_on === undefined) return res.status(400).json({ error: "calendar_columns", hint: "Needs at least a city column and a first-day column." });
+  try {
+    const created = [];
+    const skipped = [];
+    for (let i = 0; i < Math.min(rows.length, 200); i++) {
+      const r = rows[i];
+      const get = (k) => (map[k] === undefined ? "" : String(r[map[k]] || "").trim());
+      const city = G.clean(get("city"), 80);
+      const state = get("state").toUpperCase();
+      const body = {
+        name: get("name") || `${get("series") ? G.clean(get("series"), 60) + " · " : ""}${city}${state ? ", " + state : ""}`,
+        series: get("series") || undefined,
+        size: sizeOf(get("size")) || "premier",
+        region: regionOf(get("region")),
+        city,
+        state,
+        venue: get("venue") || undefined,
+        starts_on: get("starts_on"),
+        ends_on: get("ends_on") || get("starts_on"),
+        wraps_at: get("wraps_at") || undefined,
+        tz: get("tz") || undefined,
+        director_email: get("director_email") || null,
+      };
+      const { ev, errors } = readEventBody(body, null, req);
+      if (errors.length) { skipped.push({ line: i + 2, why: errors.join(",") }); continue; }
+      const same = await run(sb.from("gfs_events").select("id,city").eq("starts_on", ev.starts_on).eq("state", ev.state));
+      if (same.some((x) => G.norm(x.city) === G.norm(ev.city))) { skipped.push({ line: i + 2, why: "already_in" }); continue; }
+      const made = await createEvent(sb, req, ev, G.eventCode(ev.city, ev.starts_on));
+      created.push({ id: made.id, code: made.code, name: made.name });
+    }
+    if (rows.length > 200) skipped.push({ line: 202, why: "too_many_rows" });
+    res.json({ created: created.length, events: created, skipped });
+  } catch (e) {
+    fail(res, e, "import_calendar");
   }
 });
 
@@ -760,16 +854,20 @@ async function rematch(sb, ev, roster) {
   const index = G.rosterIndex(roster);
   const clips = await all(() => sb.from("gfs_clips").select("*").eq("event_id", ev.id).eq("match", "unmatched"));
   let n = 0;
+  const changes = [];
   for (const c of clips) {
     const m = G.matchClip({ jersey: c.jersey, team: c.team, teamHint: c.team_hint, teams: teamsOfGame(c.game) }, index);
     if (m.match === "matched") {
       const reason = G.holdReason(m.row);
-      await run(sb.from("gfs_clips").update({ match: "matched", why: null, roster_row: m.row.id, team: m.row.team, label: G.finalLabel(ev, m.row, c), held: !!reason, hold_reason: reason }).eq("id", c.id));
+      changes.push([c.id, { match: "matched", why: null, roster_row: m.row.id, team: m.row.team, label: G.finalLabel(ev, m.row, c), held: !!reason, hold_reason: reason }]);
       n++;
     } else if (m.why !== c.why) {
-      await run(sb.from("gfs_clips").update({ why: m.why }).eq("id", c.id));
+      changes.push([c.id, { why: m.why }]);
     }
   }
+  // Each clip gets its own athlete and label, so these go one by one, eight
+  // at a time.
+  await pool(changes, 8, ([id, patch]) => run(sb.from("gfs_clips").update(patch).eq("id", id).eq("match", "unmatched")));
   return n;
 }
 function teamsOfGame(game) {
@@ -1683,8 +1781,8 @@ router.get("/today", viewer, async (req, res) => {
     const events = await run(sb.from("gfs_events").select("*").in("region", regions).gte("ends_on", from).neq("status", "cancelled").order("starts_on", { ascending: true }).limit(200));
     const ids = events.map((e) => e.id);
     const [crew, dels, tds] = await Promise.all([
-      ids.length ? inChunks(ids, (c) => run(sb.from("gfs_crew").select("event_id,role,status").in("event_id", c))) : [],
-      ids.length ? inChunks(ids, (c) => run(sb.from("gfs_deliverables").select("*").in("event_id", c))) : [],
+      ids.length ? inChunks(ids, (c) => all(() => sb.from("gfs_crew").select("event_id,role,status").in("event_id", c)), 50) : [],
+      ids.length ? inChunks(ids, (c) => all(() => sb.from("gfs_deliverables").select("*").in("event_id", c)), 50) : [],
       run(sb.from("gfs_takedowns").select("*").in("region", regions).eq("status", "open")),
     ]);
     const byId = new Map(events.map((e) => [e.id, e]));
@@ -1741,7 +1839,7 @@ router.get("/desk", viewer, async (req, res) => {
     const events = q ? await run(q.order("starts_on", { ascending: true }).limit(200)) : [];
     const ids = events.map((e) => e.id);
     const counts = await eventCounts(sb, ids);
-    const dels = ids.length ? await inChunks(ids, (c) => run(sb.from("gfs_deliverables").select("*").in("event_id", c))) : [];
+    const dels = ids.length ? await inChunks(ids, (c) => all(() => sb.from("gfs_deliverables").select("*").in("event_id", c)), 50) : [];
     const tds = regions.length ? await run(sb.from("gfs_takedowns").select("*").in("region", regions).eq("status", "open")) : [];
     const names = await namesFor(sb, events.map((e) => e.director_email));
     const byId = new Map(events.map((e) => [e.id, e]));

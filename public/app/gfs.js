@@ -3,6 +3,7 @@
  *
  *   #events                      events in your regions
  *   #gfs-new                     a new event
+ *   #gfs-import                  load Pylon's calendar (approvers)
  *   #event/<id>                  the plan: checklist, crew, deliverables
  *   #gfs-edit/<id>               edit the event
  *   #gfs-crew/<id>               crew: who's on it, who can be
@@ -196,9 +197,33 @@
       '<a class="tile" href="#gfs-desk">' + ICON.desk + "Distribution desk</a>" +
       '<a class="tile" href="#gfs-creators">' + ICON.crew + "Creator scorecards</a>" +
       "</div>" +
+      (t.atLeast("approver") ? '<a class="li list" href="#gfs-import" style="border-radius:16px"><div class="ico" style="width:36px;height:36px;border-radius:9px">' + ICON.up + '</div><div class="grow"><div class="name" style="font-size:15px">Load Pylon\'s calendar</div><div class="sub">A CSV of stops, one per row. Stops already here are skipped.</div></div>' + t.I.chev + "</a>" : "") +
       (mine.length ? "" : '<p class="empty">You don\'t have a region yet. Ask Kyron to add one.</p>') +
       "</div>");
     bind("[data-region]", "click", function (b) { eventsRegion = b.dataset.region; events(); });
+  }
+
+  async function gfsImport() {
+    if (!guard() || !T().atLeast("approver")) return T().go("#events");
+    var t = T();
+    t.show(null,
+      '<div class="screen"><div class="head"><a class="back" href="#events">' + t.I.back + "Cancel</a></div>" + head(null, "Load the calendar", "", "One stop per row: name, series, size (premier, one_day or clinic), region, city, state, venue, tz, starts_on, ends_on. Each new stop comes with its Schedule C deliverables.") +
+      '<label class="btn soft small" style="align-self:flex-start;cursor:pointer">' + ICON.up + 'Choose a CSV<input type="file" id="imFile" accept=".csv,.tsv,.txt,text/csv,text/plain" hidden></label>' +
+      '<details><summary class="sub" style="cursor:pointer">Or paste it</summary><textarea class="textarea mono" id="imText" style="min-height:160px;margin-top:8px" placeholder="name,series,size,region,city,state,venue,tz,starts_on,ends_on"></textarea></details>' +
+      '<p class="sub" style="margin:0">The 2026–27 calendar from Schedule A of the Pylon agreement is in the repo as docs/gfs-calendar-2026-27.csv.</p>' +
+      '<p id="imMsg" class="body" role="status"></p></div>' +
+      '<div class="dock"><div class="dock-inner"><button type="button" class="btn block" id="imGo">Load the calendar</button></div></div>');
+    document.getElementById("imGo").addEventListener("click", function () {
+      var btn = this;
+      act(btn, async function () {
+        var text = (await readFile(document.getElementById("imFile"))) || document.getElementById("imText").value;
+        if (!text.trim()) throw new Error("Choose the file or paste it first.");
+        var r = await t.post("/api/gfs/events/import", { csv: text });
+        btn.disabled = false;
+        var skipped = r.skipped.filter(function (x) { return x.why !== "already_in"; });
+        msgEl("imMsg", r.created + " added" + (r.skipped.length - skipped.length ? ", " + (r.skipped.length - skipped.length) + " already here" : "") + (skipped.length ? ". Not loaded: " + skipped.map(function (x) { return "line " + x.line + " (" + x.why + ")"; }).join(", ") : "") + ".", !skipped.length);
+      }, "imMsg");
+    });
   }
 
   // ── New and edit ───────────────────────────────────────────────────────
@@ -916,6 +941,7 @@
   window.TOJScreens = Object.assign(window.TOJScreens || {}, {
     events: events,
     "gfs-new": gfsNew,
+    "gfs-import": gfsImport,
     "gfs-edit": gfsEdit,
     event: event,
     "gfs-crew": crew,

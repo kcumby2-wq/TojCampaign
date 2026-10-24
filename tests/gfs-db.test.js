@@ -167,6 +167,11 @@ test("a takedown sets its own clock and holds the athlete at every event, for go
   await q(`update gfs_roster set do_not_publish = false, takedown_at = null where id = $1`, [ann.id]);
   const kept = await one(`select do_not_publish, takedown_at from gfs_roster where id = $1`, [ann.id]);
   assert.ok(kept.do_not_publish && kept.takedown_at, "a roster file can't undo a takedown");
+  // The way the app loads a roster file: an upsert on (event, roster ID).
+  await q(`insert into gfs_roster (event_id, roster_id, team, jersey, consent_capture, do_not_publish) values ($1, 'ST-1001', 'Ohio Heat 14U', '7', true, false)
+           on conflict (event_id, roster_id) do update set consent_capture = excluded.consent_capture, do_not_publish = excluded.do_not_publish`, [geneva.id]);
+  const upserted = await one(`select do_not_publish, takedown_at from gfs_roster where id = $1`, [ann.id]);
+  assert.ok(upserted.do_not_publish && upserted.takedown_at, "nor can a re-upload");
 
   await q(`update gfs_takedowns set reason = 'consent_withdrawn', received_at = now(), roster_id = 'ST-2', pylon_done_at = now() where id = $1`, [t.id]);
   const after1 = await one(`select reason, roster_id, received_at, status, pylon_done_at from gfs_takedowns where id = $1`, [t.id]);

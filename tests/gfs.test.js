@@ -487,6 +487,27 @@ test("today: what needs a director, and what needs an approver", async () => {
   assert.equal(westToday.json.next, null, "nothing in the West yet");
 });
 
+test("approvers load Pylon's calendar; a second load skips what's already in", async () => {
+  const csv = require("fs").readFileSync(require("path").join(__dirname, "..", "docs", "gfs-calendar-2026-27.csv"), "utf8");
+  assert.equal((await post(mw, "/api/gfs/events/import", { csv })).status, 403, "directors add their own events, one at a time");
+  const rows = G.parseTable(csv).rows;
+  const there = rows.filter((x) => db.tables.gfs_events.some((e) => e.city === x[4] && e.state === x[5] && e.starts_on === x[8])).length;
+  const r = await post(josh, "/api/gfs/events/import", { csv });
+  assert.equal(r.status, 200, JSON.stringify(r.json));
+  assert.equal(r.json.created, 20 - there);
+  const nj = db.tables.gfs_events.find((e) => e.city === "New Jersey");
+  assert.equal(G.eventDays(nj), 4, "New Jersey runs four days");
+  assert.equal(db.tables.gfs_deliverables.filter((d) => d.event_id === nj.id && d.kind === "cutdowns").length, 4);
+  assert.equal(db.tables.gfs_events.find((e) => e.city === "Panama City").tz, "America/Chicago", "the panhandle is on Central time");
+  assert.equal(db.tables.gfs_events.filter((e) => e.city === "Chicago" && e.series === "Legacy Tour" && e.starts_on.startsWith("2027")).map((e) => e.code).sort().join(","), "Chicago2027,Chicago2027A");
+  const again = await post(josh, "/api/gfs/events/import", { csv });
+  assert.equal(again.json.created, 0);
+  assert.equal(again.json.skipped.filter((x) => x.why === "already_in").length, 20);
+  const bad = await post(josh, "/api/gfs/events/import", { csv: "city,state,starts_on,region\nSomewhere,ZZZ,2027-13-01,nowhere\n" });
+  assert.equal(bad.json.created, 0);
+  assert.match(bad.json.skipped[0].why, /state/);
+});
+
 test("team: Pylon events invites carry regions, and joining keeps them", async () => {
   const noRegion = await post(kyron, "/api/team/invites", { email: "dir@example.com", role: "member", tools: ["gfs"] });
   assert.equal(noRegion.status, 400);
