@@ -32,7 +32,7 @@
     gfs_asset_source_world: "Pick a venue World from the same stop.",
     conflict: "Someone changed this at the same moment. Try again.",
     athlete: "Pick athletes from the stop's roster.",
-    links: "Leave out links. Where the file lives goes under Where it lives.",
+    links: "Leave out links, like site.com/page. If it isn't one, add a space after the period. Where the file lives goes under Where it lives.",
     link_host: "A brand link goes to Canva, Figma, Adobe or groundfloorsports.com.",
     gfs_asset_retired: "It's retired. Make a new one instead.",
     gfs_asset_no_athletes: "This kind of asset never shows athletes.",

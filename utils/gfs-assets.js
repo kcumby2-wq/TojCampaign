@@ -230,10 +230,12 @@ function canCheck(access, check) {
 // details use team chat's check (utils/chat.js hasContact); links are looked
 // for on the same normalized copy of the text: http:// or https://, www., or
 // a domain followed by a path (a two-letter country domain or a common one,
-// then a slash and something after it). Mirrors public.gfs_asset_text_ok (027).
+// then a slash and something after it). The domain is matched in lowercase,
+// as links are pasted, so shorthand like "Day 2.QB/WR" or "Sat.AM/PM" isn't
+// taken for one. Mirrors public.gfs_asset_text_ok (027).
 const INVISIBLE = /[\u00ad\u180e\u200b-\u200f\u2060-\u2064\ufeff]/g;
 const DASHES = /[\u2010-\u2015\u2212\ufe58\ufe63\uff0d]/g;
-const LINKY = [/https?:\/\//i, /(^|[^a-z0-9])www\./i, /[a-z0-9-]\.([a-z]{2}|com|net|org|info|biz|app|dev|link|site|xyz|watch|store|live|video|media|photos|cloud|page|online|shop|studio|tube|social|news|stream)\/[^ \t\n\r\f\v]/i];
+const LINKY = [/https?:\/\//i, /(^|[^a-z0-9])www\./i, /[a-z0-9-]\.([a-z]{2}|com|net|org|info|biz|app|dev|link|site|xyz|watch|store)\/[^ \t\n\r\f\v]/];
 function normalized(s) {
   return String(s == null ? "" : s).normalize("NFKC").replace(INVISIBLE, "").replace(DASHES, "-");
 }

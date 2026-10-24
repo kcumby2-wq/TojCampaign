@@ -24,7 +24,7 @@ Code:
 - **Files stay where they are.** A record keeps where it goes live and GFS's label for the file, such as `Dallas2027-WR-11-EndZone-042`, plus its SHA-256 if you have it. Once it's out, the approver adds its ID there (a ledger token, a store listing, a post), once.
   - An ID or label can't have spaces or slashes, so no folder name with a person's name in it gets in. There's no ID or label without its place.
   - Only a brand asset can be a link. It's `https`, and it goes to Canva, Figma, Adobe or groundfloorsports.com, never a file host where footage could be.
-- **Titles and notes** carry no names, contact details or links. The app and the database both refuse an email address, a phone number, `http://`, `https://`, `www.`, or a domain followed by a path (`drive.google.com/…`, `fb.watch/…`, `bbc.co.uk/…`), on the same normalized copy of the text team chat checks. "St.Louis/KC" and "Team.tv/ intro" are fine.
+- **Titles and notes** carry no names, contact details or links. The app and the database both refuse an email address, a phone number, `http://`, `https://`, `www.`, or a domain followed by a path in lowercase, as links are pasted (`drive.google.com/…`, `fb.watch/…`, `bbc.co.uk/…`), on the same normalized copy of the text team chat checks. Shorthand like "St.Louis/KC", "Day 2.QB/WR drills", "Sat.AM/PM" and "Team.tv/ intro" is fine.
 - **Athletes are roster rows** from the stop's Sports Thread roster, shown by team and jersey number. The record keeps their team and jersey as they were when added, so a roster change shows.
 - **A stop's assets take its region.** If the stop moves to another region, its assets move with it, to the new region's directors.
 

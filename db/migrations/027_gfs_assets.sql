@@ -62,7 +62,8 @@ language sql immutable set search_path = '' as $$
     or regexp_replace(t, 'https?://[^ \t\n\r\f\v<>"'']+', ' ', 'gi') ~ '(?<![0-9])\+[1-9]([ .-]?[0-9]){7,14}(?![0-9])'
     or t ~* 'https?://'
     or t ~* '(^|[^a-z0-9])www\.'
-    or t ~* '[a-z0-9-]\.([a-z]{2}|com|net|org|info|biz|app|dev|link|site|xyz|watch|store|live|video|media|photos|cloud|page|online|shop|studio|tube|social|news|stream)/[^ \t\n\r\f\v]'
+    -- A domain and a path, in lowercase as links are pasted ("Sat.AM/PM" isn't one).
+    or t ~ '[a-z0-9-]\.([a-z]{2}|com|net|org|info|biz|app|dev|link|site|xyz|watch|store)/[^ \t\n\r\f\v]'
   )
   from (select regexp_replace(regexp_replace(normalize(coalesce(s, ''), NFKC),
                  '[\u00ad\u180e\u200b-\u200f\u2060-\u2064\ufeff]', '', 'g'),

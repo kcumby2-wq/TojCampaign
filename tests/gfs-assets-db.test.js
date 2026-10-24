@@ -238,6 +238,7 @@ test("027: titles and notes get the same text check in the app and the database"
     "https://drive.google.com/file/d/1AbC/view", "http://x.example.com", "www.dropbox.com/s/xyz", "raw at WWW.DROPBOX.COM", "dropbox.com/s/xyz/clip.mp4",
     "ｈｔｔｐｓ://x.example.com", "youtu.be/abc", "w" + ch(0x200b) + "ww.example.com", "drive.google.com/drive/folders/x",
     "fb.watch/abc", "sportsclippers.store/x", "bbc.co.uk/x", "Team.tv/ intro", "we.tl/t-abc", "Drive.Google.com/drive/x",
+    "Day 2.QB/WR drills", "Sat.AM/PM sessions", "Hawks vs.HS/JV", "Dallas.TX/Austin", "Recap.photos/video", "example.ca/x",
   ];
   const got = [];
   for (const s of texts) {
@@ -246,7 +247,8 @@ test("027: titles and notes get the same text check in the app and the database"
     got.push(db);
   }
   assert.deepEqual(got, [true, true, true, true, true, true, true, true, true, true, true, true, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false,
-    false, false, false, true, false, false]);
+    false, false, false, true, false, false,
+    true, true, true, true, true, false]);
 });
 
 test("027: the database's reasons match the app's, kind by kind", async () => {

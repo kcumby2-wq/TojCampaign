@@ -504,7 +504,9 @@ test("its ID where it went live: review needs only GFS's label; the ID is record
 
 test("links without https: more domains count, and a slash then a space isn't a link", () => {
   for (const s of ["fb.watch/abc", "sportsclippers.store/x", "bbc.co.uk/x", "photos.app.goo.gl/x", "we.tl/t-abc", "Drive.Google.com/drive/x"]) assert.equal(A.textOk(s), false, s);
-  for (const s of ["Team.tv/ intro", "St.Louis/KC swing", "v2.final/cut", "Recap w/ highlights", "3D/4D Moment", "drive.google.com"]) assert.equal(A.textOk(s), true, s);
+  for (const s of ["Team.tv/ intro", "St.Louis/KC swing", "v2.final/cut", "Recap w/ highlights", "3D/4D Moment", "drive.google.com",
+    "Day 2.QB/WR drills", "Sat.AM/PM sessions", "Hawks vs.HS/JV", "Done.WR/TE clips", "Dallas.TX/Austin", "Game 4.OT/2OT", "Recap.photos/video", "Moved to review.Ok/thanks"]) assert.equal(A.textOk(s), true, s);
+  assert.equal(A.textOk("example.ca/x"), false);
   assert.equal(A.refProblem("brand", "link", "https://www.canva.com/design/DAF1/view?utm=x&a=1"), null);
   assert.equal(A.refProblem("brand", "link", "https://www.canva.com/design/DAF1 x/view"), "link_host", "no spaces of any kind in a link");
   assert.equal(A.liveRefProblem("TOKEN-0077"), null);
