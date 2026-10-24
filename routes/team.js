@@ -8,7 +8,7 @@
 //   POST   /api/team/invites            → invite someone (owner) → one-time token, shown once
 //   POST   /api/team/invites/:id/renew  → a new link for the same invite (owner)
 //   DELETE /api/team/invites/:id        → cancel an invite (owner)
-//   PATCH  /api/team/members/:email     → change role, tools or name (owner)
+//   PATCH  /api/team/members/:email     → change role, tools, regions or name (owner)
 //   DELETE /api/team/members/:email     → remove from the team (owner)
 //   GET    /api/team/join/:token        → what an invite is for (public, token holder)
 //   POST   /api/team/join               → accept: set a password (or sign in) and join (public)
@@ -38,6 +38,11 @@ function sb503(res) {
   return res.status(503).json({ error: "supabase_unavailable" });
 }
 function fail(res, e, what) {
+  // A Pylon events invite or region change before migration 024 adds the
+  // regions column: say what's missing instead of a bare failure.
+  if (T.missingColumn(e) && /regions/.test(String((e && e.message) || ""))) {
+    return res.status(503).json({ error: "gfs_not_set_up", hint: "Apply migration 024 in Supabase to give people Pylon events regions." });
+  }
   console.error(`[team] ${what} failed:`, e && e.message);
   return res.status(500).json({ error: `${what}_failed` });
 }
@@ -46,6 +51,21 @@ function validTools(tools) {
   const list = Array.isArray(tools) ? tools.map(String) : ["studio"];
   const ok = list.filter((t) => Object.prototype.hasOwnProperty.call(T.GRANTABLE_TOOLS, t));
   return ok.length ? [...new Set(ok)] : ["studio"];
+}
+// Pylon events: a Regional Director (member) or viewer needs at least one
+// region; approvers see every region, so theirs stay empty.
+function validRegions(regions) {
+  return [...new Set((Array.isArray(regions) ? regions : []).map(String).filter((r) => T.REGION_KEYS.includes(r)))];
+}
+function regionsFor(role, tools, regions) {
+  if (!tools.includes("gfs") || role === "approver") return [];
+  return validRegions(regions);
+}
+// Reads that work before and after migration 024 adds the regions column.
+async function withRegions(build, cols) {
+  let r = await build(cols + ",regions");
+  if (r.error && T.missingColumn(r.error)) r = await build(cols);
+  return r;
 }
 
 // Same as routes/auth.js signIn: a fresh session id, then who signed in.
@@ -89,38 +109,50 @@ router.get("/", T.requireTeam(null, "viewer"), async (req, res) => {
     const { data: ownerRows } = owners.length
       ? await sb.from("users").select("email,role").in("email", owners)
       : { data: [] };
-    const { data: members, error } = await sb
-      .from("team_members")
-      .select("email,name,role,tools,status,joined_at")
-      .eq("status", "active")
-      .order("joined_at", { ascending: true });
+    const { data: members, error } = await withRegions(
+      (cols) => sb.from("team_members").select(cols).eq("status", "active").order("joined_at", { ascending: true }),
+      "email,name,role,tools,status,joined_at"
+    );
     if (error) throw new Error(error.message);
     const showEmail = req.team.owner;
     const people = [
       ...(ownerRows || [])
         .filter((u) => ["staff", "admin"].includes(u.role))
-        .map((u) => ({ email: u.email, name: null, role: "owner", tools: Object.keys(T.GRANTABLE_TOOLS), you: u.email === req.team.email })),
+        .map((u) => ({ email: u.email, name: null, role: "owner", tools: Object.keys(T.GRANTABLE_TOOLS), regions: [...T.REGION_KEYS], you: u.email === req.team.email })),
       ...(members || []).map((m) => ({ ...m, you: m.email === req.team.email })),
     ].map((p) => (showEmail || p.you ? p : { ...p, email: null }));
-    res.json({ people, roles: T.MEMBER_ROLES, tools: T.GRANTABLE_TOOLS });
+    res.json({ people, roles: T.MEMBER_ROLES, tools: T.GRANTABLE_TOOLS, regions: T.REGION_KEYS });
   } catch (e) {
     fail(res, e, "list_team");
   }
 });
 
+// Pylon events entries (gfs_*) go only to people with that tool, and to a
+// Regional Director or viewer only for their own regions (each entry carries
+// its event's region; one without a region is for owners and approvers).
+function seesEntry(team, a) {
+  if (!/^gfs_/.test(String(a.action || ""))) return true;
+  if (!T.can(team, "gfs", "viewer")) return false;
+  if (team.owner || team.role === "approver") return true;
+  const r = a.detail && a.detail.region;
+  return !!r && (team.regions || []).includes(r);
+}
+
 router.get("/activity", T.requireTeam(null, "viewer"), async (req, res) => {
   const sb = getSupabase();
   if (!sb) return sb503(res);
+  const limit = Math.min(100, Number(req.query.limit) || 40);
+  // Read past what this person can't see, so they still get a full page.
   const { data, error } = await sb
     .from("team_activity")
     .select("id,actor,action,subject,detail,created_at")
     .order("created_at", { ascending: false })
-    .limit(Math.min(100, Number(req.query.limit) || 40));
+    .limit(Math.min(300, limit * 4));
   if (error) return fail(res, error, "activity");
   const { data: members } = await sb.from("team_members").select("email,name");
   const names = new Map((members || []).map((m) => [m.email, m.name]));
   res.json({
-    activity: (data || []).map((a) => ({
+    activity: (data || []).filter((a) => seesEntry(req.team, a)).slice(0, limit).map((a) => ({
       ...a,
       actor_name: names.get(a.actor) || (a.actor === "api-key" ? "Automation" : a.actor === FORMER ? "A former teammate" : staffEmails().has(a.actor) ? "Owner" : null),
       actor: req.team.owner || a.actor === req.team.email ? a.actor : null,
@@ -132,13 +164,17 @@ router.get("/activity", T.requireTeam(null, "viewer"), async (req, res) => {
 router.get("/invites", requireStaff, async (_req, res) => {
   const sb = getSupabase();
   if (!sb) return sb503(res);
-  const { data, error } = await sb
-    .from("team_invites")
-    .select("id,email,name,role,tools,invited_by,expires_at,created_at")
-    .is("used_at", null)
-    .is("revoked_at", null)
-    .gt("expires_at", new Date().toISOString())
-    .order("created_at", { ascending: false });
+  const { data, error } = await withRegions(
+    (cols) =>
+      sb
+        .from("team_invites")
+        .select(cols)
+        .is("used_at", null)
+        .is("revoked_at", null)
+        .gt("expires_at", new Date().toISOString())
+        .order("created_at", { ascending: false }),
+    "id,email,name,role,tools,invited_by,expires_at,created_at"
+  );
   if (error) return fail(res, error, "list_invites");
   res.json({ invites: data || [] });
 });
@@ -154,19 +190,25 @@ router.post("/invites", requireStaff, async (req, res) => {
   try {
     const existing = await T.memberByEmail(email);
     if (existing && existing.status === "active") return res.status(409).json({ error: "already_on_team" });
+    const tools = validTools(req.body?.tools);
+    const regions = regionsFor(role, tools, req.body?.regions);
+    if (tools.includes("gfs") && role !== "approver" && !regions.length) return res.status(400).json({ error: "regions_required", allowed: T.REGION_KEYS });
     const token = newToken();
     const row = {
       token_hash: hashToken(token),
       email,
       name: clean(req.body?.name, 80) || null,
       role,
-      tools: validTools(req.body?.tools),
+      tools,
       invited_by: T.emailOf(req),
       expires_at: new Date(Date.now() + INVITE_DAYS * 86400000).toISOString(),
     };
+    // Only Pylon-events invites carry regions (so invites keep working
+    // before migration 024 is applied).
+    if (tools.includes("gfs")) row.regions = regions;
     const { data, error } = await sb.from("team_invites").insert(row).select("id,email,name,role,tools,expires_at").single();
     if (error) throw new Error(error.message);
-    await T.logActivity(T.emailOf(req), "invited", email, { role });
+    await T.logActivity(T.emailOf(req), "invited", email, { role, tools, regions: row.regions });
     res.json({ invite: data, token, path: `/app/#join/${token}` });
   } catch (e) {
     fail(res, e, "invite");
@@ -216,11 +258,12 @@ router.patch("/members/:email", requireStaff, async (req, res) => {
   }
   if (req.body?.tools !== undefined) patch.tools = validTools(req.body.tools);
   if (req.body?.name !== undefined) patch.name = clean(req.body.name, 80) || null;
+  if (req.body?.regions !== undefined) patch.regions = validRegions(req.body.regions);
   const { data, error } = await sb.from("team_members").update(patch).eq("email", email).eq("status", "active").select("email,name,role,tools");
   if (error) return fail(res, error, "update_member");
   if (!data || !data.length) return res.status(404).json({ error: "not_found" });
   T.forget(email);
-  await T.logActivity(T.emailOf(req), "changed_member", email, { role: patch.role, tools: patch.tools });
+  await T.logActivity(T.emailOf(req), "changed_member", email, { role: patch.role, tools: patch.tools, regions: patch.regions });
   res.json({ member: data[0] });
 });
 
@@ -284,11 +327,10 @@ router.delete("/me", T.requireTeam(null, "viewer"), async (req, res) => {
 // ── Joining (public, token holder) ───────────────────────────────────────
 async function inviteByToken(sb, token) {
   if (!token || String(token).length < 20 || String(token).length > 100) return null;
-  const { data } = await sb
-    .from("team_invites")
-    .select("id,email,name,role,tools,invited_by,expires_at,used_at,revoked_at")
-    .eq("token_hash", hashToken(token))
-    .maybeSingle();
+  const { data } = await withRegions(
+    (cols) => sb.from("team_invites").select(cols).eq("token_hash", hashToken(token)).maybeSingle(),
+    "id,email,name,role,tools,invited_by,expires_at,used_at,revoked_at"
+  );
   if (!data || data.used_at || data.revoked_at || new Date(data.expires_at) < new Date()) return null;
   return data;
 }
@@ -300,7 +342,7 @@ router.get("/join/:token", async (req, res) => {
   const inv = await inviteByToken(sb, req.params.token);
   if (!inv) return res.status(404).json({ error: "invite_not_valid", hint: "Ask Kyron for a new link." });
   const { data: user } = await sb.from("users").select("email").eq("email", inv.email).maybeSingle();
-  res.json({ email: inv.email, name: inv.name, role: inv.role, invited_by: "Kyron", account_exists: !!user, password_min: PASSWORD_MIN });
+  res.json({ email: inv.email, name: inv.name, role: inv.role, tools: inv.tools || [], regions: inv.regions || [], invited_by: "Kyron", account_exists: !!user, password_min: PASSWORD_MIN });
 });
 
 router.post("/join", async (req, res) => {
@@ -335,19 +377,18 @@ router.post("/join", async (req, res) => {
       .select("id");
     if (useErr) throw new Error(useErr.message);
     if (!used || !used.length) return res.status(409).json({ error: "invite_already_used" });
-    const { error: mErr } = await sb.from("team_members").upsert(
-      {
-        email: inv.email,
-        name,
-        role: inv.role,
-        tools: inv.tools,
-        status: "active",
-        invited_by: inv.invited_by,
-        joined_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      },
-      { onConflict: "email" }
-    );
+    const member = {
+      email: inv.email,
+      name,
+      role: inv.role,
+      tools: inv.tools,
+      status: "active",
+      invited_by: inv.invited_by,
+      joined_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+    if (Array.isArray(inv.regions)) member.regions = inv.regions;
+    const { error: mErr } = await sb.from("team_members").upsert(member, { onConflict: "email" });
     if (mErr) throw new Error(mErr.message);
     T.forget(inv.email);
     await T.logActivity(inv.email, "joined", inv.email, { role: inv.role });

@@ -1,0 +1,21 @@
+name,series,size,region,city,state,venue,tz,starts_on,ends_on
+"Girls Flag · Geneva, OH",Girls Flag,one_day,midwest,Geneva,OH,Spire Institute,,2026-10-24,2026-10-24
+"Girls Flag · Ontario, CA",Girls Flag,one_day,west,Ontario,CA,,,2026-11-21,2026-11-21
+"Girls Flag · Las Vegas, NV",Girls Flag,one_day,west,Las Vegas,NV,,,2026-12-05,2026-12-05
+"Legacy Tour · Chicago, IL",Legacy Tour,premier,midwest,Chicago,IL,,,2027-01-02,2027-01-03
+"Legacy Tour · Seattle, WA",Legacy Tour,premier,west,Seattle,WA,,,2027-01-16,2027-01-17
+Legacy Tour · Orlando (Flagship),Legacy Tour,premier,southeast,Orlando,FL,,,2027-01-23,2027-01-24
+"Legacy Tour · Indianapolis, IN",Legacy Tour,premier,midwest,Indianapolis,IN,,,2027-01-30,2027-01-31
+Legacy Tour · Hawaii,Legacy Tour,premier,west,Hawaii,HI,,,2027-01-30,2027-01-31
+"Legacy Tour · Los Angeles, CA",Legacy Tour,premier,west,Los Angeles,CA,,,2027-02-06,2027-02-07
+Legacy Tour · New Jersey,Legacy Tour,premier,northeast,New Jersey,NJ,,,2027-02-12,2027-02-15
+"Legacy Tour · Mecca, Las Vegas (Flagship)",Legacy Tour,premier,west,Las Vegas,NV,,,2027-02-27,2027-02-28
+"Legacy Tour · Panama City, FL",Legacy Tour,premier,southeast,Panama City,FL,,America/Chicago,2027-02-27,2027-02-28
+Legacy Tour · Atlanta (Flagship),Legacy Tour,premier,southeast,Atlanta,GA,,,2027-03-06,2027-03-07
+"Legacy Tour · Dallas, TX",Legacy Tour,premier,south_central,Dallas,TX,,,2027-03-06,2027-03-07
+"Legacy Tour · Philadelphia, PA",Legacy Tour,premier,northeast,Philadelphia,PA,,,2027-03-13,2027-03-14
+"Legacy Tour · Baton Rouge, LA",Legacy Tour,premier,south_central,Baton Rouge,LA,,,2027-03-20,2027-03-21
+"Legacy Tour · Chicago, IL (March)",Legacy Tour,premier,midwest,Chicago,IL,,,2027-03-20,2027-03-21
+"Legacy Tour · Washington, DC",Legacy Tour,premier,northeast,Washington,DC,,,2027-03-27,2027-03-28
+"Legacy Tour · Houston, TX",Legacy Tour,premier,south_central,Houston,TX,,,2027-04-03,2027-04-04
+"Legacy Tour · Cincinnati, OH",Legacy Tour,premier,midwest,Cincinnati,OH,,,2027-04-10,2027-04-11
