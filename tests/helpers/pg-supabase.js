@@ -22,7 +22,7 @@ types.setTypeParser(20, (v) => (v == null ? null : Number(v))); // int8
 
 const MIGRATIONS = path.join(__dirname, "..", "..", "db", "migrations");
 
-// A fresh schema with the team tables (019, 020) and Pylon events (024).
+// A fresh schema with the team tables (019, 020) and Pylon events (024, 025).
 async function makeSchema(url, schema) {
   if (!/^gfs_[a-z0-9_]+_test$/.test(schema)) throw new Error("test schemas are named gfs_*_test");
   const admin = new Pool({ connectionString: url });
@@ -33,7 +33,7 @@ async function makeSchema(url, schema) {
   const pool = new Pool({ connectionString: url, options: `-c search_path=${schema} -c timezone=UTC`, max: 6 });
   // 019 adds a column to agent_runs (from an earlier migration).
   await pool.query(`create table ${schema}.agent_runs (id uuid primary key default gen_random_uuid())`);
-  for (const file of ["019_team.sql", "020_native_push.sql", "024_gfs_events.sql"]) {
+  for (const file of ["019_team.sql", "020_native_push.sql", "024_gfs_events.sql", "025_gfs_qr.sql"]) {
     const sql = fs.readFileSync(path.join(MIGRATIONS, file), "utf8").replace(/public\./g, `${schema}.`);
     await pool.query(sql);
   }

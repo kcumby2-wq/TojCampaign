@@ -97,6 +97,8 @@ async function main() {
       ["GET", "/api/campaign/campaigns"],
       ["GET", "/api/gfs/events"],
       ["GET", "/api/gfs/desk"],
+      ["GET", "/api/gfs/events/00000000-0000-0000-0000-000000000000/qr"],
+      ["GET", "/api/gfs/events/00000000-0000-0000-0000-000000000000/qr/stop.png"],
     ]) {
       await expect(
         method + " " + url + " (must be auth-gated)",
@@ -110,6 +112,10 @@ async function main() {
     }
 
     await expect("GET /api/me", fetch(base + "/api/me"), (r) => r.ok);
+
+    // The public stop page boots and answers (no database here: the
+    // "this page isn't here" page, with no scripts allowed).
+    await expect("GET /e/<code> (public stop page)", fetch(base + "/e/Smoke2027"), async (r) => r.status === 404 && /script-src 'none'/.test(r.headers.get("content-security-policy") || "") && /Pylon/.test(await r.text()));
 
     finish(0, "✅ SMOKE PASS — boot + /api/health + onboarding POST(200) + staff routes(401) + me(200)");
   } catch (e) {

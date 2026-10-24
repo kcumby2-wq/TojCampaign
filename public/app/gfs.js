@@ -6,6 +6,7 @@
  *   #gfs-import                  load Pylon's calendar (approvers)
  *   #event/<id>                  the plan: checklist, crew, deliverables
  *   #gfs-edit/<id>               edit the event
+ *   #gfs-qr/<id>                 QR codes: the stop page, its codes, scans and clicks
  *   #gfs-crew/<id>               crew: who's on it, who can be
  *   #gfs-roster/<id>             load the Sports Thread roster
  *   #gfs-live/<id>               live: the upload log, counts, crew
@@ -65,7 +66,17 @@
     gfs_clip_held: "That athlete is on hold, so the clip stays off every channel.",
     gfs_takedown_clips_out: "Clips are still out somewhere. Take them down first.",
     featured_not_used: "This one doesn't name athletes.",
+    gfs_qr_not_set_up: "The stop page isn't set up on the server yet (migration 025).",
+    youth_no_public_link: "A youth creator never appears on a stop's page, so they don't get a public link.",
   };
+  // Field-level messages for the stop page's links.
+  var FIELD = {
+    sportsclippers_url: "Use a link on sportsclippers.com, starting with https://.",
+    help_phone: "Use a 10-digit US number, or a full number starting with +.",
+    qr_sources: "Name a placement with letters and numbers (2 to 24), up to 20 of them.",
+    youth_no_public_link: "A youth creator never appears on a stop's page, so they don't get a public link.",
+  };
+  var fieldSay = function (e) { return say(e); };
   var PROBLEM = { creator_not_active: "Not active", no_contract: "No signed contract", background_check: "Background check missing or over a year old", safety_training: "Safety training missing or over a year old", youth_role: "Youth creators shoot or shadow only" };
   var WHY = { no_number: "Number unreadable", not_on_roster: "Number isn't on the roster", team_not_on_roster: "A team in the folder name isn't on the roster", two_teams: "Same number on both teams", duplicate_number: "Two athletes share this number", no_roster: "No roster loaded yet", no_team: "No game or team folder to tell teams apart", team_conflict: "The team column and the team folder disagree", roster_changed: "The roster changed this athlete's number or team", untagged: "Untagged by a director", number_conflict: "The jersey folder and the file name give different numbers" };
   var HOLD = { takedown: "Takedown", do_not_publish: "Do not publish", no_capture_consent: "No capture consent", roster_changed: "Roster changed" };
@@ -75,6 +86,8 @@
   function say(e) {
     var d = e && e.data;
     var code = d && d.error;
+    var f = d && Array.isArray(d.fields) && d.fields.find(function (k) { return FIELD[k]; });
+    if (f) return FIELD[f];
     if (code === "credentials" && d.problems) return "Can't crew them: " + d.problems.map(function (p) { return PROBLEM[p] || p; }).join(", ").toLowerCase() + ".";
     if (code === "gfs_featured_consent" && d.blocks) return "Can't clear it: " + d.blocks.map(function (b) { return (b.team ? b.team + " " : "") + "#" + b.jersey + " (" + (BLOCK[b.why] || b.why) + ")"; }).join(", ") + ".";
     return (code && MSG[code]) || (d && d.hint) || (e && e.message) || "Something went wrong.";
@@ -96,6 +109,7 @@
     stop: svg('<circle cx="12" cy="12" r="9"/><path d="M8 12h8"/>', 22),
     up: svg('<path d="M12 16V4M7 9l5-5 5 5"/><path d="M5 20h14"/>', 22),
     desk: svg('<rect x="3" y="4" width="18" height="13" rx="2"/><path d="M8 21h8M12 17v4"/>', 22),
+    qr: svg('<rect x="4" y="4" width="6" height="6" rx="1"/><rect x="14" y="4" width="6" height="6" rx="1"/><rect x="4" y="14" width="6" height="6" rx="1"/><path d="M14 14h2v2h-2zM18 18h2v2h-2zM14 18h2M18 14h2"/>', 22),
     check: '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg>',
   };
 
@@ -259,7 +273,7 @@
       '<p class="sub" style="margin:-8px 0 0">Deadlines run from the wrap time on the last day: 12 hours for full games, 48 and 72 hours for edits.</p>' +
       input("evCrew", "Crew on site per day", 'type="number" min="0" max="30" inputmode="numeric"', ev.crew_target) +
       (T().atLeast("approver") ? input("evDir", "Director's email <small>(optional)</small>", 'type="email" inputmode="email" autocomplete="off"', ev.director && ev.director.email) : "") +
-      input("evStore", "Storefront page <small>(optional)</small>", 'type="url" inputmode="url" placeholder="https://"', ev.storefront_url, "The event's QR code points here.");
+      input("evStore", "Packages storefront <small>(optional)</small>", 'type="url" inputmode="url" placeholder="https://"', ev.storefront_url, "Where photo and video packages are sold. The QR codes open the stop page; set its links under QR codes.");
   }
   function readForm(ev) {
     var v = function (id) { var el = document.getElementById(id); return el ? el.value.trim() : undefined; };
@@ -348,10 +362,10 @@
     var member = t.atLeast("member");
     var items = d.checklist.map(function (c) {
       var sub = c.key === "roster" ? (d.roster.athletes ? d.roster.athletes + " athletes on " + d.roster.teams + " teams · " + d.roster.do_not_publish + " do-not-publish" : "Sports Thread sends it 72 hours out") :
-        c.key === "storefront" ? (ev.storefront_url ? "Assigned by athlete ID, jersey and team" : "Add the storefront link the QR code points to") :
+        c.key === "storefront" ? (ev.sportsclippers_url ? (c.done ? "The codes and the stop page are ready" : "Print the codes, then mark them ready") : "Add the stop's SportsClippers page") :
         c.key === "brief" ? "From the Pylon production playbook" :
         c.done ? "Ready" : "Tap to fill";
-      var href = c.key === "crew" ? "#gfs-crew/" + ev.id : c.key === "roster" ? "#gfs-roster/" + ev.id : c.key === "storefront" ? "#gfs-edit/" + ev.id : null;
+      var href = c.key === "crew" ? "#gfs-crew/" + ev.id : c.key === "roster" ? "#gfs-roster/" + ev.id : c.key === "storefront" ? "#gfs-qr/" + ev.id : null;
       var right = '<span class="sub mono" style="font-size:11px">' + DUE[c.key] + "</span>";
       var inner = '<span class="tick' + (c.done ? " on" : left(c.due_at).late ? " late" : "") + '">' + (c.done ? ICON.check : "") + '</span><div class="grow"><div class="name" style="font-size:15px">' + h(c.label) + '</div><div class="sub">' + h(sub) + "</div></div>" + right;
       if (c.key === "brief" && member) return '<button type="button" class="li" data-brief="' + (c.done ? "0" : "1") + '">' + inner + "</button>";
@@ -381,9 +395,122 @@
       '<a class="tile" href="#gfs-tags/' + h(ev.id) + '">' + ICON.tag + "Tag review" + (d.counts && d.counts.unmatched ? " · " + d.counts.unmatched : "") + "</a>" +
       (member ? '<a class="tile" href="#gfs-roster/' + h(ev.id) + '">' + ICON.list + "Roster and consent</a>" : '<a class="tile" href="#gfs-deliver/' + h(ev.id) + '">' + ICON.box + "Deliver</a>") +
       "</div>" +
+      '<a class="li list" href="#gfs-qr/' + h(ev.id) + '" style="border-radius:16px"><div class="ico" style="width:36px;height:36px;border-radius:9px">' + ICON.qr + '</div><div class="grow"><div class="name" style="font-size:15px">QR codes and the stop page</div><div class="sub">Signs, the booth, wristbands, and a code for each creator</div></div>' + t.I.chev + "</a>" +
       (member ? '<a class="li list" href="#gfs-takedown/' + h(ev.id) + '" style="border-radius:16px">' + '<div class="ico" style="width:36px;height:36px;border-radius:9px;color:var(--bad)">' + ICON.stop + '</div><div class="grow"><div class="name" style="font-size:15px">Log a takedown</div><div class="sub">A safety request or withdrawn consent starts its clock now</div></div>' + t.I.chev + "</a>" : "") +
       "</div>");
     bind("[data-brief]", "click", function (b) { act(b, async function () { await t.post("/api/gfs/events/" + encodeURIComponent(id), { brief_sent: b.dataset.brief === "1" }, "PATCH"); t.toast(b.dataset.brief === "1" ? "Marked: crew brief sent." : "Unmarked."); event(id); }); });
+  }
+
+  // ── QR codes and the stop page ─────────────────────────────────────────
+  // Every code opens the stop's public page (routes/gfs-page.js): footage on
+  // SportsClippers, the creator's own page for a creator's code, and help
+  // from GFS. Counts are scans of the page and clicks on to SportsClippers.
+  async function copyLink(url) {
+    try {
+      await navigator.clipboard.writeText(url);
+      T().toast("Link copied.");
+    } catch (e) {
+      T().toast("Couldn't copy here. Press and hold the link to copy it.");
+    }
+  }
+  function phoneWords(p) {
+    var m = /^\+1(\d{3})(\d{3})(\d{4})$/.exec(String(p || ""));
+    return m ? "(" + m[1] + ") " + m[2] + "-" + m[3] : p || "";
+  }
+  function countLine(c) {
+    var parts = [c.scan + (c.scan === 1 ? " scan" : " scans"), c.footage + " to footage"];
+    if (c.creator) parts.push(c.creator + " to the creator");
+    return parts.join(" · ");
+  }
+  async function qr(id) {
+    if (!guard()) return;
+    loading("events", T().backBtn("#event/" + id, "Event plan"));
+    var t = T();
+    var d = await t.api("/api/gfs/events/" + encodeURIComponent(id) + "/qr");
+    var ev = d.event;
+    var member = t.atLeast("member");
+    var base = "/api/gfs/events/" + encodeURIComponent(id) + "/qr/";
+    function codeCard(c) {
+      var img = base + encodeURIComponent(c.key) + ".svg";
+      var title = c.kind === "creator" ? "Filmed by " + c.first : c.label;
+      var sub = c.kind === "creator" ? c.creator.name + " · " + (c.status === "confirmed" ? "confirmed" : "invited") : c.use || (c.custom ? "Added for this stop" : "");
+      return '<article class="card tight"><div class="row" style="align-items:flex-start"><img src="' + h(img) + '" alt="QR code: ' + h(title) + '" width="88" height="88" loading="lazy" style="background:#fff;border-radius:10px;padding:4px;flex:none">' +
+        '<div class="grow"><div class="name" style="font-size:15px">' + h(title) + '</div><div class="sub">' + h(sub) + '</div><div class="sub mono" style="font-size:11.5px;margin-top:4px">' + h(countLine(c.counts)) + "</div></div></div>" +
+        '<div class="btn-row" style="flex-wrap:wrap"><button type="button" class="btn small soft" data-dl="' + h(c.key) + '" data-ext="png">PNG</button><button type="button" class="btn small soft" data-dl="' + h(c.key) + '" data-ext="svg">SVG</button>' +
+        '<a class="btn small soft" href="#tool/qrcard:' + h(id) + ":" + h(c.key) + '" aria-label="' + (c.kind === "creator" ? "Print a lanyard card" : "Print a sign") + '">Print</a>' +
+        '<button type="button" class="btn small ghost" data-copy="' + h(c.url) + '" aria-label="Copy link">Copy</button>' +
+        (c.custom && member ? '<button type="button" class="btn small ghost" data-unplace="' + h(c.placement) + '">Remove</button>' : "") + "</div></article>";
+    }
+    var stopCodes = d.codes.filter(function (c) { return c.kind !== "creator"; });
+    var creatorCodes = d.codes.filter(function (c) { return c.kind === "creator"; });
+    var noLink = d.creators_without_link.map(function (c) {
+      return '<a class="li" href="#gfs-creator/' + h(c.id) + '"><div class="grow"><div class="name" style="font-size:15px">' + h(c.name) + '</div><div class="sub">' + h(c.paused ? "Paused, so no code" : "Add their SportsClippers page to give them a code") + "</div></div>" + t.I.chev + "</a>";
+    }).join("");
+    var tot = d.totals;
+    var links = member
+      ? input("qrSc", "This stop's SportsClippers page", 'type="url" inputmode="url" autocomplete="off" placeholder="https://sportsclippers.com/…"', ev.sportsclippers_url, "Where Find your footage goes. It must be on sportsclippers.com.") +
+        input("qrPh", "On-site help number <small>(optional)</small>", 'type="tel" inputmode="tel" autocomplete="off" placeholder="(555) 123-4567"', phoneWords(ev.help_phone), "Families can text it from the page.") +
+        '<button type="button" class="btn small" id="qrSave" style="align-self:flex-start">Save the links</button>'
+      : '<p class="sub" style="margin:0">' + h(ev.sportsclippers_url ? "Footage: " + ev.sportsclippers_url : "No SportsClippers page yet.") + "</p>";
+    t.show("events",
+      '<div class="screen">' + t.backBtn("#event/" + id, "Event plan") +
+      head(ev.name, "QR codes", "", "Each code opens this stop's page: footage on SportsClippers, the creator's own page for a creator's code, and help from Ground Floor Sports.") +
+      (d.page.live ? "" : '<section class="card tight" style="border-color:var(--bad)"><div class="name" style="font-size:15px">This stop was cancelled</div><p class="sub" style="margin:0">Its page now says so and keeps only the help links.</p></section>') +
+      (d.page.footage_link || !d.page.live ? "" : '<section class="card tight" style="border-color:var(--warn)"><div class="name" style="font-size:15px">No footage link yet</div><p class="sub" style="margin:0">Until this stop\'s SportsClippers page is added, the page shows help only. The codes already work, so you can print them now.</p></section>') +
+      '<section class="card"><div class="row"><div class="grow"><div class="name">The stop page</div><div class="sub mono" style="font-size:11.5px;word-break:break-all">' + h(d.page.url) + '</div></div><a class="btn small soft" href="' + h(d.page.url) + '" target="_blank" rel="noopener">Open</a></div>' +
+      '<div class="stats" style="grid-template-columns:repeat(3,minmax(0,1fr))"><div class="stat"><b>' + tot.scan + '</b><span>Scans</span></div><div class="stat"><b>' + tot.footage + '</b><span>To footage</span></div><div class="stat"><b>' + tot.creator + '</b><span>To creators</span></div></div>' +
+      (d.counts_ready ? "" : '<p class="sub" style="margin:0">Counts start once the server is set up for them (migration 025).</p>') +
+      links +
+      '<p class="sub" style="margin:0">Help email on the page: <b style="color:var(--ink)">' + h(d.help.email) + "</b> (Ground Floor Sports). Takedown requests go there too.</p>" +
+      '<p id="qrMsg" class="body" role="status"></p></section>' +
+      '<section class="sec"><h2 class="sec-h">The stop and its placements</h2>' + stopCodes.map(codeCard).join("") +
+      (member ? '<div class="card tight"><div class="name" style="font-size:15px">Add a placement</div><p class="sub" style="margin:0">A code of its own for one spot, like "Field 3 sign" or "Team tent", so its scans count apart.</p><div class="row"><input class="input grow" id="qrNew" type="text" maxlength="24" placeholder="Field 3 sign" autocomplete="off"' + (d.placements_left ? "" : " disabled") + '><button type="button" class="btn small" id="qrAdd"' + (d.placements_left ? "" : " disabled") + ">Add</button></div><p id=\"qrAddMsg\" class=\"body\" role=\"status\"></p></div>" : "") +
+      "</section>" +
+      '<section class="sec"><h2 class="sec-h">Creators on the crew</h2>' +
+      (creatorCodes.length ? creatorCodes.map(codeCard).join("") : "") +
+      (noLink ? '<div class="list">' + noLink + "</div>" : "") +
+      (!creatorCodes.length && !noLink ? '<p class="sub" style="margin:0">Crew the stop, and each adult creator with a SportsClippers page gets a code for their lanyard.</p>' : "") +
+      (d.youth_on_crew ? '<p class="sub" style="margin:0">' + d.youth_on_crew + (d.youth_on_crew === 1 ? " youth creator on this crew gets" : " youth creators on this crew get") + " no code: a youth creator never appears on a public page.</p>" : "") +
+      "</section>" +
+      (member ? '<section class="card tight"><div class="row"><span class="tick' + (d.ready ? " on" : "") + '">' + (d.ready ? ICON.check : "") + '</span><div class="grow"><div class="name" style="font-size:15px">' + (d.ready ? "Marked ready" : "Ready to go?") + '</div><div class="sub">Ticks "QR code and storefront page" on the event plan.</div></div><button type="button" class="btn small ' + (d.ready ? "ghost" : "") + '" id="qrReady">' + (d.ready ? "Undo" : "Mark ready") + "</button></div></section>" : "") +
+      "</div>");
+
+    bind("[data-dl]", "click", function (b) { download(base + encodeURIComponent(b.dataset.dl) + "." + b.dataset.ext + "?download=1", ev.code + "-" + b.dataset.dl + "." + b.dataset.ext); });
+    bind("[data-copy]", "click", function (b) { copyLink(b.dataset.copy); });
+    var evUrl = "/api/gfs/events/" + encodeURIComponent(id);
+    var save = document.getElementById("qrSave");
+    if (save) save.addEventListener("click", function () {
+      act(save, async function () {
+        try {
+          await t.post(evUrl, { sportsclippers_url: document.getElementById("qrSc").value.trim(), help_phone: document.getElementById("qrPh").value.trim() }, "PATCH");
+        } catch (e) { save.disabled = false; return msgEl("qrMsg", fieldSay(e)); }
+        t.toast("Saved.");
+        qr(id);
+      }, "qrMsg");
+    });
+    var add = document.getElementById("qrAdd");
+    if (add) add.addEventListener("click", function () {
+      var label = document.getElementById("qrNew").value.trim();
+      if (!label) return msgEl("qrAddMsg", "Name the placement first.");
+      act(add, async function () {
+        try {
+          await t.post(evUrl, { qr_sources: (ev.qr_sources || []).concat([label]) }, "PATCH");
+        } catch (e) { add.disabled = false; return msgEl("qrAddMsg", fieldSay(e)); }
+        t.toast("Added.");
+        qr(id);
+      }, "qrAddMsg");
+    });
+    bind("[data-unplace]", "click", function (b) {
+      act(b, async function () {
+        await t.post(evUrl, { qr_sources: (ev.qr_sources || []).filter(function (k) { return k !== b.dataset.unplace; }) }, "PATCH");
+        t.toast("Removed. Printed copies of that code still open the stop page.");
+        qr(id);
+      });
+    });
+    var ready = document.getElementById("qrReady");
+    if (ready) ready.addEventListener("click", function () {
+      act(ready, async function () { await t.post(evUrl, { storefront_ready: !d.ready }, "PATCH"); t.toast(d.ready ? "Unmarked." : "Marked ready."); qr(id); });
+    });
   }
 
   // ── Crew ───────────────────────────────────────────────────────────────
@@ -960,6 +1087,7 @@
       (locked ? '<p class="sub" style="margin:-8px 0 0">Their screening is on file, so Kyron changes their name or email.</p>' : "") +
       '<div class="field"><span class="label">Region</span><div class="chips" role="radiogroup" aria-label="Region" style="flex-wrap:wrap;margin:0;padding:0">' + meta.you.regions.map(function (r) { return '<button type="button" role="radio" class="chip" data-creg="' + r + '" aria-pressed="' + (c.region === r) + '">' + h(rname(r)) + "</button>"; }).join("") + "</div></div>" +
       input("c_city", "Home city", 'type="text" maxlength="80"', c.home_city) +
+      '<div id="scWrap"' + (c.tier === "youth" ? " hidden" : "") + ">" + input("c_sc", "SportsClippers page <small>(optional)</small>", 'type="url" inputmode="url" autocomplete="off" placeholder="https://sportsclippers.com/…"', c.sportsclippers_url, "Shown on a stop's page when their code is scanned, with their first name. Adults only.") + "</div>" +
       '<section class="card"><div class="name">Screening' + (owner ? "" : " · Kyron records this") + '</div>' +
       (c.badges.length ? '<div class="pill-row">' + c.badges.map(function (b) { return badge(b.label + (b.until && b.ok ? " · to " + day(b.until, { month: "short", year: "numeric" }) : ""), b.ok ? "ok" : "warn"); }).join("") + "</div>" : "") +
       dateIn("contract_signed_on", "Contract signed") + dateIn("background_check_on", "Background check") + dateIn("safety_training_on", "Minor-safety training") +
@@ -973,13 +1101,14 @@
       '<div class="dock"><div class="dock-inner"><button type="button" class="btn block" id="cGo">' + (isNew ? "Add the creator" : "Save") + "</button></div></div>");
     var region = c.region, tier = c.tier, status = c.status;
     bind("[data-creg]", "click", function (b) { region = b.dataset.creg; app().querySelectorAll("[data-creg]").forEach(function (x) { x.setAttribute("aria-pressed", String(x === b)); }); });
-    bind("[data-tier]", "click", function (b) { tier = b.dataset.tier; app().querySelectorAll("[data-tier]").forEach(function (x) { x.setAttribute("aria-pressed", String(x === b)); }); });
+    bind("[data-tier]", "click", function (b) { tier = b.dataset.tier; app().querySelectorAll("[data-tier]").forEach(function (x) { x.setAttribute("aria-pressed", String(x === b)); }); document.getElementById("scWrap").hidden = tier === "youth"; });
     bind("[data-cst]", "click", function (b) { status = b.dataset.cst; app().querySelectorAll("[data-cst]").forEach(function (x) { x.setAttribute("aria-pressed", String(x === b)); }); });
     document.getElementById("cGo").addEventListener("click", function () {
       var btn = this;
       act(btn, async function () {
         var v = function (k) { var el = document.getElementById(k); return el ? el.value.trim() : undefined; };
         var body = { name: v("c_name"), email: v("c_email"), region: region, home_city: v("c_city"), notes: v("c_notes") };
+        if (tier !== "youth") body.sportsclippers_url = v("c_sc") || null;
         if (!isNew) body.status = status;
         if (owner) {
           body.contract_signed_on = v("c_contract_signed_on") || null;
@@ -1031,6 +1160,7 @@
     "gfs-new": gfsNew,
     "gfs-import": gfsImport,
     "gfs-edit": gfsEdit,
+    "gfs-qr": qr,
     event: event,
     "gfs-crew": crew,
     "gfs-roster": roster,
