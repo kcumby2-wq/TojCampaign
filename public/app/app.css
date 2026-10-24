@@ -245,6 +245,7 @@ button, input, textarea, select { font: inherit; color: inherit; }
 .msg-head { margin-top: 10px; font: 500 12.5px/1.2 var(--text); color: var(--muted); }
 .msg-head b { color: var(--ink); font-weight: 700; }
 .msg-head.mine { text-align: right; }
+.msg-head .role { display: inline-block; margin-left: 4px; padding: 2px 6px; border-radius: 6px; background: var(--chip); color: var(--gold-ink); font: 700 10.5px/1.2 var(--text); letter-spacing: .03em; }
 .msg { display: flex; align-items: flex-start; gap: 4px; position: relative; }
 .msg.mine { flex-direction: row-reverse; }
 .bubble { max-width: 82%; padding: 9px 12px; border-radius: 16px; border-bottom-left-radius: 6px; background: var(--card-2); color: var(--ink); font: 400 15px/1.45 var(--text); overflow-wrap: anywhere; }

@@ -55,6 +55,7 @@ function notSetUp(e) {
 function fail(res, e, what) {
   const m = e && typeof e.message === "string" ? e.message.trim() : "";
   if (/^chat_[a-z_]+$/.test(m)) return res.status(m === "chat_contact_details" ? 400 : 409).json({ error: m });
+  if (e && e.code === "23505" && /chat_people_name_key/.test(m)) return res.status(409).json({ error: "name_taken" });
   if (notSetUp(e)) return res.status(503).json(NOT_SET_UP);
   // A check the app missed: a name or title with contact details in it.
   if (e && e.code === "23514" && /chat_/.test(m)) return res.status(400).json({ error: "chat_contact_details" });
@@ -113,7 +114,16 @@ async function teamAccess(sb) {
       owner: false,
     });
   }
-  for (const email of staffEmails()) map.set(email, { email, role: "owner", tools: Object.keys(T.GRANTABLE_TOOLS), regions: [...T.REGION_KEYS], owner: true });
+  // Owners: on ADMIN_EMAILS and with a staff account (utils/staff.js), as
+  // GET /api/team counts them. A listed address without one isn't an owner.
+  const listed = [...staffEmails()];
+  if (listed.length) {
+    const users = (await run(sb.from("users").select("email,role").in("email", listed))) || [];
+    for (const u of users) {
+      if (!["staff", "admin"].includes(u.role)) continue;
+      map.set(u.email, { email: u.email, role: "owner", tools: Object.keys(T.GRANTABLE_TOOLS), regions: [...T.REGION_KEYS], owner: true });
+    }
+  }
   return map;
 }
 
@@ -191,11 +201,26 @@ async function namesOf(sb, ids) {
   return new Map(rows.map((r) => [r.id, r.display_name]));
 }
 
-function messageView(m, me, names) {
+// Owners and approvers are marked on their messages, so a name alone can't
+// stand in for them.
+async function rolesOf(sb, ids) {
+  const list = [...new Set(ids.filter(Boolean))];
+  const out = new Map();
+  if (!list.length) return out;
+  const rows = await inChunks(list, (part) => run(sb.from("chat_people").select("id,email").in("id", part)));
+  const teamMap = await teamAccess(sb);
+  for (const p of rows) {
+    const a = teamMap.get(p.email);
+    if (a && (a.owner || a.role === "approver")) out.set(p.id, C.roleLabel(a));
+  }
+  return out;
+}
+
+function messageView(m, me, names, roles) {
   const removed = !!m.removed_at;
   return {
     id: m.id,
-    author: m.author_id ? { id: m.author_id, name: names.get(m.author_id) || "Former teammate" } : null,
+    author: m.author_id ? { id: m.author_id, name: names.get(m.author_id) || "Former teammate", role: (roles && roles.get(m.author_id)) || null } : null,
     mine: !!me && m.author_id === me.id,
     body: removed ? null : m.body,
     removed,
@@ -249,6 +274,20 @@ router.get("/me", team, async (req, res) => {
   }
 });
 
+// Someone else already goes by this name (any case)?
+async function nameTaken(sb, name, myId) {
+  const rows = await all(() => sb.from("chat_people").select("id,display_name"));
+  const want = name.toLowerCase();
+  return rows.some((p) => p.id !== myId && String(p.display_name).toLowerCase() === want);
+}
+// A youth creator's address on the crew list never joins chat, whatever the
+// form says. Before migration 024 there's no list to check.
+async function youthCreator(sb, email) {
+  const { data, error } = await sb.from("gfs_creators").select("id,tier").eq("email", email);
+  if (error) return false;
+  return (data || []).some((c) => c.tier === "youth");
+}
+
 router.post("/me", team, async (req, res) => {
   const sb = getSupabase();
   if (!sb) return sb503(res);
@@ -256,15 +295,18 @@ router.post("/me", team, async (req, res) => {
   if (!name) return;
   try {
     const me = await personFor(sb, req.team.email);
+    if (await nameTaken(sb, name, me ? me.id : null)) return res.status(409).json({ error: "name_taken" });
     if (me) {
       await run(sb.from("chat_people").update({ display_name: name, updated_at: now() }).eq("id", me.id));
       return res.json({ me: { id: me.id, name } });
     }
     // Nobody joins without saying they're 18 or older.
     if (!req.body || req.body.adult !== true) return res.status(400).json({ error: "adult_required" });
+    if (await youthCreator(sb, req.team.email)) return res.status(403).json({ error: "adults_only" });
     const { data, error } = await sb.from("chat_people").insert({ email: req.team.email, display_name: name, adult_confirmed_at: now() }).select("id,display_name").single();
     if (error && error.code === "23505") {
       const again = await personFor(sb, req.team.email);
+      if (!again) return res.status(409).json({ error: "name_taken" });
       return res.json({ me: { id: again.id, name: again.display_name } });
     }
     if (error) throw error;
@@ -401,10 +443,11 @@ router.get("/people", team, joined, async (req, res) => {
 
 router.post("/dm", team, joined, async (req, res) => {
   const { sb, me } = req.chat;
-  const otherId = String((req.body && req.body.person) || "");
+  const otherId = String((req.body && req.body.person) || "").toLowerCase();
   if (!UUID.test(otherId) || otherId === me.id) return res.status(400).json({ error: "person_required" });
   try {
     const other = await run(sb.from("chat_people").select("id,email").eq("id", otherId).maybeSingle());
+    if (other && other.id === me.id) return res.status(400).json({ error: "person_required" });
     const teamMap = await teamAccess(sb);
     if (!other || !teamMap.has(other.email)) return res.status(404).json({ error: "person_not_found" });
     const slug = C.slugFor("dm", [me.id, other.id]);
@@ -511,24 +554,25 @@ router.patch("/rooms/:id", team, joined, async (req, res) => {
     if (!r) return;
     if (!C.canManage(req.team, r.room)) return res.status(403).json({ error: "role_too_low", need: "approver" });
     const b = req.body || {};
+    // Everything is checked before anything changes.
+    let title = null;
     if (b.title !== undefined) {
-      const title = readLine(b.title, C.TITLE_MAX, res, "title");
+      title = readLine(b.title, C.TITLE_MAX, res, "title");
       if (!title) return;
-      await run(sb.from("chat_rooms").update({ title }).eq("id", r.room.id));
     }
     const teamMap = await teamAccess(sb);
+    let adding = [];
     if (b.add !== undefined) {
-      const people = await teamPeopleByIds(sb, b.add, teamMap);
+      const people = await teamPeopleByIds(sb, (Array.isArray(b.add) ? b.add : []).map((x) => String(x).toLowerCase()), teamMap);
       if (!people) return res.status(400).json({ error: "person_not_found" });
       const current = ((await run(sb.from("chat_room_members").select("person_id").eq("room_id", r.room.id))) || []).length;
-      const adding = people.filter((p) => p.id !== me.id);
+      adding = people.filter((p) => p.id !== me.id);
       if (current + adding.length > C.TOPIC_PEOPLE_MAX + 1) return res.status(400).json({ error: "too_many_people", max: C.TOPIC_PEOPLE_MAX });
-      for (const p of adding) await ensureMember(sb, r.room.id, p.id, me.id);
     }
-    if (b.remove !== undefined) {
-      const ids = [...new Set((Array.isArray(b.remove) ? b.remove : []).map(String))].filter((x) => UUID.test(x));
-      if (ids.length) await run(sb.from("chat_room_members").delete().eq("room_id", r.room.id).in("person_id", ids));
-    }
+    const removing = b.remove !== undefined ? [...new Set((Array.isArray(b.remove) ? b.remove : []).map((x) => String(x).toLowerCase()))].filter((x) => UUID.test(x)) : [];
+    if (title) await run(sb.from("chat_rooms").update({ title }).eq("id", r.room.id));
+    for (const p of adding) await ensureMember(sb, r.room.id, p.id, me.id);
+    if (removing.length) await run(sb.from("chat_room_members").delete().eq("room_id", r.room.id).in("person_id", removing));
     res.json({ ok: true });
   } catch (e) {
     fail(res, e, "chat_change_room");
@@ -555,9 +599,10 @@ router.patch("/rooms/:id/me", team, joined, async (req, res) => {
 });
 
 // ── Messages ─────────────────────────────────────────────────────────────
-function idParam(v) {
+function idParam(v, zeroOk) {
+  if (v === undefined || v === null || v === "") return null;
   const n = Number(v);
-  return Number.isSafeInteger(n) && n > 0 ? n : null;
+  return Number.isSafeInteger(n) && (n > 0 || (zeroOk && n === 0)) ? n : null;
 }
 
 router.get("/rooms/:id/messages", team, joined, async (req, res) => {
@@ -566,11 +611,11 @@ router.get("/rooms/:id/messages", team, joined, async (req, res) => {
     const r = await loadRoom(sb, req, res, me);
     if (!r) return;
     const cols = "id,room_id,author_id,body,created_at,edited_at,removed_at";
-    const after = idParam(req.query.after);
+    const after = idParam(req.query.after, true);
     const before = idParam(req.query.before);
     let rows;
     let more = false;
-    if (after) {
+    if (after !== null) {
       rows = (await run(sb.from("chat_messages").select(cols).eq("room_id", r.room.id).gt("id", after).order("id", { ascending: true }).limit(NEWER_MAX))) || [];
       more = rows.length === NEWER_MAX;
     } else {
@@ -588,7 +633,8 @@ router.get("/rooms/:id/messages", team, joined, async (req, res) => {
       await run(sb.from("chat_reads").upsert({ person_id: me.id, room_id: r.room.id, last_read_id: Math.max(upto, before ? 0 : newest), seen_at: now() }, { onConflict: "person_id,room_id" }));
     }
     const names = await namesOf(sb, rows.map((m) => m.author_id));
-    res.json({ messages: rows.map((m) => messageView(m, me, names)), more, read_upto: upto });
+    const roles = rows.length ? await rolesOf(sb, rows.map((m) => m.author_id)) : new Map();
+    res.json({ messages: rows.map((m) => messageView(m, me, names, roles)), more, read_upto: upto });
   } catch (e) {
     fail(res, e, "chat_messages");
   }
@@ -614,13 +660,13 @@ async function notifyRoom(sb, r, me, body) {
   const tag = "chat-" + r.room.id;
   if (r.room.kind === "dm") {
     const to = people.filter((p) => !looking(p) && (!muted(p) || mentioned.has(p.id)));
-    if (to.length) P.notifySoon(to.map((p) => p.email), { title: me.display_name, body: "Sent you a message", url, tag });
+    if (to.length) P.notifySoon(to.map((p) => p.email), { title: me.display_name, body: "Sent you a message", url, tag, renotify: true });
     return;
   }
   const title = C.titleOf(r.room, { ev: r.ev });
   const tagged = people.filter((p) => mentioned.has(p.id) && !looking(p));
   const rest = people.filter((p) => !mentioned.has(p.id) && !muted(p) && !looking(p));
-  if (tagged.length) P.notifySoon(tagged.map((p) => p.email), { title, body: me.display_name + " mentioned you", url, tag });
+  if (tagged.length) P.notifySoon(tagged.map((p) => p.email), { title, body: me.display_name + " mentioned you", url, tag, renotify: true });
   if (rest.length) P.notifySoon(rest.map((p) => p.email), { title, body: me.display_name + " sent a message", url, tag });
 }
 
@@ -637,9 +683,18 @@ router.post("/rooms/:id/messages", team, joined, async (req, res) => {
     if (!body) return;
     if (C.tooFast(me.id)) return res.status(429).json({ error: "chat_too_fast" });
     const row = await run(sb.from("chat_messages").insert({ room_id: r.room.id, author_id: me.id, body }).select("id,room_id,author_id,body,created_at,edited_at,removed_at").single());
-    await run(sb.from("chat_rooms").update({ last_message_at: row.created_at || now() }).eq("id", r.room.id));
-    await run(sb.from("chat_reads").upsert({ person_id: me.id, room_id: r.room.id, last_read_id: row.id, seen_at: now() }, { onConflict: "person_id,room_id" }));
-    res.status(201).json({ message: messageView(row, me, new Map([[me.id, me.display_name]])) });
+    // Sent. The room's sort time (the database sets it too) and "they're
+    // looking at it" are extras: a failure there doesn't fail the send, so
+    // a retry can't post it twice. The read mark isn't moved: the room's
+    // next check marks read what it fetched.
+    try {
+      await run(sb.from("chat_rooms").update({ last_message_at: row.created_at || now() }).eq("id", r.room.id));
+      await run(sb.from("chat_reads").upsert({ person_id: me.id, room_id: r.room.id, seen_at: now() }, { onConflict: "person_id,room_id" }));
+    } catch (e2) {
+      console.warn("[chat] after-send update failed for room", r.room.id, (e2 && e2.code) || "");
+    }
+    const roles = await rolesOf(sb, [me.id]);
+    res.status(201).json({ message: messageView(row, me, new Map([[me.id, me.display_name]]), roles) });
     notifyRoom(sb, r, me, body).catch((e) => console.warn("[chat] notify failed for room", r.room.id, (e && e.code) || ""));
   } catch (e) {
     fail(res, e, "chat_send");
@@ -668,7 +723,7 @@ router.patch("/messages/:mid", team, joined, async (req, res) => {
     if (!body) return;
     const at = now();
     await run(sb.from("chat_messages").update({ body, edited_at: at }).eq("id", x.m.id));
-    res.json({ message: messageView({ ...x.m, body, edited_at: at }, me, new Map([[me.id, me.display_name]])) });
+    res.json({ message: messageView({ ...x.m, body, edited_at: at }, me, new Map([[me.id, me.display_name]]), await rolesOf(sb, [me.id])) });
   } catch (e) {
     fail(res, e, "chat_edit");
   }
@@ -682,7 +737,7 @@ router.delete("/messages/:mid", team, joined, async (req, res) => {
     if (!C.canRemove(req.team, x.m, me)) return res.status(403).json({ error: "not_yours" });
     if (x.m.removed_at) return res.json({ ok: true });
     await run(sb.from("chat_messages").update({ body: null, removed_at: now(), removed_by: me.id }).eq("id", x.m.id));
-    if (x.m.author_id !== me.id) await T.logActivity(req.team.email, "chat_removed_message", x.r.room.id);
+    if (x.m.author_id !== me.id) await T.logActivity(req.team.email, "chat_removed_message", null, { kind: x.r.room.kind });
     res.json({ ok: true });
   } catch (e) {
     fail(res, e, "chat_remove");
@@ -712,5 +767,22 @@ async function forgetPerson(sb, email) {
   }
 }
 
+// Taking someone off the team (routes/team.js): they leave every room they
+// were added to, so coming back later doesn't hand them what was said while
+// they were gone. Their DMs close on their own (the other side can't send).
+async function dropRooms(sb, email) {
+  const { data: p, error } = await sb.from("chat_people").select("id").eq("email", email).maybeSingle();
+  if (error) {
+    if (notSetUp(error)) return;
+    throw new Error(error.message);
+  }
+  if (!p) return;
+  const mine = ((await run(sb.from("chat_room_members").select("room_id").eq("person_id", p.id))) || []).map((m) => m.room_id);
+  if (!mine.length) return;
+  const topics = (await inChunks(mine, (part) => run(sb.from("chat_rooms").select("id,kind").in("id", part)))).filter((r) => r.kind === "topic").map((r) => r.id);
+  if (topics.length) await run(sb.from("chat_room_members").delete().eq("person_id", p.id).in("room_id", topics));
+}
+
 module.exports = router;
 module.exports.forgetPerson = forgetPerson;
+module.exports.dropRooms = dropRooms;

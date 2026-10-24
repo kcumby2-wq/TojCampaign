@@ -337,7 +337,7 @@ test("edits and removals: your own; the owner can remove anyone's, and it's logg
   assert.deepEqual([shown.removed, shown.body, shown.edited], [true, null, false]);
   assert.equal((await wes(`/api/chat/messages/${m.id}`, { method: "PATCH", body: { body: "back" } })).json.error, "chat_message_removed");
   const log = db.tables.team_activity.find((a) => a.action === "chat_removed_message");
-  assert.ok(log && log.actor === "kyron@example.com" && log.subject === room);
+  assert.ok(log && log.actor === "kyron@example.com" && log.subject === null && log.detail.kind === "region", "logged without the room, so a room someone can't read stays unknown to them");
   assert.ok(!JSON.stringify(log).includes("Wrap"), "the log has no message text");
   const own = (await vic(`/api/chat/rooms/${room}/messages`, { method: "POST", body: { body: "oops" } })).json.message;
   assert.equal((await vic(`/api/chat/messages/${own.id}`, { method: "DELETE" })).status, 200);
@@ -405,4 +405,74 @@ test("deleting your account: your messages lose their text and your chat record 
   assert.ok(!db.tables.chat_messages.some((x) => x.body && x.body.includes("Vic was here")));
   const seen = (await wes(`/api/chat/rooms/${room}/messages`)).json.messages.find((x) => x.id === m.id);
   assert.deepEqual([seen.removed, seen.body, seen.author.name], [true, null, "Former teammate"]);
+});
+
+test("names are unique whatever the case, and a youth creator's address can't join", async () => {
+  const sam2 = await as("sam@example.com");
+  assert.equal((await sam2("/api/chat/me", { method: "POST", body: { name: "KYRON" } })).json.error, "name_taken");
+  assert.equal((await sam2("/api/chat/me", { method: "POST", body: { name: "Sam" } })).status, 200, "your own name is fine");
+  db.tables.team_members.push({ email: "teen@example.com", name: "Teen Shooter", role: "viewer", tools: ["gfs"], regions: ["west"], status: "active" });
+  db.tables.gfs_creators = [{ id: crypto.randomUUID(), code: "TEEN1", name: "Teen Shooter", email: "teen@example.com", tier: "youth" }];
+  T.forget();
+  const teen = await as("teen@example.com");
+  assert.equal((await teen("/api/chat/me", { method: "POST", body: { name: "Teen", adult: true } })).json.error, "adults_only");
+  assert.ok(!db.tables.chat_people.some((p) => p.email === "teen@example.com"));
+});
+
+test("someone taken off the team and invited back isn't handed the rooms they were in", async () => {
+  const made = await abby("/api/chat/rooms", { method: "POST", body: { title: "Edit bay", people: [people.Stu] } });
+  const id = made.json.room.id;
+  assert.equal((await stu(`/api/chat/rooms/${id}`)).status, 200);
+  assert.equal((await kyron("/api/team/members/stu@example.com", { method: "DELETE" })).status, 200);
+  await abby(`/api/chat/rooms/${id}/messages`, { method: "POST", body: { body: "Said while Stu was away." } });
+  setMember("stu@example.com", { status: "active" });
+  assert.equal((await stu(`/api/chat/rooms/${id}`)).status, 404, "back on the team, but not back in the room");
+  assert.ok(!(await stu("/api/chat")).json.rooms.some((r) => r.id === id));
+});
+
+test("an address on ADMIN_EMAILS without a staff account isn't an owner in chat", async () => {
+  const before_ = process.env.ADMIN_EMAILS;
+  process.env.ADMIN_EMAILS = "kyron@example.com,ops@example.com";
+  db.tables.users.push({ email: "ops@example.com", hash: "x", role: "creator" });
+  db.tables.chat_people.push({ id: crypto.randomUUID(), email: "ops@example.com", display_name: "Ops", adult_confirmed_at: new Date().toISOString() });
+  db.tables.push_subscriptions.push({ id: crypto.randomUUID(), email: "ops@example.com", endpoint: "https://push.example.com/ops", p256dh: "k", auth: "a", kind: "web", fail_count: 0 });
+  try {
+    const room = roomOf(await wes("/api/chat"), "region").id;
+    assert.ok(!(await wes(`/api/chat/rooms/${room}`)).json.room.people.some((p) => p.name === "Ops"));
+    sentPush.length = 0;
+    await wes(`/api/chat/rooms/${room}/messages`, { method: "POST", body: { body: "Who gets this?" } });
+    await new Promise((r) => setTimeout(r, 80));
+    assert.ok(!sentPush.some((p) => p.email === "ops@example.com"));
+  } finally {
+    process.env.ADMIN_EMAILS = before_;
+  }
+});
+
+test("DMs never with yourself, whatever the case of the id", async () => {
+  assert.equal((await wes("/api/chat/dm", { method: "POST", body: { person: people.wes.toUpperCase() } })).json.error, "person_required");
+});
+
+test("owners and approvers are marked on their messages; sending doesn't mark others' messages read", async () => {
+  const all = roomOf(await kyron("/api/chat"), "all").id;
+  await kyron(`/api/chat/rooms/${all}/messages`, { method: "POST", body: { body: "Owner here." } });
+  const page = await wes(`/api/chat/rooms/${all}/messages`);
+  const mine = page.json.messages[page.json.messages.length - 1];
+  assert.deepEqual([mine.author.name, mine.author.role], ["Kyron", "Owner"]);
+  const sams = (await sam(`/api/chat/rooms/${all}/messages`, { method: "POST", body: { body: "Director here." } })).json.message;
+  assert.equal(sams.author.role, null, "directors aren't marked");
+  // Kyron writes, then Wes sends without having fetched it: it stays unread for Wes.
+  await wes(`/api/chat/rooms/${all}/messages?read=1`);
+  await kyron(`/api/chat/rooms/${all}/messages`, { method: "POST", body: { body: "Did you see this?" } });
+  await wes(`/api/chat/rooms/${all}/messages`, { method: "POST", body: { body: "Replying to something else." } });
+  assert.equal((await wes("/api/chat")).json.rooms.find((r) => r.id === all).unread, 1);
+});
+
+test("contact details in other forms: Unicode spaces and hyphens, full-width characters, hidden characters, dial links", () => {
+  for (const s of ["503\u00a0555\u00a00142", "503\u2011555\u20110142", "503\u2013555\u20130142", "\uff15\uff10\uff13-555-0142", "jane\uff20example.com", "503\u2060555\u20600142", "https://wa.me/15035550142", "call tel:+15035550142", "sms:5035550142"]) {
+    assert.equal(C.hasContact(s), true, JSON.stringify(s));
+  }
+  for (const s of ["https://sportsclippers.com/e/12345678901", "Bulldogs 21-14", "2026\u201310\u201324", "Field 3 at 9:00\u201310:30"]) {
+    assert.equal(C.hasContact(s), false, JSON.stringify(s));
+  }
+  assert.equal(C.cleanBody("a\u2060b\u00adc"), "abc", "hidden characters don't survive");
 });

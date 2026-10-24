@@ -69,6 +69,9 @@ async function as(email, role) {
 
 before(async () => {
   pool = await makeSchema(URL_, S, [...BASE, "026_team_chat.sql"]);
+  // The sign-in table (migration 005), for who counts as an owner.
+  await q("create table users (email text primary key, hash text, role text)");
+  await q("insert into users (email, hash, role) values ('kyron@example.com', 'x', 'admin')");
   await q("insert into team_members (email, name, role, tools, regions) values ('wes@example.com', 'Wes West', 'member', array['gfs'], array['west']), ('sam@example.com', 'Sam South', 'member', array['gfs'], array['south_central'])");
   const app = appFor(pgSupabase(pool, S));
   await new Promise((r) => (server = app.listen(0, r)));
@@ -90,7 +93,9 @@ test("026: no contact details in a message, a name or a room title", async () =>
   for (const bad of ["call 214-555-0199", "+1 (214) 555-0199", "+44 20 7946 0958", "write ana@example.org"]) await refused("insert into chat_messages (room_id, author_id, body) values ($1, $2, $3)", [room.id, a.id, bad], /chat_contact_details/);
   for (const fine of ["Bulldogs 21-14, #12 and #24", "https://sportsclippers.com/e/12345678901", "2026-10-24 10-26"]) assert.equal((await send(fine)).length, 1, fine);
   // The app's check and the database's agree.
-  for (const s of ["call 214-555-0199", "+44 20 7946 0958", "x@y.co", "https://sportsclippers.com/e/12345678901", "Bulldogs 21-14", "5035550142", "ok 1234567"]) {
+  for (const s of ["call 214-555-0199", "+44 20 7946 0958", "x@y.co", "https://sportsclippers.com/e/12345678901", "Bulldogs 21-14", "5035550142", "ok 1234567",
+    "503\u00a0555\u00a00142", "503\u2011555\u20110142", "503\u2013555\u20130142", "\uff15\uff10\uff13-555-0142", "jane\uff20example.com", "503\u2060555\u20600142",
+    "https://wa.me/15035550142", "call tel:+15035550142", "SMS:5035550142", "https://x.co\u00a0503-555-0142", "2026\u201310\u201324", "Field 3 at 9:00\u201310:30", "hotel:5"]) {
     const db = (await one("select chat_text_ok($1) as ok", [s])).ok;
     assert.equal(db, !C.hasContact(s), s);
   }
@@ -102,6 +107,16 @@ test("026: no contact details in a message, a name or a room title", async () =>
   await refused("update chat_messages set body = 'back', removed_at = null where id = $1", [m.id], /chat_message_removed/);
   const other = await one("insert into chat_rooms (slug, kind, region) values ('region:west', 'region', 'west') returning *");
   await refused("update chat_messages set room_id = $1 where id = (select max(id) from chat_messages where body is not null)", [other.id], /chat_message_moved/);
+});
+
+test("026: one person per name whatever the case; a room's latest message time comes with the message", async () => {
+  await person("n1@example.com", "Nora Lee");
+  await refused("insert into chat_people (email, display_name, adult_confirmed_at) values ('n2@example.com', 'nora lee', now())", [], /chat_people_name_key/);
+  const p = await person("n3@example.com", "Nate");
+  const room = await one("insert into chat_rooms (slug, kind, region) values ('region:midwest', 'region', 'midwest') returning *");
+  assert.equal(room.last_message_at, null);
+  const m = await one("insert into chat_messages (room_id, author_id, body) values ($1, $2, 'First') returning *", [room.id, p.id]);
+  assert.equal((await one("select last_message_at from chat_rooms where id = $1", [room.id])).last_message_at, m.created_at);
 });
 
 test("026: room shapes; members only in topic rooms and DMs, two in a DM", async () => {

@@ -45,6 +45,8 @@ self.addEventListener("push", (e) => {
         icon: "/app/icons/icon-192.png",
         badge: "/app/icons/icon-192.png",
         tag: d.tag || undefined,
+        // A mention or a DM that replaces an earlier notification still alerts.
+        renotify: !!(d.tag && d.renotify),
         data: { url: d.url || "/app/#today" },
       }),
       typeof d.badge === "number" && self.navigator && self.navigator.setAppBadge ? self.navigator.setAppBadge(d.badge).catch(() => {}) : null,

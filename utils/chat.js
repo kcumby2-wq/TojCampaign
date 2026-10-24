@@ -30,7 +30,7 @@ const TOPIC_PEOPLE_MAX = 60;
 // One line: names and titles.
 function cleanLine(s, max) {
   return String(s == null ? "" : s)
-    .replace(/[\u0000-\u001f\u007f\u200b-\u200f\u2028-\u202e\u2066-\u2069\ufeff]/g, " ")
+    .replace(/[\u0000-\u001f\u007f\u00ad\u180e\u200b-\u200f\u2028-\u202e\u2060-\u2069\ufeff]/g, " ")
     .replace(/\s+/g, " ")
     .trim()
     .slice(0, max);
@@ -41,7 +41,7 @@ function cleanBody(s) {
   return String(s == null ? "" : s)
     .replace(/\r\n?/g, "\n")
     .replace(/\t/g, " ")
-    .replace(/[\u0000-\u0009\u000b-\u001f\u007f\u200b-\u200f\u2028-\u202e\u2066-\u2069\ufeff]/g, "")
+    .replace(/[\u0000-\u0009\u000b-\u001f\u007f\u00ad\u180e\u200b-\u200f\u2028-\u202e\u2060-\u2069\ufeff]/g, "")
     .split("\n")
     .map((l) => l.replace(/\s+$/g, ""))
     .join("\n")
@@ -49,14 +49,24 @@ function cleanBody(s) {
     .trim();
 }
 
-// Mirrors public.chat_text_ok (migration 026).
+// Mirrors public.chat_text_ok (migration 026). The check runs on a
+// normalized copy: compatibility forms folded (full-width digits and @,
+// non-breaking and other Unicode spaces), invisible characters dropped,
+// every kind of dash made a hyphen. Digits in tel:, sms: and wa.me links
+// count; a long number elsewhere in a link doesn't (a URL's ID isn't a phone).
 const EMAIL = /[a-z0-9._%+-]+@[a-z0-9-]+(\.[a-z0-9-]+)*\.[a-z]{2,}/i;
-const LINKS = /https?:\/\/[^\s]+/gi;
+const DIAL = /(^|[^a-z])(tel|sms|callto|facetime):\s*\+?[0-9]|wa\.me\/\s*\+?[0-9]/i;
+const LINKS = /https?:\/\/[^ \t\n\r\f\v<>"']+/gi;
 const US_PHONE = /(?<![0-9])(\+?1[ .-]?)?\(?[2-9][0-9]{2}\)?[ .-]?[0-9]{3}[ .-]?[0-9]{4}(?![0-9])/;
 const INTL_PHONE = /(?<![0-9])\+[1-9]([ .-]?[0-9]){7,14}(?![0-9])/;
+const INVISIBLE = /[\u00ad\u180e\u200b-\u200f\u2060-\u2064\ufeff]/g;
+const DASHES = /[\u2010-\u2015\u2212\ufe58\ufe63\uff0d]/g;
+function forCheck(s) {
+  return String(s == null ? "" : s).normalize("NFKC").replace(INVISIBLE, "").replace(DASHES, "-");
+}
 function hasContact(s) {
-  const text = String(s == null ? "" : s);
-  if (EMAIL.test(text)) return true;
+  const text = forCheck(s);
+  if (EMAIL.test(text) || DIAL.test(text)) return true;
   const noLinks = text.replace(LINKS, " ");
   return US_PHONE.test(noLinks) || INTL_PHONE.test(noLinks);
 }

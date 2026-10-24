@@ -271,6 +271,15 @@ router.delete("/members/:email", requireStaff, async (req, res) => {
   const sb = getSupabase();
   if (!sb) return sb503(res);
   const email = String(req.params.email || "").toLowerCase();
+  const { data: current } = await sb.from("team_members").select("email").eq("email", email).eq("status", "active").maybeSingle();
+  if (!current) return res.status(404).json({ error: "not_found" });
+  // First they leave the chat rooms they were added to (routes/chat.js), so
+  // coming back later doesn't hand them what was said while they were gone.
+  try {
+    await require("./chat").dropRooms(sb, email);
+  } catch (e) {
+    return fail(res, e, "remove_member");
+  }
   const { data, error } = await sb
     .from("team_members")
     .update({ status: "removed", updated_at: new Date().toISOString() })

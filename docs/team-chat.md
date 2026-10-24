@@ -12,7 +12,10 @@ Code:
 ## Who's in it
 
 - Everyone on the team can use chat. That means owners on `ADMIN_EMAILS` and active team members, in any role.
-- Each person joins once. They confirm they're 18 or older and pick the name people see. Nobody joins without the confirmation, and the database won't store a person without it.
+- Each person joins once. They confirm they're 18 or older and pick the name people see.
+  - Nobody joins without the confirmation, and the database won't store a person without it.
+  - An address on the crew list as a youth creator can't join, whatever the form says.
+  - Names are unique whatever the case, so nobody can post as someone else. Messages from owners and approvers carry their role.
 - Team emails never leave the server. People appear by the name they chose and their role:
   - Owner
   - Approver
@@ -30,14 +33,21 @@ Code:
 | **A room someone made** | Only the people listed | Owners and approvers make them and add or remove people. Anyone added can leave. |
 | **A direct message** | The two people in it, and nobody else (the owner included) | Anyone on the team, with anyone else on the team who has joined chat |
 
-- **Roles and regions decide rooms on every request.** Change someone's regions, and their region and stop rooms change with them. Take someone off the team, and they lose every room at once.
+- **Roles and regions decide rooms on every request.** Change someone's regions, and their region and stop rooms change with them.
+- **Taking someone off the team** takes them out of every room they were added to. If they're invited back, they aren't handed what was said while they were gone.
 - **A room you can't read answers "not found",** as if it weren't there.
 - **A DM closes when the other person leaves the team.** You can still read it, but you can't send in it.
 
 ## What can go in a message
 
 - **Text only.** No photos, video or files. Media stays in the event's tools, where consent is checked.
-- **No email addresses or phone numbers.** The app refuses them, and so does the database. A long number inside a link doesn't count. Chat is the contact channel for the team, and families' details stay in the event's tools.
+- **No email addresses or phone numbers.** The app refuses them, and so does the database, on a normalized copy of the text:
+  - full-width digits and @ count, and so do non-breaking spaces and every kind of dash;
+  - hidden characters don't hide anything;
+  - a number in a `tel:`, `sms:` or `wa.me` link counts;
+  - a long number elsewhere in a link doesn't (a URL's ID isn't a phone number).
+
+  Chat is the contact channel for the team, and families' details stay in the event's tools.
 - **Up to 2,000 characters.** At most one blank line in a row. Invisible and text-direction characters are removed.
 - **Athletes by team and jersey number only.** Every room shows this rule at the top. Chat can't check it, so it's on the people writing:
   - no names, contact details or film links;
@@ -55,16 +65,18 @@ Code:
 
 - **Unread counts.** The Chat tab shows a count of unread messages, outside muted rooms, checked every 45 seconds. Opening a room marks it read.
 - **An open room** checks for new messages every 4 seconds while it's on screen. Every 30 seconds it also picks up edits and removals.
+  - It asks for everything after the last message the server sent it. Your own sends don't count, so a message someone posts just before yours is never skipped.
+  - Sending doesn't mark anything read. The room's next check does, for what it fetched.
 - **Who gets a notification.** A new message notifies everyone who can read the room, except:
   - the sender;
   - anyone who had the room open in the last 20 seconds;
   - anyone who muted it. Muted people still hear about an @mention of their name.
-- **What a notification says.** It carries the room's name and the sender's name, such as "Wes sent a message" or "Wes mentioned you". It never carries the text, so nothing anyone writes passes through Apple's or Google's push services.
+- **What a notification says.** It carries the room's name and the sender's chat name, such as "Wes sent a message" or "Wes mentioned you". It never carries the message, so what people write in chat doesn't pass through Apple's or Google's push services. Room names never name an athlete, since they show in notifications.
 - **Mentions.** Type @ and the start of a name to mention someone in the room.
 
 ## Setting it up
 
-1. **Apply migration 026 in Supabase, with Kyron's OK.** It only adds: five `chat_*` tables, with the functions and triggers that check them.
+1. **Apply migration 026 in Supabase, with Kyron's OK, after 024.** A stop's room points at its event. It only adds: five `chat_*` tables, with the functions and triggers that check them.
    - Everything is service-role only: RLS is on with one service-role policy per table, and the API roles can't call the two functions the server uses.
    - Until it runs, the Chat tab says chat isn't set up yet. The Team screen still opens from it and from your initials on Today, and deleting an account still works.
 2. **Merge, then let Vercel and Render deploy main.** Nothing to set on the server.

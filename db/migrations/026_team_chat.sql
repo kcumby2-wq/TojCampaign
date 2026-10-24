@@ -21,19 +21,29 @@
 -- the app), and the app asks people to talk about athletes by team and jersey
 -- number only.
 --
+-- Needs migration 024 first (a stop's room points at its gfs_events row).
+--
 -- Everything here is service-role only (RLS on, one service_role policy each).
 
 -- ── People ───────────────────────────────────────────────────────────────
--- No email address or phone number in a name, a title or a message. Phone
--- numbers inside links don't count (a long ID in a URL isn't a phone number).
--- Mirrors hasContact() in utils/chat.js.
+-- No email address or phone number in a name, a title or a message. The
+-- check runs on a normalized copy: compatibility forms folded (full-width
+-- digits and @, non-breaking and other Unicode spaces), invisible characters
+-- dropped, every kind of dash made a hyphen. Digits in tel:, sms: and wa.me
+-- links count; a long number elsewhere in a link doesn't (a URL's ID isn't a
+-- phone number). Mirrors hasContact() in utils/chat.js.
 create or replace function public.chat_text_ok(s text) returns boolean
 language sql immutable set search_path = '' as $$
   select s is null or not (
-    s ~* '[a-z0-9._%+-]+@[a-z0-9-]+(\.[a-z0-9-]+)*\.[a-z]{2,}'
-    or regexp_replace(s, 'https?://[^[:space:]]+', ' ', 'gi') ~ '(?<![0-9])(\+?1[ .-]?)?\(?[2-9][0-9]{2}\)?[ .-]?[0-9]{3}[ .-]?[0-9]{4}(?![0-9])'
-    or regexp_replace(s, 'https?://[^[:space:]]+', ' ', 'gi') ~ '(?<![0-9])\+[1-9]([ .-]?[0-9]){7,14}(?![0-9])'
+    t ~* '[a-z0-9._%+-]+@[a-z0-9-]+(\.[a-z0-9-]+)*\.[a-z]{2,}'
+    or t ~* '(^|[^a-z])(tel|sms|callto|facetime):[[:space:]]*\+?[0-9]'
+    or t ~* 'wa\.me/[[:space:]]*\+?[0-9]'
+    or regexp_replace(t, 'https?://[^ \t\n\r\f\v<>"'']+', ' ', 'gi') ~ '(?<![0-9])(\+?1[ .-]?)?\(?[2-9][0-9]{2}\)?[ .-]?[0-9]{3}[ .-]?[0-9]{4}(?![0-9])'
+    or regexp_replace(t, 'https?://[^ \t\n\r\f\v<>"'']+', ' ', 'gi') ~ '(?<![0-9])\+[1-9]([ .-]?[0-9]){7,14}(?![0-9])'
   )
+  from (select regexp_replace(regexp_replace(normalize(coalesce(s, ''), NFKC),
+                 '[\u00ad\u180e\u200b-\u200f\u2060-\u2064\ufeff]', '', 'g'),
+                 '[\u2010-\u2015\u2212\ufe58\ufe63\uff0d]', '-', 'g') as t) n
 $$;
 
 create table if not exists public.chat_people (
@@ -45,6 +55,9 @@ create table if not exists public.chat_people (
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+
+-- One person per name, whatever the case: nobody can post as someone else.
+create unique index if not exists chat_people_name_key on public.chat_people (lower(display_name));
 
 -- ── Rooms ────────────────────────────────────────────────────────────────
 -- slug names a room once: 'all', 'region:<region>', 'stop:<event id>',
@@ -131,6 +144,17 @@ end $$;
 drop trigger if exists chat_messages_gate on public.chat_messages;
 create trigger chat_messages_gate before insert or update on public.chat_messages
   for each row execute function public.chat_messages_gate();
+
+-- The room list sorts by the latest message; it's set in the same statement.
+create or replace function public.chat_messages_touch() returns trigger
+language plpgsql set search_path = '' as $$
+begin
+  update public.chat_rooms set last_message_at = new.created_at where id = new.room_id;
+  return null;
+end $$;
+drop trigger if exists chat_messages_touch on public.chat_messages;
+create trigger chat_messages_touch after insert on public.chat_messages
+  for each row execute function public.chat_messages_touch();
 
 -- ── Reading ──────────────────────────────────────────────────────────────
 -- How far each person has read in each room, whether they muted it, and when

@@ -39,6 +39,8 @@
     cant_leave: "You can only leave rooms you were added to.",
     role_too_low: "Owners and approvers make rooms.",
     not_found: "That room isn't here, or it isn't yours to read.",
+    name_taken: "Someone on the team already goes by that name. Add an initial.",
+    adults_only: "Chat is for adults on the team.",
   };
   function say(e) {
     var d = e && e.data;
@@ -109,6 +111,30 @@
       re.lastIndex = last;
     }
     return out + plain(raw.slice(last), names);
+  }
+
+  // ── Merging what the server sends into what's on screen ─────────────────
+  // By id, in id order. A message already shown takes the server's latest
+  // text, removal and edit mark; with onlyUpdate, nothing new is added.
+  function merge(list, incoming, onlyUpdate) {
+    var byId = {};
+    list.forEach(function (m) { byId[m.id] = m; });
+    var changed = false, added = [];
+    (incoming || []).forEach(function (m) {
+      var have = byId[m.id];
+      if (have) {
+        if (have.body !== m.body || have.removed !== m.removed || have.edited !== m.edited) {
+          have.body = m.body; have.removed = m.removed; have.edited = m.edited;
+          changed = true;
+        }
+      } else if (!onlyUpdate) {
+        byId[m.id] = m;
+        added.push(m);
+        changed = true;
+      }
+    });
+    var out = added.length ? list.concat(added).sort(function (a, b) { return a.id - b.id; }) : list;
+    return { list: out, changed: changed, added: added };
   }
 
   // ── The tab's unread count ───────────────────────────────────────────────
@@ -207,13 +233,27 @@
       "</div></a>";
   }
 
+  var homeSig = "";
+  function scheduleHome() {
+    T().later(function again() {
+      if (location.hash !== "#chat") return;
+      if (document.hidden) return T().later(again, 15000);
+      home(true).catch(function () {});
+    }, 15000);
+  }
   async function home(quiet) {
     var t = T();
-    if (!quiet) loading("chat");
+    if (!quiet) { loading("chat"); homeSig = ""; }
     var d;
-    try { d = await t.api("/api/chat"); } catch (e) { if (e.stale) throw e; if (failed(e, "#chat")) return; throw e; }
+    try { d = await t.api("/api/chat"); } catch (e) { if (e.stale) throw e; if (quiet) return scheduleHome(); if (failed(e, "#chat")) return; throw e; }
     if (!d.me) return hello("#chat");
     paintDot(d.unread_total);
+    // Every 15 seconds: redraw only when something changed, and without the
+    // whole list being read out again.
+    var sig = JSON.stringify([d.can_make_rooms, d.rooms.map(function (r) { return [r.id, r.title, r.unread, r.muted, r.last && r.last.at, r.last && r.last.text]; })]);
+    if (quiet && sig === homeSig) return scheduleHome();
+    homeSig = sig;
+    if (quiet) app().setAttribute("aria-live", "off");
     var dms = d.rooms.filter(function (r) { return r.kind === "dm"; });
     var rooms = d.rooms.filter(function (r) { return r.kind === "all" || r.kind === "region" || r.kind === "topic"; });
     var stops = d.rooms.filter(function (r) { return r.kind === "stop"; });
@@ -228,12 +268,7 @@
       sec("Rooms", rooms, t.hasTool("gfs") ? "No rooms yet." : "No rooms yet. Owners and approvers make them, and add you.") +
       (t.hasTool("gfs") ? sec("Stops", stops, "A stop's room shows up here once someone writes in it. Open one from the event plan.") : "") +
       teamRow() + "</div>");
-    // Keeps the list current while it's open, without the spinner.
-    t.later(function again() {
-      if (location.hash !== "#chat") return;
-      if (document.hidden) return t.later(again, 15000);
-      home(true).catch(function () {});
-    }, 15000);
+    scheduleHome();
   }
 
   // The open room, for the visibility handler.
@@ -314,7 +349,7 @@
         var aid = m.author ? m.author.id : "gone";
         var at = new Date(m.at).getTime();
         if (aid !== lastAuthor || at - lastAt > 5 * 60000) {
-          html += '<div class="msg-head' + (m.mine ? " mine" : "") + '"><b>' + h(m.mine ? "You" : m.author ? m.author.name : "Former teammate") + "</b> <span>" + h(clock(m.at)) + "</span></div>";
+          html += '<div class="msg-head' + (m.mine ? " mine" : "") + '"><b>' + h(m.mine ? "You" : m.author ? m.author.name : "Former teammate") + "</b>" + (m.author && m.author.role && !m.mine ? ' <span class="role">' + h(m.author.role) + "</span>" : "") + " <span>" + h(clock(m.at)) + "</span></div>";
         }
         lastAuthor = aid; lastAt = at;
         html += bubble(m);
@@ -374,7 +409,7 @@
       btn.disabled = true;
       try {
         var p = await t.api("/api/chat/rooms/" + encodeURIComponent(id) + "/messages?before=" + (msgs.length ? msgs[0].id : ""));
-        msgs = p.messages.concat(msgs);
+        msgs = merge(msgs, p.messages).list;
         more = p.more;
         btn.hidden = !more;
         draw(true);
@@ -388,8 +423,15 @@
 
     // New messages every 4 seconds while the room is on screen; edits and
     // removals of recent ones every 30.
+    //
+    // cursor is the highest id the server has sent this screen. Your own
+    // sends never move it, so a message someone posts just before yours is
+    // still fetched. Each check reaches 10 ids back, because ids can commit
+    // a moment out of order, and the merge drops what's already shown.
     var polls = 0;
+    var cursor = msgs.length ? msgs[msgs.length - 1].id : 0;
     var announce = document.getElementById("announce");
+    var url = "/api/chat/rooms/" + encodeURIComponent(id) + "/messages";
     // One poll at a time: a newer poll (the app coming back on screen) cancels
     // the one that was waiting.
     var seq = 0;
@@ -401,27 +443,29 @@
       var my = ++seq;
       try {
         polls++;
-        var lastId = msgs.length ? msgs[msgs.length - 1].id : 0;
-        var fresh = polls % 8 === 0;
-        var p = await t.api("/api/chat/rooms/" + encodeURIComponent(id) + "/messages?read=1" + (fresh || !lastId ? "" : "&after=" + lastId));
-        var changed = false;
-        if (fresh || !lastId) {
-          p.messages.forEach(function (m) {
-            var have = msgs.find(function (x) { return x.id === m.id; });
-            if (have) { if (have.body !== m.body || have.removed !== m.removed || have.edited !== m.edited) { Object.assign(have, m); changed = true; } }
-            else if (!msgs.length || m.id > msgs[msgs.length - 1].id) { msgs.push(m); changed = true; }
-          });
-        } else if (p.messages.length) {
-          var arrived = p.messages.filter(function (m) { return !msgs.some(function (x) { return x.id === m.id; }); });
-          arrived.forEach(function (m) { msgs.push(m); });
-          var theirs = arrived.filter(function (m) { return !m.mine; });
-          if (theirs.length) announce.textContent = theirs.length === 1 ? "New message from " + (theirs[0].author ? theirs[0].author.name : "a former teammate") : theirs.length + " new messages";
-          changed = arrived.length > 0;
+        var changed = false, added = [];
+        // Everything newer, a page at a time if it's a lot.
+        for (var pages = 0; pages < 10; pages++) {
+          var p = await t.api(url + "?read=1&after=" + Math.max(0, cursor - 10));
+          var r = merge(msgs, p.messages);
+          msgs = r.list;
+          changed = changed || r.changed;
+          added = added.concat(r.added);
+          p.messages.forEach(function (m) { if (m.id > cursor) cursor = m.id; });
+          if (!p.more) break;
         }
+        // Edits and removals of the latest page.
+        if (polls % 8 === 0) {
+          var latest = await t.api(url);
+          var u = merge(msgs, latest.messages, true);
+          changed = changed || u.changed;
+        }
+        var theirs = added.filter(function (m) { return !m.mine; });
+        if (theirs.length) announce.textContent = theirs.length === 1 ? "New message from " + (theirs[0].author ? theirs[0].author.name : "a former teammate") : theirs.length + " new messages";
         if (changed) {
           var stay = nearBottom();
           draw(true);
-          if (stay) toBottom(); else jump.hidden = false;
+          if (stay) toBottom(); else if (theirs.length) jump.hidden = false;
         }
       } catch (e) { if (e.stale) return; }
       if (my === seq && onScreen()) schedule();
@@ -443,7 +487,7 @@
       sendBtn.disabled = true;
       try {
         var r = await t.post("/api/chat/rooms/" + encodeURIComponent(id) + "/messages", { body: body });
-        if (!msgs.some(function (x) { return x.id === r.message.id; })) msgs.push(r.message);
+        msgs = merge(msgs, [r.message]).list;
         firstNew = null;
         box.value = "";
         grow();
@@ -576,7 +620,7 @@
     try { d = await t.api("/api/chat/people"); } catch (e) { if (e.stale) throw e; if (failed(e, "#chat-new")) return; throw e; }
     t.show(null,
       '<div class="screen">' + t.backBtn("#chat", "Cancel") + head("Make a room", "", "Only the people you add can read it. You can add or take people out later.") +
-      '<label class="field"><span class="label">Name</span><input class="input" id="nTitle" maxlength="60" placeholder="3D crew · Dallas"></label>' +
+      '<label class="field"><span class="label">Name <small>never an athlete\'s name: it shows in notifications</small></span><input class="input" id="nTitle" maxlength="60" placeholder="3D crew · Dallas"></label>' +
       '<section class="sec"><h2 class="sec-h">People</h2>' + (d.people.length ? '<div class="list">' + d.people.map(function (p) {
         return '<label class="li"><input type="checkbox" data-pick="' + h(p.id) + '" style="width:20px;height:20px;accent-color:var(--gold)"><div class="grow"><div class="name" style="font-size:15px">' + h(p.name) + '</div><div class="sub">' + h(p.role) + "</div></div></label>";
       }).join("") + "</div>" : '<p class="empty">Nobody else has joined chat yet. You can add people later.</p>') + "</section>" +
@@ -606,7 +650,7 @@
     }
   }
 
-  window.TOJChat = { refreshUnread: refreshUnread };
+  window.TOJChat = { refreshUnread: refreshUnread, merge: merge };
   window.TOJScreens = Object.assign(window.TOJScreens || {}, {
     chat: chat,
     "chat-room": details,
