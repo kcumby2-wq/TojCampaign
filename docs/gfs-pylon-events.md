@@ -29,19 +29,22 @@ The team activity feed follows the same lines. Pylon events entries go only to p
 
 ## Setting it up
 
-1. **Apply migration 024 in Supabase**, with Kyron's OK. It adds `regions` to `team_members` and `team_invites` and creates the `gfs_*` tables.
+1. **Deploy.** Merge to main.
+   - Vercel serves the screens and passes `/api` through to the API, which runs on Render (`toj-csv-app`, in `render.yaml`).
+   - Render has to deploy main too. Until it does, nobody sees Pylon events: the screens show the Events tab only when the API says a person has the tool.
+2. **Apply migration 024 in Supabase**, with Kyron's OK. It adds `regions` to `team_members` and `team_invites` and creates the `gfs_*` tables.
    - Until it runs, the API answers `503 gfs_not_set_up`.
    - Everything else keeps working: sign-in reads the old columns if `regions` isn't there yet.
-2. **Invite people.** In the app, go to Team → Invite and tick **Pylon events**.
+3. **Invite people.** In the app, go to Team → Invite and tick **Pylon events**.
    - **Regional Director:** pick Regional Director and at least one region.
    - **Approver** (Pylon's CEO, the Creative Lead): pick Approver. Approvers need no region.
    - The owner can change a director's regions later from Team → Change regions.
-3. **Load the calendar.** An approver can go to Events → Load Pylon's calendar and choose `docs/gfs-calendar-2026-27.csv`.
+4. **Load the calendar.** An approver can go to Events → Load Pylon's calendar and choose `docs/gfs-calendar-2026-27.csv`.
    - It holds the 17 dated 2027 Legacy Tour stops from Schedule A-1 of the agreement and the three dated Girls Flag stops from A-4.
    - The National Championship has no location yet, so it isn't in the file.
    - Girls Flag is marked "[in scope / not in scope]" in A-4, and the file loads those stops as one-day tournaments.
    - Stops already in the app are skipped, so the file can be loaded again safely.
-4. **Add creators** from Creators → Add. Kyron then records each creator's contract, background check and minor-safety training on their page.
+5. **Add creators** from Creators → Add. Kyron then records each creator's contract, background check and minor-safety training on their page.
    - Until all three are on file, and each is less than a year old at the event, the creator can't be crewed.
    - Once any of them is on file, the record belongs to that person. Only Kyron changes its name or email.
 
