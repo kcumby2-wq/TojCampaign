@@ -8,7 +8,7 @@
     { "source": "/e/:path*", "destination": "https://toj-csv-app.onrender.com/e/:path*" }
   ],
   "redirects": [
-    { "source": "/((?!e/).*)", "has": [{ "type": "host", "value": "media.groundfloorsports.com" }], "destination": "https://groundfloorsports.com/", "permanent": false },
+    { "source": "/((?!e/).*)", "has": [{ "type": "host", "value": "media.groundfloorsports.com" }], "destination": "/e/", "permanent": false },
     { "source": "/studio", "destination": "/app/#studio", "permanent": false },
     { "source": "/app", "destination": "/app/", "permanent": false },
     { "source": "/sports.html", "destination": "/authority.html", "permanent": true },

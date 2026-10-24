@@ -101,6 +101,10 @@ async function creatorFor(sb, ev, code) {
 const live = (ev) => ev.status !== "cancelled";
 const footageOk = (ev) => live(ev) && !!ev.sportsclippers_url && GP.SC_URL.test(ev.sportsclippers_url);
 
+// The bare /e/, where media.groundfloorsports.com sends anything that isn't
+// a stop (vercel.json): the same Pylon page as an unknown code.
+router.get("/", (req, res) => missing(res));
+
 router.get("/:code", async (req, res) => {
   const sb = getSupabase();
   if (!sb) return missing(res);
