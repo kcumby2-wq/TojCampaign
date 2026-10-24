@@ -163,6 +163,7 @@ function assetView(asset, ctx, req, names) {
     location: asset.location || null,
     ref: member ? asset.ref || null : null,
     sha256: member ? asset.sha256 || null : null,
+    live_ref: member ? asset.live_ref || null : null,
     price_cents: asset.price_cents == null ? null : asset.price_cents,
     school_venue: !!asset.school_venue,
     sponsor_marks: !!asset.sponsor_marks,
@@ -358,6 +359,8 @@ router.patch("/:id", member, async (req, res) => {
     if (!asset) return;
     if (!worksOn(req, asset)) return res.status(403).json({ error: "region_not_yours" });
     const b = req.body || {};
+    // Its ID where it went live is recorded on the way live, never here.
+    if (b.live_ref !== undefined) return res.status(409).json({ error: asset.stage === "retired" ? "gfs_asset_retired" : "gfs_asset_locked" });
     // From review on, nothing here changes: the details, the file and the
     // athletes are what the approver checks.
     if (asset.stage !== "draft" && DRAFT_FIELDS.some((k) => b[k] !== undefined)) return res.status(409).json({ error: asset.stage === "retired" ? "gfs_asset_retired" : "gfs_asset_locked" });
@@ -543,6 +546,12 @@ router.post("/:id/stage", member, async (req, res) => {
       const asked = (v) => (v ? String(v).trim() : null);
       if ((b.location !== undefined && asked(b.location) !== (asset.location || null)) || (b.ref !== undefined && asked(b.ref) !== (asset.ref || null))) return res.status(409).json({ error: "gfs_asset_locked" });
       if (!A.liveLocationOk(asset)) return res.status(409).json({ error: "gfs_asset_live_location", allowed: A.KINDS[asset.kind].live });
+      // Its ID there, if the place gave it one (a ledger token, a listing or
+      // a post): recorded now, once.
+      const liveRef = b.live_ref == null ? null : String(b.live_ref).trim() || null;
+      const lp = A.liveRefProblem(liveRef);
+      if (lp) return res.status(400).json({ error: lp });
+      if (liveRef) patch.live_ref = liveRef;
     }
     if (to === "draft") {
       // Back to draft: the approval and the review's checks go (the database
@@ -577,8 +586,8 @@ router.post("/:id/retire", member, async (req, res) => {
     if (asset.stage === "retired") {
       if (personal) {
         const left = (await run(sb.from("gfs_asset_athletes").select("roster_row").eq("asset_id", asset.id))) || [];
-        if (left.length || asset.ref || asset.sha256 || asset.note) {
-          if (asset.ref || asset.sha256 || asset.note) await run(sb.from("gfs_assets").update({ ref: null, sha256: null, note: null }).eq("id", asset.id));
+        if (left.length || asset.ref || asset.sha256 || asset.live_ref || asset.note) {
+          if (asset.ref || asset.sha256 || asset.live_ref || asset.note) await run(sb.from("gfs_assets").update({ ref: null, sha256: null, live_ref: null, note: null }).eq("id", asset.id));
           if (left.length) await run(sb.from("gfs_asset_athletes").delete().eq("asset_id", asset.id));
           const done = await run(sb.from("gfs_assets").select(ASSET_COLS).eq("id", asset.id).single());
           return res.json({ asset: await oneView(sb, req, done) });
@@ -589,7 +598,7 @@ router.post("/:id/retire", member, async (req, res) => {
     const reason = String((req.body && req.body.reason) || "");
     if (!A.RETIRE_REASONS[reason]) return res.status(400).json({ error: "reason", allowed: Object.keys(A.RETIRE_REASONS) });
     const patch = { stage: "retired", retired_at: now(), retired_by: actor(req), retire_reason: reason };
-    if (personal) Object.assign(patch, { ref: null, sha256: null, note: null, title: A.RETIRED_TITLES[asset.kind] });
+    if (personal) Object.assign(patch, { ref: null, sha256: null, live_ref: null, note: null, title: A.RETIRED_TITLES[asset.kind] });
     const updated = await run(sb.from("gfs_assets").update(patch).eq("id", asset.id).select(ASSET_COLS).single());
     if (personal) await run(sb.from("gfs_asset_athletes").delete().eq("asset_id", asset.id));
     await log(req, "gfs_asset_retired", updated, ev);

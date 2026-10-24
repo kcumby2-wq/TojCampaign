@@ -25,7 +25,8 @@
     gfs_assets_not_set_up: "The asset library isn't set up on the server yet (migration 027).",
     gfs_asset_blocked: "It isn't ready yet. See what's blocking it.",
     gfs_asset_live_location: "Say where it lives first.",
-    gfs_asset_file_required: "Record the file where it goes live first: the place and its ID or label. It locks once it's in review.",
+    gfs_asset_file_required: "Record where it goes live and GFS's label for the file first. They lock once it's in review.",
+    live_ref: "Use an ID: letters, numbers, dots, colons and hyphens. No spaces or slashes.",
     gfs_asset_check_in_review: "This check is recorded once it's in review. Send it to review first.",
     gfs_asset_locked: "Only a draft changes. Send it back to draft first.",
     gfs_asset_source_world: "Pick a venue World from the same stop.",
@@ -266,7 +267,7 @@
     function draw() {
       var blocks = a.blocks || [];
       var items = blocks.map(blockText);
-      if (a.stage === "draft" && !a.file_ready) items.push("Record the file where it goes live (Where it lives, below) before you send it to review.");
+      if (a.stage === "draft" && !a.file_ready) items.push("Record where it goes live and the file's label (Where it lives, below) before you send it to review.");
       var blockCard = a.stage === "retired" ? "" :
         member ? (items.length ? '<section class="card" style="' + (a.needs_retiring ? "border-color:#5A3A33" : "") + '"><h2 class="sec-h">' + (a.needs_retiring ? "Live, and it shouldn't be" : "Before it can go out") + '</h2><ul style="margin:0;padding-left:20px;display:flex;flex-direction:column;gap:6px;font-size:14.5px;line-height:1.45;color:var(--ink-2)">' + items.map(function (x) { return "<li>" + h(x) + "</li>"; }).join("") + "</ul>" + (a.needs_retiring ? '<p class="sub" style="margin:0">Take the file down where it lives, then retire it here.</p>' : "") + "</section>" : (a.stage === "draft" || a.stage === "review" ? '<p class="sub" style="margin:0;color:var(--ok)">' + t.I.check + " Nothing's blocking it.</p>" : "")) :
         (a.held ? '<p class="body">On hold. A director can say why.</p>' : "");
@@ -297,13 +298,14 @@
       var where = member ?
         '<section class="sec"><h2 class="sec-h">Where it lives</h2>' +
         (a.can.place ? '<label class="field"><span class="label">Place</span><select class="input" id="asLoc"><option value="">Not yet</option>' + allowed.map(function (l) { return '<option value="' + h(l) + '"' + (a.location === l ? " selected" : "") + ">" + h(m.locations[l]) + (k.live.indexOf(l) >= 0 ? "" : " (not where it goes live)") + "</option>"; }).join("") + "</select></label>" +
-          '<label class="field"><span class="label">' + (a.location === "link" ? "Link <small>Canva, Figma, Adobe or groundfloorsports.com</small>" : "ID or label there <small>no spaces or slashes; a label like Dallas2027-WR-11-EndZone-042</small>") + '</span><input class="input" id="asRef" maxlength="300" autocomplete="off" value="' + h(a.ref || "") + '"></label>' +
+          '<label class="field"><span class="label">' + (a.location === "link" ? "Link <small>Canva, Figma, Adobe or groundfloorsports.com</small>" : "GFS's label for the file <small>no spaces or slashes, like Dallas2027-WR-11-EndZone-042</small>") + '</span><input class="input" id="asRef" maxlength="300" autocomplete="off" value="' + h(a.ref || "") + '"></label>' +
           '<label class="field"><span class="label">SHA-256 <small>optional, the file\'s fingerprint</small></span><input class="input mono" id="asSha" maxlength="64" autocomplete="off" spellcheck="false" style="font:13px var(--mono)" value="' + h(a.sha256 || "") + '"></label>' +
           '<button type="button" class="btn soft" id="asPlace">Save where it lives</button>' +
-          '<p class="sub" style="margin:0">Record it where it goes live before you send it to review. It locks there, so what\'s approved is what goes out.</p>'
+          '<p class="sub" style="margin:0">Record the place and the file\'s label before review. They lock there, so what\'s approved is what goes out. Its ID there, like a token number or a listing, is added when it goes live.</p>'
           : '<p class="body">' + (a.location ? h(m.locations[a.location]) + (a.ref ? " · " + h(a.ref) : "") : "Not recorded.") + "</p>" +
+            (a.live_ref ? '<p class="body">Its ID there: ' + h(a.live_ref) + "</p>" : "") +
             (a.sha256 ? '<p class="sub mono" style="margin:0;font:12px var(--mono);word-break:break-all">SHA-256 ' + h(a.sha256) + "</p>" : "") +
-            (a.stage !== "draft" && a.stage !== "retired" ? '<p class="sub" style="margin:0">Locked since review. To change the file, send it back to draft.</p>' : "")) +
+            (a.stage === "review" || a.stage === "approved" ? '<p class="sub" style="margin:0">Locked since review. To change the file, send it back to draft.</p>' : a.stage === "live" ? '<p class="sub" style="margin:0">It went out as it was reviewed.</p>' : "")) +
         '<p class="sub" style="margin:0">Where it goes live: ' + h(k.live.map(function (l) { return m.locations[l]; }).join(", ")) + ".</p></section>" : "";
 
       var checkKeys = Object.keys(a.checks || {});
@@ -397,6 +399,16 @@
           var to = b.dataset.move;
           // The file was recorded before review and goes out as it is.
           var body = { to: to };
+          if (to === "live" && a.location !== "link") {
+            // Its ID there, if the place gave it one: asked once, here.
+            var idBox = document.getElementById("asLiveRef");
+            if (!idBox) {
+              b.insertAdjacentHTML("beforebegin", '<label class="field" style="grid-column:1/-1;flex-basis:100%"><span class="label">Its ID there, if it has one <small>a token number, listing or post ID; no spaces or slashes</small></span><input class="input" id="asLiveRef" maxlength="120" autocomplete="off"></label>');
+              b.textContent = (k.liveLabel === "Out" ? "Mark it out" : "Mark " + k.liveLabel.toLowerCase()) + ": confirm";
+              return;
+            }
+            if (idBox.value.trim()) body.live_ref = idBox.value.trim();
+          }
           b.disabled = true;
           call(function () { return t.post(base + "/stage", body); }, to === "review" ? "Sent to review." : to === "draft" ? "Back to draft." : k.liveLabel + ".").then(function () { b.disabled = false; });
         });

@@ -21,10 +21,10 @@ Code:
 | **Brand asset** | A graphic, template, LUT, overlay, logo or sponsor asset | None | GFS storage, or a link |
 
 - **Clips stay in the clips tool.** The library shows each stop's clip counts and links to them.
-- **Files stay where they are.** A record keeps the place and the file's ID or label there, such as `Dallas2027-WR-11-EndZone-042`, plus its SHA-256 if you have it.
+- **Files stay where they are.** A record keeps where it goes live and GFS's label for the file, such as `Dallas2027-WR-11-EndZone-042`, plus its SHA-256 if you have it. Once it's out, the approver adds its ID there (a ledger token, a store listing, a post), once.
   - An ID or label can't have spaces or slashes, so no folder name with a person's name in it gets in. There's no ID or label without its place.
   - Only a brand asset can be a link. It's `https`, and it goes to Canva, Figma, Adobe or groundfloorsports.com, never a file host where footage could be.
-- **Titles and notes** carry no names, contact details or links. The app and the database both refuse an email address, a phone number, `http://`, `https://`, `www.` or a domain followed by a path (`drive.google.com/…`), on the same normalized copy of the text team chat checks.
+- **Titles and notes** carry no names, contact details or links. The app and the database both refuse an email address, a phone number, `http://`, `https://`, `www.`, or a domain followed by a path (`drive.google.com/…`, `fb.watch/…`, `bbc.co.uk/…`), on the same normalized copy of the text team chat checks. "St.Louis/KC" and "Team.tv/ intro" are fine.
 - **Athletes are roster rows** from the stop's Sports Thread roster, shown by team and jersey number. The record keeps their team and jersey as they were when added, so a roster change shows.
 - **A stop's assets take its region.** If the stop moves to another region, its assets move with it, to the new region's directors.
 
@@ -34,13 +34,13 @@ Code:
 
 | Step | Who | What happens |
 | --- | --- | --- |
-| Draft | A Regional Director, in their regions (approvers and the owner anywhere) | Add athletes, details and the file: where it goes live and its ID there. Only a draft can be deleted. |
-| Send to review | The same | It needs the file in the place the kind goes live. From here the details, the file and the athletes lock. |
+| Draft | A Regional Director, in their regions (approvers and the owner anywhere) | Add athletes, details and the file: where it goes live and GFS's label for it. Only a draft can be deleted. |
+| Send to review | The same | It needs where it goes live and the file's label. From here the details, the file and the athletes lock. |
 | Checks | An approver, or Kyron for the Consent to Mint | Recorded in review only. A director records the venue's permission in a draft or in review. |
 | Approve | An approver or the owner | They confirm the kind's checklist, and everything below has to pass. |
-| Live | An approver or the owner | The file goes out as it was reviewed. Everything is checked again. |
+| Live | An approver or the owner | The file goes out as it was reviewed, and everything is checked again. The approver adds its ID there, if the place gave it one, such as a token number. It can't change after. |
 | Back to draft | A director from review, an approver from approved | The approval and every check an approver or Kyron recorded are cleared, so they're recorded again for what's reviewed next. |
-| Retire | A Regional Director and up | Retired is final. Retiring a Moment or an NFT clears where the file was, its title, its note and the athlete, so the record keeps nothing about them. |
+| Retire | A Regional Director and up | Retired is final. Retiring a Moment or an NFT clears the file's label and its ID there, its title, its note and the athlete, so the record keeps nothing about them. |
 
 - **Why the file locks.** What an approver approves is the file that goes out. To change it, send the asset back to draft, which clears the review's checks.
 - **Why the checks clear.** A check belongs to one review. Athletes change only in a draft, so the Consent to Mint or a Tier 4 check recorded for one athlete can never carry over to another.
@@ -88,6 +88,7 @@ Code:
 ## Setting it up
 
 1. **Apply migration 027 in Supabase, with Kyron's OK, after 026.** It needs 024's stops and roster. It adds `gfs_assets` and `gfs_asset_athletes`, the checks, a trigger on `gfs_events` that moves a stop's assets with it, and a new version of the takedown clock.
+   - The checks added after the first draft of 027 are named constraints, dropped and added again, so running it over an earlier 027 brings that database up to date.
    - The new takedown clock is the same as 024's, plus the live-asset rule.
    - Everything is service-role only: RLS is on, and the API roles can't call the functions.
    - Until it runs, the library says it isn't set up yet, and takedowns and event changes work as before.

@@ -126,7 +126,8 @@ const LABEL_RE = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,119}$/;
 // A brand asset's link goes to the design tools brand assets are kept in, or
 // GFS's own site: never a file host, where footage could be.
 const LINK_HOSTS = Object.freeze(["canva.com", "figma.com", "adobe.com", "groundfloorsports.com"]);
-const LINK_RE = /^https:\/\/([a-z0-9-]+\.)*(canva\.com|figma\.com|adobe\.com|groundfloorsports\.com)(\/[^\s"<>]*)?$/i;
+// The path is plain URL characters, so no spaces of any kind (as in 027).
+const LINK_RE = /^https:\/\/([a-z0-9-]+\.)*(canva\.com|figma\.com|adobe\.com|groundfloorsports\.com)(\/[A-Za-z0-9._~:\/?#@!$&'()*+,;=%-]*)?$/i;
 const SHA_RE = /^[0-9a-f]{64}$/;
 
 // Where a file is: an ID or a label in the B-5 / J-9 form (no spaces, no
@@ -141,6 +142,12 @@ function refProblem(kind, location, ref) {
     return String(ref).length <= 300 && LINK_RE.test(ref) ? null : "link_host";
   }
   return LABEL_RE.test(ref) ? null : "ref";
+}
+// Its ID where it went live (a ledger token, a listing or a post), recorded
+// once on the way live: the same form as a label. Mirrors gfs_assets_live_ref.
+function liveRefProblem(v) {
+  if (v == null || v === "") return null;
+  return LABEL_RE.test(String(v)) ? null : "live_ref";
 }
 function liveLocationOk(asset) {
   return !!asset.location && KINDS[asset.kind].live.includes(asset.location) && !!asset.ref;
@@ -222,10 +229,11 @@ function canCheck(access, check) {
 // No email address, phone number or link in a title or a note. Contact
 // details use team chat's check (utils/chat.js hasContact); links are looked
 // for on the same normalized copy of the text: http:// or https://, www., or
-// a domain followed by a path. Mirrors public.gfs_asset_text_ok (027).
+// a domain followed by a path (a two-letter country domain or a common one,
+// then a slash and something after it). Mirrors public.gfs_asset_text_ok (027).
 const INVISIBLE = /[\u00ad\u180e\u200b-\u200f\u2060-\u2064\ufeff]/g;
 const DASHES = /[\u2010-\u2015\u2212\ufe58\ufe63\uff0d]/g;
-const LINKY = [/https?:\/\//i, /(^|[^a-z0-9])www\./i, /[a-z0-9-]\.(com|net|org|io|co|us|tv|me|ly|app|be|gl|link|to|ai|dev|info|biz|cc|ms|gg|so|site|xyz)\//i];
+const LINKY = [/https?:\/\//i, /(^|[^a-z0-9])www\./i, /[a-z0-9-]\.([a-z]{2}|com|net|org|info|biz|app|dev|link|site|xyz|watch|store|live|video|media|photos|cloud|page|online|shop|studio|tube|social|news|stream)\/[^ \t\n\r\f\v]/i];
 function normalized(s) {
   return String(s == null ? "" : s).normalize("NFKC").replace(INVISIBLE, "").replace(DASHES, "-");
 }
@@ -267,6 +275,7 @@ module.exports = {
   checksFor,
   checkStages,
   refProblem,
+  liveRefProblem,
   liveLocationOk,
   assetBlocks,
   athleteReason,

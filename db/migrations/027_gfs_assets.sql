@@ -62,7 +62,7 @@ language sql immutable set search_path = '' as $$
     or regexp_replace(t, 'https?://[^ \t\n\r\f\v<>"'']+', ' ', 'gi') ~ '(?<![0-9])\+[1-9]([ .-]?[0-9]){7,14}(?![0-9])'
     or t ~* 'https?://'
     or t ~* '(^|[^a-z0-9])www\.'
-    or t ~* '[a-z0-9-]\.(com|net|org|io|co|us|tv|me|ly|app|be|gl|link|to|ai|dev|info|biz|cc|ms|gg|so|site|xyz)/'
+    or t ~* '[a-z0-9-]\.([a-z]{2}|com|net|org|info|biz|app|dev|link|site|xyz|watch|store|live|video|media|photos|cloud|page|online|shop|studio|tube|social|news|stream)/[^ \t\n\r\f\v]'
   )
   from (select regexp_replace(regexp_replace(normalize(coalesce(s, ''), NFKC),
                  '[\u00ad\u180e\u200b-\u200f\u2060-\u2064\ufeff]', '', 'g'),
@@ -83,7 +83,8 @@ create table if not exists public.gfs_assets (
   )),
   title text not null check (char_length(title) between 1 and 80 and public.gfs_asset_text_ok(title)),
   stage text not null default 'draft' check (stage in ('draft', 'review', 'approved', 'live', 'retired')),
-  -- Where the file is, and its ID or label there.
+  -- Where it goes live, and GFS's label for the reviewed file (or, for a
+  -- brand asset, its link). Its ID at that place, once it's out, is live_ref.
   location text check (location is null or location in ('gfs_storage', 'world_labs', 'family_library', 'gfs_store', 'sportsclippers', 'pylon_channels', 'ledger', 'link')),
   ref text check (ref is null or char_length(ref) <= 300),
   sha256 text check (sha256 is null or sha256 ~ '^[0-9a-f]{64}$'),
@@ -116,23 +117,41 @@ create table if not exists public.gfs_assets (
   check (stage not in ('approved', 'live') or (approved_at is not null and approved_by is not null)),
   check (stage <> 'live' or live_at is not null),
   check (stage <> 'retired' or (retired_at is not null and retire_reason is not null)),
-  -- No ID or label without the place it's in.
-  check (location is not null or ref is null),
-  -- A link only for a brand asset, only https, and only to the design tools
-  -- brand assets are kept in (or GFS's own site): never a file host, where
-  -- footage could be.
-  check (location is distinct from 'link' or (kind = 'brand' and ref ~* '^https://([a-z0-9-]+\.)*(canva\.com|figma\.com|adobe\.com|groundfloorsports\.com)(/[^\s"<>]*)?$')),
   -- Everywhere else, an ID or a label in the B-5 / J-9 form: letters, digits
   -- and a few separators, no spaces and no slashes (so no folder names).
   check (location is null or location = 'link' or ref is null or ref ~ '^[A-Za-z0-9][A-Za-z0-9._:-]{0,119}$'),
   check (kind = 'world_pass' or (source_asset_id is null and price_cents is null)),
   check (kind = 'venue_world' or not school_venue),
-  -- A sponsor asset carries the sponsor's marks, so it needs their licence.
-  check (format is distinct from 'sponsor' or sponsor_marks),
   check (format is null or (kind = 'edit' and format in ('recap', 'montage', 'feature', 'reel', 'photos', 'interview'))
                         or (kind = 'moment' and format in ('3d', '4d'))
                         or (kind = 'brand' and format in ('graphic', 'template', 'lut', 'overlay', 'logo', 'sponsor')))
 );
+-- These are added outside the create statement, so a database that ran an
+-- earlier 027 gets them too (create table if not exists skips a table that's
+-- already there).
+--
+-- Its ID where it went live: a ledger token, a listing or a post, recorded
+-- once, when it goes live, in the same B-5 / J-9 form as a label. Some
+-- places only issue one once it's out, so review needs only the place and
+-- GFS's label for the file.
+alter table public.gfs_assets add column if not exists live_ref text;
+alter table public.gfs_assets drop constraint if exists gfs_assets_live_ref;
+alter table public.gfs_assets add constraint gfs_assets_live_ref
+  check (live_ref is null or (live_at is not null and live_ref ~ '^[A-Za-z0-9][A-Za-z0-9._:-]{0,119}$'));
+-- No ID or label without the place it's in.
+alter table public.gfs_assets drop constraint if exists gfs_assets_ref_needs_place;
+alter table public.gfs_assets add constraint gfs_assets_ref_needs_place
+  check (location is not null or ref is null);
+-- A link only for a brand asset, only https, and only to the design tools
+-- brand assets are kept in (or GFS's own site): never a file host, where
+-- footage could be. The path is plain URL characters: no spaces of any kind.
+alter table public.gfs_assets drop constraint if exists gfs_assets_link_hosts;
+alter table public.gfs_assets add constraint gfs_assets_link_hosts
+  check (location is distinct from 'link' or (kind = 'brand' and ref ~* '^https://([a-z0-9-]+\.)*(canva\.com|figma\.com|adobe\.com|groundfloorsports\.com)(/[A-Za-z0-9._~:/?#@!$&''()*+,;=%-]*)?$'));
+-- A sponsor asset carries the sponsor's marks, so it needs their licence.
+alter table public.gfs_assets drop constraint if exists gfs_assets_sponsor_marks;
+alter table public.gfs_assets add constraint gfs_assets_sponsor_marks
+  check (format is distinct from 'sponsor' or sponsor_marks);
 create index if not exists gfs_assets_event_idx on public.gfs_assets (event_id, kind, stage);
 create index if not exists gfs_assets_region_idx on public.gfs_assets (region, stage);
 create index if not exists gfs_assets_source_idx on public.gfs_assets (source_asset_id);
@@ -255,7 +274,7 @@ begin
     end if;
   end if;
   if tg_op = 'INSERT' then
-    if new.stage <> 'draft' then raise exception 'gfs_asset_starts_as_draft'; end if;
+    if new.stage <> 'draft' or new.live_at is not null or new.live_ref is not null then raise exception 'gfs_asset_starts_as_draft'; end if;
     if num_nonnulls(new.deidentified_at, new.deidentified_by, new.tier4_at, new.tier4_by, new.mint_consent_at,
                     new.mint_consent_by, new.marks_licensed_at, new.marks_licensed_by) > 0 then
       raise exception 'gfs_asset_check_in_review';
@@ -308,6 +327,7 @@ begin
     if new.stage <> 'retired' or new.title <> old.title or new.retired_at is distinct from old.retired_at
        or new.retire_reason is distinct from old.retire_reason or new.location is distinct from old.location
        or (new.ref is not null and new.ref is distinct from old.ref) or (new.sha256 is not null and new.sha256 is distinct from old.sha256)
+       or (new.live_ref is not null and new.live_ref is distinct from old.live_ref)
        or (new.note is not null and new.note is distinct from old.note) then
       raise exception 'gfs_asset_retired';
     end if;
@@ -328,6 +348,14 @@ begin
        or (new.ref is not null and new.ref is distinct from old.ref) or (new.sha256 is not null and new.sha256 is distinct from old.sha256) then
       raise exception 'gfs_asset_locked';
     end if;
+  end if;
+
+  -- Its ID where it went live is recorded once, on the way live. Retiring a
+  -- Moment or an NFT clears it with the rest.
+  if new.live_ref is distinct from old.live_ref
+     and not (old.stage = 'approved' and new.stage = 'live')
+     and not (retiring and personal and new.live_ref is null) then
+    raise exception 'gfs_asset_locked';
   end if;
 
   if new.stage is distinct from old.stage then
@@ -359,6 +387,7 @@ begin
       if personal then
         new.ref := null;
         new.sha256 := null;
+        new.live_ref := null;
         new.note := null;
         new.title := case new.kind when 'moment' then 'Retired 3D/4D Moment' else 'Retired Narrative NFT' end;
       end if;

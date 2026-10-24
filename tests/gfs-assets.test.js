@@ -478,3 +478,35 @@ test("the screen's Save details sends only what changed, and never clears what i
   assert.deepEqual(dp(pass, { title: "Edition", price: "" }), { body: { price_cents: null } }, "clearing the price on purpose");
   assert.deepEqual(dp(pass, { title: "New name", marks: false }), { body: { title: "New name" } });
 });
+
+test("its ID where it went live: review needs only GFS's label; the ID is recorded once on the way live", async () => {
+  const n = await make(wes, { kind: "narrative_nft", title: "Interception · day two", event_id: ev.dallas.id });
+  // GFS's own label for the file is enough for review: the ledger's token comes later.
+  await patch(wes, n.id, { athletes: { add: [ro.b2.id] }, location: "ledger", ref: "Dallas2027-NFT-INT-2" });
+  assert.equal((await patch(wes, n.id, { live_ref: "TOKEN-1" })).json.error, "gfs_asset_locked", "never through Save");
+  const rv = await stage(wes, n.id, { to: "review" });
+  assert.equal(rv.status, 200, JSON.stringify(rv.json));
+  await check(kyron, n.id, "mint_consent");
+  const ap = await stage(abby, n.id, { to: "approved", confirm: true });
+  assert.equal(ap.status, 200, JSON.stringify(ap.json));
+  assert.equal((await stage(abby, n.id, { to: "live", live_ref: "token 77" })).json.error, "live_ref", "an ID in the label form");
+  const live = await stage(abby, n.id, { to: "live", live_ref: " TOKEN-0077 " });
+  assert.equal(live.status, 200, JSON.stringify(live.json));
+  assert.deepEqual([live.json.asset.stage, live.json.asset.live_ref, live.json.asset.ref], ["live", "TOKEN-0077", "Dallas2027-NFT-INT-2"]);
+  assert.equal((await patch(abby, n.id, { live_ref: "TOKEN-0078" })).json.error, "gfs_asset_locked", "it can't change after");
+  assert.equal((await vic(`/api/gfs/assets/${n.id}`)).json.asset.live_ref, null, "viewers never see it");
+  const ret = await wes(`/api/gfs/assets/${n.id}/retire`, { method: "POST", body: { reason: "withdrawn" } });
+  assert.deepEqual([ret.json.asset.live_ref, ret.json.asset.ref], [null, null], "retiring an NFT clears it with the rest");
+  // A place that gives no ID of its own: going live without one is fine.
+  const w = await make(wes, { kind: "venue_world", title: "Dallas 2027 · Stadium World, west end", event_id: ev.dallas.id });
+  assert.equal(w.live_ref, null);
+});
+
+test("links without https: more domains count, and a slash then a space isn't a link", () => {
+  for (const s of ["fb.watch/abc", "sportsclippers.store/x", "bbc.co.uk/x", "photos.app.goo.gl/x", "we.tl/t-abc", "Drive.Google.com/drive/x"]) assert.equal(A.textOk(s), false, s);
+  for (const s of ["Team.tv/ intro", "St.Louis/KC swing", "v2.final/cut", "Recap w/ highlights", "3D/4D Moment", "drive.google.com"]) assert.equal(A.textOk(s), true, s);
+  assert.equal(A.refProblem("brand", "link", "https://www.canva.com/design/DAF1/view?utm=x&a=1"), null);
+  assert.equal(A.refProblem("brand", "link", "https://www.canva.com/design/DAF1 x/view"), "link_host", "no spaces of any kind in a link");
+  assert.equal(A.liveRefProblem("TOKEN-0077"), null);
+  assert.equal(A.liveRefProblem("a/b"), "live_ref");
+});

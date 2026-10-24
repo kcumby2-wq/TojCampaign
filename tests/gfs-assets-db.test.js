@@ -237,6 +237,7 @@ test("027: titles and notes get the same text check in the app and the database"
     "tel:+12145550199", "facetime:2145550199", "wa.me/12145550199",
     "https://drive.google.com/file/d/1AbC/view", "http://x.example.com", "www.dropbox.com/s/xyz", "raw at WWW.DROPBOX.COM", "dropbox.com/s/xyz/clip.mp4",
     "ｈｔｔｐｓ://x.example.com", "youtu.be/abc", "w" + ch(0x200b) + "ww.example.com", "drive.google.com/drive/folders/x",
+    "fb.watch/abc", "sportsclippers.store/x", "bbc.co.uk/x", "Team.tv/ intro", "we.tl/t-abc", "Drive.Google.com/drive/x",
   ];
   const got = [];
   for (const s of texts) {
@@ -244,7 +245,8 @@ test("027: titles and notes get the same text check in the app and the database"
     assert.equal(db, A.textOk(s), `app and database disagree on ${JSON.stringify(s)}`);
     got.push(db);
   }
-  assert.deepEqual(got, [true, true, true, true, true, true, true, true, true, true, true, true, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false]);
+  assert.deepEqual(got, [true, true, true, true, true, true, true, true, true, true, true, true, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false,
+    false, false, false, true, false, false]);
 });
 
 test("027: the database's reasons match the app's, kind by kind", async () => {
@@ -353,6 +355,47 @@ test("027: server only (RLS on, functions not callable by the API roles), and it
   }
   const sql = fs.readFileSync(path.join(__dirname, "..", "db", "migrations", "027_gfs_assets.sql"), "utf8").replace(/public\./g, `${S}.`);
   await pool.query(sql);
+});
+
+test("027: run over an earlier 027, it adds the column and the checks that came later", async () => {
+  await q("alter table gfs_assets drop column live_ref; alter table gfs_assets drop constraint gfs_assets_ref_needs_place; alter table gfs_assets drop constraint gfs_assets_link_hosts; alter table gfs_assets drop constraint gfs_assets_sponsor_marks");
+  const sql = fs.readFileSync(path.join(__dirname, "..", "db", "migrations", "027_gfs_assets.sql"), "utf8").replace(/public\./g, `${S}.`);
+  await pool.query(sql);
+  const names = (await q("select conname from pg_constraint where conrelid = $1::regclass", [`${S}.gfs_assets`])).map((r) => r.conname);
+  for (const c of ["gfs_assets_link_hosts", "gfs_assets_live_ref", "gfs_assets_ref_needs_place", "gfs_assets_sponsor_marks"]) assert.ok(names.includes(c), c);
+  assert.equal((await one("select count(*)::int n from information_schema.columns where table_schema = $1 and table_name = 'gfs_assets' and column_name = 'live_ref'", [S])).n, 1);
+  await refused("insert into gfs_assets (kind, title, created_by, format) values ('brand', 'Sponsor card', 'x', 'sponsor')", [], /gfs_assets_sponsor_marks/);
+});
+
+test("027: its ID where it went live is set once on the way live, and goes when a Moment or an NFT is retired", async () => {
+  const r = await roster(dallas);
+  const n = await asset(dallas, "narrative_nft", { title: "Pick six" });
+  await link(n, r);
+  await refused("update gfs_assets set live_ref = 'TOKEN-1' where id = $1", [n.id], /gfs_asset_locked/);
+  // GFS's label is enough for review.
+  await q("update gfs_assets set location = 'ledger', ref = 'Dallas2027-NFT-P6' where id = $1", [n.id]);
+  await q("update gfs_assets set stage = 'review' where id = $1", [n.id]);
+  await refused("update gfs_assets set live_ref = 'TOKEN-1' where id = $1", [n.id], /gfs_asset_locked/);
+  await q("update gfs_assets set mint_consent_at = now(), mint_consent_by = 'kyron@example.com' where id = $1", [n.id]);
+  await q("update gfs_assets set stage = 'approved', approved_at = now(), approved_by = 'abby@example.com' where id = $1", [n.id]);
+  await refused("update gfs_assets set live_ref = 'TOKEN-1' where id = $1", [n.id], /gfs_asset_locked/);
+  await refused("update gfs_assets set stage = 'live', live_ref = 'token 1' where id = $1", [n.id], /gfs_assets_live_ref/);
+  await q("update gfs_assets set stage = 'live', live_ref = 'TOKEN-1' where id = $1", [n.id]);
+  await refused("update gfs_assets set live_ref = 'TOKEN-2' where id = $1", [n.id], /gfs_asset_locked/);
+  await refused("update gfs_assets set live_ref = null where id = $1", [n.id], /gfs_asset_locked/);
+  await q("update gfs_assets set stage = 'retired', retire_reason = 'withdrawn' where id = $1", [n.id]);
+  assert.deepEqual(Object.values(await one("select live_ref, ref from gfs_assets where id = $1", [n.id])), [null, null]);
+  // An edit keeps its record when it's retired, the ID included.
+  const e = await asset(dallas, "edit", { title: "Recap · day three" });
+  await place(e, "-live");
+  await q("update gfs_assets set stage = 'review' where id = $1", [e.id]);
+  await q("update gfs_assets set stage = 'approved', approved_at = now(), approved_by = 'abby@example.com' where id = $1", [e.id]);
+  await q("update gfs_assets set stage = 'live', live_ref = 'POST-9' where id = $1", [e.id]);
+  await q("update gfs_assets set stage = 'retired', retire_reason = 'replaced' where id = $1", [e.id]);
+  assert.equal((await one("select live_ref from gfs_assets where id = $1", [e.id])).live_ref, "POST-9");
+  await refused("update gfs_assets set live_ref = 'POST-10' where id = $1", [e.id], /gfs_asset_retired/);
+  // A new record starts with none.
+  await refused("insert into gfs_assets (event_id, kind, title, created_by, live_ref) values ($1, 'edit', 'Recap', 'x', 'POST-1')", [dallas.id], /gfs_asset_starts_as_draft/);
 });
 
 test("the routes on Postgres: a Moment from draft to the family's library, then a takedown and retiring it", async () => {
