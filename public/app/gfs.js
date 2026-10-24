@@ -928,7 +928,8 @@
   function takedownCard(td, approverOrMember) {
     var l = td.next_due_at ? left(td.next_due_at) : null;
     var elsewhere = td.clips_out - (td.clips_out_yours === undefined ? td.clips_out : td.clips_out_yours);
-    var where = [td.event ? td.event.name : "", (td.regions || []).length > 1 ? (td.regions || []).map(rname).join(" and ") : null, td.clips_out ? td.clips_out + " clips still out" + (elsewhere ? " (" + elsewhere + " in other regions)" : "") : null, td.assets_live ? td.assets_live + (td.assets_live === 1 ? " asset" : " assets") + " still live in the library" : null].filter(Boolean).join(" · ");
+    var assetsElsewhere = td.assets_live - (td.assets_live_yours === undefined ? td.assets_live : td.assets_live_yours);
+    var where = [td.event ? td.event.name : "", (td.regions || []).length > 1 ? (td.regions || []).map(rname).join(" and ") : null, td.clips_out ? td.clips_out + " clips still out" + (elsewhere ? " (" + elsewhere + " in other regions)" : "") : null, td.assets_live ? td.assets_live + (td.assets_live === 1 ? " asset" : " assets") + " still live in the library" + ((td.assets_live_events || []).length ? " at " + td.assets_live_events.join(", ") : "") + (assetsElsewhere ? " (" + assetsElsewhere + " in other regions)" : "") : null].filter(Boolean).join(" · ");
     return '<div class="card tight"><div class="row"><div class="grow"><div class="name" style="font-size:15px">' + (td.number ? "#" + td.number + " · " : "") + h(td.team || "Athlete") + " · " + h((td.reason_name || "takedown").toLowerCase()) + '</div><div class="sub">' + h(where) + "</div></div>" + (l ? badge(l.text, l.late || l.hours < 6 ? "bad" : "warn") : badge("Done", "ok")) + "</div>" +
       td.steps.map(function (s) { return '<div class="row" style="gap:10px"><span class="tick' + (s.done_at ? " on" : new Date(s.due_at) < new Date() ? " late" : "") + '">' + (s.done_at ? ICON.check : "") + '</span><div class="grow sub" style="color:var(--ink-2)">' + h(s.label) + " · " + (s.done_at ? "done " + h(T().ago(s.done_at)) : "by " + h(whenIn(s.due_at))) + "</div>" + (!s.done_at && approverOrMember ? '<button type="button" class="btn small soft" data-tdstep="' + h(td.id) + '" data-k="' + s.key + '">Done</button>' : "") + "</div>"; }).join("") +
       "</div>";
@@ -941,8 +942,10 @@
         var r = await T().post("/api/gfs/takedowns/" + encodeURIComponent(b.dataset.tdstep), body, "PATCH");
         // Each region takes down its own events' clips; the step closes once
         // nothing is out anywhere.
-        if (r.partial && r.partial.still_out) T().toast("Taken down in your regions. " + r.partial.still_out + " still out at " + r.partial.events.join(", ") + "; their directors have been told." + (r.partial.assets_live ? " " + r.partial.assets_live + " in the asset library still live too." : ""));
-        else if (r.partial && r.partial.assets_live) T().toast("Clips are down. " + r.partial.assets_live + (r.partial.assets_live === 1 ? " asset" : " assets") + " in the library still show this athlete live: retire " + (r.partial.assets_live === 1 ? "it" : "them") + " once the file is down, then mark the step done.");
+        var p = r.partial;
+        var at = p && (p.asset_events || []).length ? " at " + p.asset_events.join(", ") : "";
+        if (p && p.still_out) T().toast("Taken down in your regions. " + p.still_out + " still out at " + p.events.join(", ") + "; their directors have been told." + (p.assets_live ? " " + p.assets_live + " in the asset library still live too" + at + "." : ""));
+        else if (p && p.assets_live) T().toast("Clips are down. " + p.assets_live + (p.assets_live === 1 ? " asset" : " assets") + " in the library still show this athlete live" + at + ": " + (p.assets_live === 1 ? "it's" : "they're") + " retired once the file is down, and those stops' directors have been told. Then mark the step done.");
         else T().toast("Marked.");
         refresh();
       });

@@ -25,7 +25,14 @@
     gfs_assets_not_set_up: "The asset library isn't set up on the server yet (migration 027).",
     gfs_asset_blocked: "It isn't ready yet. See what's blocking it.",
     gfs_asset_live_location: "Say where it lives first.",
-    gfs_asset_locked: "Only a draft's details change. Send it back to draft first.",
+    gfs_asset_file_required: "Record the file where it goes live first: the place and its ID or label. It locks once it's in review.",
+    gfs_asset_check_in_review: "This check is recorded once it's in review. Send it to review first.",
+    gfs_asset_locked: "Only a draft changes. Send it back to draft first.",
+    gfs_asset_source_world: "Pick a venue World from the same stop.",
+    conflict: "Someone changed this at the same moment. Try again.",
+    athlete: "Pick athletes from the stop's roster.",
+    links: "Leave out links. Where the file lives goes under Where it lives.",
+    link_host: "A brand link goes to Canva, Figma, Adobe or groundfloorsports.com.",
     gfs_asset_retired: "It's retired. Make a new one instead.",
     gfs_asset_no_athletes: "This kind of asset never shows athletes.",
     gfs_asset_one_athlete: "A Moment or a Narrative NFT shows exactly one athlete.",
@@ -69,6 +76,8 @@
     under_13: function (a) { return a + " may be under 13 (no verified age, or a 12-and-under division). A Moment needs verifiable parental consent, which isn't tracked yet."; },
     no_nft_consent: function (a) { return a + " has no Narrative NFT permission on the roster."; },
     no_marketing_consent: function (a) { return a + " has no marketing consent, so an edit can't feature them."; },
+    no_sale_consent: function (a) { return a + " has no sale consent, so an edit with them can't be listed on SportsClippers."; },
+    not_public: function (a) { return a + " isn't set for public display, or may be under 13, so an edit with them can't be listed on SportsClippers."; },
     one_athlete: function () { return "A Moment or a Narrative NFT shows exactly one athlete. Add them."; },
     venue_permission: function () { return "Record the venue's signed permission (Pylon I-2)."; },
     deidentified: function () { return "An approver confirms every other player is blurred or masked."; },
@@ -202,7 +211,7 @@
         '<div class="list" role="radiogroup" aria-label="Kind">' + Object.keys(m.kinds).map(function (key) {
           return '<button type="button" class="li" role="radio" aria-checked="' + (key === kind) + '" data-pick="' + h(key) + '" style="' + (key === kind ? "background:#1A2C45" : "") + '"><div class="ico" style="width:40px;height:40px;border-radius:11px">' + ICON[key] + '</div><div class="grow"><div class="name" style="font-size:15px">' + h(m.kinds[key].name) + '</div><div class="sub">' + h(m.kinds[key].what) + "</div></div>" + (key === kind ? '<span style="color:var(--gold)">' + t.I.check + "</span>" : "") + "</button>";
         }).join("") + "</div>" +
-        '<label class="field"><span class="label">Title</span><input class="input" id="naTitle" maxlength="80" placeholder="' + h(kind === "venue_world" ? "Dallas 2027 · Stadium World" : kind === "world_pass" ? "Dallas 2027 · Stadium World edition" : kind === "brand" ? "Pylon end card" : kind === "moment" ? "Bulldogs #12 · catch on field 3" : "Recap · day one") + '"></label>' +
+        '<label class="field"><span class="label">Title <small>no names, links or contact details</small></span><input class="input" id="naTitle" maxlength="80" placeholder="' + h(kind === "venue_world" ? "Dallas 2027 · Stadium World" : kind === "world_pass" ? "Dallas 2027 · Stadium World edition" : kind === "brand" ? "Pylon end card" : kind === "moment" ? "Catch on field 3" : kind === "narrative_nft" ? "First touchdown · day one" : "Recap · day one") + '"></label>' +
         (k.formats.length ? '<label class="field"><span class="label">Format</span><select class="input" id="naFormat"><option value="">Pick one</option>' + k.formats.map(function (f) { return '<option value="' + h(f) + '">' + h(m.formats[f] || f) + "</option>"; }).join("") + "</select></label>" : "") +
         '<label class="field"><span class="label">Stop</span><select class="input" id="naEvent">' + (kind === "brand" ? '<option value="">No stop</option>' : "") + evOptions + "</select></label>" +
         (kind === "brand" ? '<label class="field" id="naRegionRow"><span class="label">Region <small>for a brand asset with no stop</small></span><select class="input" id="naRegion">' + (t.atLeast("approver") ? '<option value="">National</option>' : "") + regions + "</select></label>" : "") +
@@ -256,8 +265,10 @@
 
     function draw() {
       var blocks = a.blocks || [];
+      var items = blocks.map(blockText);
+      if (a.stage === "draft" && !a.file_ready) items.push("Record the file where it goes live (Where it lives, below) before you send it to review.");
       var blockCard = a.stage === "retired" ? "" :
-        member ? (blocks.length ? '<section class="card" style="' + (a.needs_retiring ? "border-color:#5A3A33" : "") + '"><h2 class="sec-h">' + (a.needs_retiring ? "Live, and it shouldn't be" : "Before it can go out") + '</h2><ul style="margin:0;padding-left:20px;display:flex;flex-direction:column;gap:6px;font-size:14.5px;line-height:1.45;color:var(--ink-2)">' + blocks.map(function (b) { return "<li>" + h(blockText(b)) + "</li>"; }).join("") + "</ul>" + (a.needs_retiring ? '<p class="sub" style="margin:0">Take the file down where it lives, then retire it here.</p>' : "") + "</section>" : (a.stage === "draft" || a.stage === "review" ? '<p class="sub" style="margin:0;color:var(--ok)">' + t.I.check + " Nothing's blocking it.</p>" : "")) :
+        member ? (items.length ? '<section class="card" style="' + (a.needs_retiring ? "border-color:#5A3A33" : "") + '"><h2 class="sec-h">' + (a.needs_retiring ? "Live, and it shouldn't be" : "Before it can go out") + '</h2><ul style="margin:0;padding-left:20px;display:flex;flex-direction:column;gap:6px;font-size:14.5px;line-height:1.45;color:var(--ink-2)">' + items.map(function (x) { return "<li>" + h(x) + "</li>"; }).join("") + "</ul>" + (a.needs_retiring ? '<p class="sub" style="margin:0">Take the file down where it lives, then retire it here.</p>' : "") + "</section>" : (a.stage === "draft" || a.stage === "review" ? '<p class="sub" style="margin:0;color:var(--ok)">' + t.I.check + " Nothing's blocking it.</p>" : "")) :
         (a.held ? '<p class="body">On hold. A director can say why.</p>' : "");
 
       var athletes = k.athletes === "none" ? "" :
@@ -265,7 +276,7 @@
         (a.athletes.length ? '<div class="list">' + a.athletes.map(function (x) {
           return '<div class="li" style="cursor:default"><div class="grow"><div class="name" style="font-size:15px">' + h(athleteName(x)) + (x.position ? ' <span class="sub">' + h(x.position) + "</span>" : "") + "</div>" + (x.roster_id ? '<div class="sub">Roster ' + h(x.roster_id) + "</div>" : "") + "</div>" +
             (a.can.edit ? '<button type="button" class="btn small ghost" data-drop="' + h(x.roster_row) + '">Take out</button>' : "") + "</div>";
-        }).join("") + "</div>" : '<p class="empty">' + (k.athletes === "one" ? "Nobody yet. A " + k.name + " shows one athlete." : "Nobody yet.") + "</p>") +
+        }).join("") + "</div>" : '<p class="empty">' + (a.stage === "retired" && k.athletes === "one" ? "Cleared when it was retired." : k.athletes === "one" ? "Nobody yet. A " + k.name + " shows one athlete." : "Nobody yet.") + "</p>") +
         (a.can.edit && (k.athletes === "many" || !a.athletes.length) ? '<button type="button" class="btn soft small" id="asPick" style="align-self:flex-start">Add an athlete</button><div id="asPicker"></div>' : "") +
         "</section>";
 
@@ -276,8 +287,8 @@
         (a.kind === "world_pass" ? '<label class="field"><span class="label">Price <small>fixed, in dollars</small></span><input class="input" id="asPrice" inputmode="decimal" value="' + (a.price_cents == null ? "" : h((a.price_cents / 100).toFixed(2))) + '"></label>' +
           '<label class="field"><span class="label">The venue World it\'s an edition of</span><select class="input" id="asSource"><option value="">Pick a World</option></select></label>' : "") +
         (a.kind === "venue_world" ? '<label class="check"><span class="grow"><b style="font-size:15px">A school venue</b><span class="sub" style="display:block">School stadiums are never sold.</span></span><input type="checkbox" class="switch" id="asSchool"' + (a.school_venue ? " checked" : "") + "></label>" : "") +
-        (a.kind === "edit" || a.kind === "brand" ? '<label class="check"><span class="grow"><b style="font-size:15px">Carries a sponsor\'s marks</b><span class="sub" style="display:block">Then the sponsor\'s licence has to be on file.</span></span><input type="checkbox" class="switch" id="asMarks"' + (a.sponsor_marks ? " checked" : "") + "></label>" : "") +
-        '<label class="field"><span class="label">Note <small>optional</small></span><input class="input" id="asNote" maxlength="300" value="' + h(a.note || "") + '"></label>' +
+        (a.kind === "edit" || a.kind === "brand" ? '<label class="check"><span class="grow"><b style="font-size:15px">Carries a sponsor\'s marks</b><span class="sub" style="display:block">' + (a.format === "sponsor" ? "A sponsor asset always does, so the sponsor's licence has to be on file." : "Then the sponsor's licence has to be on file.") + '</span></span><input type="checkbox" class="switch" id="asMarks"' + (a.sponsor_marks || a.format === "sponsor" ? " checked" : "") + (a.format === "sponsor" ? " disabled" : "") + "></label>" : "") +
+        '<label class="field"><span class="label">Note <small>optional; no names, links or contact details</small></span><input class="input" id="asNote" maxlength="300" value="' + h(a.note || "") + '"></label>' +
         '<button type="button" class="btn soft" id="asSave">Save details</button></section>' :
         (a.kind === "world_pass" && a.price_cents != null ? '<p class="body">' + h(money(a.price_cents)) + (a.source ? " · an edition of " + h(a.source.title) : "") + "</p>" : "") +
         (a.note && member ? '<p class="body">' + h(a.note) + "</p>" : "");
@@ -286,18 +297,22 @@
       var where = member ?
         '<section class="sec"><h2 class="sec-h">Where it lives</h2>' +
         (a.can.place ? '<label class="field"><span class="label">Place</span><select class="input" id="asLoc"><option value="">Not yet</option>' + allowed.map(function (l) { return '<option value="' + h(l) + '"' + (a.location === l ? " selected" : "") + ">" + h(m.locations[l]) + (k.live.indexOf(l) >= 0 ? "" : " (not where it goes live)") + "</option>"; }).join("") + "</select></label>" +
-          '<label class="field"><span class="label">' + (a.location === "link" ? "Link" : "ID or label there") + ' <small>no spaces or slashes; a label like Dallas2027-WR-11-EndZone-042</small></span><input class="input" id="asRef" maxlength="300" autocomplete="off" value="' + h(a.ref || "") + '"></label>' +
+          '<label class="field"><span class="label">' + (a.location === "link" ? "Link <small>Canva, Figma, Adobe or groundfloorsports.com</small>" : "ID or label there <small>no spaces or slashes; a label like Dallas2027-WR-11-EndZone-042</small>") + '</span><input class="input" id="asRef" maxlength="300" autocomplete="off" value="' + h(a.ref || "") + '"></label>' +
           '<label class="field"><span class="label">SHA-256 <small>optional, the file\'s fingerprint</small></span><input class="input mono" id="asSha" maxlength="64" autocomplete="off" spellcheck="false" style="font:13px var(--mono)" value="' + h(a.sha256 || "") + '"></label>' +
-          '<button type="button" class="btn soft" id="asPlace">Save where it lives</button>'
-          : '<p class="body">' + (a.location ? h(m.locations[a.location]) + (a.ref ? " · " + h(a.ref) : "") : "Not recorded.") + "</p>") +
+          '<button type="button" class="btn soft" id="asPlace">Save where it lives</button>' +
+          '<p class="sub" style="margin:0">Record it where it goes live before you send it to review. It locks there, so what\'s approved is what goes out.</p>'
+          : '<p class="body">' + (a.location ? h(m.locations[a.location]) + (a.ref ? " · " + h(a.ref) : "") : "Not recorded.") + "</p>" +
+            (a.sha256 ? '<p class="sub mono" style="margin:0;font:12px var(--mono);word-break:break-all">SHA-256 ' + h(a.sha256) + "</p>" : "") +
+            (a.stage !== "draft" && a.stage !== "retired" ? '<p class="sub" style="margin:0">Locked since review. To change the file, send it back to draft.</p>' : "")) +
         '<p class="sub" style="margin:0">Where it goes live: ' + h(k.live.map(function (l) { return m.locations[l]; }).join(", ")) + ".</p></section>" : "";
 
       var checkKeys = Object.keys(a.checks || {});
       var checks = checkKeys.length ? '<section class="sec"><h2 class="sec-h">Checks</h2>' + checkKeys.map(function (c) {
         var x = a.checks[c];
-        return '<label class="check"><span class="grow"><b style="font-size:14.5px">' + h(m.checks[c].name) + '</b><span class="sub" style="display:block">' + (x.on ? "Recorded" + (x.by ? " by " + h(x.by) : "") + " · " + h(t.ago(x.at)) : h(m.checks[c].role === "owner" ? "Kyron records this." : m.checks[c].role === "approver" ? "An approver records this." : "A director records this.")) + "</span></span>" +
+        var who = m.checks[c].role === "owner" ? "Kyron records this in review." : m.checks[c].role === "approver" ? "An approver records this in review." : "A director records this.";
+        return '<label class="check"><span class="grow"><b style="font-size:14.5px">' + h(m.checks[c].name) + '</b><span class="sub" style="display:block">' + (x.on ? "Recorded" + (x.by ? " by " + h(x.by) : "") + " · " + h(t.ago(x.at)) : h(who)) + "</span></span>" +
           '<input type="checkbox" class="switch" data-check="' + h(c) + '"' + (x.on ? " checked" : "") + (x.can ? "" : " disabled") + "></label>";
-      }).join("") + "</section>" : "";
+      }).join("") + (a.stage === "draft" || a.stage === "review" ? '<p class="sub" style="margin:0">Checks an approver or Kyron records belong to this review. Going back to draft clears them.</p>' : "") + "</section>" : "";
 
       var stageLine = [a.approved ? "Approved by " + a.approved.by + " · " + t.ago(a.approved.at) : null, a.live_at ? k.liveLabel + " · " + t.ago(a.live_at) : null, a.retired ? "Retired · " + (m.retire_reasons[a.retired.reason] || a.retired.reason) + " · " + t.ago(a.retired.at) : null].filter(Boolean).join(" · ");
       var moves = a.can.moves || [];
@@ -306,7 +321,7 @@
       if (moves.indexOf("approved") >= 0) actions.push('<button type="button" class="btn" id="asApprove">Approve</button>');
       if (moves.indexOf("live") >= 0) actions.push('<button type="button" class="btn" data-move="live">' + h(k.liveLabel === "Out" ? "Mark it out" : "Mark " + k.liveLabel.toLowerCase()) + "</button>");
       if (moves.indexOf("draft") >= 0) actions.push('<button type="button" class="btn soft" data-move="draft">Back to draft</button>');
-      var retire = moves.indexOf("retired") >= 0 ? '<details class="card tight"' + (a.needs_retiring ? " open" : "") + '><summary class="sub" style="cursor:pointer">Retire it</summary><div style="display:flex;flex-direction:column;gap:10px;margin-top:10px"><select class="input" id="asReason"><option value="">Why</option>' + Object.keys(m.retire_reasons).map(function (r) { return '<option value="' + h(r) + '">' + h(m.retire_reasons[r]) + "</option>"; }).join("") + '</select>' + (a.kind === "moment" || a.kind === "narrative_nft" ? '<p class="sub" style="margin:0">Retiring clears where the file was and the athlete from this record. It stays retired.</p>' : '<p class="sub" style="margin:0">It stays retired.</p>') + '<button type="button" class="btn danger" id="asRetire">Retire</button></div></details>' : "";
+      var retire = moves.indexOf("retired") >= 0 ? '<details class="card tight"' + (a.needs_retiring ? " open" : "") + '><summary class="sub" style="cursor:pointer">Retire it</summary><div style="display:flex;flex-direction:column;gap:10px;margin-top:10px"><select class="input" id="asReason"><option value="">Why</option>' + Object.keys(m.retire_reasons).map(function (r) { return '<option value="' + h(r) + '">' + h(m.retire_reasons[r]) + "</option>"; }).join("") + '</select>' + (a.kind === "moment" || a.kind === "narrative_nft" ? '<p class="sub" style="margin:0">Retiring clears where the file was, the title, the note and the athlete from this record. It stays retired.</p>' : '<p class="sub" style="margin:0">It stays retired.</p>') + '<button type="button" class="btn danger" id="asRetire">Retire</button></div></details>' : "";
 
       t.show(null,
         '<div class="screen">' + t.backBtn(backTo, a.event ? "Stop's assets" : "Asset library") +
@@ -326,17 +341,18 @@
       var save = document.getElementById("asSave");
       if (save) {
         var src = document.getElementById("asSource");
+        var sourceLoaded = false;
         if (src) t.api("/api/gfs/assets?event=" + encodeURIComponent(a.event.id) + "&kind=venue_world").then(function (r) {
           src.innerHTML = '<option value="">Pick a World</option>' + r.assets.map(function (w) { return '<option value="' + h(w.id) + '"' + (a.source && a.source.id === w.id ? " selected" : "") + ">" + h(w.title + " · " + w.stage_name) + "</option>"; }).join("");
+          sourceLoaded = true;
         }).catch(function () {});
         save.addEventListener("click", function () {
-          var body = { title: document.getElementById("asTitle").value, note: document.getElementById("asNote").value };
-          var f = document.getElementById("asFormat"); if (f) body.format = f.value || null;
-          var p = document.getElementById("asPrice"); if (p) body.price_cents = p.value.trim() ? Math.round(Number(p.value.replace(/[$,]/g, "")) * 100) : null;
-          var s = document.getElementById("asSource"); if (s) body.source_asset_id = s.value || null;
-          var sc = document.getElementById("asSchool"); if (sc) body.school_venue = sc.checked;
-          var mk = document.getElementById("asMarks"); if (mk) body.sponsor_marks = mk.checked;
-          call(function () { return t.post(base, body, "PATCH"); }, "Saved.");
+          var val = function (id) { var el = document.getElementById(id); return el ? el.value : undefined; };
+          var box = function (id) { var el = document.getElementById(id); return el && !el.disabled ? el.checked : undefined; };
+          var d = detailsPatch(a, { title: val("asTitle"), note: val("asNote"), format: val("asFormat"), price: val("asPrice"), source: val("asSource"), sourceLoaded: sourceLoaded, school: box("asSchool"), marks: box("asMarks") });
+          if (d.error) return msg(MSG[d.error] || say({ data: { error: d.error } }));
+          if (!Object.keys(d.body).length) return t.toast("Nothing changed.");
+          call(function () { return t.post(base, d.body, "PATCH"); }, "Saved.");
         });
       }
       var place = document.getElementById("asPlace");
@@ -379,8 +395,8 @@
       app().querySelectorAll("[data-move]").forEach(function (b) {
         b.addEventListener("click", function () {
           var to = b.dataset.move;
+          // The file was recorded before review and goes out as it is.
           var body = { to: to };
-          if (to === "live") { var loc = document.getElementById("asLoc"), ref = document.getElementById("asRef"); if (loc) body.location = loc.value || null; if (ref) body.ref = ref.value; }
           b.disabled = true;
           call(function () { return t.post(base + "/stage", body); }, to === "review" ? "Sent to review." : to === "draft" ? "Back to draft." : k.liveLabel + ".").then(function () { b.disabled = false; });
         });
@@ -412,6 +428,30 @@
     draw();
   }
 
+  // What Save details sends: only what changed, and never a field the screen
+  // hasn't read yet (the World list loads after the screen does). A price
+  // that isn't a number is an error, not a cleared price.
+  function detailsPatch(a, form) {
+    var body = {};
+    if (form.title !== undefined && form.title !== a.title) body.title = form.title;
+    if (form.note !== undefined && String(form.note || "") !== String(a.note || "")) body.note = form.note;
+    if (form.format !== undefined && (form.format || null) !== (a.format || null)) body.format = form.format || null;
+    if (form.price !== undefined) {
+      var raw = String(form.price).replace(/[$,\s]/g, "");
+      var cents = raw === "" ? null : Math.round(Number(raw) * 100);
+      if (raw !== "" && !isFinite(cents)) return { error: "price" };
+      if (cents !== (a.price_cents == null ? null : a.price_cents)) body.price_cents = cents;
+    }
+    if (form.source !== undefined && form.sourceLoaded) {
+      var current = a.source ? a.source.id : null;
+      if ((form.source || null) !== current) body.source_asset_id = form.source || null;
+    }
+    if (form.school !== undefined && form.school !== !!a.school_venue) body.school_venue = form.school;
+    if (form.marks !== undefined && form.marks !== !!a.sponsor_marks) body.sponsor_marks = form.marks;
+    return { body: body };
+  }
+
+  window.TOJAssets = { detailsPatch: detailsPatch };
   window.TOJScreens = Object.assign(window.TOJScreens || {}, {
     "gfs-assets": library,
     "gfs-asset-new": newAsset,

@@ -8,7 +8,7 @@
 //                                (?event=, ?kind=, ?stage=)
 //   POST   /                     a new draft (Regional Directors and up)
 //   GET    /:id                  one asset: athletes, checks, what blocks it, what you can do
-//   PATCH  /:id                  change a draft's details, where it lives, its athletes
+//   PATCH  /:id                  change a draft: its details, its file, its athletes
 //   DELETE /:id                  delete a draft
 //   POST   /:id/check            record or clear a check   { check, on }
 //   POST   /:id/stage            move it: review, back to draft, approved, live   { to, confirm }
@@ -17,8 +17,13 @@
 //
 // Region rules as everywhere in Pylon events: owners and approvers see every
 // region, a Regional Director or viewer only their own. Viewers read; they
-// see that an asset is held, never why, and never a roster ID or a file's
-// ID. Athletes are team and jersey number, never a name.
+// see that an asset is held, never why, never its checks, and never a roster
+// ID or a file's ID. Athletes are team and jersey number, never a name.
+//
+// The file is set in a draft and locks from review on, so what an approver
+// approves is what goes out. The checks an approver or the owner records
+// belong to one review: recorded in review only, cleared by going back to
+// draft. Migration 027 holds the database to the same rules.
 
 "use strict";
 
@@ -26,6 +31,7 @@ const express = require("express");
 const T = require("../utils/team");
 const G = require("../utils/gfs");
 const A = require("../utils/gfs-assets");
+const { staffEmails } = require("../utils/staff");
 const { getSupabase } = require("../utils/supabase");
 
 const router = express.Router();
@@ -50,6 +56,8 @@ function fail(res, e, what) {
   if (/^gfs_[a-z0-9_]+$/.test(m)) return res.status(409).json({ error: m });
   if (notSetUp(e)) return res.status(503).json({ error: "gfs_assets_not_set_up", hint: "Apply migration 027 in Supabase." });
   if (e && e.code === "23514" && /gfs_assets/.test(m)) return res.status(400).json({ error: "invalid_asset" });
+  // Two changes to the same athletes at once.
+  if (e && e.code === "23505") return res.status(409).json({ error: "conflict" });
   console.error(`[gfs-assets] ${what} failed:`, (e && e.code) || "", m.slice(0, 160));
   return res.status(500).json({ error: `${what}_failed` });
 }
@@ -92,6 +100,14 @@ async function namesFor(sb, emails) {
   const rows = await run(sb.from("team_members").select("email,name").in("email", list));
   return new Map((rows || []).map((r) => [r.email, r.name]));
 }
+// Who recorded or approved something: a teammate's name. Owners aren't in
+// team_members, so they show as "the owner"; anyone else who's gone from the
+// team shows as a former teammate.
+function personName(names, email) {
+  if (!email) return null;
+  if (names.get(email)) return names.get(email);
+  return staffEmails().has(String(email).toLowerCase()) ? "the owner" : "a former teammate";
+}
 
 // Everything an asset's record needs, for a set of assets.
 async function context(sb, assets) {
@@ -116,8 +132,6 @@ async function context(sb, assets) {
   return { byAsset, events, sources };
 }
 
-const CHECK_COLS = { venue_permission: "venue_permission", deidentified: "deidentified", tier4: "tier4", mint_consent: "mint_consent", marks_licensed: "marks_licensed" };
-
 function assetView(asset, ctx, req, names) {
   const member = atLeast(req, "member");
   const athletes = ctx.byAsset.get(asset.id) || [];
@@ -126,11 +140,14 @@ function assetView(asset, ctx, req, names) {
   const blocks = asset.stage === "retired" ? [] : A.assetBlocks(asset, athletes, ev, source);
   const byRow = new Map(athletes.map((a) => [a.roster.id, a]));
   const held = blocks.some(A.athleteReason);
-  const checks = {};
-  for (const k of A.checksFor(asset)) {
-    const at = asset[CHECK_COLS[k] + "_at"];
-    const by = asset[CHECK_COLS[k] + "_by"];
-    checks[k] = { on: !!at, at: at || null, by: at ? names.get(by) || (by && staffName(by)) || null : null, can: A.canCheck(req.team, k) && worksOn(req, asset) && ["draft", "review"].includes(asset.stage) };
+  // The checks say what consent is on file, so they're for directors and up.
+  let checks = null;
+  if (member) {
+    checks = {};
+    for (const k of A.checksFor(asset)) {
+      const at = asset[k + "_at"];
+      checks[k] = { on: !!at, at: at || null, by: at ? personName(names, asset[k + "_by"]) : null, can: A.canCheck(req.team, k) && worksOn(req, asset) && A.checkStages(k).includes(asset.stage) };
+    }
   }
   const kind = A.KINDS[asset.kind];
   return {
@@ -169,22 +186,19 @@ function assetView(asset, ctx, req, names) {
       : null,
     held,
     ready: blocks.length === 0,
+    file_ready: A.liveLocationOk(asset),
     needs_retiring: asset.stage === "live" && blocks.length > 0,
-    approved: asset.approved_at ? { at: asset.approved_at, by: names.get(asset.approved_by) || staffName(asset.approved_by) } : null,
+    approved: asset.approved_at ? { at: asset.approved_at, by: personName(names, asset.approved_by) } : null,
     live_at: asset.live_at || null,
     retired: asset.retired_at ? { at: asset.retired_at, reason: asset.retire_reason } : null,
     created_at: asset.created_at,
     can: {
       edit: worksOn(req, asset) && asset.stage === "draft",
-      place: worksOn(req, asset) && ["draft", "review", "approved"].includes(asset.stage),
+      place: worksOn(req, asset) && asset.stage === "draft",
       moves: worksOn(req, asset) ? A.moves(req.team, asset) : [],
       delete: worksOn(req, asset) && asset.stage === "draft",
     },
   };
-}
-// Owners aren't in team_members, so they show as "the owner".
-function staffName(email) {
-  return email ? "the owner" : null;
 }
 
 async function loadAsset(sb, req, res, id = req.params.id) {
@@ -205,11 +219,18 @@ async function loadAsset(sb, req, res, id = req.params.id) {
 }
 async function oneView(sb, req, asset) {
   const ctx = await context(sb, [asset]);
-  const emails = [asset.approved_by, ...A.CHECK_KEYS.map((k) => asset[CHECK_COLS[k] + "_by"])];
+  const emails = [asset.approved_by, ...A.CHECK_KEYS.map((k) => asset[k + "_by"])];
   return assetView(asset, ctx, req, await namesFor(sb, emails));
 }
+// The activity log names the stop (or the brand kit), the region and the
+// kind: never a title.
+function logSubject(asset, ev) {
+  if (ev) return ev.code;
+  if (asset.event_id) return null;
+  return asset.region ? `the ${G.REGIONS[asset.region] || asset.region} brand kit` : "the national brand kit";
+}
 function log(req, action, asset, ev) {
-  return T.logActivity(actor(req), action, ev ? ev.code : "the national brand kit", { region: asset.region || null, kind: asset.kind });
+  return T.logActivity(actor(req), action, logSubject(asset, ev), { region: asset.region || null, kind: asset.kind });
 }
 
 // ── Meta ─────────────────────────────────────────────────────────────────
@@ -220,6 +241,7 @@ router.get("/meta", viewer, (req, res) => {
     stages: A.STAGE_NAMES,
     locations: A.LOCATIONS,
     checks: A.CHECKS,
+    link_hosts: A.LINK_HOSTS,
     retire_reasons: A.RETIRE_REASONS,
     regions: G.REGIONS,
     you: { role: req.team.role, owner: !!req.team.owner, regions: G.regionsOf(req.team) },
@@ -242,7 +264,7 @@ router.get("/", viewer, async (req, res) => {
     if (stage) assets = assets.filter((a) => a.stage === stage);
     assets = assets.filter((a) => seesAsset(req, a));
     const ctx = await context(sb, assets);
-    const emails = assets.flatMap((a) => [a.approved_by, ...A.CHECK_KEYS.map((k) => a[CHECK_COLS[k] + "_by"])]);
+    const emails = assets.flatMap((a) => [a.approved_by, ...A.CHECK_KEYS.map((k) => a[k + "_by"])]);
     const names = await namesFor(sb, emails);
     const views = assets.map((a) => assetView(a, ctx, req, names)).sort((x, y) => String(y.created_at).localeCompare(String(x.created_at)));
 
@@ -289,7 +311,8 @@ router.post("/", member, async (req, res) => {
   const format = b.format == null || b.format === "" ? null : String(b.format);
   if (format && !A.KINDS[kind].formats.includes(format)) return res.status(400).json({ error: "format", allowed: A.KINDS[kind].formats });
   try {
-    const row = { kind, title, format, stage: "draft", school_venue: false, sponsor_marks: false, created_by: actor(req) };
+    // A sponsor asset carries the sponsor's marks, so it needs their licence.
+    const row = { kind, title, format, stage: "draft", school_venue: false, sponsor_marks: format === "sponsor", created_by: actor(req) };
     let ev = null;
     if (b.event_id) {
       if (!UUID.test(String(b.event_id))) return res.status(404).json({ error: "not_found" });
@@ -325,7 +348,9 @@ router.get("/:id", viewer, async (req, res) => {
   }
 });
 
-// ── Changing a draft, and where a file lives ─────────────────────────────
+// ── Changing a draft: its details, its file, its athletes ────────────────
+// Everything is checked first, then written, so a refusal changes nothing.
+const DRAFT_FIELDS = ["title", "format", "price_cents", "school_venue", "sponsor_marks", "source_asset_id", "note", "athletes", "location", "ref", "sha256"];
 router.patch("/:id", member, async (req, res) => {
   const sb = getSupabase();
   try {
@@ -333,12 +358,10 @@ router.patch("/:id", member, async (req, res) => {
     if (!asset) return;
     if (!worksOn(req, asset)) return res.status(403).json({ error: "region_not_yours" });
     const b = req.body || {};
+    // From review on, nothing here changes: the details, the file and the
+    // athletes are what the approver checks.
+    if (asset.stage !== "draft" && DRAFT_FIELDS.some((k) => b[k] !== undefined)) return res.status(409).json({ error: asset.stage === "retired" ? "gfs_asset_retired" : "gfs_asset_locked" });
     const patch = {};
-    const draftOnly = ["title", "format", "price_cents", "school_venue", "sponsor_marks", "source_asset_id", "note", "athletes"];
-    if (asset.stage !== "draft" && draftOnly.some((k) => b[k] !== undefined)) return res.status(409).json({ error: "gfs_asset_locked" });
-    if (asset.stage === "live" || asset.stage === "retired") {
-      if (b.location !== undefined || b.ref !== undefined || b.sha256 !== undefined) return res.status(409).json({ error: asset.stage === "live" ? "gfs_asset_locked" : "gfs_asset_retired" });
-    }
     if (b.title !== undefined) {
       const title = A.cleanTitle(b.title);
       const tp = A.textProblem(title, A.TITLE_MAX, "title");
@@ -352,7 +375,8 @@ router.patch("/:id", member, async (req, res) => {
     }
     if (b.note !== undefined) {
       const n = b.note === null ? "" : G.clean(b.note, A.NOTE_MAX + 1);
-      if (n && A.textProblem(n, A.NOTE_MAX, "note")) return res.status(400).json({ error: A.textProblem(n, A.NOTE_MAX, "note") });
+      const np = n ? A.textProblem(n, A.NOTE_MAX, "note") : null;
+      if (np) return res.status(400).json({ error: np });
       patch.note = n || null;
     }
     if (b.price_cents !== undefined) {
@@ -366,6 +390,8 @@ router.patch("/:id", member, async (req, res) => {
       patch.school_venue = b.school_venue === true;
     }
     if (b.sponsor_marks !== undefined) patch.sponsor_marks = b.sponsor_marks === true;
+    // A sponsor asset always carries the sponsor's marks.
+    if ((patch.format !== undefined ? patch.format : asset.format) === "sponsor") patch.sponsor_marks = true;
     if (b.source_asset_id !== undefined) {
       if (asset.kind !== "world_pass") return res.status(400).json({ error: "source_world_pass_only" });
       if (b.source_asset_id === null) patch.source_asset_id = null;
@@ -388,28 +414,51 @@ router.patch("/:id", member, async (req, res) => {
       if (h && !A.SHA_RE.test(h)) return res.status(400).json({ error: "sha256" });
       patch.sha256 = h;
     }
-    if (Object.keys(patch).length) await run(sb.from("gfs_assets").update(patch).eq("id", asset.id));
 
     // Athletes: roster rows of this stop, added and removed by id.
+    let remove = [];
+    let fresh = [];
+    let freshRows = [];
     if (b.athletes !== undefined) {
-      const add = [...new Set((Array.isArray(b.athletes.add) ? b.athletes.add : []).map(String))];
-      const remove = [...new Set((Array.isArray(b.athletes.remove) ? b.athletes.remove : []).map(String))];
-      if ([...add, ...remove].some((x) => !UUID.test(x))) return res.status(400).json({ error: "athlete" });
+      const x = b.athletes;
+      const list = (v) => (v === undefined ? [] : Array.isArray(v) ? v : null);
+      const addIn = x && typeof x === "object" && !Array.isArray(x) ? list(x.add) : null;
+      const removeIn = x && typeof x === "object" && !Array.isArray(x) ? list(x.remove) : null;
+      if (!addIn || !removeIn) return res.status(400).json({ error: "athlete" });
+      const add = [...new Set(addIn.map(String))];
+      remove = [...new Set(removeIn.map(String))];
+      if ([...add, ...remove].some((id) => !UUID.test(id))) return res.status(400).json({ error: "athlete" });
       if (add.length && A.KINDS[asset.kind].athletes === "none") return res.status(409).json({ error: "gfs_asset_no_athletes" });
-      const have = ((await run(sb.from("gfs_asset_athletes").select("roster_row").eq("asset_id", asset.id))) || []).map((x) => x.roster_row);
-      const after = have.filter((x) => !remove.includes(x)).concat(add.filter((x) => !have.includes(x)));
+      const have = ((await run(sb.from("gfs_asset_athletes").select("roster_row").eq("asset_id", asset.id))) || []).map((r) => r.roster_row);
+      const after = have.filter((id) => !remove.includes(id)).concat(add.filter((id) => !have.includes(id)));
       if (A.KINDS[asset.kind].athletes === "one" && after.length > 1) return res.status(409).json({ error: "gfs_asset_one_athlete" });
       if (after.length > 200) return res.status(400).json({ error: "too_many_athletes" });
-      if (remove.length) await run(sb.from("gfs_asset_athletes").delete().eq("asset_id", asset.id).in("roster_row", remove));
-      const fresh = add.filter((x) => !have.includes(x));
+      remove = remove.filter((id) => have.includes(id));
+      fresh = add.filter((id) => !have.includes(id));
       if (fresh.length) {
-        const rows = await inChunks(fresh, (part) => run(sb.from("gfs_roster").select("id,event_id,team,jersey").in("id", part)));
-        if (rows.length !== fresh.length || rows.some((r) => r.event_id !== asset.event_id)) return res.status(409).json({ error: "gfs_asset_not_on_roster" });
-        await run(sb.from("gfs_asset_athletes").insert(rows.map((r) => ({ asset_id: asset.id, roster_row: r.id, team: r.team, jersey: r.jersey, added_by: actor(req) }))));
+        freshRows = await inChunks(fresh, (part) => run(sb.from("gfs_roster").select("id,event_id,team,jersey").in("id", part)));
+        if (freshRows.length !== fresh.length || freshRows.some((r) => r.event_id !== asset.event_id)) return res.status(409).json({ error: "gfs_asset_not_on_roster" });
       }
     }
-    const fresh = await run(sb.from("gfs_assets").select(ASSET_COLS).eq("id", asset.id).single());
-    res.json({ asset: await oneView(sb, req, fresh) });
+
+    // It all checks out: write it.
+    if (Object.keys(patch).length) await run(sb.from("gfs_assets").update(patch).eq("id", asset.id));
+    if (remove.length) await run(sb.from("gfs_asset_athletes").delete().eq("asset_id", asset.id).in("roster_row", remove));
+    if (freshRows.length) {
+      await run(sb.from("gfs_asset_athletes").insert(freshRows.map((r) => ({ asset_id: asset.id, roster_row: r.id, team: r.team, jersey: r.jersey, added_by: actor(req) }))));
+      // Two adds at once can't leave two athletes on a Moment or an NFT. The
+      // database locks the asset for each change; this catches a store
+      // without that lock.
+      if (A.KINDS[asset.kind].athletes === "one") {
+        const on = (await run(sb.from("gfs_asset_athletes").select("roster_row").eq("asset_id", asset.id))) || [];
+        if (on.length > 1) {
+          await run(sb.from("gfs_asset_athletes").delete().eq("asset_id", asset.id).in("roster_row", fresh));
+          return res.status(409).json({ error: "gfs_asset_one_athlete" });
+        }
+      }
+    }
+    const updated = await run(sb.from("gfs_assets").select(ASSET_COLS).eq("id", asset.id).single());
+    res.json({ asset: await oneView(sb, req, updated) });
   } catch (e) {
     fail(res, e, "change_asset");
   }
@@ -433,6 +482,8 @@ router.delete("/:id", member, async (req, res) => {
 });
 
 // ── Checks a person records ──────────────────────────────────────────────
+// A director's check (the venue's permission) goes in a draft or in review.
+// An approver's or the owner's is recorded in review, for that review.
 router.post("/:id/check", member, async (req, res) => {
   const sb = getSupabase();
   try {
@@ -443,10 +494,10 @@ router.post("/:id/check", member, async (req, res) => {
     if (!A.checksFor(asset).includes(check)) return res.status(400).json({ error: "check_not_for_this_asset" });
     if (!worksOn(req, asset)) return res.status(403).json({ error: "region_not_yours" });
     if (!A.canCheck(req.team, check)) return res.status(403).json({ error: A.CHECKS[check].role === "owner" ? "check_owner_only" : "role_too_low", need: A.CHECKS[check].role });
-    if (!["draft", "review"].includes(asset.stage)) return res.status(409).json({ error: "gfs_asset_locked" });
+    if (asset.stage === "retired") return res.status(409).json({ error: "gfs_asset_retired" });
+    if (!A.checkStages(check).includes(asset.stage)) return res.status(409).json({ error: asset.stage === "draft" ? "gfs_asset_check_in_review" : "gfs_asset_locked" });
     const on = req.body.on === true;
-    const col = CHECK_COLS[check];
-    await run(sb.from("gfs_assets").update({ [col + "_at"]: on ? now() : null, [col + "_by"]: on ? actor(req) : null }).eq("id", asset.id));
+    await run(sb.from("gfs_assets").update({ [check + "_at"]: on ? now() : null, [check + "_by"]: on ? actor(req) : null }).eq("id", asset.id));
     const fresh = await run(sb.from("gfs_assets").select(ASSET_COLS).eq("id", asset.id).single());
     res.json({ asset: await oneView(sb, req, fresh) });
   } catch (e) {
@@ -470,6 +521,9 @@ router.post("/:id/stage", member, async (req, res) => {
     const ctx = await context(sb, [asset]);
     const ev = asset.event_id ? ctx.events.get(asset.event_id) : null;
     const src = asset.source_asset_id ? ctx.sources.get(asset.source_asset_id) : null;
+    // Into review only with the file where the kind goes live, under its ID:
+    // it locks there, so what's approved is what goes out.
+    if (to === "review" && !A.liveLocationOk(asset)) return res.status(409).json({ error: "gfs_asset_file_required", allowed: A.KINDS[asset.kind].live });
     if (to === "approved" || to === "live") {
       // The same checks the database runs, said first and in full.
       const blocks = A.assetBlocks(asset, ctx.byAsset.get(asset.id) || [], ev, src);
@@ -485,13 +539,20 @@ router.post("/:id/stage", member, async (req, res) => {
       patch.approved_by = actor(req);
     }
     if (to === "live") {
-      const location = b.location !== undefined ? String(b.location || "") || null : asset.location;
-      const ref = b.ref !== undefined ? (b.ref ? String(b.ref).trim() : null) : asset.ref;
-      const p = A.refProblem(asset.kind, location, ref);
-      if (p) return res.status(400).json({ error: p });
-      if (!A.liveLocationOk({ kind: asset.kind, location, ref })) return res.status(409).json({ error: "gfs_asset_live_location", allowed: A.KINDS[asset.kind].live });
-      patch.location = location;
-      patch.ref = ref;
+      // The file was set before review and can't change now.
+      const asked = (v) => (v ? String(v).trim() : null);
+      if ((b.location !== undefined && asked(b.location) !== (asset.location || null)) || (b.ref !== undefined && asked(b.ref) !== (asset.ref || null))) return res.status(409).json({ error: "gfs_asset_locked" });
+      if (!A.liveLocationOk(asset)) return res.status(409).json({ error: "gfs_asset_live_location", allowed: A.KINDS[asset.kind].live });
+    }
+    if (to === "draft") {
+      // Back to draft: the approval and the review's checks go (the database
+      // clears them too).
+      patch.approved_at = null;
+      patch.approved_by = null;
+      for (const k of A.REVIEW_CHECKS) {
+        patch[k + "_at"] = null;
+        patch[k + "_by"] = null;
+      }
     }
     const updated = await run(sb.from("gfs_assets").update(patch).eq("id", asset.id).select(ASSET_COLS).single());
     await log(req, "gfs_asset_" + to, updated, ev);
@@ -501,26 +562,36 @@ router.post("/:id/stage", member, async (req, res) => {
   }
 });
 
+// Retiring a Moment or an NFT keeps no content and nothing about the athlete
+// (NFT Terms §6): no file, a plain title, no note, no athlete. The database
+// does it in the same statement; this does it too, for a store without
+// migration 027's triggers, and finishes it if an earlier try stopped short.
 router.post("/:id/retire", member, async (req, res) => {
   const sb = getSupabase();
   try {
     const asset = await loadAsset(sb, req, res);
     if (!asset) return;
     if (!worksOn(req, asset)) return res.status(403).json({ error: "region_not_yours" });
-    if (asset.stage === "retired") return res.status(409).json({ error: "gfs_asset_retired" });
+    const personal = A.PERSONAL.includes(asset.kind);
+    const ev = asset.event_id ? await run(sb.from("gfs_events").select(EVENT_COLS).eq("id", asset.event_id).maybeSingle()) : null;
+    if (asset.stage === "retired") {
+      if (personal) {
+        const left = (await run(sb.from("gfs_asset_athletes").select("roster_row").eq("asset_id", asset.id))) || [];
+        if (left.length || asset.ref || asset.sha256 || asset.note) {
+          if (asset.ref || asset.sha256 || asset.note) await run(sb.from("gfs_assets").update({ ref: null, sha256: null, note: null }).eq("id", asset.id));
+          if (left.length) await run(sb.from("gfs_asset_athletes").delete().eq("asset_id", asset.id));
+          const done = await run(sb.from("gfs_assets").select(ASSET_COLS).eq("id", asset.id).single());
+          return res.json({ asset: await oneView(sb, req, done) });
+        }
+      }
+      return res.status(409).json({ error: "gfs_asset_retired" });
+    }
     const reason = String((req.body && req.body.reason) || "");
     if (!A.RETIRE_REASONS[reason]) return res.status(400).json({ error: "reason", allowed: Object.keys(A.RETIRE_REASONS) });
     const patch = { stage: "retired", retired_at: now(), retired_by: actor(req), retire_reason: reason };
-    // A retired Moment or NFT keeps no content and nothing about the athlete
-    // (NFT Terms §6): where the file was goes, then the athlete.
-    const personal = asset.kind === "moment" || asset.kind === "narrative_nft";
-    if (personal) {
-      patch.ref = null;
-      patch.sha256 = null;
-    }
+    if (personal) Object.assign(patch, { ref: null, sha256: null, note: null, title: A.RETIRED_TITLES[asset.kind] });
     const updated = await run(sb.from("gfs_assets").update(patch).eq("id", asset.id).select(ASSET_COLS).single());
     if (personal) await run(sb.from("gfs_asset_athletes").delete().eq("asset_id", asset.id));
-    const ev = asset.event_id ? await run(sb.from("gfs_events").select(EVENT_COLS).eq("id", asset.event_id).maybeSingle()) : null;
     await log(req, "gfs_asset_retired", updated, ev);
     res.json({ asset: await oneView(sb, req, updated) });
   } catch (e) {
@@ -530,7 +601,7 @@ router.post("/:id/retire", member, async (req, res) => {
 
 // ── Picking athletes ─────────────────────────────────────────────────────
 // The stop's roster, by team and jersey, with whether each athlete can be in
-// this kind of asset (and why not). Directors and up.
+// this kind of asset, where it goes (and why not). Directors and up.
 router.get("/:id/roster", member, async (req, res) => {
   const sb = getSupabase();
   try {
@@ -542,7 +613,7 @@ router.get("/:id/roster", member, async (req, res) => {
     const have = new Set(((await run(sb.from("gfs_asset_athletes").select("roster_row").eq("asset_id", asset.id))) || []).map((x) => x.roster_row));
     const athletes = rows
       .map((r) => {
-        const why = A.assetBlocks({ kind: asset.kind }, [{ roster: r, team: r.team, jersey: r.jersey }], null, null)
+        const why = A.assetBlocks({ kind: asset.kind, location: asset.location }, [{ roster: r, team: r.team, jersey: r.jersey }], null, null)
           .filter(A.athleteReason)
           .map((b) => A.splitBlock(b).code);
         return { roster_row: r.id, roster_id: r.roster_id, team: r.team, jersey: r.jersey, position: r.position || null, in_asset: have.has(r.id), can: why.length === 0, why };

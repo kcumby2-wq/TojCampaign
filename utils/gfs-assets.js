@@ -10,6 +10,7 @@
 //   GFS Digital Collectibles Terms v1.1      §1 (18 and older), §2, §7
 //   GFS Digital Scout Agreement v1.5         §8 (GFS owns the footage), B-2
 //   Pylon × GFS Partnership Agreement        Schedule I-2 (venue permission), I-3
+//   SportsClippers Schedule A                listing (as the clips gate in 024)
 
 "use strict";
 
@@ -24,8 +25,8 @@ const KINDS = Object.freeze({
     formats: ["recap", "montage", "feature", "reel", "photos", "interview"],
     live: ["gfs_storage", "pylon_channels", "sportsclippers"],
     liveLabel: "Out",
-    checklist: "Checked against the stop's keep-out list, and every athlete it features has capture and marketing consent.",
-    rights: "GFS owns the footage it captures (Scout Agreement §8). Pylon posts only what an approver clears, and families get footage through family-only links unless the guardian chose public display.",
+    checklist: "Checked against the stop's keep-out list, and every athlete it features has capture and marketing consent (and, listed on SportsClippers, sale consent and public display).",
+    rights: "GFS owns the footage it captures (Scout Agreement §8). Pylon posts only what an approver clears, and families get footage through family-only links unless the guardian chose public display. On SportsClippers an edit is a public listing, so every athlete in it needs sale consent and public display, and nobody who may be under 13.",
   },
   venue_world: {
     name: "Venue World",
@@ -93,8 +94,15 @@ const LOCATIONS = Object.freeze({
   link: "Link",
 });
 const RETIRE_REASONS = Object.freeze({ withdrawn: "Consent withdrawn", takedown: "Takedown", replaced: "Replaced", expired: "Expired", mistake: "Made in error" });
+// What a retired Moment or NFT is called: it keeps nothing about the athlete,
+// so not the title it had either. Mirrors gfs_assets_gate (027).
+const RETIRED_TITLES = Object.freeze({ moment: "Retired 3D/4D Moment", narrative_nft: "Retired Narrative NFT" });
+const PERSONAL = Object.freeze(["moment", "narrative_nft"]);
 
 // The checks a person records, who may record them, and for which kinds.
+// A director's check (the venue's permission) goes in a draft or in review.
+// An approver's or the owner's belongs to one review: it's recorded in review
+// only, and going back to draft clears it.
 const CHECKS = Object.freeze({
   venue_permission: { name: "The venue's signed permission is on file (Pylon I-2)", role: "member", kinds: ["venue_world"] },
   deidentified: { name: "Every other player is blurred or masked, and a person checked it", role: "approver", kinds: ["moment"] },
@@ -103,24 +111,35 @@ const CHECKS = Object.freeze({
   marks_licensed: { name: "The sponsor's licence for its marks is on file", role: "approver", kinds: null },
 });
 const CHECK_KEYS = Object.freeze(Object.keys(CHECKS));
+const REVIEW_CHECKS = Object.freeze(CHECK_KEYS.filter((k) => CHECKS[k].role !== "member"));
 function checksFor(asset) {
   return CHECK_KEYS.filter((k) => (CHECKS[k].kinds ? CHECKS[k].kinds.includes(asset.kind) : !!asset.sponsor_marks));
+}
+// The stages a check can be recorded or cleared in.
+function checkStages(check) {
+  return CHECKS[check].role === "member" ? ["draft", "review"] : ["review"];
 }
 
 const TITLE_MAX = 80;
 const NOTE_MAX = 300;
 const LABEL_RE = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,119}$/;
-const LINK_RE = /^https:\/\/[^\s"<>]+$/;
+// A brand asset's link goes to the design tools brand assets are kept in, or
+// GFS's own site: never a file host, where footage could be.
+const LINK_HOSTS = Object.freeze(["canva.com", "figma.com", "adobe.com", "groundfloorsports.com"]);
+const LINK_RE = /^https:\/\/([a-z0-9-]+\.)*(canva\.com|figma\.com|adobe\.com|groundfloorsports\.com)(\/[^\s"<>]*)?$/i;
 const SHA_RE = /^[0-9a-f]{64}$/;
 
 // Where a file is: an ID or a label in the B-5 / J-9 form (no spaces, no
-// slashes, so no folder names), or for a brand asset only, an https link.
-// Mirrors the gfs_assets checks.
+// slashes, so no folder names), or for a brand asset only, an https link to
+// one of LINK_HOSTS. Mirrors the gfs_assets checks.
 function refProblem(kind, location, ref) {
   if (!location) return ref ? "location_required" : null;
   if (!Object.prototype.hasOwnProperty.call(LOCATIONS, location)) return "location";
   if (ref == null || ref === "") return null;
-  if (location === "link") return kind === "brand" && String(ref).length <= 300 && LINK_RE.test(ref) ? null : "link_brand_only";
+  if (location === "link") {
+    if (kind !== "brand" || !/^https:\/\//i.test(String(ref))) return "link_brand_only";
+    return String(ref).length <= 300 && LINK_RE.test(ref) ? null : "link_host";
+  }
   return LABEL_RE.test(ref) ? null : "ref";
 }
 function liveLocationOk(asset) {
@@ -145,6 +164,12 @@ function assetBlocks(asset, athletes, ev, source) {
       if (!r.consent_nft) out.push("no_nft_consent:" + r.id);
     } else if (asset.kind === "edit") {
       if (!r.consent_marketing) out.push("no_marketing_consent:" + r.id);
+      // On SportsClippers an edit is a listing, held to Schedule A as a
+      // public listing (the record has no family-only setting).
+      if (asset.location === "sportsclippers") {
+        if (!r.consent_sale) out.push("no_sale_consent:" + r.id);
+        if (!r.public_display || G.under13(r)) out.push("not_public:" + r.id);
+      }
     }
   }
   if ((asset.kind === "moment" || asset.kind === "narrative_nft") && list.length !== 1) out.push("one_athlete");
@@ -158,7 +183,7 @@ function assetBlocks(asset, athletes, ev, source) {
   if (asset.sponsor_marks && !asset.marks_licensed_at) out.push("marks_licensed");
   if (asset.kind === "world_pass") {
     if (asset.price_cents == null) out.push("price");
-    if (!asset.source_asset_id || !source || source.kind !== "venue_world" || source.stage !== "live") out.push("source_world");
+    if (!asset.source_asset_id || !source || source.kind !== "venue_world" || source.stage !== "live" || source.event_id !== asset.event_id) out.push("source_world");
     else if (source.school_venue) out.push("school_venue");
   }
   return out;
@@ -194,6 +219,23 @@ function canCheck(access, check) {
   return access.owner || T.ROLE_RANK[access.role] >= T.ROLE_RANK[CHECKS[check].role];
 }
 
+// No email address, phone number or link in a title or a note. Contact
+// details use team chat's check (utils/chat.js hasContact); links are looked
+// for on the same normalized copy of the text: http:// or https://, www., or
+// a domain followed by a path. Mirrors public.gfs_asset_text_ok (027).
+const INVISIBLE = /[\u00ad\u180e\u200b-\u200f\u2060-\u2064\ufeff]/g;
+const DASHES = /[\u2010-\u2015\u2212\ufe58\ufe63\uff0d]/g;
+const LINKY = [/https?:\/\//i, /(^|[^a-z0-9])www\./i, /[a-z0-9-]\.(com|net|org|io|co|us|tv|me|ly|app|be|gl|link|to|ai|dev|info|biz|cc|ms|gg|so|site|xyz)\//i];
+function normalized(s) {
+  return String(s == null ? "" : s).normalize("NFKC").replace(INVISIBLE, "").replace(DASHES, "-");
+}
+function hasLink(s) {
+  const t = normalized(s);
+  return LINKY.some((re) => re.test(t));
+}
+function textOk(s) {
+  return s == null || (!hasContact(s) && !hasLink(s));
+}
 function cleanTitle(s) {
   return G.clean(s, TITLE_MAX + 1);
 }
@@ -201,6 +243,7 @@ function textProblem(s, max, field) {
   if (!s) return field + "_required";
   if (s.length > max) return field + "_too_long";
   if (hasContact(s)) return "contact_details";
+  if (hasLink(s)) return "links";
   return null;
 }
 
@@ -212,12 +255,17 @@ module.exports = {
   STAGE_NAMES,
   LOCATIONS,
   RETIRE_REASONS,
+  RETIRED_TITLES,
+  PERSONAL,
   CHECKS,
   CHECK_KEYS,
+  REVIEW_CHECKS,
+  LINK_HOSTS,
   TITLE_MAX,
   NOTE_MAX,
   SHA_RE,
   checksFor,
+  checkStages,
   refProblem,
   liveLocationOk,
   assetBlocks,
@@ -225,6 +273,8 @@ module.exports = {
   splitBlock,
   moves,
   canCheck,
+  hasLink,
+  textOk,
   cleanTitle,
   textProblem,
 };
