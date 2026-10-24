@@ -283,6 +283,12 @@ test("the stop page: footage on SportsClippers, the creator, help; nothing about
   assert.equal(unknown.status, 404);
   assert.match(unknown.text, /This page isn't here/);
   assert.equal((await visitor("/e/bad%20code")).status, 404);
+  // The bare /e/, where media.groundfloorsports.com sends everything else: Pylon's page, no TOJ.
+  const bare = await visitor("/e/");
+  assert.equal(bare.status, 404);
+  assert.match(bare.text, /This page isn't here/);
+  assert.ok(!TOJ_MARKS.test(bare.text), "no TOJ names, marks or domain");
+  assert.match(bare.headers.get("content-security-policy"), /script-src 'none'/);
 });
 
 test("counted links go only to the stored SportsClippers pages, tagged with the stop and the code", async () => {
