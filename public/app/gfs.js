@@ -56,10 +56,19 @@
     size_fixed: "The size is fixed. Cancel the event and make a new one.",
     invalid_event: "Check the highlighted fields.",
     regions_required: "Pick at least one region for a Regional Director.",
+    identity_owner_only: "Their screening is on file, so Kyron changes their name or email.",
+    reactivate_owner_only: "Kyron puts a paused or inactive creator back to work.",
+    gfs_creator_on_crew: "They're on an upcoming crew. Take them off it first.",
+    attest_required: "Check the pieces against the keep-out list, then confirm.",
+    gfs_deliverable_attest: "Check the pieces against the keep-out list, then confirm.",
+    gfs_clip_not_exported: "Make the file first, then mark what went out in it.",
+    gfs_clip_held: "That athlete is on hold, so the clip stays off every channel.",
+    gfs_takedown_clips_out: "Clips are still out somewhere. Take them down first.",
   };
   var PROBLEM = { creator_not_active: "Not active", no_contract: "No signed contract", background_check: "Background check missing or over a year old", safety_training: "Safety training missing or over a year old", youth_role: "Youth creators shoot or shadow only" };
-  var WHY = { no_number: "Number unreadable", not_on_roster: "Number isn't on the roster", team_not_on_roster: "Team isn't on the roster", two_teams: "Same number on both teams", duplicate_number: "Two athletes share this number", no_roster: "No roster loaded yet" };
-  var HOLD = { takedown: "Takedown", do_not_publish: "Do not publish", no_capture_consent: "No capture consent" };
+  var WHY = { no_number: "Number unreadable", not_on_roster: "Number isn't on the roster", team_not_on_roster: "A team in the folder name isn't on the roster", two_teams: "Same number on both teams", duplicate_number: "Two athletes share this number", no_roster: "No roster loaded yet", no_team: "No game or team folder to tell teams apart", team_conflict: "The team column and the team folder disagree", roster_changed: "The roster changed this athlete's number or team", untagged: "Untagged by a director" };
+  var HOLD = { takedown: "Takedown", do_not_publish: "Do not publish", no_capture_consent: "No capture consent", roster_changed: "Roster changed" };
+  var PULL = { no_sale_consent: "no sale consent now", not_public: "public display off now" };
   var BLOCK = { no_marketing_consent: "no marketing consent", no_capture_consent: "no capture consent", do_not_publish: "do not publish", takedown: "takedown", not_on_roster: "not on this roster" };
 
   function say(e) {
@@ -340,7 +349,7 @@
       var sub = c.key === "roster" ? (d.roster.athletes ? d.roster.athletes + " athletes on " + d.roster.teams + " teams · " + d.roster.do_not_publish + " do-not-publish" : "Sports Thread sends it 72 hours out") :
         c.key === "storefront" ? (ev.storefront_url ? "Assigned by athlete ID, jersey and team" : "Add the storefront link the QR code points to") :
         c.key === "brief" ? "From the Pylon production playbook" :
-        (c.lead ? "" : "No lead yet · ") + "Tap to fill";
+        c.done ? "Ready" : "Tap to fill";
       var href = c.key === "crew" ? "#gfs-crew/" + ev.id : c.key === "roster" ? "#gfs-roster/" + ev.id : c.key === "storefront" ? "#gfs-edit/" + ev.id : null;
       var right = '<span class="sub mono" style="font-size:11px">' + DUE[c.key] + "</span>";
       var inner = '<span class="tick' + (c.done ? " on" : left(c.due_at).late ? " late" : "") + '">' + (c.done ? ICON.check : "") + '</span><div class="grow"><div class="name" style="font-size:15px">' + h(c.label) + '</div><div class="sub">' + h(sub) + "</div></div>" + right;
@@ -353,10 +362,10 @@
     var late = dl.filter(function (x) { return x.late && !x.cleared; });
     var next = dl.filter(function (x) { return !x.cleared && x.required > 0; }).sort(function (a, b) { return a.due_at < b.due_at ? -1 : 1; })[0];
     var tds = d.takedowns.map(function (td) {
-      var steps = [td.pylon_done_at, td.other_done_at, td.offsite_requested_at].filter(Boolean).length;
-      var due = [td.pylon_done_at ? null : td.pylon_due_at, td.other_done_at ? null : td.other_due_at, td.offsite_requested_at ? null : td.offsite_due_at].filter(Boolean).sort()[0];
-      var l = left(due);
-      return '<a class="li" href="#gfs-desk"><span class="badge bad">' + h(l.text) + '</span><div class="grow"><div class="name" style="font-size:15px">Takedown' + (td.number ? " #" + td.number : "") + " · " + h(td.team || "") + '</div><div class="sub">' + h(td.reason_name) + " · " + steps + " of 3 steps done</div></div>" + t.I.chev + "</a>";
+      var steps = td.steps.filter(function (s) { return s.done_at; }).length;
+      var l = td.next_due_at ? left(td.next_due_at) : null;
+      var sub = [td.reason_name, steps + " of 3 steps done", td.event && td.event.id !== ev.id ? "logged at " + td.event.name : null].filter(Boolean).join(" · ");
+      return '<a class="li" href="#gfs-desk">' + (l ? '<span class="badge bad">' + h(l.text) + "</span>" : badge("Done", "ok")) + '<div class="grow"><div class="name" style="font-size:15px">Takedown' + (td.number ? " #" + td.number : "") + " · " + h(td.team || "") + '</div><div class="sub">' + h(sub) + "</div></div>" + t.I.chev + "</a>";
     }).join("");
     t.show("events",
       '<div class="screen">' + t.backBtn("#events", "Events") +
@@ -391,7 +400,9 @@
       var cr = r.creator || {};
       var initial = (r.role_name || "?")[0];
       var actions = member && r.status !== "removed" ? '<select class="input" data-crew="' + h(r.id) + '" aria-label="Status for ' + h(cr.name) + '" style="width:auto;min-height:38px;padding:4px 8px;font-size:14px">' + ["invited", "confirmed", "declined", "removed"].map(function (s) { return '<option value="' + s + '"' + (r.status === s ? " selected" : "") + ">" + STATUS[s][0] + "</option>"; }).join("") + "</select>" : badge(STATUS[r.status][0], STATUS[r.status][1]);
-      return '<div class="li" style="cursor:default"><span class="avatar" style="width:38px;height:38px;border-width:0;background:#22364F;font-size:13px">' + h(initial) + '</span><div class="grow"><div class="name" style="font-size:15px">' + h(cr.name || "Creator") + (cr.tier === "youth" ? ' <span class="badge warn">Youth</span>' : "") + '</div><div class="sub">' + h([r.role_name.toUpperCase(), r.note, cr.home_city].filter(Boolean).join(" · ")) + "</div></div>" + actions + "</div>";
+      var probs = (r.problems || []).map(function (p) { return PROBLEM[p] || p; });
+      return '<div class="li" style="cursor:default"><span class="avatar" style="width:38px;height:38px;border-width:0;background:#22364F;font-size:13px">' + h(initial) + '</span><div class="grow"><div class="name" style="font-size:15px">' + h(cr.name || "Creator") + (cr.tier === "youth" ? ' <span class="badge warn">Youth</span>' : "") + (probs.length ? ' <span class="badge bad">Not screened</span>' : "") + '</div><div class="sub">' + h([r.role_name.toUpperCase(), r.note, cr.home_city].filter(Boolean).join(" · ")) + "</div>" +
+        (probs.length ? '<div class="sub err">' + h(probs.join(", ")) + ". They don't count toward the crew until Kyron updates their screening.</div>" : "") + "</div>" + actions + "</div>";
     }).join("");
     var open = Math.max(0, c.target - c.confirmed);
     var cand = d.candidates.map(function (cr) {
@@ -410,7 +421,8 @@
       '<section class="sec"><h2 class="sec-h">This event</h2>' + (rows ? '<div class="list">' + rows + "</div>" : '<p class="empty">No one yet. Schedule C wants ' + c.target + " named, screened operators on site, one of them the lead.</p>") + "</section>" +
       '<section class="sec"><h2 class="sec-h">Available · ' + h(rname(ev.region)) + " first</h2>" + (cand || '<p class="empty">No other creators in your regions. ' + (member ? '<a href="#gfs-creator/new">Add one</a>.' : "") + "</p>") + "</section>" +
       '<a class="li list" href="#gfs-creators" style="border-radius:16px"><div class="grow"><div class="name" style="font-size:15px">' + h(rname(ev.region)) + ' scorecards</div><div class="sub">On time, two angles, usable film, family rating</div></div>' + t.I.chev + "</a>" +
-      '<p class="sub" style="margin:0">Directors set their own crews and rotations. A youth creator shoots alongside a confirmed adult, never alone with a minor. Pylon event day rate: $[150] per event day (Scout Agreement, Schedule A).</p>' +
+      (c.youth_alone ? '<p class="body err" style="margin:0">A youth creator is confirmed without a screened adult on site. Confirm a screened adult, or take the youth creator off this crew.</p>' : "") +
+      '<p class="sub" style="margin:0">Directors set their own crews and rotations. A youth creator shoots alongside a confirmed, screened adult on site, never alone with a minor. Pylon event day rate: $[150] per event day (Scout Agreement, Schedule A).</p>' +
       '<p id="crMsg" class="body" role="status"></p></div>');
     bind("[data-assign]", "click", function (b) {
       var role = app().querySelector('[data-role-for="' + b.dataset.assign + '"]').value;
@@ -496,7 +508,10 @@
         var s = r.summary;
         t.toast(s.added + " added, " + s.updated + " updated.");
         await roster(id);
-        msgEl("rsMsg", s.rows + " athletes read · " + s.do_not_publish + " do-not-publish · " + s.no_capture + " without capture consent · " + s.under_13 + " under 13." + (kept.dropped.length ? " Left behind: " + kept.dropped.slice(0, 8).join(", ") + (kept.dropped.length > 8 ? "…" : "") + "." : "") + (s.warnings.indexOf("no_capture_column") >= 0 ? " No capture column: everyone is on hold until it's added." : "") + (s.clips_matched_now ? " " + s.clips_matched_now + " clips matched now." : ""), true);
+        msgEl("rsMsg", s.rows + " athletes read · " + s.do_not_publish + " do-not-publish · " + s.no_capture + " without capture consent · " + s.under_13 + " under 13." + (kept.dropped.length ? " Left behind: " + kept.dropped.slice(0, 8).join(", ") + (kept.dropped.length > 8 ? "…" : "") + "." : "") + (s.warnings.indexOf("no_capture_column") >= 0 ? " No capture column: everyone is on hold until it's added." : "") +
+          (s.renumbered ? " " + s.renumbered + (s.renumbered === 1 ? " athlete" : " athletes") + " changed number or team: " + s.clips_back_to_review + " clips went back to tag review" + (s.clips_out_held ? ", and " + s.clips_out_held + " already out are held until they're taken down" : "") + "." : "") +
+          (s.clips_matched_now ? " " + s.clips_matched_now + " clips matched now." : "") +
+          (s.missing_from_file ? " " + s.missing_from_file + (s.missing_from_file === 1 ? " athlete" : " athletes") + " from the last file " + (s.missing_from_file === 1 ? "isn't" : "aren't") + " in this one and keep their old permissions. If a family withdrew, log a takedown." : ""), true);
       }, "rsMsg");
     });
   }
@@ -570,7 +585,8 @@
       head(ev.name, "Tag review", "", (c.matched || 0) + " of " + (c.shot || 0) + " clips matched to the roster") +
       '<p class="body">Every clip is tagged by jersey number against the roster Sports Thread sent. No face matching. A clip that isn\'t matched to an athlete doesn\'t sell.</p>' +
       '<section class="sec"><h2 class="sec-h">Unmatched · ' + (c.unmatched || 0) + "</h2>" + (rows || '<p class="empty">Nothing left to match.</p>') + (c.unmatched > d.clips.length ? '<p class="sub">' + (c.unmatched - d.clips.length) + " more after these.</p>" : "") + "</section>" +
-      (c.held ? '<p class="sub" style="margin:0">' + c.held + " matched clip" + (c.held === 1 ? " shows an athlete" : "s show athletes") + " on hold (do-not-publish, no capture consent or a takedown). They stay off every channel.</p>" : "") +
+      (d.clips.some(function (x) { return ["no_team", "team_not_on_roster", "team_conflict"].indexOf(x.why) >= 0; }) ? '<p class="sub" style="margin:0">A clip matches only when its team is certain. Name game folders with the roster\'s team names (TEAM-A_vs_TEAM-B_YYYYMMDD), and put a team folder above the jersey folder when both teams wear the same number.</p>' : "") +
+      (c.held ? '<p class="sub" style="margin:0">' + c.held + " matched clip" + (c.held === 1 ? " shows an athlete" : "s show athletes") + " on hold (do-not-publish, no capture consent, a takedown, or a roster change while it was out). They stay off every channel.</p>" : "") +
       '<p id="tgMsg" class="body" role="status"></p></div>' +
       (member ? '<div class="dock"><div class="dock-inner"><button type="button" class="btn block" id="tgGo">Approve the game\'s tags</button><span class="note">Matched clips move to the edit. Unmatched ones stay unlisted.' + (d.tags_approved_at ? " Last approved " + h(t.ago(d.tags_approved_at)) + "." : "") + "</span></div></div>" : ""));
     async function tag(clipId, body) {
@@ -590,6 +606,15 @@
 
   // ── Deliver ────────────────────────────────────────────────────────────
   var STATE = { open: ["Open", ""], submitted: ["Waiting for an approver", "warn"], approved: ["Cleared", "ok"], changes: ["Changes asked", "bad"], done: ["Done", "ok"] };
+  var KEEP = { takedown: "takedown", do_not_publish: "do not publish", no_capture_consent: "no capture consent", no_marketing_consent: "no marketing consent" };
+  // Who can't appear on Pylon's channels, by team and jersey (no names, no IDs).
+  function keepOutHtml(ko) {
+    if (!ko || !ko.total) return '<p class="sub" style="margin:0">Everyone on this roster can appear on Pylon\'s channels.</p>';
+    return '<div style="max-height:240px;overflow:auto;display:flex;flex-direction:column;gap:8px">' + ko.teams.map(function (tm) {
+      return '<div><b style="font-size:14px">' + h(tm.team) + '</b><div class="sub">' + tm.athletes.map(function (a) { return (a.jersey == null ? "no number" : "#" + h(a.jersey)) + " (" + h(KEEP[a.why] || a.why) + ")"; }).join(", ") + "</div></div>";
+    }).join("") + "</div>" +
+      (ko.no_jersey ? '<p class="sub" style="margin:0">' + ko.no_jersey + (ko.no_jersey === 1 ? " of them has" : " of them have") + " no jersey number in the roster file. Ask the director to confirm they're not in the pieces.</p>" : "");
+  }
   async function deliver(id) {
     if (!guard()) return;
     loading("events", T().backBtn("#event/" + id, "Event plan"));
@@ -599,14 +624,15 @@
     var d = res[0], athletes = res[1].athletes || [];
     var ev = d.event, c = d.counts || {};
     var member = t.atLeast("member"), approver = t.atLeast("approver");
+    var keep = null;
     var byGroup = {};
     d.deliverables.forEach(function (x) { (byGroup[x.group || "Other"] = byGroup[x.group || "Other"] || []).push(x); });
     function featuredPicker(x) {
-      if (!x.featured_needed) return "";
+      if (!x.featured_allowed) return "";
       var chosen = athletes.filter(function (a) { return x.featured.indexOf(a.id) >= 0; });
-      var label = chosen.length ? chosen.map(function (a) { return a.team + " #" + a.jersey + (!a.consent_marketing || a.hold ? " ⚠" : ""); }).join(", ") : "No athletes named yet";
+      var label = chosen.length ? chosen.map(function (a) { return a.team + " #" + a.jersey + (!a.consent_marketing || a.hold ? " ⚠" : ""); }).join(", ") : x.featured_needed ? "No athletes named yet" : "None named";
       var opts = athletes.filter(function (a) { return a.jersey != null; }).map(function (a) { var ok = a.consent_capture && a.consent_marketing && !a.hold; return '<label class="row" style="gap:8px;font-size:14px;padding:4px 0"><input type="checkbox" data-feat="' + h(x.id) + '" value="' + h(a.id) + '"' + (x.featured.indexOf(a.id) >= 0 ? " checked" : "") + (ok ? "" : " disabled") + '><span>' + h(a.team) + " #" + h(a.jersey) + (ok ? "" : ' <span class="sub">· ' + h(a.hold ? HOLD[a.hold] : "no marketing consent") + "</span>") + "</span></label>"; }).join("");
-      return '<details class="card tight" style="background:var(--card-2)"><summary class="sub" style="cursor:pointer">Featured: ' + h(label) + "</summary>" + (member && x.status !== "submitted" ? '<div style="max-height:220px;overflow:auto;margin-top:8px">' + (opts || '<span class="sub">Load the roster first.</span>') + '</div><button type="button" class="btn small soft" data-savefeat="' + h(x.id) + '" style="align-self:flex-start">Save featured</button>' : "") + "</details>";
+      return '<details class="card tight" style="background:var(--card-2)"><summary class="sub" style="cursor:pointer">' + (x.featured_needed ? "Featured: " : "Athletes it names (optional): ") + h(label) + "</summary>" + (member && x.status !== "submitted" ? '<div style="max-height:220px;overflow:auto;margin-top:8px">' + (opts || '<span class="sub">Load the roster first.</span>') + '</div><button type="button" class="btn small soft" data-savefeat="' + h(x.id) + '" style="align-self:flex-start">Save</button>' : "") + "</details>";
     }
     function rowHtml(x) {
       var st = STATE[x.status] || STATE.open;
@@ -622,33 +648,39 @@
       }
       if (approver && x.status === "submitted") controls += '<button type="button" class="btn small" data-approve="' + h(x.id) + '">Approve ' + x.to_submit + '</button><button type="button" class="btn small ghost" data-changes="' + h(x.id) + '">Ask for changes</button>';
       var lateCause = member && x.late && !x.cleared ? '<input class="input" data-cause="' + h(x.id) + '" maxlength="200" placeholder="Why it\'s late (goes in the monthly report)" value="' + h(x.late_cause || "") + '" style="min-height:40px;font-size:14px">' : "";
-      return '<div class="card tight"><div class="row"><span class="tick' + (x.cleared ? " on" : x.late ? " late" : "") + '">' + (x.cleared ? ICON.check : "") + '</span><div class="grow"><div class="name" style="font-size:15px">' + h(x.name) + '</div><div class="sub">' + h([count, due, x.publishes ? "posts on Pylon's channels" : null, x.note].filter(Boolean).join(" · ")) + "</div></div>" + (x.status !== "open" ? badge(st[0], st[1]) : "") + lateBadge + "</div>" +
+      return '<div class="card tight" data-card="' + h(x.id) + '"><div class="row"><span class="tick' + (x.cleared ? " on" : x.late ? " late" : "") + '">' + (x.cleared ? ICON.check : "") + '</span><div class="grow"><div class="name" style="font-size:15px">' + h(x.name) + '</div><div class="sub">' + h([count, due, x.publishes ? "posts on Pylon's channels" : null, x.note].filter(Boolean).join(" · ")) + "</div></div>" + (x.status !== "open" ? badge(st[0], st[1]) : "") + lateBadge + "</div>" +
         (x.note_from_approver ? '<p class="body" style="margin:0;color:var(--bad)">' + h(x.note_from_approver) + "</p>" : "") +
         featuredPicker(x) + (controls ? '<div class="row" style="flex-wrap:wrap;gap:8px">' + controls + "</div>" : "") + lateCause + "</div>";
     }
     var groups = Object.keys(byGroup).map(function (g) { return '<section class="sec"><h2 class="sec-h">' + h(g) + "</h2>" + byGroup[g].map(rowHtml).join("") + "</section>"; }).join("");
+    var pulls = "";
+    if (c.needs_removal) pulls += '<div class="card tight" style="border-color:var(--bad)"><div class="name" style="font-size:15px">' + c.needs_removal + (c.needs_removal === 1 ? " clip is" : " clips are") + " out but can't stay</div><p class=\"sub\" style=\"margin:0\">On hold now, or listed without sale consent. Take " + (c.needs_removal === 1 ? "it" : "them") + " off SportsClippers and the family links, then mark " + (c.needs_removal === 1 ? "it" : "them") + " removed.</p>" + (member ? '<button type="button" class="btn small" id="clPull" style="align-self:flex-start">Mark ' + c.needs_removal + " removed</button>" : "") + "</div>";
+    if (c.to_family_only) pulls += '<div class="card tight"><div class="name" style="font-size:15px">' + c.to_family_only + " public " + (c.to_family_only === 1 ? "listing" : "listings") + ' lost public display</div><p class="sub" style="margin:0">Make ' + (c.to_family_only === 1 ? "it" : "them") + " family-only on SportsClippers, then mark it here.</p>" + (approver ? '<button type="button" class="btn small" id="clFamOnly" style="align-self:flex-start">Mark ' + c.to_family_only + " family-only</button>" : "") + "</div>";
     var pipe = '<section class="card"><div class="name">Clips to families and SportsClippers</div>' +
       '<div class="stats" style="grid-template-columns:repeat(3,minmax(0,1fr))"><div class="stat"><b>' + (c.tagged || 0) + '</b><span>Tagged</span></div><div class="stat"><b>' + (c.approved || 0) + '</b><span>Approved</span></div><div class="stat"><b>' + (c.listed || 0) + "</b><span>On SportsClippers</span></div></div>" +
       '<div class="btn-row">' +
       (member ? '<button type="button" class="btn small soft" id="clEdited">Mark tagged clips edited</button>' : "") +
       (approver ? '<button type="button" class="btn small" id="clApprove">Approve edited clips</button>' : "") +
       "</div>" +
+      (member ? '<p class="sub" style="margin:0">Make the file, hand it over, then mark what went out in it. Only clips in a file can be marked.</p>' : "") +
       '<div class="btn-row">' +
-      (member ? '<button type="button" class="btn small soft" id="clFam">Family links file</button><button type="button" class="btn small soft" id="clSent">Mark sent to families</button>' : "") +
+      (member ? '<button type="button" class="btn small soft" id="clFam">Family links file</button><button type="button" class="btn small soft" id="clSent"' + (c.to_send ? "" : " disabled") + ">" + (c.to_send ? "Mark " + c.to_send + " sent to families" : "Nothing to mark sent") + "</button>" : "") +
       "</div>" +
-      (approver ? '<div class="btn-row"><button type="button" class="btn small soft" id="clList">SportsClippers file</button><button type="button" class="btn small" id="clListed">Mark listed</button></div>' : "") +
+      (approver ? '<div class="btn-row"><button type="button" class="btn small soft" id="clList">SportsClippers file</button><button type="button" class="btn small' + (c.to_list ? "" : " soft") + '" id="clListed"' + (c.to_list ? "" : " disabled") + ">" + (c.to_list ? "Mark " + c.to_list + " listed" : "Nothing to mark listed") + "</button></div>" : "") +
+      pulls +
       '<p id="clMsg" class="body" role="status"></p></section>';
     t.show("events",
       '<div class="screen">' + t.backBtn("#event/" + id, "Event plan") +
       head(ev.name, "Deliver", "", "What Schedule C of the Pylon agreement owes for a " + ev.size_name.toLowerCase() + ". Deadlines in " + ev.tz.replace(/^America\//, "").replace(/_/g, " ") + " time.") +
       '<section class="card tight"><div class="name" style="font-size:15px">Where it goes</div>' +
       '<p class="sub" style="margin:0"><b style="color:var(--ink)">Families</b> · one link per athlete, only their athlete\'s clips. Private for a minor unless the guardian chose public.</p>' +
-      '<p class="sub" style="margin:0"><b style="color:var(--ink)">Pylon\'s channels</b> · an approver clears it, with capture and marketing consent for every athlete it features.</p>' +
+      '<p class="sub" style="margin:0"><b style="color:var(--ink)">Pylon\'s channels</b> · an approver clears it, after checking it against the keep-out list, with capture and marketing consent for every athlete it names.</p>' +
       '<p class="sub" style="margin:0"><b style="color:var(--ink)">SportsClippers</b> · listed only with sale-of-media consent; never public under 13.</p></section>' +
       groups + pipe +
       '<p id="dvMsg" class="body" role="status"></p></div>');
     var base = "/api/gfs/events/" + encodeURIComponent(id);
     function save(did, body) { return t.post(base + "/deliverables/" + encodeURIComponent(did), body, "PATCH"); }
+    async function keepOut() { if (!keep) keep = await t.api(base + "/keep-out"); return keep; }
     bind("[data-step]", "click", function (b) {
       var inp = app().querySelector('[data-count="' + b.dataset.step + '"]');
       var n = Math.max(0, (Number(inp.value) || 0) + Number(b.dataset.d));
@@ -662,7 +694,21 @@
       act(b, async function () { await save(b.dataset.savefeat, { featured: ids }); t.toast("Saved."); deliver(id); }, "dvMsg");
     });
     bind("[data-submit]", "click", function (b) { act(b, async function () { await t.post(base + "/deliverables/" + encodeURIComponent(b.dataset.submit) + "/submit"); t.toast("Sent to the approvers."); deliver(id); }, "dvMsg"); });
-    bind("[data-approve]", "click", function (b) { act(b, async function () { await t.post(base + "/deliverables/" + encodeURIComponent(b.dataset.approve) + "/approve"); t.toast("Cleared for Pylon's channels."); deliver(id); }, "dvMsg"); });
+    // Approving: the keep-out list first, then the approver's word.
+    bind("[data-approve]", "click", function (b) {
+      var card = app().querySelector('[data-card="' + b.dataset.approve + '"]');
+      if (card.querySelector("[data-attestbox]")) return;
+      act(b, async function () {
+        var ko = await keepOut();
+        b.disabled = false;
+        var x = d.deliverables.find(function (y) { return y.id === b.dataset.approve; });
+        card.insertAdjacentHTML("beforeend", '<div class="card tight" style="background:var(--card-2)"><div class="name" style="font-size:15px">Before you clear ' + x.to_submit + '</div><p class="sub" style="margin:0">These athletes can\'t appear on Pylon\'s channels. Check every piece.</p>' + keepOutHtml(ko) +
+          '<label class="row" style="gap:8px;font-size:14px;align-items:flex-start"><input type="checkbox" data-attestbox><span>I checked these pieces: no one on this list appears in them.</span></label><button type="button" class="btn small" data-confirm="' + h(x.id) + '" style="align-self:flex-start" disabled>Clear for Pylon\'s channels</button></div>');
+        var box = card.querySelector("[data-attestbox]"), go = card.querySelector("[data-confirm]");
+        box.addEventListener("change", function () { go.disabled = !box.checked; });
+        go.addEventListener("click", function () { act(go, async function () { await t.post(base + "/deliverables/" + encodeURIComponent(x.id) + "/approve", { attest: true }); t.toast("Cleared for Pylon's channels."); deliver(id); }, "dvMsg"); });
+      }, "dvMsg");
+    });
     bind("[data-changes]", "click", function (b) {
       var card = b.closest(".card");
       if (!card.querySelector("[data-note]")) {
@@ -677,12 +723,27 @@
     bind("[data-done]", "click", function (b) { act(b, async function () { await t.post(base + "/deliverables/" + encodeURIComponent(b.dataset.done) + "/done"); t.toast("Done."); deliver(id); }, "dvMsg"); });
     bind("[data-reopen]", "click", function (b) { act(b, async function () { await t.post(base + "/deliverables/" + encodeURIComponent(b.dataset.reopen) + "/reopen"); deliver(id); }, "dvMsg"); });
     function wire(btnId, fn) { var b = document.getElementById(btnId); if (b) b.addEventListener("click", function () { act(b, fn, "clMsg"); }); }
+    // A file download is a plain link; the counts refresh once it's made.
+    function fileThen(path, name) { download(path, name); setTimeout(function () { deliver(id); }, 1500); }
     wire("clEdited", async function () { var r = await t.post(base + "/clips/edited"); t.toast(r.edited + " clips marked edited."); deliver(id); });
     wire("clApprove", async function () { var r = await t.post(base + "/clips/approve"); t.toast(r.approved + " clips approved."); deliver(id); });
-    wire("clFam", async function () { download(base + "/families.csv", ev.code + "-family-links.csv"); document.getElementById("clFam").disabled = false; });
+    wire("clFam", async function () { fileThen(base + "/families.csv", ev.code + "-family-links.csv"); });
     wire("clSent", async function () { var r = await t.post(base + "/clips/delivered"); t.toast(r.delivered + " clips for " + r.athletes + " athletes marked sent."); deliver(id); });
-    wire("clList", async function () { download(base + "/listings.csv", ev.code + "-sportsclippers.csv"); document.getElementById("clList").disabled = false; });
-    wire("clListed", async function () { var r = await t.post(base + "/clips/listed"); t.toast(r.listed + " listed: " + r.family + " family-only, " + r.public + " public."); deliver(id); });
+    wire("clList", async function () { fileThen(base + "/listings.csv", ev.code + "-sportsclippers.csv"); });
+    wire("clListed", async function () {
+      var r = await t.post(base + "/clips/listed");
+      t.toast(r.listed + " listed: " + r.family + " family-only, " + r.public + " public.");
+      await deliver(id);
+      if (r.changed_since_export) msgEl("clMsg", r.changed_since_export + (r.changed_since_export === 1 ? " clip" : " clips") + " lost public display after the file was made, so " + (r.changed_since_export === 1 ? "it wasn't" : "they weren't") + " marked. Make the SportsClippers file again: " + (r.changed_since_export === 1 ? "it goes" : "they go") + " up family-only.");
+    });
+    wire("clPull", async function () {
+      var out = (await t.api(base + "/clips?view=out&limit=200")).clips.filter(function (x) { return x.held || x.pull_reason === "no_sale_consent"; });
+      if (!out.length) { deliver(id); return; }
+      var r = await t.post(base + "/clips/removed", { ids: out.map(function (x) { return x.id; }) });
+      t.toast(r.removed + " marked removed.");
+      deliver(id);
+    });
+    wire("clFamOnly", async function () { var r = await t.post(base + "/clips/family-only"); t.toast(r.family_only + " marked family-only."); deliver(id); });
   }
 
   // ── Takedowns ──────────────────────────────────────────────────────────
@@ -728,7 +789,9 @@
   }
   function takedownCard(td, approverOrMember) {
     var l = td.next_due_at ? left(td.next_due_at) : null;
-    return '<div class="card tight"><div class="row"><div class="grow"><div class="name" style="font-size:15px">' + (td.number ? "#" + td.number + " · " : "") + h(td.team || "Athlete") + " · " + h(td.reason_name.toLowerCase()) + '</div><div class="sub">' + h(td.event ? td.event.name : "") + (td.clips_out ? " · " + td.clips_out + " clips still out" : "") + "</div></div>" + (l ? badge(l.text, l.late || l.hours < 6 ? "bad" : "warn") : badge("Done", "ok")) + "</div>" +
+    var elsewhere = td.clips_out - (td.clips_out_yours === undefined ? td.clips_out : td.clips_out_yours);
+    var where = [td.event ? td.event.name : "", (td.regions || []).length > 1 ? (td.regions || []).map(rname).join(" and ") : null, td.clips_out ? td.clips_out + " clips still out" + (elsewhere ? " (" + elsewhere + " in other regions)" : "") : null].filter(Boolean).join(" · ");
+    return '<div class="card tight"><div class="row"><div class="grow"><div class="name" style="font-size:15px">' + (td.number ? "#" + td.number + " · " : "") + h(td.team || "Athlete") + " · " + h((td.reason_name || "takedown").toLowerCase()) + '</div><div class="sub">' + h(where) + "</div></div>" + (l ? badge(l.text, l.late || l.hours < 6 ? "bad" : "warn") : badge("Done", "ok")) + "</div>" +
       td.steps.map(function (s) { return '<div class="row" style="gap:10px"><span class="tick' + (s.done_at ? " on" : new Date(s.due_at) < new Date() ? " late" : "") + '">' + (s.done_at ? ICON.check : "") + '</span><div class="grow sub" style="color:var(--ink-2)">' + h(s.label) + " · " + (s.done_at ? "done " + h(T().ago(s.done_at)) : "by " + h(whenIn(s.due_at))) + "</div>" + (!s.done_at && approverOrMember ? '<button type="button" class="btn small soft" data-tdstep="' + h(td.id) + '" data-k="' + s.key + '">Done</button>' : "") + "</div>"; }).join("") +
       "</div>";
   }
@@ -736,7 +799,14 @@
     bind("[data-tdstep]", "click", function (b) {
       var body = {};
       body[{ pylon: "pylon_done", other: "other_done", offsite: "offsite_requested" }[b.dataset.k]] = true;
-      act(b, async function () { await T().post("/api/gfs/takedowns/" + encodeURIComponent(b.dataset.tdstep), body, "PATCH"); T().toast("Marked."); refresh(); });
+      act(b, async function () {
+        var r = await T().post("/api/gfs/takedowns/" + encodeURIComponent(b.dataset.tdstep), body, "PATCH");
+        // Each region takes down its own events' clips; the step closes once
+        // nothing is out anywhere.
+        if (r.partial) T().toast("Taken down in your regions. " + r.partial.still_out + " still out at " + r.partial.events.join(", ") + "; their directors have been told.");
+        else T().toast("Marked.");
+        refresh();
+      });
     });
   }
 
@@ -755,13 +825,13 @@
     var pickedRows = d.rows.filter(function (r) { return desk.sel[r.event.id]; });
     var pending = pickedRows.reduce(function (s, r) { return s + r.waiting_items.reduce(function (a, w) { return a + w.pieces; }, 0); }, 0);
     var nf = function (v) { return v === undefined || v === null ? "—" : String(v); };
-    var table = '<div class="dtable-wrap"><table class="dtable"><thead><tr><th><span class="sr">Select</span></th><th>Event</th><th>Director</th><th>Shot</th><th>Tagged</th><th>Edited</th><th>Approved</th><th>Delivered</th><th>On SportsClippers</th><th>Held</th><th>Waiting</th></tr></thead><tbody>' +
+    var table = '<div class="dtable-wrap"><table class="dtable"><thead><tr><th><span class="sr">Select</span></th><th>Event</th><th>Director</th><th>Shot</th><th>Tagged</th><th>Edited</th><th>Approved</th><th>Delivered</th><th>On SportsClippers</th><th>Held</th><th>To pull</th><th>Waiting</th></tr></thead><tbody>' +
       d.rows.map(function (r) {
         var on = !!desk.sel[r.event.id];
         return '<tr class="' + (on ? "sel" : "") + '"><td class="l"><button type="button" class="box" data-sel="' + h(r.event.id) + '" aria-pressed="' + on + '" aria-label="Select ' + h(r.event.name) + '"></button></td>' +
           '<td class="l"><a href="#event/' + h(r.event.id) + '" style="color:var(--ink);text-decoration:none;font-weight:700">' + h(r.event.name) + '</a><div class="sub">' + h(span(r.event) + " · " + rname(r.event.region) + (r.overdue ? " · " + r.overdue + " late" : "")) + "</div></td>" +
           '<td class="l">' + h(r.event.director ? r.event.director.name || (r.event.director.you ? "You" : "—") : "—") + "</td>" +
-          "<td>" + nf(r.shot) + "</td><td>" + nf(r.tagged) + "</td><td>" + nf(r.edited) + "</td><td>" + nf(r.approved) + "</td><td>" + nf(r.delivered) + "</td><td>" + nf(r.listed) + '</td><td class="' + (r.held ? "num-warn" : "") + '">' + nf(r.held) + '</td><td class="' + (r.waiting ? "num-warn" : "") + '">' + nf(r.waiting) + "</td></tr>";
+          "<td>" + nf(r.shot) + "</td><td>" + nf(r.tagged) + "</td><td>" + nf(r.edited) + "</td><td>" + nf(r.approved) + "</td><td>" + nf(r.delivered) + "</td><td>" + nf(r.listed) + '</td><td class="' + (r.held ? "num-warn" : "") + '">' + nf(r.held) + '</td><td class="' + ((r.needs_removal || 0) + (r.to_family_only || 0) ? "num-warn" : "") + '">' + nf((r.needs_removal || 0) + (r.to_family_only || 0)) + '</td><td class="' + (r.waiting ? "num-warn" : "") + '">' + nf(r.waiting) + "</td></tr>";
       }).join("") + "</tbody></table></div>";
     var tds = d.takedowns.map(function (td) { return takedownCard(td, member); }).join("");
     var att = d.creators.attention.map(function (cr) {
@@ -796,19 +866,32 @@
     wireTakedowns(deskScreen);
     var ap = document.getElementById("dkApprove");
     if (ap) ap.addEventListener("click", function () {
+      if (document.getElementById("dkAttest")) return;
       act(ap, async function () {
-        var ok = 0, blocked = [];
-        for (var i = 0; i < pickedRows.length; i++) {
-          for (var j = 0; j < pickedRows[i].waiting_items.length; j++) {
-            var w = pickedRows[i].waiting_items[j];
-            try { await t.post("/api/gfs/events/" + encodeURIComponent(pickedRows[i].event.id) + "/deliverables/" + encodeURIComponent(w.id) + "/approve"); ok++; }
-            catch (e) { blocked.push(pickedRows[i].event.code + " · " + w.name + ": " + say(e)); }
-          }
-        }
-        desk.sel = {};
-        await deskScreen();
-        if (blocked.length) msgEl("dkMsg", ok + " cleared. Held back: " + blocked.join(" · "));
-        else t.toast(ok + " cleared for Pylon's channels.");
+        // Every selected event's keep-out list, then one attestation for all.
+        var lists = await Promise.all(pickedRows.map(function (r) { return t.api("/api/gfs/events/" + encodeURIComponent(r.event.id) + "/keep-out").then(function (ko) { return { r: r, ko: ko }; }); }));
+        ap.disabled = false;
+        document.getElementById("dkMsg").insertAdjacentHTML("beforebegin", '<div class="card" id="dkAttest"><div class="name">Before you clear ' + pending + (pending === 1 ? " piece" : " pieces") + "</div><p class=\"sub\" style=\"margin:0\">These athletes can't appear on Pylon's channels. Check every piece against its event's list.</p>" +
+          lists.map(function (x) { return '<details class="card tight" style="background:var(--card-2)"><summary class="name" style="font-size:15px;cursor:pointer">' + h(x.r.event.name) + " · " + (x.ko.total ? x.ko.total + " to keep out" : "no one to keep out") + "</summary>" + keepOutHtml(x.ko) + "</details>"; }).join("") +
+          '<label class="row" style="gap:8px;font-size:14px;align-items:flex-start"><input type="checkbox" id="dkBox"><span>I checked these pieces: no one on these lists appears in them.</span></label><button type="button" class="btn small" id="dkGo" style="align-self:flex-start" disabled>Clear ' + pending + " for Pylon's channels</button></div>");
+        var bx = document.getElementById("dkBox"), go = document.getElementById("dkGo");
+        bx.addEventListener("change", function () { go.disabled = !bx.checked; });
+        go.addEventListener("click", function () {
+          act(go, async function () {
+            var ok = 0, blocked = [];
+            for (var i = 0; i < pickedRows.length; i++) {
+              for (var j = 0; j < pickedRows[i].waiting_items.length; j++) {
+                var w = pickedRows[i].waiting_items[j];
+                try { await t.post("/api/gfs/events/" + encodeURIComponent(pickedRows[i].event.id) + "/deliverables/" + encodeURIComponent(w.id) + "/approve", { attest: true }); ok++; }
+                catch (e) { blocked.push(pickedRows[i].event.code + " · " + w.name + ": " + say(e)); }
+              }
+            }
+            desk.sel = {};
+            await deskScreen();
+            if (blocked.length) msgEl("dkMsg", ok + " cleared. Held back: " + blocked.join(" · "));
+            else t.toast(ok + " cleared for Pylon's channels.");
+          }, "dkMsg");
+        });
       }, "dkMsg");
     });
   }
@@ -866,10 +949,13 @@
     }
     var owner = t.isOwner();
     var dateIn = function (key, label) { return input("c_" + key, label, 'type="date"' + (owner ? "" : " disabled"), c[key]); };
+    // Once screening is on file, the record belongs to that person.
+    var locked = !isNew && !owner && !!c.identity_locked;
     t.show(null,
       '<div class="screen"><div class="head"><a class="back" href="#gfs-creators">' + t.I.back + "Cancel</a></div>" + head(isNew ? null : "Code " + c.code, isNew ? "Add a creator" : c.name) +
-      input("c_name", "Name", 'type="text" maxlength="80"', c.name) +
-      input("c_email", "Email <small>(a parent's, for a youth creator)</small>", 'type="email" inputmode="email" autocomplete="off"', c.email) +
+      input("c_name", "Name", 'type="text" maxlength="80"' + (locked ? " disabled" : ""), c.name) +
+      input("c_email", "Email <small>(a parent's, for a youth creator)</small>", 'type="email" inputmode="email" autocomplete="off"' + (locked ? " disabled" : ""), c.email) +
+      (locked ? '<p class="sub" style="margin:-8px 0 0">Their screening is on file, so Kyron changes their name or email.</p>' : "") +
       '<div class="field"><span class="label">Region</span><div class="chips" role="radiogroup" aria-label="Region" style="flex-wrap:wrap;margin:0;padding:0">' + meta.you.regions.map(function (r) { return '<button type="button" role="radio" class="chip" data-creg="' + r + '" aria-pressed="' + (c.region === r) + '">' + h(rname(r)) + "</button>"; }).join("") + "</div></div>" +
       input("c_city", "Home city", 'type="text" maxlength="80"', c.home_city) +
       '<section class="card"><div class="name">Screening' + (owner ? "" : " · Kyron records this") + '</div>' +
@@ -879,7 +965,7 @@
         input("c_shadow", "Shadowed events", 'type="number" min="0" max="50" inputmode="numeric"', c.shadow_events || 0) +
         '<label class="check"><span><b style="display:block;font-size:15px">Lead scout</b><span class="sub">Regional quality control and mentoring</span></span><input type="checkbox" class="switch" id="c_lead"' + (c.lead_scout ? " checked" : "") + "></label>" : "") +
       '<p class="sub" style="margin:0">Each is good for a year (Scout Agreement §6). A creator can\'t be crewed without all three.</p></section>' +
-      (isNew ? "" : '<div class="field"><span class="label">Status</span><div class="seg" role="group" aria-label="Status">' + ["active", "paused", "inactive"].map(function (s) { return '<button type="button" data-cst="' + s + '" aria-pressed="' + (c.status === s) + '">' + s[0].toUpperCase() + s.slice(1) + "</button>"; }).join("") + "</div></div>") +
+      (isNew ? "" : '<div class="field"><span class="label">Status</span><div class="seg" role="group" aria-label="Status">' + ["active", "paused", "inactive"].map(function (s) { return '<button type="button" data-cst="' + s + '" aria-pressed="' + (c.status === s) + '"' + (s === "active" && c.status !== "active" && !owner ? " disabled" : "") + ">" + s[0].toUpperCase() + s.slice(1) + "</button>"; }).join("") + "</div>" + (c.status !== "active" && !owner ? '<span class="sub">Kyron puts a paused or inactive creator back to work.</span>' : "") + "</div>") +
       '<div class="field"><label class="label" for="c_notes">Notes</label><textarea class="textarea" id="c_notes" maxlength="500" style="min-height:80px">' + h(c.notes || "") + "</textarea></div>" +
       '<p id="cMsg" class="body" role="status"></p></div>' +
       '<div class="dock"><div class="dock-inner"><button type="button" class="btn block" id="cGo">' + (isNew ? "Add the creator" : "Save") + "</button></div></div>");
@@ -918,7 +1004,7 @@
     var needs = d.needs.map(function (n) {
       if (n.kind === "takedown") {
         var l = n.next_due_at ? left(n.next_due_at) : { text: "", late: false };
-        return '<a class="card tight" href="#gfs-desk" style="text-decoration:none;color:inherit"><div class="row"><div class="grow"><div class="name" style="font-size:15px">Takedown' + (n.number ? " #" + n.number : "") + " · " + h(n.team || "") + '</div><div class="sub">' + h(n.reason_name) + " · " + h(n.event ? n.event.name : "") + "</div></div>" + badge(l.text, "bad") + "</div></a>";
+        return '<a class="card tight" href="#gfs-desk" style="text-decoration:none;color:inherit"><div class="row"><div class="grow"><div class="name" style="font-size:15px">Takedown' + (n.number ? " #" + n.number : "") + " · " + h(n.team || "") + '</div><div class="sub">' + h([n.reason_name, n.event ? n.event.name : ""].filter(Boolean).join(" · ")) + "</div></div>" + badge(l.text, "bad") + "</div></a>";
       }
       if (n.kind === "event_gaps") { var dd = daysUntil(n.event.starts_on, n.event.tz); return '<a class="card tight" href="#event/' + h(n.event.id) + '" style="text-decoration:none;color:inherit"><div class="row"><div class="grow"><div class="name" style="font-size:15px">' + h(n.event.name) + '</div><div class="sub">' + h(n.gaps.join(" · ")) + "</div></div>" + badge(dd <= 0 ? "Today" : dd === 1 ? "Tomorrow" : "In " + dd + " days", "gold") + "</div></a>"; }
       var label = { approve: "To approve", changes: "Changes asked", overdue: "Late" }[n.kind];

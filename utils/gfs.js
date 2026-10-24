@@ -274,14 +274,17 @@ function positionOf(v) {
   const initials = words.map((w) => w[0]).join("").toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 6);
   return initials || null;
 }
-// L-5: no verified age, or a 10U/12U division, counts as under 13. Mirrors
-// public.gfs_under_13 (same two patterns, tried in the same order).
+// L-5: no verified age counts as under 13, and so does a division with any
+// standalone number of 12 or less, however it's written: 12U, U12, U-12,
+// "Under 12", "12 & Under", "Girls U-10". (A year like 2026 isn't standalone
+// 1–2 digits, so it doesn't count.) Mirrors public.gfs_under_13.
+const DIVISION_NUMBER = /(?:^|\D)(\d{1,2})(?!\d)/g;
 function under13(row) {
   if (!row) return true;
   if (row.under_13 !== false) return true;
-  const d = String(row.division || "").toUpperCase();
-  const m = /(\d{1,2}) ?U/.exec(d) || /U ?(\d{1,2})/.exec(d);
-  return !!m && Number(m[1]) <= 12;
+  const d = String(row.division || "");
+  for (const m of d.matchAll(DIVISION_NUMBER)) if (Number(m[1]) <= 12) return true;
+  return false;
 }
 
 // ── CSV in (comma or tab) ────────────────────────────────────────────────
@@ -317,19 +320,23 @@ function parseTable(text) {
   if (!nonEmpty.length) return { headers: [], rows: [] };
   return { headers: nonEmpty[0].map((h) => String(h).trim()), rows: nonEmpty.slice(1) };
 }
+// Which header becomes which field. Each field takes the header its alias
+// list prefers, not whichever comes first in the file: with both "Registration
+// ID" and "Athlete ID", the athlete ID is the roster ID.
 function columnMap(headers, spec) {
+  const normed = headers.map((h) => (String(h).trim() === "#" ? "#" : norm(h)));
   const map = {};
   const used = new Set();
-  headers.forEach((h, i) => {
-    const n = h.trim() === "#" ? "#" : norm(h);
-    for (const [key, names] of Object.entries(spec)) {
-      if (map[key] === undefined && names.includes(n)) {
+  for (const [key, names] of Object.entries(spec)) {
+    for (const n of names) {
+      const i = normed.findIndex((x, j) => x === n && !used.has(j));
+      if (i >= 0) {
         map[key] = i;
         used.add(i);
         break;
       }
     }
-  });
+  }
   const dropped = headers.filter((_h, i) => !used.has(i)).map((h) => clean(h, 40)).filter(Boolean);
   return { map, dropped };
 }
@@ -381,10 +388,29 @@ function holdReason(row) {
   if (!row.consent_capture) return "no_capture_consent";
   return null;
 }
+// A clip's hold: the athlete's record first, then "roster_changed" for a clip
+// that was out when the roster changed its athlete's number or team (it may
+// show someone else, so it stays held until it's taken down and tagged again).
+function clipHold(row, retag) {
+  return holdReason(row) || (retag ? "roster_changed" : null);
+}
 // SportsClippers Schedule A: family-only links unless the guardian chose
 // public display; never public under 13.
 function visibilityFor(row) {
   return row && row.public_display && !under13(row) ? "public" : "family";
+}
+// A live listing the roster no longer allows: no sale consent means it comes
+// down; a public listing that lost public display (or turned out to be under
+// 13) goes family-only. Mirrors the pull_reason in public.gfs_clips_gate.
+function pullReason(clip, row) {
+  if (!clip || !clip.listed_at || clip.removed_at) return null;
+  if (!row || !row.consent_sale) return "no_sale_consent";
+  if (clip.visibility === "public" && visibilityFor(row) !== "public") return "not_public";
+  return null;
+}
+// Out means a family or SportsClippers has it, and it hasn't been taken down.
+function isOut(clip) {
+  return !!clip && !!(clip.delivered_at || clip.listed_at) && !clip.removed_at;
 }
 function featureBlock(row) {
   if (!row) return "not_on_roster";
@@ -417,6 +443,11 @@ const CLIP_SCOUT = new RegExp(`^(\\d{1,2})-${ANGLE_RE}-(\\d{1,4})$`, "i");
 const CLIP_FINAL = new RegExp(`^([A-Za-z0-9]{2,24})-([A-Za-z0-9]{1,6})-(\\d{1,2})-${ANGLE_RE}-(\\d{1,4})$`, "i");
 const CLIP_BARE = new RegExp(`^${ANGLE_RE}-(\\d{1,4})$`, "i");
 const SAFE_NAME = /^[A-Za-z0-9._-]{1,120}$/;
+// The only folder names kept: a jersey folder (B-5) or 00-unassigned. Any
+// other folder could be named for a person, so it isn't stored.
+function safeFolder(f) {
+  return f && (/^\d{1,2}$/.test(f) || /^00-?unassigned$/i.test(f)) ? f : null;
+}
 
 function parseUploadPath(raw, eventCode) {
   const parts = String(raw || "").trim().split(/[\\/]+/).filter(Boolean);
@@ -424,7 +455,8 @@ function parseUploadPath(raw, eventCode) {
   const file = parts[parts.length - 1];
   if (!SAFE_NAME.test(file)) return { kind: "skip", why: "file_name" };
   const base = file.replace(/\.[A-Za-z0-9]{2,5}$/, "");
-  const folder = parts.length > 1 ? parts[parts.length - 2] : null;
+  const rawFolder = parts.length > 1 ? parts[parts.length - 2] : null;
+  const folder = safeFolder(rawFolder);
   let game = null;
   let teams = null;
   let gameAt = -1;
@@ -434,7 +466,8 @@ function parseUploadPath(raw, eventCode) {
   });
   // B-5 keeps one folder per jersey number per game, which can't tell two
   // teams' #7 apart; a team folder above the jersey folder (or a team column)
-  // settles it. It's a hint: used only when it names a team on the roster.
+  // settles it. This is the raw folder name: teamHintOf keeps it only when it
+  // names one of the game's teams or a team on the roster.
   const teamHint = parts.length > 2 && parts.length - 3 > gameAt ? parts[parts.length - 3] : null;
   let m = GAME_FILE.exec(base);
   if (m) {
@@ -447,22 +480,33 @@ function parseUploadPath(raw, eventCode) {
   if (m) {
     const angle = angleOf(m[2]);
     if (!angle) return { kind: "skip", why: "angle" };
-    return { kind: "clip", file, folder, game, teams, teamHint, jersey: unassigned ? null : jerseyOf(m[1]), angle, clip_no: Number(m[3]) };
+    return { kind: "clip", file, folder, keyFolder: rawFolder, game, teams, teamHint, jersey: unassigned ? null : jerseyOf(m[1]), angle, clip_no: Number(m[3]) };
   }
   m = CLIP_FINAL.exec(base);
   if (m) {
     if (eventCode && m[1].toLowerCase() !== String(eventCode).toLowerCase()) return { kind: "skip", why: "other_event" };
     const angle = angleOf(m[4]);
     if (!angle) return { kind: "skip", why: "angle" };
-    return { kind: "clip", file, folder, game, teams, teamHint, jersey: unassigned ? null : jerseyOf(m[3]), angle, clip_no: Number(m[5]) };
+    return { kind: "clip", file, folder, keyFolder: rawFolder, game, teams, teamHint, jersey: unassigned ? null : jerseyOf(m[3]), angle, clip_no: Number(m[5]) };
   }
   m = CLIP_BARE.exec(base);
   if (m) {
     const angle = angleOf(m[1]);
     if (!angle) return { kind: "skip", why: "angle" };
-    return { kind: "clip", file, folder, game, teams, teamHint, jersey: unassigned || !folder ? null : jerseyOf(folder), angle, clip_no: Number(m[2]) };
+    return { kind: "clip", file, folder, keyFolder: rawFolder, game, teams, teamHint, jersey: unassigned || !folder ? null : jerseyOf(folder), angle, clip_no: Number(m[2]) };
   }
   return { kind: "skip", why: "not_a_label" };
+}
+
+// The team folder, kept only when it names one of the game's teams or a team
+// on the roster (rosterTeams: a Set of norm()'d team names). Anything else,
+// an angle folder or a folder named for a person, is dropped.
+function teamHintOf(clip, rosterTeams) {
+  if (!clip || !clip.teamHint) return null;
+  const n = norm(clip.teamHint);
+  if (!n) return null;
+  const inGame = (clip.teams || []).some((t) => norm(t) === n);
+  return inGame || (rosterTeams && rosterTeams.has(n)) ? clean(clip.teamHint, 80) : null;
 }
 
 // A time from the export: ISO with an offset, or a local "YYYY-MM-DD HH:MM"
@@ -500,9 +544,10 @@ function parseUploads(text, ev) {
     if (p.kind === "game") {
       games.push({ ...p, ...common, final_whistle_at: timeOf(get(r, "final_whistle"), ev.tz), usable: map.usable === undefined ? null : triState(get(r, "usable")) });
     } else {
+      // A game column counts only when it's a game name (TEAM-A_vs_TEAM-B_DATE).
       const g = clean(get(r, "game"), 160);
       const gm = g ? GAME_DIR.exec(g) : null;
-      clips.push({ ...p, ...common, game: p.game || (gm ? g : g || null), teams: p.teams || (gm ? [gm[1], gm[2]] : null) });
+      clips.push({ ...p, ...common, game: p.game || (gm ? g : null), teams: p.teams || (gm ? [gm[1], gm[2]] : null) });
     }
   });
   if (rows.length > UPLOAD_MAX) skipped.push({ line: UPLOAD_MAX + 2, why: "too_many_rows" });
@@ -523,21 +568,33 @@ function rosterIndex(rows) {
   return byTeam;
 }
 // Match a clip by jersey number against the roster: no face matching
-// (C-2 "matched by jersey number to the Pylon roster").
+// (C-2 "matched by jersey number to the Pylon roster"). A clip matches only
+// when its team is certain:
+//   * a team column or a team folder names the team (they must agree), and
+//     that team is on the roster;
+//   * otherwise its game folder names two teams, and both are on the roster
+//     (if one isn't, its #7 could be the kid in the clip);
+//   * otherwise the roster has a single team.
+// Anything else goes to tag review for a person to decide.
 function matchClip(clip, index) {
   if (!index.size) return { match: "unmatched", why: "no_roster" };
   if (clip.jersey == null) return { match: "unmatched", why: "no_number" };
+  const given = clip.team ? norm(clip.team) : "";
+  const hint = clip.teamHint ? norm(clip.teamHint) : "";
+  if (given && hint && given !== hint) return { match: "unmatched", why: "team_conflict" };
   let teams;
-  const hint = clip.teamHint ? norm(clip.teamHint) : null;
-  if (!clip.team && hint && index.has(hint)) {
-    teams = [hint];
-  } else if (clip.team) {
-    teams = [norm(clip.team)];
-    if (!index.has(teams[0])) return { match: "unmatched", why: "team_not_on_roster" };
-  } else if (clip.teams) {
-    teams = clip.teams.map(norm).filter((t) => index.has(t));
-    if (!teams.length) teams = [...index.keys()];
-  } else teams = [...index.keys()];
+  if (given || hint) {
+    const t = given || hint;
+    if (!index.has(t)) return { match: "unmatched", why: "team_not_on_roster" };
+    teams = [t];
+  } else if (clip.teams && clip.teams.length) {
+    teams = [...new Set(clip.teams.map(norm))];
+    if (!teams.every((t) => index.has(t))) return { match: "unmatched", why: "team_not_on_roster" };
+  } else if (index.size === 1) {
+    teams = [...index.keys()];
+  } else {
+    return { match: "unmatched", why: "no_team" };
+  }
   const hits = [];
   for (const t of teams) for (const r of index.get(t).get(clip.jersey) || []) hits.push(r);
   if (!hits.length) return { match: "unmatched", why: "not_on_roster" };
@@ -549,8 +606,10 @@ function finalLabel(ev, row, clip) {
   const n = clip.clip_no == null ? "000" : String(clip.clip_no).padStart(3, "0");
   return `${ev.code}-${row.position || "NA"}-${row.jersey}-${clip.angle || "NA"}-${n}`;
 }
+// One key per file in the log, hashed so no folder name is stored with it.
 function clipKey(eventId, c) {
-  return [eventId, norm(c.game || ""), norm(c.team || c.teamHint || ""), String(c.folder || "").toLowerCase(), String(c.file).toLowerCase()].join("|");
+  const raw = [eventId, norm(c.game || ""), norm(c.team || c.teamHint || ""), String(c.keyFolder || c.folder || "").toLowerCase(), String(c.file).toLowerCase()].join("|");
+  return "c" + crypto.createHash("sha256").update(raw).digest("hex").slice(0, 40);
 }
 function uploadKey(eventId, g) {
   return [eventId, norm(g.game), g.angle].join("|");
@@ -598,6 +657,36 @@ function credentialBadges(c, ev) {
     { key: "training", ok: !!c.safety_training_on && c.safety_training_on >= floor, label: !c.safety_training_on ? "No safety training" : c.safety_training_on >= floor ? "Safety trained" : "Training expired", until: exp(c.safety_training_on) },
     ...(c.tier === "youth" ? [{ key: "youth", ok: true, label: `Youth · shadowed ${c.shadow_events || 0}` }] : []),
   ];
+}
+
+// Screening dates on file: from then on, who the record belongs to (name,
+// email) and whether it's active are the owner's to change.
+function screeningOnFile(c) {
+  return !!(c && (c.contract_signed_on || c.background_check_on || c.safety_training_on));
+}
+
+// Creator Playbook v1.5: a youth creator works only alongside a confirmed,
+// screened adult on site (lead, shooter, photographer or story camera).
+// Mirrors public.gfs_crew_check, which also locks the event so two changes
+// can't race past it.
+function isAnchor(row, creators, ev) {
+  const c = row && creators.get(row.creator_id);
+  return !!c && row.status === "confirmed" && ADULT_ON_SITE.includes(row.role) && (c.tier || "adult") === "adult" && !credentialProblems(c, ev, row.role).length;
+}
+const isYouth = (row, creators) => ((creators.get(row.creator_id) || {}).tier || "adult") === "youth";
+// A confirmed youth creator with no screened adult on site (screening that
+// lapsed, or a creator paused since, leaves them alone too).
+function youthAlone(crew, creators, ev) {
+  return crew.some((x) => x.status === "confirmed" && isYouth(x, creators)) && !crew.some((x) => isAnchor(x, creators, ev));
+}
+// What a crew change would break: next is the row as it would be.
+function crewProblem(crew, creators, ev, next) {
+  const prev = next.id ? crew.find((x) => x.id === next.id) || null : null;
+  const others = crew.filter((x) => x.id !== next.id);
+  const othersAnchor = others.some((x) => isAnchor(x, creators, ev));
+  if (isYouth(next, creators) && next.status === "confirmed" && (!prev || prev.status !== "confirmed") && !othersAnchor) return "crew_youth_needs_adult";
+  if (prev && isAnchor(prev, creators, ev) && !isAnchor(next, creators, ev) && !othersAnchor && others.some((x) => x.status === "confirmed" && isYouth(x, creators))) return "crew_youth_left_alone";
+  return null;
 }
 
 // The four measures for one creator, from game uploads and family ratings.
@@ -726,6 +815,7 @@ module.exports = {
   deliverablesFor,
   deliverableInfo,
   parseTable,
+  columnMap,
   ROSTER_COLUMNS,
   parseRoster,
   bool,
@@ -734,9 +824,14 @@ module.exports = {
   positionOf,
   under13,
   holdReason,
+  clipHold,
   visibilityFor,
+  pullReason,
+  isOut,
   featureBlock,
+  safeFolder,
   parseUploadPath,
+  teamHintOf,
   parseUploads,
   timeOf,
   rosterIndex,
@@ -747,6 +842,10 @@ module.exports = {
   suggestions,
   credentialProblems,
   credentialBadges,
+  screeningOnFile,
+  isAnchor,
+  youthAlone,
+  crewProblem,
   angleMap,
   scorecard,
   quarterOf,

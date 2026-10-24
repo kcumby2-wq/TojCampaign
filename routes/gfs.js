@@ -25,11 +25,13 @@
 //   POST   /api/gfs/events/:id/tags/approve           matched clips → tagged                member
 //   POST   /api/gfs/events/:id/clips/edited           tagged → edited                       member
 //   POST   /api/gfs/events/:id/clips/approve          edited → approved                     approver
-//   POST   /api/gfs/events/:id/clips/delivered        approved → sent to families           member
+//   GET    /api/gfs/events/:id/families.csv           roster ID → approved clips (exports)  member
+//   POST   /api/gfs/events/:id/clips/delivered        exported clips → sent to families     member
 //   POST   /api/gfs/events/:id/clips/removed          taken off every surface               member
-//   GET    /api/gfs/events/:id/families.csv           roster ID → approved clips            member
-//   GET    /api/gfs/events/:id/listings.csv           the SportsClippers listing file       approver
-//   POST   /api/gfs/events/:id/clips/listed           mark listed (family or public)        approver
+//   GET    /api/gfs/events/:id/listings.csv           the SportsClippers file (exports)     approver
+//   POST   /api/gfs/events/:id/clips/listed           exported clips → listed               approver
+//   POST   /api/gfs/events/:id/clips/family-only      public listings that lost it → family approver
+//   GET    /api/gfs/events/:id/keep-out               who can't appear on Pylon's channels  member
 //   PATCH  /api/gfs/events/:id/deliverables/:did      counts, late cause, featured          member
 //   POST   /api/gfs/events/:id/deliverables/:did/submit    to the approver queue            member
 //   POST   /api/gfs/events/:id/deliverables/:did/approve   clear for Pylon's channels       approver
@@ -44,9 +46,14 @@
 //   POST   /api/gfs/takedowns                         log one (the clock starts)            member
 //   PATCH  /api/gfs/takedowns/:id                     mark a step done                      member
 //
+// A takedown follows the athlete: anyone whose regions include an event the
+// athlete is on sees it, and each region takes down its own clips.
+//
 // Nothing here posts, lists or messages anyone: listings and family links go
 // out through SportsClippers, posts through Pylon's own channels. Logs and
 // notifications carry event codes and counts, never an athlete's identity.
+// Activity entries carry the event's region, so the feed shows each person
+// only their regions.
 
 "use strict";
 
@@ -132,15 +139,16 @@ async function loadEvent(sb, req, res, id = req.params.id) {
 }
 
 // Push to the people who should know about an event: owners, approvers, and
-// the directors whose regions include it.
+// the directors whose regions include it (any of them, for a list).
 async function regionEmails(region, minRole = "member") {
+  const regions = [].concat(region).filter(Boolean);
   const out = new Set(staffEmails());
   const sb = getSupabase();
   if (!sb) return [...out];
   const rows = await run(sb.from("team_members").select("email,role,tools,regions,status").eq("status", "active"));
   for (const m of rows || []) {
     if (!(m.tools || []).includes("gfs") || T.ROLE_RANK[m.role] < T.ROLE_RANK[minRole]) continue;
-    if (m.role === "approver" || (m.regions || []).includes(region)) out.add(m.email);
+    if (m.role === "approver" || (m.regions || []).some((r) => regions.includes(r))) out.add(m.email);
   }
   return [...out];
 }
@@ -168,7 +176,8 @@ function eventView(ev, req, names) {
   out.director = ev.director_email ? { name: (names && names.get(ev.director_email)) || null, email: req.team.owner || ev.director_email === req.team.email ? ev.director_email : null, you: ev.director_email === req.team.email } : null;
   return out;
 }
-function crewView(row, creator, req) {
+function crewView(row, creator, req, ev) {
+  const active = ["invited", "confirmed"].includes(row.status);
   return {
     id: row.id,
     role: row.role,
@@ -178,7 +187,10 @@ function crewView(row, creator, req) {
     family_rating: row.family_rating == null ? null : Number(row.family_rating),
     rating_count: row.rating_count == null ? null : row.rating_count,
     on_site: G.ON_SITE.includes(row.role),
-    creator: creator ? creatorView(creator, req) : null,
+    // Screening that lapsed (or a pause) since they were crewed: they don't
+    // count toward the crew until it's fixed.
+    problems: active && ev ? G.credentialProblems(creator, ev, row.role) : [],
+    creator: creator ? creatorView(creator, req, ev) : null,
   };
 }
 function creatorView(c, req, ev) {
@@ -201,18 +213,36 @@ function creatorView(c, req, ev) {
     badges: G.credentialBadges(c, ev),
   };
 }
-function checklist(ev, crew) {
+// The four checks before an event. A crew member counts only while they're
+// screened for this event (a check that lapsed, or a pause, takes them out of
+// the count), and the crew isn't ready while a youth creator lacks a screened
+// adult on site. creators: Map of creator id → row.
+function checklist(ev, crew, creators) {
   const start = G.zonedToUtc(ev.starts_on, "00:00", ev.tz).getTime();
   const at = (h) => new Date(start - h * 3600000).toISOString();
-  const onSite = crew.filter((c) => c.status === "confirmed" && G.ON_SITE.includes(c.role));
+  const valid = (c) => !G.credentialProblems(creators.get(c.creator_id), ev, c.role).length;
+  const confirmed = crew.filter((c) => c.status === "confirmed");
+  const onSite = confirmed.filter((c) => G.ON_SITE.includes(c.role) && valid(c));
+  const lapsed = confirmed.filter((c) => !valid(c)).length;
   const lead = onSite.some((c) => c.role === "lead");
-  const crewDone = onSite.length >= ev.crew_target && (lead || ev.crew_target === 0);
+  const alone = G.youthAlone(crew, creators, ev);
+  const crewDone = onSite.length >= ev.crew_target && (lead || ev.crew_target === 0) && !alone;
+  const notes = [];
+  if (ev.crew_target && !lead) notes.push("no lead yet");
+  if (lapsed) notes.push(`${lapsed} not screened for this event`);
+  if (alone) notes.push("a youth creator needs a screened adult");
   return [
     { key: "storefront", label: "QR code and storefront page", due_at: at(7 * 24), done: !!ev.storefront_ready_at, done_at: ev.storefront_ready_at || null },
     { key: "roster", label: "Roster and consent from Sports Thread", due_at: at(72), done: !!ev.roster_in_at, done_at: ev.roster_in_at || null },
     { key: "brief", label: "Crew brief sent", due_at: at(48), done: !!ev.brief_sent_at, done_at: ev.brief_sent_at || null },
-    { key: "crew", label: `Crew ${onSite.length} of ${ev.crew_target} confirmed on site${ev.crew_target && !lead ? ", no lead yet" : ""}`, due_at: at(48), done: crewDone, done_at: null, confirmed: onSite.length, target: ev.crew_target, lead },
+    { key: "crew", label: `Crew ${onSite.length} of ${ev.crew_target} confirmed on site${notes.length ? ", " + notes.join(", ") : ""}`, due_at: at(48), done: crewDone, done_at: null, confirmed: onSite.length, target: ev.crew_target, lead, not_screened: lapsed, youth_alone: alone },
   ];
+}
+// The creators behind a set of crew rows.
+async function creatorsFor(sb, crew) {
+  const ids = [...new Set(crew.map((c) => c.creator_id).filter(Boolean))];
+  const rows = ids.length ? await inChunks(ids, (chunk) => run(sb.from("gfs_creators").select("*").in("id", chunk))) : [];
+  return new Map(rows.map((c) => [c.id, c]));
 }
 function deliverableView(d, ev) {
   const info = G.deliverableInfo(d.kind) || {};
@@ -236,20 +266,46 @@ function deliverableView(d, ev) {
     late,
     late_cause: d.late_cause || null,
     publishes: d.publishes,
+    // Named athletes: required where the piece is about them; anything that
+    // posts can name the athletes it shows, and they're checked the same way.
     featured_needed: !!info.featured,
+    featured_allowed: !!info.featured || !!d.publishes,
     featured: d.featured || [],
     status: d.status,
     cleared,
     submitted_at: d.submitted_at || null,
     decided_at: d.decided_at || null,
+    attested: !!d.attested_at,
     note_from_approver: d.status === "changes" ? d.note || null : null,
     note: d.note || null,
   };
 }
 
 // Pipeline counts: the SQL function, or the same counts from the clips.
+const ZERO_COUNTS = { shot: 0, matched: 0, unmatched: 0, not_a_player: 0, tagged: 0, edited: 0, approved: 0, delivered: 0, listed: 0, held: 0, needs_removal: 0, to_family_only: 0, to_send: 0, to_list: 0 };
+function countClips(rows) {
+  const c = { ...ZERO_COUNTS };
+  for (const r of rows) {
+    c.shot++;
+    if (r.match === "matched") c.matched++;
+    if (r.match === "unmatched") c.unmatched++;
+    if (r.match === "not_a_player") c.not_a_player++;
+    if (["tagged", "edited", "approved"].includes(r.stage)) c.tagged++;
+    if (["edited", "approved"].includes(r.stage)) c.edited++;
+    if (r.stage === "approved") c.approved++;
+    if (r.delivered_at) c.delivered++;
+    if (r.listed_at && !r.removed_at) c.listed++;
+    if (r.held) c.held++;
+    if ((r.held || r.pull_reason === "no_sale_consent") && G.isOut(r)) c.needs_removal++;
+    if (r.pull_reason === "not_public" && !r.held) c.to_family_only++;
+    const ready = r.stage === "approved" && !r.held && !r.removed_at;
+    if (ready && r.family_export_at && !r.delivered_at) c.to_send++;
+    if (ready && r.exported_at && !r.listed_at) c.to_list++;
+  }
+  return c;
+}
 async function eventCounts(sb, ids) {
-  const out = new Map(ids.map((id) => [id, { shot: 0, matched: 0, unmatched: 0, not_a_player: 0, tagged: 0, edited: 0, approved: 0, delivered: 0, listed: 0, held: 0, needs_removal: 0 }]));
+  const out = new Map(ids.map((id) => [id, { ...ZERO_COUNTS }]));
   if (!ids.length) return out;
   const { data, error } = await sb.rpc("gfs_event_counts", { p_events: ids });
   if (!error && Array.isArray(data)) {
@@ -257,42 +313,49 @@ async function eventCounts(sb, ids) {
     return out;
   }
   for (const id of ids) {
-    const rows = await all(() => sb.from("gfs_clips").select("event_id,match,stage,held,delivered_at,listed_at,removed_at").eq("event_id", id));
-    const c = out.get(id);
-    for (const r of rows) {
-      c.shot++;
-      if (r.match === "matched") c.matched++;
-      if (r.match === "unmatched") c.unmatched++;
-      if (r.match === "not_a_player") c.not_a_player++;
-      if (["tagged", "edited", "approved"].includes(r.stage)) c.tagged++;
-      if (["edited", "approved"].includes(r.stage)) c.edited++;
-      if (r.stage === "approved") c.approved++;
-      if (r.delivered_at) c.delivered++;
-      if (r.listed_at && !r.removed_at) c.listed++;
-      if (r.held) c.held++;
-      if (r.held && (r.listed_at || r.delivered_at) && !r.removed_at) c.needs_removal++;
-    }
+    const rows = await all(() => sb.from("gfs_clips").select("id,event_id,match,stage,held,pull_reason,family_export_at,delivered_at,exported_at,listed_at,removed_at").eq("event_id", id));
+    out.set(id, countClips(rows));
   }
   return out;
 }
 
-// Re-check every matched clip's hold against the roster (the database does
-// this itself through migration 024; this keeps the answer right either way).
+// Re-check every matched clip's hold and pull reason against the roster (the
+// database does this itself through migration 024; this keeps the answer
+// right either way).
 async function refreshHolds(sb, ev, rosterById) {
-  const clips = await all(() => sb.from("gfs_clips").select("id,roster_row,held,hold_reason").eq("event_id", ev.id).eq("match", "matched"));
-  const groups = new Map(); // one update per distinct hold
+  const clips = await all(() => sb.from("gfs_clips").select("id,roster_row,held,hold_reason,retag,pull_reason,listed_at,removed_at,visibility").eq("event_id", ev.id).eq("match", "matched"));
+  const groups = new Map(); // one update per distinct hold and pull
   for (const c of clips) {
-    const reason = G.holdReason(rosterById.get(c.roster_row)) || null;
-    if (reason === (c.hold_reason || null) && !!reason === !!c.held) continue;
-    if (!groups.has(reason)) groups.set(reason, []);
-    groups.get(reason).push(c.id);
+    const row = rosterById.get(c.roster_row);
+    const hold = G.clipHold(row, c.retag) || null;
+    const pull = G.pullReason(c, row) || null;
+    if (hold === (c.hold_reason || null) && !!hold === !!c.held && pull === (c.pull_reason || null)) continue;
+    const key = `${hold || ""}|${pull || ""}`;
+    if (!groups.has(key)) groups.set(key, { hold, pull, ids: [] });
+    groups.get(key).ids.push(c.id);
   }
   let changed = 0;
-  for (const [reason, ids] of groups) {
-    await inChunks(ids, (chunk) => run(sb.from("gfs_clips").update({ held: !!reason, hold_reason: reason }).in("id", chunk)));
+  for (const { hold, pull, ids } of groups.values()) {
+    await inChunks(ids, (chunk) => run(sb.from("gfs_clips").update({ held: !!hold, hold_reason: hold, pull_reason: pull }).in("id", chunk)));
     changed += ids.length;
   }
   return changed;
+}
+
+// A roster correction (a new jersey or team) means the athlete's clips may
+// show someone else. The ones not out go back to tag review (jersey-matched
+// ones are matched again against the corrected roster; a director's own tags
+// wait for them); the ones out stay held until they're taken down and tagged
+// again. The database does the same in gfs_roster_refresh.
+async function retagFor(sb, rowIds) {
+  if (!rowIds.length) return { untagged: 0, held_out: 0 };
+  const clips = await inChunks(rowIds, (chunk) => all(() => sb.from("gfs_clips").select("id,roster_row,team_given,delivered_at,listed_at,removed_at").in("roster_row", chunk)));
+  const out = clips.filter((c) => G.isOut(c)).map((c) => c.id);
+  const back = clips.filter((c) => !G.isOut(c));
+  await inChunks(out, (chunk) => run(sb.from("gfs_clips").update({ retag: true, held: true, hold_reason: "roster_changed" }).in("id", chunk)));
+  // team_given differs clip to clip, so these go one by one.
+  await pool(back, 8, (c) => run(sb.from("gfs_clips").update({ match: "unmatched", why: "roster_changed", roster_row: null, label: null, stage: "shot", team: c.team_given || null, held: false, hold_reason: null, pull_reason: null, retag: false }).eq("id", c.id)));
+  return { untagged: back.length, held_out: out.length };
 }
 // Run fn over items, a few at a time.
 async function pool(items, size, fn) {
@@ -355,12 +418,13 @@ router.get("/events", viewer, async (req, res) => {
     if (req.query.series) q = q.eq("series", G.clean(req.query.series, 60));
     const events = await run(q.order("starts_on", { ascending: true }).limit(300));
     const ids = events.map((e) => e.id);
-    const crew = ids.length ? await inChunks(ids, (chunk) => all(() => sb.from("gfs_crew").select("event_id,role,status").in("event_id", chunk)), 50) : [];
+    const crew = ids.length ? await inChunks(ids, (chunk) => all(() => sb.from("gfs_crew").select("id,event_id,creator_id,role,status").in("event_id", chunk)), 50) : [];
+    const creators = await creatorsFor(sb, crew);
     const names = await namesFor(sb, events.map((e) => e.director_email));
     res.json({
       events: events.map((ev) => {
         const mine = crew.filter((c) => c.event_id === ev.id);
-        const list = checklist(ev, mine);
+        const list = checklist(ev, mine, creators);
         return { ...eventView(ev, req, names), checklist: list, ready: list.filter((x) => x.done).length };
       }),
       regions: G.regionsOf(req.team),
@@ -516,10 +580,7 @@ router.post("/events/import", approver, async (req, res) => {
   const text = csvText(req, res);
   if (text == null) return;
   const { headers, rows } = G.parseTable(text);
-  const map = {};
-  headers.forEach((h, i) => {
-    for (const [k, names] of Object.entries(CAL_COLUMNS)) if (map[k] === undefined && names.includes(G.norm(h))) map[k] = i;
-  });
+  const { map } = G.columnMap(headers, CAL_COLUMNS);
   if (map.city === undefined || map.starts_on === undefined) return res.status(400).json({ error: "calendar_columns", hint: "Needs at least a city column and a first-day column." });
   try {
     const created = [];
@@ -562,23 +623,27 @@ router.get("/events/:id", viewer, async (req, res) => {
   try {
     const ev = await loadEvent(sb, req, res);
     if (!ev) return;
-    const [crew, deliverables, roster, takedowns] = await Promise.all([
+    const [crew, deliverables, roster, open] = await Promise.all([
       run(sb.from("gfs_crew").select("*").eq("event_id", ev.id)),
       run(sb.from("gfs_deliverables").select("*").eq("event_id", ev.id)),
       rosterRows(sb, ev.id),
-      run(sb.from("gfs_takedowns").select("id,number,team,reason,received_at,pylon_due_at,other_due_at,offsite_due_at,pylon_done_at,other_done_at,offsite_requested_at,status").eq("event_id", ev.id).eq("status", "open")),
+      run(sb.from("gfs_takedowns").select("*").eq("status", "open").order("received_at", { ascending: false }).limit(500)),
     ]);
-    const creatorIds = [...new Set(crew.map((c) => c.creator_id))];
-    const creators = creatorIds.length ? await run(sb.from("gfs_creators").select("*").in("id", creatorIds)) : [];
-    const byId = new Map(creators.map((c) => [c.id, c]));
+    const byId = await creatorsFor(sb, crew);
     const counts = (await eventCounts(sb, [ev.id])).get(ev.id);
     const names = await namesFor(sb, [ev.director_email]);
     const teams = new Set(roster.map((r) => G.norm(r.team)));
     const order = new Map(G.DELIVERABLE_KINDS.map((k, i) => [k, i]));
+    // Open takedowns for anyone on this roster, wherever they were logged.
+    const rids = new Set(roster.map((r) => r.roster_id));
+    const takedowns = open.filter((t) => t.event_id === ev.id || rids.has(t.roster_id));
+    const tdEvents = new Map([[ev.id, ev]]);
+    const others = [...new Set(takedowns.map((t) => t.event_id).filter((x) => x && x !== ev.id))];
+    for (const e of others.length ? await run(sb.from("gfs_events").select("id,code,name,region").in("id", others)) : []) tdEvents.set(e.id, e);
     res.json({
       event: eventView(ev, req, names),
-      checklist: checklist(ev, crew),
-      crew: crew.filter((c) => c.status !== "removed").map((c) => crewView(c, byId.get(c.creator_id), req)),
+      checklist: checklist(ev, crew, byId),
+      crew: crew.filter((c) => c.status !== "removed").map((c) => crewView(c, byId.get(c.creator_id), req, ev)),
       roster: {
         teams: teams.size,
         athletes: roster.length,
@@ -593,7 +658,7 @@ router.get("/events/:id", viewer, async (req, res) => {
       },
       counts,
       deliverables: deliverables.sort((a, b) => order.get(a.kind) - order.get(b.kind) || a.day - b.day).map((d) => deliverableView(d, ev)),
-      takedowns: takedowns.map((t) => ({ ...t, reason_name: (G.TAKEDOWN[t.reason] || {}).label })),
+      takedowns: takedowns.map((t) => takedownView(t, tdEvents, null, req)),
     });
   } catch (e) {
     fail(res, e, "get_event");
@@ -651,7 +716,7 @@ router.patch("/events/:id", member, async (req, res) => {
     patch.ends_at = G.endsAt(merged);
     const updated = await run(sb.from("gfs_events").update(patch).eq("id", ev.id).select("*").single());
     if (["starts_on", "ends_on", "wraps_at", "tz"].some((k) => patch[k] !== undefined)) await resyncDeliverables(sb, updated);
-    await T.logActivity(actor(req), "gfs_event_changed", updated.code, { fields: Object.keys(patch).filter((k) => k !== "ends_at") });
+    await T.logActivity(actor(req), "gfs_event_changed", updated.code, { region: updated.region, fields: Object.keys(patch).filter((k) => k !== "ends_at") });
     res.json({ event: eventView(updated, req) });
   } catch (e) {
     fail(res, e, "update_event");
@@ -679,8 +744,8 @@ router.get("/events/:id/crew", viewer, async (req, res) => {
     const active = new Set(crew.filter((c) => ["invited", "confirmed"].includes(c.status)).map((c) => c.creator_id));
     res.json({
       event: eventView(ev, req),
-      checklist: checklist(ev, crew),
-      crew: crew.filter((c) => c.status !== "removed").map((c) => crewView(c, byId.get(c.creator_id), req)),
+      checklist: checklist(ev, crew, byId),
+      crew: crew.filter((c) => c.status !== "removed").map((c) => crewView(c, byId.get(c.creator_id), req, ev)),
       candidates: pool
         .filter((c) => c.status === "active" && !active.has(c.id))
         .sort((a, b) => (a.region === ev.region ? 0 : 1) - (b.region === ev.region ? 0 : 1) || a.name.localeCompare(b.name))
@@ -690,18 +755,6 @@ router.get("/events/:id/crew", viewer, async (req, res) => {
     fail(res, e, "get_crew");
   }
 });
-
-function youthCheck(crew, creators, ev, change) {
-  // change: { id?, creator, role, status } — the row as it would be.
-  const rows = crew.filter((c) => c.id !== change.id).concat([{ ...change, creator_id: change.creator.id }]);
-  const tier = (c) => ((creators.get(c.creator_id) || change.creator).tier || "adult");
-  const adultsOnSite = rows.filter((c) => c.status === "confirmed" && G.ADULT_ON_SITE.includes(c.role) && tier(c) === "adult");
-  const youthConfirmed = rows.filter((c) => c.status === "confirmed" && tier(c) === "youth");
-  const mine = change.creator.tier || "adult";
-  if (mine === "youth" && change.status === "confirmed" && !adultsOnSite.length) return "crew_youth_needs_adult";
-  if (mine === "adult" && ["declined", "removed"].includes(change.status) && youthConfirmed.length && !adultsOnSite.length) return "crew_youth_left_alone";
-  return null;
-}
 
 router.post("/events/:id/crew", member, async (req, res) => {
   const sb = getSupabase();
@@ -720,8 +773,8 @@ router.post("/events/:id/crew", member, async (req, res) => {
     const row = await run(
       sb.from("gfs_crew").insert({ event_id: ev.id, creator_id: c.id, role: b.role, status: "invited", note: G.clean(b.note, 120) || null, assigned_by: actor(req) }).select("*").single()
     );
-    await T.logActivity(actor(req), "gfs_crew_added", ev.code, { role: b.role, creator: c.code });
-    res.json({ crew: crewView(row, c, req) });
+    await T.logActivity(actor(req), "gfs_crew_added", ev.code, { region: ev.region, role: b.role, creator: c.code });
+    res.json({ crew: crewView(row, c, req, ev) });
   } catch (e) {
     fail(res, e, "add_crew");
   }
@@ -762,16 +815,20 @@ router.patch("/events/:id/crew/:cid", member, async (req, res) => {
     }
     patch.updated_at = now();
     const next = { ...row, ...patch };
-    if (!["declined", "removed"].includes(next.status)) {
-      const problems = G.credentialProblems(c, ev, next.role);
-      if (problems.length) return res.status(409).json({ error: "credentials", problems });
-      if (["declined", "removed"].includes(row.status) && crew.some((x) => x.id !== row.id && x.creator_id === row.creator_id && ["invited", "confirmed"].includes(x.status))) return res.status(409).json({ error: "already_on_crew" });
+    // A note or a family rating (after the event, even if the creator has been
+    // paused since) changes nothing about who's on the crew.
+    if (next.role !== row.role || next.status !== row.status) {
+      if (!["declined", "removed"].includes(next.status)) {
+        const problems = G.credentialProblems(c, ev, next.role);
+        if (problems.length) return res.status(409).json({ error: "credentials", problems });
+        if (["declined", "removed"].includes(row.status) && crew.some((x) => x.id !== row.id && x.creator_id === row.creator_id && ["invited", "confirmed"].includes(x.status))) return res.status(409).json({ error: "already_on_crew" });
+      }
+      const problem = G.crewProblem(crew, creators, ev, next);
+      if (problem) return res.status(409).json({ error: problem });
     }
-    const youth = youthCheck(crew, creators, ev, { ...next, creator: c });
-    if (youth) return res.status(409).json({ error: youth });
     const updated = await run(sb.from("gfs_crew").update(patch).eq("id", row.id).select("*").single());
-    if (patch.status && patch.status !== row.status) await T.logActivity(actor(req), "gfs_crew_" + patch.status, ev.code, { role: updated.role, creator: c.code });
-    res.json({ crew: crewView(updated, c, req) });
+    if (patch.status && patch.status !== row.status) await T.logActivity(actor(req), "gfs_crew_" + patch.status, ev.code, { region: ev.region, role: updated.role, creator: c.code });
+    res.json({ crew: crewView(updated, c, req, ev) });
   } catch (e) {
     fail(res, e, "update_crew");
   }
@@ -803,37 +860,56 @@ router.post("/events/:id/roster", member, async (req, res) => {
     if (!parsed.ok) return res.status(400).json({ error: "roster_columns", problems: parsed.problems, dropped_columns: parsed.dropped });
     const existing = await rosterRows(sb, ev.id);
     const byRid = new Map(existing.map((r) => [r.roster_id, r]));
+    // A takedown logged at any event stands here too, even for an athlete
+    // this roster is only now adding (the database does the same as the row
+    // goes in).
+    const rids = parsed.rows.map((r) => r.roster_id);
+    const tds = rids.length ? await inChunks(rids, (chunk) => run(sb.from("gfs_takedowns").select("roster_id,received_at").in("roster_id", chunk))) : [];
+    const takedownAt = new Map();
+    for (const t of tds) if (!takedownAt.has(t.roster_id) || t.received_at < takedownAt.get(t.roster_id)) takedownAt.set(t.roster_id, t.received_at);
     let added = 0, updated = 0, unchanged = 0;
     const upserts = [];
+    const moved = []; // existing rows whose jersey or team changed
     for (const r of parsed.rows) {
       const row = { event_id: ev.id };
       for (const k of ROSTER_KEEP) row[k] = r[k];
       const prev = byRid.get(r.roster_id);
-      if (prev && prev.takedown_at) row.do_not_publish = true; // a takedown stands
+      row.takedown_at = (prev && prev.takedown_at) || takedownAt.get(r.roster_id) || null;
+      if (row.takedown_at) row.do_not_publish = true; // a takedown stands
       if (!prev) added++;
-      else if (ROSTER_KEEP.some((k) => (prev[k] ?? null) !== (row[k] ?? null))) updated++;
+      else if (ROSTER_KEEP.some((k) => (prev[k] ?? null) !== (row[k] ?? null)) || (row.takedown_at && !prev.takedown_at)) updated++;
       else { unchanged++; continue; }
+      if (prev && ((prev.jersey ?? null) !== (row.jersey ?? null) || prev.team !== row.team)) moved.push(prev.id);
       row.imported_at = now();
       upserts.push(row);
     }
+    const inFile = new Set(rids);
+    const missingFromFile = existing.filter((r) => !inFile.has(r.roster_id)).length;
     for (let i = 0; i < upserts.length; i += 500) await run(sb.from("gfs_roster").upsert(upserts.slice(i, i + 500), { onConflict: "event_id,roster_id" }));
     await run(sb.from("gfs_events").update({ roster_in_at: now() }).eq("id", ev.id));
+    const retag = await retagFor(sb, moved);
     const fresh = await rosterRows(sb, ev.id);
     const byId = new Map(fresh.map((r) => [r.id, r]));
     const holds = await refreshHolds(sb, ev, byId);
     const rematched = await rematch(sb, ev, fresh);
-    await T.logActivity(actor(req), "gfs_roster_loaded", ev.code, { rows: parsed.rows.length, added, updated });
+    await T.logActivity(actor(req), "gfs_roster_loaded", ev.code, { region: ev.region, rows: parsed.rows.length, added, updated, renumbered: moved.length });
     res.json({
       summary: {
         rows: parsed.rows.length,
         added,
         updated,
         unchanged,
+        // On file from an earlier load but not in this one: they keep the
+        // permissions they had (log a takedown if a family withdrew).
+        missing_from_file: missingFromFile,
         skipped: parsed.skipped.length,
         skipped_lines: parsed.skipped.slice(0, 20),
         dropped_columns: parsed.dropped,
         warnings: parsed.warnings,
         athletes: fresh.length,
+        renumbered: moved.length,
+        clips_back_to_review: retag.untagged,
+        clips_out_held: retag.held_out,
         do_not_publish: fresh.filter((r) => r.do_not_publish || r.takedown_at).length,
         no_capture: fresh.filter((r) => !r.consent_capture).length,
         under_13: fresh.filter((r) => G.under13(r)).length,
@@ -849,17 +925,18 @@ router.post("/events/:id/roster", member, async (req, res) => {
   }
 });
 
-// Unmatched clips get another try against the roster as it is now.
+// Unmatched clips get another try against the roster as it is now, except
+// the ones a director decided on (tag_source "manual").
 async function rematch(sb, ev, roster) {
   const index = G.rosterIndex(roster);
-  const clips = await all(() => sb.from("gfs_clips").select("*").eq("event_id", ev.id).eq("match", "unmatched"));
+  const clips = await all(() => sb.from("gfs_clips").select("*").eq("event_id", ev.id).eq("match", "unmatched").neq("tag_source", "manual"));
   let n = 0;
   const changes = [];
   for (const c of clips) {
-    const m = G.matchClip({ jersey: c.jersey, team: c.team, teamHint: c.team_hint, teams: teamsOfGame(c.game) }, index);
+    const m = G.matchClip({ jersey: c.jersey, team: c.team_given, teamHint: c.team_hint, teams: teamsOfGame(c.game) }, index);
     if (m.match === "matched") {
       const reason = G.holdReason(m.row);
-      changes.push([c.id, { match: "matched", why: null, roster_row: m.row.id, team: m.row.team, label: G.finalLabel(ev, m.row, c), held: !!reason, hold_reason: reason }]);
+      changes.push([c.id, { match: "matched", why: null, roster_row: m.row.id, team: m.row.team, label: G.finalLabel(ev, m.row, c), held: !!reason, hold_reason: reason, retag: false }]);
       n++;
     } else if (m.why !== c.why) {
       changes.push([c.id, { why: m.why }]);
@@ -952,21 +1029,26 @@ router.post("/events/:id/uploads", member, async (req, res) => {
     // Clips → tagged by jersey against the roster.
     const roster = await rosterRows(sb, ev.id);
     const index = G.rosterIndex(roster);
-    const known = new Set((await all(() => sb.from("gfs_clips").select("log_key").eq("event_id", ev.id))).map((c) => c.log_key));
+    const rosterTeams = new Set(roster.map((r) => G.norm(r.team)));
+    const known = new Set((await all(() => sb.from("gfs_clips").select("id,log_key").eq("event_id", ev.id))).map((c) => c.log_key));
     const fresh = new Map();
     let already = 0;
     const tally = { matched: 0, unmatched: 0, held: 0, why: {} };
     for (const c of parsed.clips) {
       const key = G.clipKey(ev.id, c);
       if (known.has(key) || fresh.has(key)) { already++; continue; }
-      const m = G.matchClip(c, index);
+      // A team folder counts only when it names one of the game's teams or a
+      // roster team; any other folder (an angle, a person) is dropped.
+      const hint = G.teamHintOf(c, rosterTeams);
+      const m = G.matchClip({ ...c, teamHint: hint }, index);
       const row = {
         event_id: ev.id,
         log_key: key,
         game: c.game ? String(c.game).slice(0, 160) : null,
         team: m.row ? m.row.team : c.team || null,
-        team_hint: c.teamHint ? G.clean(c.teamHint, 80) : null,
-        folder: c.folder ? String(c.folder).slice(0, 40) : null,
+        team_given: c.team || null,
+        team_hint: hint,
+        folder: c.folder || null,
         file: c.file,
         angle: c.angle,
         clip_no: c.clip_no,
@@ -974,10 +1056,12 @@ router.post("/events/:id/uploads", member, async (req, res) => {
         creator_id: findCreator(c.creator),
         roster_row: m.row ? m.row.id : null,
         match: m.match,
+        tag_source: "jersey",
         why: m.why || null,
         label: m.row ? G.finalLabel(ev, m.row, c) : null,
         held: false,
         hold_reason: null,
+        retag: false,
         stage: "shot",
         uploaded_at: c.uploaded_at,
         logged_by: actor(req),
@@ -996,7 +1080,7 @@ router.post("/events/:id/uploads", member, async (req, res) => {
     }
     const rows = [...fresh.values()];
     for (let i = 0; i < rows.length; i += 500) await run(sb.from("gfs_clips").insert(rows.slice(i, i + 500)));
-    await T.logActivity(actor(req), "gfs_uploads_loaded", ev.code, { clips: rows.length, games: ups.length });
+    await T.logActivity(actor(req), "gfs_uploads_loaded", ev.code, { region: ev.region, clips: rows.length, games: ups.length });
     res.json({
       summary: {
         games: { added: gamesAdded, updated: gamesUpdated },
@@ -1014,7 +1098,10 @@ router.post("/events/:id/uploads", member, async (req, res) => {
 });
 
 // ── Clips ────────────────────────────────────────────────────────────────
+// Viewers see that a clip is held, never why (a takedown is a family's
+// private business), and never an athlete's roster ID.
 function clipView(c, row, req) {
+  const member = atLeast(req, "member");
   return {
     id: c.id,
     file: c.file,
@@ -1026,16 +1113,19 @@ function clipView(c, row, req) {
     clip_no: c.clip_no,
     jersey: c.jersey,
     match: c.match,
+    tag_source: c.tag_source || "jersey",
     why: c.why || null,
     label: c.label || null,
     held: !!c.held,
-    hold_reason: c.hold_reason || null,
+    hold_reason: member ? c.hold_reason || null : null,
+    pull_reason: member ? c.pull_reason || null : null,
     stage: c.stage,
     delivered: !!c.delivered_at,
     listed: !!c.listed_at && !c.removed_at,
     removed: !!c.removed_at,
+    out: G.isOut(c),
     visibility: c.visibility || null,
-    athlete: row ? { roster_row: row.id, team: row.team, jersey: row.jersey, position: row.position || null, roster_id: atLeast(req, "member") ? row.roster_id : null } : null,
+    athlete: row ? { roster_row: row.id, team: row.team, jersey: row.jersey, position: row.position || null, roster_id: member ? row.roster_id : null } : null,
   };
 }
 
@@ -1050,27 +1140,30 @@ router.get("/events/:id/clips", viewer, async (req, res) => {
     const base = () => {
       let q = sb.from("gfs_clips").select("*").eq("event_id", ev.id);
       if (view === "unmatched") q = q.eq("match", "unmatched");
-      else if (view === "held" || view === "out") q = q.eq("held", true);
+      else if (view === "held") q = q.eq("held", true);
       else if (view === "matched") q = q.eq("match", "matched");
       else if (view === "not_a_player") q = q.eq("match", "not_a_player");
+      else if (view === "out") q = q.eq("match", "matched");
       if (req.query.team) q = q.eq("team", G.clean(req.query.team, 80));
       return q.order("created_at", { ascending: true });
     };
-    // "out": held clips that reached a family or SportsClippers and still
-    // need taking down (a short list, so it's filtered here).
+    // "out": clips that reached a family or SportsClippers and now have to
+    // come down (held, or listed without sale consent) or go family-only (a
+    // short list, so it's filtered here).
     const clips = view === "out"
-      ? (await all(base)).filter((c) => (c.listed_at || c.delivered_at) && !c.removed_at).slice(offset, offset + limit)
+      ? (await all(base)).filter((c) => G.isOut(c) && (c.held || c.pull_reason)).slice(offset, offset + limit)
       : await run(base().range(offset, offset + limit - 1));
     const roster = await rosterRows(sb, ev.id);
     const byId = new Map(roster.map((r) => [r.id, r]));
     const showSuggestions = atLeast(req, "member") && view === "unmatched";
     const teams = [...new Set(roster.map((r) => r.team))].sort();
+    const onRoster = new Set(roster.map((r) => G.norm(r.team)));
     res.json({
       event: eventView(ev, req),
       counts: (await eventCounts(sb, [ev.id])).get(ev.id),
       clips: clips.map((c) => {
-        const hint = c.team_hint && roster.some((r) => G.norm(r.team) === G.norm(c.team_hint)) ? c.team_hint : null;
-        return { ...clipView(c, byId.get(c.roster_row), req), suggestions: showSuggestions ? G.suggestions({ jersey: c.jersey, team: c.team || hint, teams: teamsOfGame(c.game) }, roster) : undefined };
+        const hint = c.team_hint && onRoster.has(G.norm(c.team_hint)) ? c.team_hint : null;
+        return { ...clipView(c, byId.get(c.roster_row), req), suggestions: showSuggestions ? G.suggestions({ jersey: c.jersey, team: c.team_given || hint, teams: teamsOfGame(c.game) }, roster) : undefined };
       }),
       teams: atLeast(req, "member") ? teams.map((t) => ({ team: t, jerseys: roster.filter((r) => r.team === t && r.jersey != null).map((r) => ({ roster_row: r.id, jersey: r.jersey, position: r.position || null })).sort((a, b) => Number(a.jersey) - Number(b.jersey)) })) : [],
       tags_approved_at: ev.tags_approved_at || null,
@@ -1090,19 +1183,24 @@ router.patch("/events/:id/clips/:clipId", member, async (req, res) => {
     if (!UUID.test(String(req.params.clipId))) return res.status(404).json({ error: "not_found" });
     const c = await run(sb.from("gfs_clips").select("*").eq("id", req.params.clipId).eq("event_id", ev.id).maybeSingle());
     if (!c) return res.status(404).json({ error: "not_found" });
-    if ((c.delivered_at || c.listed_at) && !c.removed_at) return res.status(409).json({ error: "gfs_clip_already_out", hint: "This clip has reached families or SportsClippers. Log a takedown instead." });
+    if (G.isOut(c)) return res.status(409).json({ error: "gfs_clip_already_out", hint: "This clip has reached families or SportsClippers. Take it down first, then tag it again." });
     const b = req.body || {};
+    // A director's call: re-matching leaves it alone from here on. The file's
+    // own jersey number stays as filed. A clip that was taken down starts
+    // over (it can go out again once it's approved again).
+    const fresh = c.removed_at ? { delivered_at: null, family_export_at: null, listed_at: null, exported_at: null, export_visibility: null, visibility: null, removed_at: null } : {};
+    const reset = { ...fresh, stage: "shot", tag_source: "manual", retag: false, pull_reason: null };
     let patch;
     if (b.not_a_player === true) {
-      patch = { match: "not_a_player", why: null, roster_row: null, label: null, stage: "shot", held: false, hold_reason: null };
+      patch = { ...reset, match: "not_a_player", why: null, roster_row: null, label: null, team: c.team_given || null, held: false, hold_reason: null };
     } else if (b.untag === true) {
-      patch = { match: "unmatched", why: c.jersey ? "not_on_roster" : "no_number", roster_row: null, label: null, stage: "shot", held: false, hold_reason: null };
+      patch = { ...reset, match: "unmatched", why: "untagged", roster_row: null, label: null, team: c.team_given || null, held: false, hold_reason: null };
     } else if (UUID.test(String(b.roster_row || ""))) {
       const row = await run(sb.from("gfs_roster").select("*").eq("id", b.roster_row).eq("event_id", ev.id).maybeSingle());
       if (!row) return res.status(400).json({ error: "not_on_this_roster" });
       if (row.jersey == null) return res.status(400).json({ error: "athlete_has_no_jersey" });
       const reason = G.holdReason(row);
-      patch = { match: "matched", why: null, roster_row: row.id, team: row.team, jersey: row.jersey, label: G.finalLabel(ev, row, c), stage: "shot", held: !!reason, hold_reason: reason };
+      patch = { ...reset, match: "matched", why: null, roster_row: row.id, team: row.team, label: G.finalLabel(ev, row, c), held: !!reason, hold_reason: reason };
     } else {
       return res.status(400).json({ error: "tag_required", hint: "Send roster_row, or not_a_player: true." });
     }
@@ -1133,7 +1231,7 @@ router.post("/events/:id/tags/approve", member, async (req, res) => {
     await run(sb.from("gfs_events").update({ tags_approved_at: now(), tags_approved_by: actor(req) }).eq("id", ev.id));
     await markDeliverable(sb, ev, "tagging", 1);
     const counts = (await eventCounts(sb, [ev.id])).get(ev.id);
-    await T.logActivity(actor(req), "gfs_tags_approved", ev.code, { tagged: ready.length, unmatched: counts.unmatched });
+    await T.logActivity(actor(req), "gfs_tags_approved", ev.code, { region: ev.region, tagged: ready.length, unmatched: counts.unmatched });
     res.json({ tagged: ready.length, counts });
   } catch (e) {
     fail(res, e, "approve_tags");
@@ -1151,7 +1249,7 @@ router.post("/events/:id/clips/edited", member, async (req, res) => {
     if (!ev) return;
     const ids = (await all(() => teamFilter(sb.from("gfs_clips").select("id").eq("event_id", ev.id).eq("stage", "tagged"), req))).map((c) => c.id);
     await inChunks(ids, (chunk) => run(sb.from("gfs_clips").update({ stage: "edited" }).in("id", chunk).eq("stage", "tagged")));
-    await T.logActivity(actor(req), "gfs_clips_edited", ev.code, { clips: ids.length });
+    await T.logActivity(actor(req), "gfs_clips_edited", ev.code, { region: ev.region, clips: ids.length });
     res.json({ edited: ids.length });
   } catch (e) {
     fail(res, e, "mark_edited");
@@ -1166,7 +1264,7 @@ router.post("/events/:id/clips/approve", approver, async (req, res) => {
     const ids = (await all(() => teamFilter(sb.from("gfs_clips").select("id").eq("event_id", ev.id).eq("stage", "edited").eq("held", false), req))).map((c) => c.id);
     const at = now();
     await inChunks(ids, (chunk) => run(sb.from("gfs_clips").update({ stage: "approved", approved_by: actor(req), approved_at: at }).in("id", chunk).eq("stage", "edited").eq("held", false)));
-    await T.logActivity(actor(req), "gfs_clips_approved", ev.code, { clips: ids.length });
+    await T.logActivity(actor(req), "gfs_clips_approved", ev.code, { region: ev.region, clips: ids.length });
     res.json({ approved: ids.length });
   } catch (e) {
     fail(res, e, "approve_clips");
@@ -1181,16 +1279,20 @@ async function outgoing(sb, ev) {
   return clips.filter((c) => !c.removed_at && !G.holdReason(byId.get(c.roster_row))).map((c) => ({ c, row: byId.get(c.roster_row) }));
 }
 
+// Marked sent only for clips that went out in a family-links file: what the
+// app records is what was actually handed over.
 router.post("/events/:id/clips/delivered", member, async (req, res) => {
   const sb = getSupabase();
   try {
     const ev = await loadEvent(sb, req, res);
     if (!ev) return;
-    const list = (await outgoing(sb, ev)).filter((x) => !x.c.delivered_at);
+    const ready = (await outgoing(sb, ev)).filter((x) => !x.c.delivered_at);
+    const list = ready.filter((x) => x.c.family_export_at);
     const at = now();
     await inChunks(list.map((x) => x.c.id), (chunk) => run(sb.from("gfs_clips").update({ delivered_at: at }).in("id", chunk).is("delivered_at", null)));
-    await T.logActivity(actor(req), "gfs_clips_delivered", ev.code, { clips: list.length, athletes: new Set(list.map((x) => x.row.id)).size });
-    res.json({ delivered: list.length, athletes: new Set(list.map((x) => x.row.id)).size });
+    const athletes = new Set(list.map((x) => x.row.id)).size;
+    await T.logActivity(actor(req), "gfs_clips_delivered", ev.code, { region: ev.region, clips: list.length, athletes });
+    res.json({ delivered: list.length, athletes, not_exported: ready.length - list.length });
   } catch (e) {
     fail(res, e, "mark_delivered");
   }
@@ -1210,7 +1312,11 @@ router.get("/events/:id/families.csv", member, async (req, res) => {
       by.set(row.id, x);
     }
     const rows = [...by.values()].map((x) => ({ ...x, event: ev.code, visibility: "family", labels: x.labels.join(" ") }));
-    await T.logActivity(actor(req), "gfs_families_exported", ev.code, { athletes: rows.length });
+    // These clips are now in a file; "Mark sent" covers exactly these.
+    const stamp = list.filter((x) => !x.c.family_export_at).map((x) => x.c.id);
+    const at = now();
+    await inChunks(stamp, (chunk) => run(sb.from("gfs_clips").update({ family_export_at: at }).in("id", chunk).is("family_export_at", null)));
+    await T.logActivity(actor(req), "gfs_families_exported", ev.code, { region: ev.region, athletes: rows.length });
     res.setHeader("Content-Type", "text/csv; charset=utf-8");
     res.setHeader("Content-Disposition", `attachment; filename="${ev.code}-family-links.csv"`);
     res.setHeader("Cache-Control", "no-store");
@@ -1232,6 +1338,13 @@ router.get("/events/:id/listings.csv", approver, async (req, res) => {
     const ev = await loadEvent(sb, req, res);
     if (!ev) return;
     const list = await listable(sb, ev, req.query.all === "1");
+    // Record what went out and how it was listed, so "Mark listed" marks
+    // exactly these, at the visibility the file gave SportsClippers.
+    const at = now();
+    for (const vis of ["family", "public"]) {
+      const ids = list.filter(({ c, row }) => !c.listed_at && G.visibilityFor(row) === vis).map(({ c }) => c.id);
+      await inChunks(ids, (chunk) => run(sb.from("gfs_clips").update({ exported_at: at, export_visibility: vis }).in("id", chunk).is("listed_at", null)));
+    }
     const rows = list.map(({ c, row }) => ({
       label: c.label,
       file: c.file,
@@ -1251,7 +1364,7 @@ router.get("/events/:id/listings.csv", approver, async (req, res) => {
       under_13: G.under13(row) ? "yes" : "no",
       price_cents: ev.clip_price_cents,
     }));
-    await T.logActivity(actor(req), "gfs_listings_exported", ev.code, { clips: rows.length });
+    await T.logActivity(actor(req), "gfs_listings_exported", ev.code, { region: ev.region, clips: rows.length });
     res.setHeader("Content-Type", "text/csv; charset=utf-8");
     res.setHeader("Content-Disposition", `attachment; filename="${ev.code}-sportsclippers.csv"`);
     res.setHeader("Cache-Control", "no-store");
@@ -1261,6 +1374,10 @@ router.get("/events/:id/listings.csv", approver, async (req, res) => {
   }
 });
 
+// Marked listed only for clips in a SportsClippers file, at the visibility
+// that file gave. A clip exported as public whose guardian has since turned
+// public display off isn't marked: export again, so the listing goes up
+// family-only.
 router.post("/events/:id/clips/listed", approver, async (req, res) => {
   const sb = getSupabase();
   try {
@@ -1271,17 +1388,43 @@ router.post("/events/:id/clips/listed", approver, async (req, res) => {
       const want = new Set(req.body.ids.map(String));
       list = list.filter((x) => want.has(x.c.id));
     }
+    const exported = list.filter((x) => x.c.exported_at);
+    const changed = exported.filter((x) => x.c.export_visibility === "public" && G.visibilityFor(x.row) !== "public");
+    const ok = exported.filter((x) => !changed.includes(x));
     const at = now();
     const tally = { family: 0, public: 0 };
     for (const vis of ["family", "public"]) {
-      const ids = list.filter((x) => G.visibilityFor(x.row) === vis).map((x) => x.c.id);
+      const ids = ok.filter((x) => (x.c.export_visibility || "family") === vis).map((x) => x.c.id);
       tally[vis] = ids.length;
       await inChunks(ids, (chunk) => run(sb.from("gfs_clips").update({ listed_at: at, visibility: vis }).in("id", chunk).is("listed_at", null)));
     }
-    await T.logActivity(actor(req), "gfs_clips_listed", ev.code, tally);
-    res.json({ listed: tally.family + tally.public, ...tally });
+    await T.logActivity(actor(req), "gfs_clips_listed", ev.code, { region: ev.region, ...tally });
+    res.json({ listed: tally.family + tally.public, ...tally, not_exported: list.length - exported.length, changed_since_export: changed.length });
   } catch (e) {
     fail(res, e, "mark_listed");
+  }
+});
+
+// Public listings the roster no longer allows as public (the guardian turned
+// public display off, or the athlete turned out to be under 13): once they're
+// family-only on SportsClippers, mark them here.
+router.post("/events/:id/clips/family-only", approver, async (req, res) => {
+  const sb = getSupabase();
+  try {
+    const ev = await loadEvent(sb, req, res);
+    if (!ev) return;
+    const want = Array.isArray(req.body && req.body.ids) ? new Set(req.body.ids.map(String)) : null;
+    const roster = new Map((await rosterRows(sb, ev.id)).map((r) => [r.id, r]));
+    const clips = await all(() => sb.from("gfs_clips").select("*").eq("event_id", ev.id).eq("visibility", "public").is("removed_at", null));
+    const ids = clips
+      .filter((c) => c.listed_at && !c.held && (!want || want.has(c.id)))
+      .filter((c) => G.pullReason(c, roster.get(c.roster_row)) === "not_public")
+      .map((c) => c.id);
+    await inChunks(ids, (chunk) => run(sb.from("gfs_clips").update({ visibility: "family", export_visibility: "family", pull_reason: null }).in("id", chunk)));
+    await T.logActivity(actor(req), "gfs_clips_family_only", ev.code, { region: ev.region, clips: ids.length });
+    res.json({ family_only: ids.length });
+  } catch (e) {
+    fail(res, e, "family_only");
   }
 });
 
@@ -1294,14 +1437,47 @@ router.post("/events/:id/clips/removed", member, async (req, res) => {
     if (!ids.length) return res.status(400).json({ error: "ids_required" });
     const at = now();
     const rows = await inChunks(ids, (chunk) => run(sb.from("gfs_clips").select("id,listed_at,delivered_at,removed_at").eq("event_id", ev.id).in("id", chunk)));
-    const out = rows.filter((c) => (c.listed_at || c.delivered_at) && !c.removed_at).map((c) => c.id);
-    await inChunks(out, (chunk) => run(sb.from("gfs_clips").update({ removed_at: at }).in("id", chunk).is("removed_at", null)));
-    await T.logActivity(actor(req), "gfs_clips_removed", ev.code, { clips: out.length });
+    const out = rows.filter((c) => G.isOut(c)).map((c) => c.id);
+    await inChunks(out, (chunk) => run(sb.from("gfs_clips").update({ removed_at: at, pull_reason: null }).in("id", chunk).is("removed_at", null)));
+    await T.logActivity(actor(req), "gfs_clips_removed", ev.code, { region: ev.region, clips: out.length });
     res.json({ removed: out.length });
   } catch (e) {
     fail(res, e, "mark_removed");
   }
 });
+
+// Who can't appear in anything that posts on Pylon's channels: on hold
+// (takedown, do-not-publish, no capture consent) or without marketing
+// consent. By team and jersey; an approver checks the pieces against it
+// before clearing them.
+router.get("/events/:id/keep-out", member, async (req, res) => {
+  const sb = getSupabase();
+  try {
+    const ev = await loadEvent(sb, req, res);
+    if (!ev) return;
+    res.json(keepOut(await rosterRows(sb, ev.id)));
+  } catch (e) {
+    fail(res, e, "keep_out");
+  }
+});
+function keepOut(roster) {
+  const teams = new Map();
+  let total = 0, noJersey = 0;
+  for (const r of roster) {
+    const why = G.featureBlock(r);
+    if (!why) continue;
+    total++;
+    if (r.jersey == null) noJersey++;
+    if (!teams.has(r.team)) teams.set(r.team, []);
+    teams.get(r.team).push({ roster_row: r.id, jersey: r.jersey, position: r.position || null, why });
+  }
+  return {
+    total,
+    no_jersey: noJersey,
+    athletes: roster.length,
+    teams: [...teams.entries()].sort((a, b) => a[0].localeCompare(b[0])).map(([team, list]) => ({ team, athletes: list.sort((a, b) => Number(a.jersey ?? 999) - Number(b.jersey ?? 999)) })),
+  };
+}
 
 // ── Deliverables ─────────────────────────────────────────────────────────
 async function loadDeliverable(sb, ev, req, res) {
@@ -1381,7 +1557,7 @@ router.post("/events/:id/deliverables/:did/submit", member, async (req, res) => 
     const blocks = await consentBlocks(sb, ev, d.featured);
     if (blocks.length) return res.status(409).json({ error: "gfs_featured_consent", blocks });
     const updated = await run(sb.from("gfs_deliverables").update({ status: "submitted", submitted_by: actor(req), submitted_at: now() }).eq("id", d.id).select("*").single());
-    await T.logActivity(actor(req), "gfs_submitted", ev.code, { kind: d.kind, day: d.day || undefined, pieces: d.delivered - d.approved_count });
+    await T.logActivity(actor(req), "gfs_submitted", ev.code, { region: ev.region, kind: d.kind, day: d.day || undefined, pieces: d.delivered - d.approved_count });
     notify(regionEmails(ev.region, "approver"), { title: `${info.name} is waiting for approval`, body: `${ev.name} · ${d.delivered - d.approved_count} to clear for Pylon's channels`, url: `/app/#gfs-deliver/${ev.id}`, tag: `gfs-approve-${d.id}` });
     res.json({ deliverable: deliverableView(updated, ev) });
   } catch (e) {
@@ -1397,11 +1573,15 @@ router.post("/events/:id/deliverables/:did/approve", approver, async (req, res) 
     const d = await loadDeliverable(sb, ev, req, res);
     if (!d) return;
     if (d.status !== "submitted") return res.status(409).json({ error: "not_submitted" });
+    // Recaps, montages, stills and cut-downs show athletes nobody names: the
+    // approver checks them against the event's keep-out list and says so.
+    if (!req.body || req.body.attest !== true) return res.status(409).json({ error: "attest_required", hint: "Check the pieces against the keep-out list first, then confirm that no one on it appears." });
     const blocks = await consentBlocks(sb, ev, d.featured);
     if (blocks.length) return res.status(409).json({ error: "gfs_featured_consent", blocks });
-    const updated = await run(sb.from("gfs_deliverables").update({ status: "approved", decided_by: actor(req), decided_at: now(), approved_count: d.delivered, note: null }).eq("id", d.id).select("*").single());
+    const at = now();
+    const updated = await run(sb.from("gfs_deliverables").update({ status: "approved", decided_by: actor(req), decided_at: at, attested_by: actor(req), attested_at: at, approved_count: d.delivered, note: null }).eq("id", d.id).select("*").single());
     const info = G.deliverableInfo(d.kind);
-    await T.logActivity(actor(req), "gfs_approved", ev.code, { kind: d.kind, day: d.day || undefined, pieces: d.delivered - d.approved_count });
+    await T.logActivity(actor(req), "gfs_approved", ev.code, { region: ev.region, kind: d.kind, day: d.day || undefined, pieces: d.delivered - d.approved_count, attested: true });
     if (d.submitted_by && d.submitted_by !== actor(req)) notify([d.submitted_by], { title: `${info.name} is approved`, body: `${ev.name} · cleared for Pylon's channels`, url: `/app/#gfs-deliver/${ev.id}`, tag: `gfs-approve-${d.id}` });
     res.json({ deliverable: deliverableView(updated, ev) });
   } catch (e) {
@@ -1421,7 +1601,7 @@ router.post("/events/:id/deliverables/:did/changes", approver, async (req, res) 
     if (!note) return res.status(400).json({ error: "note_required", hint: "Say what needs to change." });
     const updated = await run(sb.from("gfs_deliverables").update({ status: "changes", decided_by: actor(req), decided_at: now(), note }).eq("id", d.id).select("*").single());
     const info = G.deliverableInfo(d.kind);
-    await T.logActivity(actor(req), "gfs_changes_asked", ev.code, { kind: d.kind, day: d.day || undefined });
+    await T.logActivity(actor(req), "gfs_changes_asked", ev.code, { region: ev.region, kind: d.kind, day: d.day || undefined });
     if (d.submitted_by && d.submitted_by !== actor(req)) notify([d.submitted_by], { title: `${info.name} needs changes`, body: `${ev.name} · open it for the approver's note`, url: `/app/#gfs-deliver/${ev.id}`, tag: `gfs-approve-${d.id}` });
     res.json({ deliverable: deliverableView(updated, ev) });
   } catch (e) {
@@ -1447,7 +1627,7 @@ router.post("/events/:id/deliverables/:did/done", member, async (req, res) => {
       if (blocks.length) return res.status(409).json({ error: "gfs_featured_consent", blocks });
     }
     const updated = await run(sb.from("gfs_deliverables").update({ status: "done" }).eq("id", d.id).select("*").single());
-    await T.logActivity(actor(req), "gfs_delivered", ev.code, { kind: d.kind });
+    await T.logActivity(actor(req), "gfs_delivered", ev.code, { region: ev.region, kind: d.kind });
     res.json({ deliverable: deliverableView(updated, ev) });
   } catch (e) {
     fail(res, e, "done_deliverable");
@@ -1517,7 +1697,25 @@ function readCreator(b, req, prev) {
   const tier = out.tier || (prev && prev.tier) || "adult";
   const lead = out.lead_scout !== undefined ? out.lead_scout : prev && prev.lead_scout;
   if (tier === "youth" && lead) errors.push("youth_lead_scout");
+  if (prev && !req.team.owner) {
+    // Once screening is on file it belongs to a person: a director can't
+    // point the record at someone else.
+    if (G.screeningOnFile(prev) && ((out.name !== undefined && out.name !== prev.name) || (out.email !== undefined && (out.email || null) !== (prev.email || null)))) errors.push("identity_owner_only");
+    // Pausing is anyone's call; putting someone back to work is Kyron's.
+    if (out.status === "active" && prev.status !== "active") errors.push("reactivate_owner_only");
+  }
   return { out, errors };
+}
+const OWNER_ONLY = {
+  credentials_owner_only: "Kyron records contracts, background checks and training.",
+  identity_owner_only: "This creator's screening is on file, so Kyron changes their name or email.",
+  reactivate_owner_only: "Kyron puts a paused or inactive creator back to work.",
+};
+function ownerOnly(res, errors) {
+  const code = Object.keys(OWNER_ONLY).find((k) => errors.includes(k));
+  if (!code) return false;
+  res.status(403).json({ error: code, hint: OWNER_ONLY[code] });
+  return true;
 }
 async function uniqueCreatorCode(sb) {
   for (let i = 0; i < 20; i++) {
@@ -1528,17 +1726,27 @@ async function uniqueCreatorCode(sb) {
   throw new Error("no_code");
 }
 
+// The quarter an event counts in is the quarter it ended in: uploads loaded
+// late, and family ratings typed in weeks later from SportsClippers'
+// statements, still count for the event's quarter.
 async function scorecards(sb, creatorIds, quarter) {
   if (!creatorIds.length) return new Map();
-  const uploads = await inChunks(creatorIds, (chunk) => all(() => sb.from("gfs_uploads").select("event_id,game,angle,creator_id,final_whistle_at,uploaded_at,usable,created_at").in("creator_id", chunk).gte("created_at", quarter.from).lt("created_at", quarter.to)), 50);
-  const eventIds = [...new Set(uploads.map((u) => u.event_id))];
-  const allGameUploads = eventIds.length ? await inChunks(eventIds, (chunk) => all(() => sb.from("gfs_uploads").select("event_id,game,angle").in("event_id", chunk))) : [];
-  const angles = G.angleMap(allGameUploads);
-  // Ratings are entered after an event, from SportsClippers' statements.
-  const ratings = await inChunks(creatorIds, (chunk) => all(() => sb.from("gfs_crew").select("creator_id,family_rating,rating_count,updated_at").in("creator_id", chunk).gte("updated_at", quarter.from).lt("updated_at", quarter.to)), 50);
+  const events = await all(() => sb.from("gfs_events").select("id,ends_on").gte("ends_on", quarter.from).lt("ends_on", quarter.to));
+  const eventIds = events.map((e) => e.id);
+  const mine = new Set(creatorIds);
+  const gameUploads = eventIds.length ? await inChunks(eventIds, (chunk) => all(() => sb.from("gfs_uploads").select("id,event_id,game,angle,creator_id,final_whistle_at,uploaded_at,usable").in("event_id", chunk)), 50) : [];
+  const angles = G.angleMap(gameUploads);
+  const uploads = gameUploads.filter((u) => mine.has(u.creator_id));
+  const ratings = eventIds.length ? (await inChunks(eventIds, (chunk) => all(() => sb.from("gfs_crew").select("id,event_id,creator_id,family_rating,rating_count").in("event_id", chunk)), 50)).filter((r) => mine.has(r.creator_id)) : [];
   const out = new Map();
   for (const id of creatorIds) out.set(id, G.scorecard(uploads.filter((u) => u.creator_id === id), ratings.filter((r) => r.creator_id === id), angles));
   return out;
+}
+// ?quarter=previous, ?on=YYYY-MM-DD (the quarter holding that day), or now.
+function quarterFor(req) {
+  if (G.isDate(req.query.on)) return G.quarterOf(new Date(req.query.on + "T12:00:00Z"));
+  const q = G.quarterOf();
+  return req.query.quarter === "previous" ? G.quarterOf(new Date(Date.parse(q.from + "T00:00:00Z") - 86400000)) : q;
 }
 
 router.get("/creators", viewer, async (req, res) => {
@@ -1548,9 +1756,9 @@ router.get("/creators", viewer, async (req, res) => {
     const regions = regionFilter(req, res);
     if (!regions) return;
     const pool = regions.length ? await all(() => sb.from("gfs_creators").select("*").in("region", regions).order("name", { ascending: true })) : [];
-    const quarter = G.quarterOf();
+    const quarter = quarterFor(req);
     const cards = await scorecards(sb, pool.map((c) => c.id), quarter);
-    res.json({ quarter, standard: G.STANDARD, creators: pool.map((c) => ({ ...creatorView(c, req), scorecard: cards.get(c.id) })) });
+    res.json({ quarter, standard: G.STANDARD, creators: pool.map((c) => ({ ...creatorView(c, req), scorecard: cards.get(c.id), identity_locked: G.screeningOnFile(c) && !isOwner(req) })) });
   } catch (e) {
     fail(res, e, "list_creators");
   }
@@ -1560,7 +1768,7 @@ router.post("/creators", member, async (req, res) => {
   const sb = getSupabase();
   if (!sb) return sb503(res);
   const { out, errors } = readCreator(req.body || {}, req, null);
-  if (errors.includes("credentials_owner_only")) return res.status(403).json({ error: "credentials_owner_only", hint: "Kyron records contracts, background checks and training." });
+  if (ownerOnly(res, errors)) return;
   if (errors.length) return res.status(400).json({ error: "invalid_creator", fields: errors });
   try {
     const row = await run(
@@ -1585,12 +1793,20 @@ router.patch("/creators/:id", member, async (req, res) => {
     const prev = await run(sb.from("gfs_creators").select("*").eq("id", req.params.id).maybeSingle());
     if (!prev || !G.canSee(req.team, prev.region)) return res.status(404).json({ error: "not_found" });
     const { out, errors } = readCreator(req.body || {}, req, prev);
-    if (errors.includes("credentials_owner_only")) return res.status(403).json({ error: "credentials_owner_only", hint: "Kyron records contracts, background checks and training." });
+    if (ownerOnly(res, errors)) return;
     if (errors.length) return res.status(400).json({ error: "invalid_creator", fields: errors });
     if (!Object.keys(out).length) return res.json({ creator: creatorView(prev, req) });
+    // A youth creator's roles are limited, and an adult may be the one a youth
+    // creator works alongside: the tier doesn't change mid-crew.
+    if (out.tier !== undefined && out.tier !== prev.tier) {
+      const rows = await run(sb.from("gfs_crew").select("id,event_id,status").eq("creator_id", prev.id).in("status", ["invited", "confirmed"]));
+      const evIds = [...new Set(rows.map((r) => r.event_id))];
+      const upcoming = evIds.length ? (await run(sb.from("gfs_events").select("id,ends_on").in("id", evIds))).filter((e) => e.ends_on >= today()) : [];
+      if (upcoming.length) return res.status(409).json({ error: "gfs_creator_on_crew", events: upcoming.length, hint: "Take them off their upcoming crews first." });
+    }
     out.updated_at = now();
     const row = await run(sb.from("gfs_creators").update(out).eq("id", prev.id).select("*").single());
-    await T.logActivity(actor(req), "gfs_creator_changed", row.code, { fields: Object.keys(out).filter((k) => k !== "updated_at") });
+    await T.logActivity(actor(req), "gfs_creator_changed", row.code, { region: row.region, fields: Object.keys(out).filter((k) => k !== "updated_at") });
     res.json({ creator: creatorView(row, req) });
   } catch (e) {
     fail(res, e, "update_creator");
@@ -1603,8 +1819,7 @@ router.get("/scorecards", viewer, async (req, res) => {
   try {
     const regions = regionFilter(req, res);
     if (!regions) return;
-    let quarter = G.quarterOf();
-    if (req.query.quarter === "previous") quarter = G.quarterOf(new Date(Date.parse(quarter.from + "T00:00:00Z") - 86400000));
+    const quarter = quarterFor(req);
     const pool = regions.length ? await all(() => sb.from("gfs_creators").select("*").in("region", regions).eq("status", "active").order("name", { ascending: true })) : [];
     const cards = await scorecards(sb, pool.map((c) => c.id), quarter);
     const people = pool.map((c) => ({ id: c.id, name: c.name, code: c.code, region: c.region, home_city: c.home_city || null, tier: c.tier, badges: G.credentialBadges(c), scorecard: cards.get(c.id) }));
@@ -1623,42 +1838,89 @@ router.get("/scorecards", viewer, async (req, res) => {
 });
 
 // ── Takedowns ────────────────────────────────────────────────────────────
-function takedownView(t, events, outByRid) {
+// A takedown follows the athlete (one Sports Thread ID at every event), so who
+// sees it, and whose clips it reaches, comes from every event the athlete is
+// on: the region it was logged in, plus the regions of those events now.
+function takedownView(t, events, outClips, req, regions) {
   const ev = events.get(t.event_id);
+  const member = !req || atLeast(req, "member");
   const steps = [
     { key: "pylon", label: "Off Pylon's channels", due_at: t.pylon_due_at, done_at: t.pylon_done_at || null },
     { key: "other", label: "Off every other surface, SportsClippers included", due_at: t.other_due_at, done_at: t.other_done_at || null },
     { key: "offsite", label: "Removal asked of accounts Pylon doesn't run", due_at: t.offsite_due_at, done_at: t.offsite_requested_at || null },
   ];
   const open = steps.filter((s) => !s.done_at);
+  const out = outClips ? outClips.get(t.roster_id) || [] : [];
+  const mine = req ? new Set(G.regionsOf(req.team)) : null;
   return {
     id: t.id,
     number: t.number || null,
     event: ev ? { id: ev.id, code: ev.code, name: ev.name } : null,
     region: t.region,
+    regions: regions ? [...regions].sort() : [t.region],
     team: t.team || null,
-    reason: t.reason,
-    reason_name: (G.TAKEDOWN[t.reason] || {}).label || t.reason,
+    // Why a family asked is theirs: viewers see that there's a takedown, not
+    // the reason or the note.
+    reason: member ? t.reason : null,
+    reason_name: member ? (G.TAKEDOWN[t.reason] || {}).label || t.reason : null,
     received_at: t.received_at,
     status: t.status,
     steps,
     next_due_at: open.length ? open.map((s) => s.due_at).sort()[0] : null,
     overdue: open.some((s) => new Date(s.due_at).getTime() < Date.now()),
-    clips_out: outByRid ? outByRid.get(t.roster_id) || 0 : 0,
-    note: t.note || null,
+    clips_out: out.length,
+    clips_out_yours: mine ? out.filter((c) => mine.has((events.get(c.event_id) || {}).region)).length : out.length,
+    note: member ? t.note || null : null,
   };
 }
-async function clipsOut(sb, rosterIds) {
+// The athlete's clips that are still out (a family link or a listing, not
+// taken down), at every event: roster ID → [{ id, event_id }].
+async function outClipsFor(sb, rosterIds) {
   const out = new Map();
   if (!rosterIds.length) return out;
-  const rows = await inChunks(rosterIds, (chunk) => run(sb.from("gfs_roster").select("id,roster_id").in("roster_id", chunk)));
+  const rows = await inChunks(rosterIds, (chunk) => all(() => sb.from("gfs_roster").select("id,roster_id").in("roster_id", chunk)));
   const rid = new Map(rows.map((r) => [r.id, r.roster_id]));
   const ids = rows.map((r) => r.id);
-  const clips = ids.length ? await inChunks(ids, (chunk) => all(() => sb.from("gfs_clips").select("id,roster_row,listed_at,delivered_at,removed_at").in("roster_row", chunk))) : [];
+  const clips = ids.length ? await inChunks(ids, (chunk) => all(() => sb.from("gfs_clips").select("id,event_id,roster_row,listed_at,delivered_at,removed_at").in("roster_row", chunk))) : [];
   for (const c of clips) {
-    if ((c.listed_at || c.delivered_at) && !c.removed_at) out.set(rid.get(c.roster_row), (out.get(rid.get(c.roster_row)) || 0) + 1);
+    if (!G.isOut(c)) continue;
+    const k = rid.get(c.roster_row);
+    if (!out.has(k)) out.set(k, []);
+    out.get(k).push({ id: c.id, event_id: c.event_id });
   }
   return out;
+}
+// For each takedown: the regions it reaches, and the events involved.
+async function takedownScope(sb, tds) {
+  const rids = [...new Set(tds.map((t) => t.roster_id))];
+  const rows = rids.length ? await inChunks(rids, (chunk) => all(() => sb.from("gfs_roster").select("id,roster_id,event_id").in("roster_id", chunk))) : [];
+  const evIds = [...new Set([...rows.map((r) => r.event_id), ...tds.map((t) => t.event_id).filter(Boolean)])];
+  const events = new Map((evIds.length ? await inChunks(evIds, (chunk) => run(sb.from("gfs_events").select("id,code,name,region").in("id", chunk))) : []).map((e) => [e.id, e]));
+  const byRid = new Map();
+  for (const r of rows) {
+    if (!byRid.has(r.roster_id)) byRid.set(r.roster_id, new Set());
+    const e = events.get(r.event_id);
+    if (e) byRid.get(r.roster_id).add(e.region);
+  }
+  const scope = new Map();
+  for (const t of tds) {
+    const set = new Set([t.region, ...(byRid.get(t.roster_id) || [])]);
+    const e = events.get(t.event_id);
+    if (e) set.add(e.region);
+    scope.set(t.id, set);
+  }
+  return { scope, events };
+}
+// Takedowns that reach any of these regions (all regions for owners and
+// approvers when none are given).
+async function visibleTakedowns(sb, req, { status = "open", regions = null } = {}) {
+  let q = sb.from("gfs_takedowns").select("*");
+  if (status !== "all") q = q.eq("status", status);
+  const tds = await run(q.order("received_at", { ascending: false }).limit(500));
+  const { scope, events } = await takedownScope(sb, tds);
+  const want = new Set(regions || G.regionsOf(req.team));
+  const list = tds.filter((t) => [...scope.get(t.id)].some((r) => want.has(r)));
+  return { list, scope, events };
 }
 
 router.get("/takedowns", viewer, async (req, res) => {
@@ -1668,14 +1930,10 @@ router.get("/takedowns", viewer, async (req, res) => {
     const regions = regionFilter(req, res);
     if (!regions) return;
     if (!regions.length) return res.json({ takedowns: [] });
-    let q = sb.from("gfs_takedowns").select("*").in("region", regions);
     const status = String(req.query.status || "open");
-    if (status !== "all") q = q.eq("status", status === "done" ? "done" : "open");
-    const rows = await run(q.order("received_at", { ascending: false }).limit(200));
-    const evIds = [...new Set(rows.map((t) => t.event_id).filter(Boolean))];
-    const events = new Map((evIds.length ? await run(sb.from("gfs_events").select("id,code,name").in("id", evIds)) : []).map((e) => [e.id, e]));
-    const out = await clipsOut(sb, [...new Set(rows.filter((t) => t.status === "open").map((t) => t.roster_id))]);
-    const list = rows.map((t) => takedownView(t, events, out));
+    const { list: rows, scope, events } = await visibleTakedowns(sb, req, { status: status === "all" ? "all" : status === "done" ? "done" : "open", regions });
+    const out = await outClipsFor(sb, [...new Set(rows.filter((t) => t.status === "open").map((t) => t.roster_id))]);
+    const list = rows.slice(0, 200).map((t) => takedownView(t, events, out, req, scope.get(t.id)));
     list.sort((a, b) => (a.status === b.status ? String(a.next_due_at || "~").localeCompare(String(b.next_due_at || "~")) : a.status === "open" ? -1 : 1));
     res.json({ takedowns: list, windows: G.TAKEDOWN });
   } catch (e) {
@@ -1713,17 +1971,21 @@ router.post("/takedowns", member, async (req, res) => {
     };
     const t = await run(sb.from("gfs_takedowns").insert(insert).select("*").single());
     // The athlete goes do-not-publish at every event (the database does this
-    // too, through migration 024's trigger).
+    // too, through migration 024's trigger; rosters loaded later pick it up).
     const rows = await run(sb.from("gfs_roster").select("*").eq("roster_id", row.roster_id));
     for (const r of rows) {
       await run(sb.from("gfs_roster").update({ takedown_at: r.takedown_at || received, do_not_publish: true }).eq("id", r.id));
       await run(sb.from("gfs_clips").update({ held: true, hold_reason: "takedown" }).eq("roster_row", r.id));
     }
-    const out = await clipsOut(sb, [row.roster_id]);
-    const view = takedownView(t, new Map([[ev.id, ev]]), out);
-    await T.logActivity(actor(req), "gfs_takedown_logged", ev.code, { number: t.number || undefined, reason: b.reason });
+    const { scope, events } = await takedownScope(sb, [t]);
+    events.set(ev.id, ev);
+    const reach = scope.get(t.id);
+    const out = await outClipsFor(sb, [row.roster_id]);
+    const view = takedownView(t, events, out, req, reach);
+    await T.logActivity(actor(req), "gfs_takedown_logged", ev.code, { region: ev.region, number: t.number || undefined });
     const w = G.TAKEDOWN[b.reason];
-    notify(regionEmails(ev.region, "member"), { title: `Takedown${t.number ? " #" + t.number : ""} · ${w.label}`, body: `${ev.name} · off Pylon's channels within ${w.pylon} hours, everywhere else within ${w.other}`, url: `/app/#gfs-desk`, tag: `gfs-takedown-${t.id}` });
+    // Everyone running an event this athlete is on hears about it.
+    notify(regionEmails([...reach], "member"), { title: `Takedown${t.number ? " #" + t.number : ""} · ${w.label}`, body: `${ev.name} · off Pylon's channels within ${w.pylon} hours, everywhere else within ${w.other}`, url: `/app/#gfs-desk`, tag: `gfs-takedown-${t.id}` });
     res.json({ takedown: view });
   } catch (e) {
     fail(res, e, "log_takedown");
@@ -1736,35 +1998,44 @@ router.patch("/takedowns/:id", member, async (req, res) => {
   try {
     if (!UUID.test(String(req.params.id))) return res.status(404).json({ error: "not_found" });
     const t = await run(sb.from("gfs_takedowns").select("*").eq("id", req.params.id).maybeSingle());
-    if (!t || !G.canSee(req.team, t.region)) return res.status(404).json({ error: "not_found" });
+    if (!t) return res.status(404).json({ error: "not_found" });
+    const { scope, events } = await takedownScope(sb, [t]);
+    const reach = scope.get(t.id);
+    const mine = new Set(G.regionsOf(req.team));
+    if (![...reach].some((r) => mine.has(r))) return res.status(404).json({ error: "not_found" });
     const b = req.body || {};
     const patch = {};
     const at = now();
+    let partial = null;
     if (b.pylon_done === true && !t.pylon_done_at) Object.assign(patch, { pylon_done_at: at, pylon_done_by: actor(req) });
-    if (b.other_done === true && !t.other_done_at) Object.assign(patch, { other_done_at: at, other_done_by: actor(req) });
-    if (b.offsite_requested === true && !t.offsite_requested_at) Object.assign(patch, { offsite_requested_at: at, offsite_requested_by: actor(req) });
-    if (b.note !== undefined) patch.note = G.clean(b.note, 300) || null;
-    if (!Object.keys(patch).length) return res.status(400).json({ error: "nothing_to_change" });
-    const next = { ...t, ...patch };
-    patch.status = next.pylon_done_at && next.other_done_at && next.offsite_requested_at ? "done" : "open";
-    const updated = await run(sb.from("gfs_takedowns").update(patch).eq("id", t.id).select("*").single());
-    // "Every other surface" includes SportsClippers and family links: the
-    // athlete's clips there are marked removed.
-    if (patch.other_done_at) {
-      const rows = await run(sb.from("gfs_roster").select("id").eq("roster_id", t.roster_id));
-      for (const r of rows) {
-        const clips = await all(() => sb.from("gfs_clips").select("id,listed_at,delivered_at,removed_at").eq("roster_row", r.id));
-        const ids = clips.filter((c) => (c.listed_at || c.delivered_at) && !c.removed_at).map((c) => c.id);
-        await inChunks(ids, (chunk) => run(sb.from("gfs_clips").update({ removed_at: at }).in("id", chunk)));
+    if (b.other_done === true && !t.other_done_at) {
+      // "Every other surface" includes SportsClippers and family links. Each
+      // region takes down its own events' clips; the step is done once none
+      // are out anywhere.
+      const out = (await outClipsFor(sb, [t.roster_id])).get(t.roster_id) || [];
+      const here = out.filter((c) => mine.has((events.get(c.event_id) || {}).region));
+      await inChunks(here.map((c) => c.id), (chunk) => run(sb.from("gfs_clips").update({ removed_at: at, pull_reason: null }).in("id", chunk).is("removed_at", null)));
+      const left = out.filter((c) => !here.includes(c));
+      if (!left.length) Object.assign(patch, { other_done_at: at, other_done_by: actor(req) });
+      else {
+        const regions = [...new Set(left.map((c) => (events.get(c.event_id) || {}).region).filter(Boolean))];
+        const codes = [...new Set(left.map((c) => (events.get(c.event_id) || {}).code).filter(Boolean))];
+        partial = { removed: here.length, still_out: left.length, regions, events: codes };
+        notify(regionEmails(regions, "member"), { title: `Takedown${t.number ? " #" + t.number : ""} · clips still out`, body: `${left.length} still out at ${codes.join(", ")}: take them down, then mark the step done`, url: `/app/#gfs-desk`, tag: `gfs-takedown-${t.id}` });
       }
     }
-    const events = new Map();
-    if (updated.event_id) {
-      const ev = await run(sb.from("gfs_events").select("id,code,name").eq("id", updated.event_id).maybeSingle());
-      if (ev) events.set(ev.id, ev);
+    if (b.offsite_requested === true && !t.offsite_requested_at) Object.assign(patch, { offsite_requested_at: at, offsite_requested_by: actor(req) });
+    if (b.note !== undefined) patch.note = G.clean(b.note, 300) || null;
+    if (!Object.keys(patch).length && !partial) return res.status(400).json({ error: "nothing_to_change" });
+    let updated = t;
+    if (Object.keys(patch).length) {
+      const next = { ...t, ...patch };
+      patch.status = next.pylon_done_at && next.other_done_at && next.offsite_requested_at ? "done" : "open";
+      updated = await run(sb.from("gfs_takedowns").update(patch).eq("id", t.id).select("*").single());
     }
-    await T.logActivity(actor(req), "gfs_takedown_step", (events.get(updated.event_id) || {}).code || null, { number: updated.number || undefined, steps: Object.keys(patch).filter((k) => k.endsWith("_at")) });
-    res.json({ takedown: takedownView(updated, events, await clipsOut(sb, [t.roster_id])) });
+    const ev = events.get(updated.event_id) || {};
+    await T.logActivity(actor(req), "gfs_takedown_step", ev.code || null, { region: mine.has(t.region) ? t.region : [...reach].find((r) => mine.has(r)), number: updated.number || undefined, steps: Object.keys(patch).filter((k) => k.endsWith("_at")), removed: partial ? partial.removed : undefined });
+    res.json({ takedown: takedownView(updated, events, await outClipsFor(sb, [t.roster_id]), req, reach), partial });
   } catch (e) {
     fail(res, e, "update_takedown");
   }
@@ -1781,18 +2052,19 @@ router.get("/today", viewer, async (req, res) => {
     const events = await run(sb.from("gfs_events").select("*").in("region", regions).gte("ends_on", from).neq("status", "cancelled").order("starts_on", { ascending: true }).limit(200));
     const ids = events.map((e) => e.id);
     const [crew, dels, tds] = await Promise.all([
-      ids.length ? inChunks(ids, (c) => all(() => sb.from("gfs_crew").select("event_id,role,status").in("event_id", c)), 50) : [],
+      ids.length ? inChunks(ids, (c) => all(() => sb.from("gfs_crew").select("id,event_id,creator_id,role,status").in("event_id", c)), 50) : [],
       ids.length ? inChunks(ids, (c) => all(() => sb.from("gfs_deliverables").select("*").in("event_id", c)), 50) : [],
-      run(sb.from("gfs_takedowns").select("*").in("region", regions).eq("status", "open")),
+      visibleTakedowns(sb, req),
     ]);
+    const creators = await creatorsFor(sb, crew);
     const byId = new Map(events.map((e) => [e.id, e]));
     const needs = [];
-    for (const t of tds) needs.push({ kind: "takedown", ...takedownView(t, byId, null) });
+    for (const t of tds.list) needs.push({ kind: "takedown", ...takedownView(t, tds.events, null, req, tds.scope.get(t.id)) });
     const soon = Date.now() + 3 * 86400000;
     for (const ev of events) {
       const start = G.zonedToUtc(ev.starts_on, "00:00", ev.tz).getTime();
       if (start < Date.now() - 86400000 || start > soon) continue;
-      const gaps = checklist(ev, crew.filter((c) => c.event_id === ev.id)).filter((x) => !x.done);
+      const gaps = checklist(ev, crew.filter((c) => c.event_id === ev.id), creators).filter((x) => !x.done);
       if (gaps.length) needs.push({ kind: "event_gaps", event: eventView(ev, req), gaps: gaps.map((g) => g.label) });
     }
     for (const d of dels) {
@@ -1810,7 +2082,7 @@ router.get("/today", viewer, async (req, res) => {
     const names = await namesFor(sb, upcoming.slice(0, 4).map((e) => e.director_email));
     res.json({
       needs: needs.slice(0, 30),
-      next: next ? { ...eventView(next, req, names), checklist: checklist(next, crew.filter((c) => c.event_id === next.id)) } : null,
+      next: next ? { ...eventView(next, req, names), checklist: checklist(next, crew.filter((c) => c.event_id === next.id), creators) } : null,
       upcoming: upcoming.slice(1, 4).map((e) => eventView(e, req, names)),
       regions,
     });
@@ -1840,11 +2112,9 @@ router.get("/desk", viewer, async (req, res) => {
     const ids = events.map((e) => e.id);
     const counts = await eventCounts(sb, ids);
     const dels = ids.length ? await inChunks(ids, (c) => all(() => sb.from("gfs_deliverables").select("*").in("event_id", c)), 50) : [];
-    const tds = regions.length ? await run(sb.from("gfs_takedowns").select("*").in("region", regions).eq("status", "open")) : [];
+    const td = regions.length ? await visibleTakedowns(sb, req, { regions }) : { list: [], scope: new Map(), events: new Map() };
+    const tds = td.list;
     const names = await namesFor(sb, events.map((e) => e.director_email));
-    const byId = new Map(events.map((e) => [e.id, e]));
-    const allTdEvents = [...new Set(tds.map((t) => t.event_id).filter((x) => x && !byId.has(x)))];
-    for (const e of allTdEvents.length ? await run(sb.from("gfs_events").select("id,code,name").in("id", allTdEvents)) : []) byId.set(e.id, e);
     const rows = events.map((ev) => {
       const c = counts.get(ev.id);
       const mine = dels.filter((d) => d.event_id === ev.id).map((d) => deliverableView(d, ev));
@@ -1862,7 +2132,8 @@ router.get("/desk", viewer, async (req, res) => {
     const below = pool
       .map((c) => ({ id: c.id, name: c.name, region: c.region, scorecard: cards.get(c.id), badges: G.credentialBadges(c) }))
       .filter((c) => (c.scorecard.games && !c.scorecard.on_standard) || c.badges.some((b) => !b.ok && b.key !== "youth"));
-    const tdViews = tds.map((t) => takedownView(t, byId, null)).sort((a, b) => String(a.next_due_at || "~").localeCompare(String(b.next_due_at || "~")));
+    const outNow = await outClipsFor(sb, [...new Set(tds.map((t) => t.roster_id))]);
+    const tdViews = tds.map((t) => takedownView(t, td.events, outNow, req, td.scope.get(t.id))).sort((a, b) => String(a.next_due_at || "~").localeCompare(String(b.next_due_at || "~")));
     res.json({
       window: { from, to, name: win },
       regions,
@@ -1871,6 +2142,7 @@ router.get("/desk", viewer, async (req, res) => {
         unmatched: rows.reduce((s, r) => s + r.unmatched, 0),
         held: rows.reduce((s, r) => s + r.held, 0),
         needs_removal: rows.reduce((s, r) => s + r.needs_removal, 0),
+        to_family_only: rows.reduce((s, r) => s + (r.to_family_only || 0), 0),
         overdue: rows.reduce((s, r) => s + r.overdue, 0),
         takedowns_open: tds.length,
         next_takedown_due_at: tdViews.length ? tdViews[0].next_due_at : null,

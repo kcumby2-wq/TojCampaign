@@ -29,9 +29,11 @@ let sent = [];
 // The SQL counts function, in JS, over the fake tables.
 function countsRpc(tables, { p_events }) {
   const out = [];
+  const isOut = (c) => !!(c.listed_at || c.delivered_at) && !c.removed_at;
   for (const id of p_events) {
     const cs = (tables.gfs_clips || []).filter((c) => c.event_id === id);
     if (!cs.length) continue;
+    const ready = (c) => c.stage === "approved" && !c.held && !c.removed_at;
     out.push({
       event_id: id,
       shot: cs.length,
@@ -44,7 +46,10 @@ function countsRpc(tables, { p_events }) {
       delivered: cs.filter((c) => c.delivered_at).length,
       listed: cs.filter((c) => c.listed_at && !c.removed_at).length,
       held: cs.filter((c) => c.held).length,
-      needs_removal: cs.filter((c) => c.held && (c.listed_at || c.delivered_at) && !c.removed_at).length,
+      needs_removal: cs.filter((c) => (c.held || c.pull_reason === "no_sale_consent") && isOut(c)).length,
+      to_family_only: cs.filter((c) => c.pull_reason === "not_public" && !c.held).length,
+      to_send: cs.filter((c) => ready(c) && c.family_export_at && !c.delivered_at).length,
+      to_list: cs.filter((c) => ready(c) && c.exported_at && !c.listed_at).length,
     });
   }
   return { data: out, error: null };
@@ -345,6 +350,8 @@ test("clips: edited by the crew, approved by an approver, then families and Spor
   assert.equal((await post(mw, `/api/gfs/events/${evId}/clips/approve`)).status, 403, "directors don't approve");
   assert.equal((await post(josh, `/api/gfs/events/${evId}/clips/approve`)).json.approved, 5);
   assert.equal((await mw(`/api/gfs/events/${evId}/listings.csv`)).status, 403);
+  const early = await post(josh, `/api/gfs/events/${evId}/clips/listed`);
+  assert.deepEqual([early.json.listed, early.json.not_exported], [0, 4], "nothing is marked listed before it's in a SportsClippers file");
   const csv = await josh(`/api/gfs/events/${evId}/listings.csv`);
   assert.equal(csv.status, 200);
   assert.match(csv.headers.get("content-type"), /text\/csv/);
@@ -352,9 +359,11 @@ test("clips: edited by the crew, approved by an approver, then families and Spor
   assert.equal(lines[0], "label,file,event_code,event,team,jersey,position,roster_id,angle,visibility,consent_capture,consent_marketing,consent_sale,consent_commercial,public_display,under_13,price_cents");
   assert.equal(lines.length - 1, 4, "Eve (#11) has no sale consent, so her clip isn't listed");
   assert.ok(lines.some((l) => l.includes("ST-1001") && l.includes(",public,")));
-  for (const leak of ["Ann", "Sample", "2012", "@example.com", "555-"]) assert.ok(!csv.text.includes(leak), leak);
+  for (const leak of ["Ann", "Sample", "2012-01-01", "@example.com", "555-0101", "555-0202"]) assert.ok(!csv.text.includes(leak), leak);
   const listed = await post(josh, `/api/gfs/events/${evId}/clips/listed`);
   assert.deepEqual([listed.json.public, listed.json.family], [2, 2]);
+  const unsent = await post(mw, `/api/gfs/events/${evId}/clips/delivered`);
+  assert.deepEqual([unsent.json.delivered, unsent.json.not_exported], [0, 5], "nothing is marked sent before it's in a family-links file");
   const fam = await mw(`/api/gfs/events/${evId}/families.csv`);
   assert.equal(fam.status, 200);
   assert.ok(fam.text.includes("ST-2002"), "family links don't need sale consent");
@@ -387,10 +396,12 @@ test("deliverables: consent is checked for featured athletes, and only approvers
   await wait(50);
   assert.deepEqual([...new Set(sent.map((s) => s.to))].sort(), ["josh@example.com", "kyron@example.com"], "approvers hear about it, not directors or viewers");
   assert.ok(sent.every((s) => !/ST-\d|Ann|Sample/.test(JSON.stringify(s))));
-  assert.equal((await post(mw, `/api/gfs/events/${evId}/deliverables/${whoIs.id}/approve`)).status, 403);
+  assert.equal((await post(mw, `/api/gfs/events/${evId}/deliverables/${whoIs.id}/approve`, { attest: true })).status, 403);
+  assert.equal((await post(josh, `/api/gfs/events/${evId}/deliverables/${whoIs.id}/approve`)).json.error, "attest_required", "the approver checks the keep-out list and says so");
   sent = [];
-  r = await post(josh, `/api/gfs/events/${evId}/deliverables/${whoIs.id}/approve`);
+  r = await post(josh, `/api/gfs/events/${evId}/deliverables/${whoIs.id}/approve`, { attest: true });
   assert.equal(r.status, 200);
+  assert.equal(r.json.deliverable.attested, true);
   assert.equal(r.json.deliverable.approved_count, 2);
   assert.equal(r.json.deliverable.cleared, true);
   await wait(50);
@@ -460,7 +471,7 @@ test("scorecards: the four measures from game uploads and family ratings", async
   // End Zone the game has two wide angles. Creator B's End Zone came in 7.5h.
   const lead = db.tables.gfs_crew.find((c) => c.creator_id === creators.a.id && c.event_id === evId);
   await patch(mw, `/api/gfs/events/${evId}/crew/${lead.id}`, { family_rating: 4.6, rating_count: 5 });
-  const r = await josh("/api/gfs/scorecards");
+  const r = await josh(`/api/gfs/scorecards?on=${TOMORROW}`);
   assert.equal(r.status, 200);
   const a = r.json.creators.find((c) => c.id === creators.a.id).scorecard;
   assert.equal(a.games, 1);
@@ -534,7 +545,263 @@ test("team: Pylon events invites carry regions, and joining keeps them", async (
 });
 
 test("the activity log carries event codes and counts, never an athlete's identity", async () => {
-  const log = JSON.stringify(db.tables.team_activity.filter((a) => a.action.startsWith("gfs_")));
+  const entries = db.tables.team_activity.filter((a) => a.action.startsWith("gfs_"));
+  const log = JSON.stringify(entries.map((a) => [a.action, a.subject, a.detail]));
   assert.ok(log.length > 100);
-  for (const leak of ["ST-1001", "ST-2001", "Ann", "Sample", "555-", "2012-01-01"]) assert.ok(!log.includes(leak), leak);
+  for (const leak of ["ST-1001", "ST-2001", "Ann", "Sample", "555-0101", "2012-01-01", "a@example.com"]) assert.ok(!log.includes(leak), leak);
+  assert.ok(entries.every((a) => a.detail && a.detail.region), "every entry says which region it belongs to");
+});
+
+// ── The review's findings, one test each ─────────────────────────────────
+const D = (n) => iso(Date.now() + n * DAY);
+const ymd = (d) => d.replace(/-/g, "");
+const E = (e) => `/api/gfs/events/${e.id}`;
+const clipOf = (e, file) => db.tables.gfs_clips.find((c) => c.event_id === e.id && c.file === file);
+const rosterOf = (e, rid) => db.tables.gfs_roster.find((x) => x.event_id === e.id && x.roster_id === rid);
+async function newEvent(who, body) {
+  const r = await post(who, "/api/gfs/events", { size: "one_day", state: "OH", starts_on: TOMORROW, ...body });
+  assert.equal(r.status, 200, JSON.stringify(r.json));
+  return r.json.event;
+}
+// Tags, the edit, approval, the family-links file, then marked sent.
+async function sendOut(e, dir, appr) {
+  await post(dir, `${E(e)}/tags/approve`);
+  await post(dir, `${E(e)}/clips/edited`);
+  await post(appr, `${E(e)}/clips/approve`);
+  await dir(`${E(e)}/families.csv`);
+  return (await post(dir, `${E(e)}/clips/delivered`)).json;
+}
+
+test("B1, S6, S12: a takedown reaches rosters loaded later, in any region, and each region takes down its own clips", async () => {
+  // Ann's takedown was logged at Geneva; her roster at a West stop loads now.
+  const ontario = await newEvent(west, { name: "Girls Flag · Ontario, CA", region: "west", city: "Ontario", state: "CA", starts_on: D(3) });
+  const r = await post(west, `${E(ontario)}/roster`, { csv: "Athlete ID,Team,Jersey,Capture,Marketing,Sale,Public,Under 13\nST-1001,Ohio Heat 14U,7,yes,yes,yes,yes,no\nST-7001,Cali Stars 14U,4,yes,yes,yes,yes,no\n" });
+  assert.equal(r.status, 200, JSON.stringify(r.json));
+  assert.ok(rosterOf(ontario, "ST-1001").takedown_at && rosterOf(ontario, "ST-1001").do_not_publish, "a takedown follows the athlete to a roster loaded later");
+  assert.equal(r.json.summary.do_not_publish, 1);
+  const OG = "Ohio-Heat-14U_vs_Cali-Stars-14U_" + ymd(D(3));
+  await post(west, `${E(ontario)}/uploads`, { csv: `path\n${OG}/7/7-Sideline-001.mp4\n${OG}/4/4-Sideline-002.mp4\n` });
+  assert.equal(clipOf(ontario, "7-Sideline-001.mp4").hold_reason, "takedown");
+
+  // A new athlete on rosters in two regions, with a clip out in each.
+  const akron = await newEvent(mw, { name: "Girls Flag · Akron, OH", region: "midwest", city: "Akron", starts_on: D(4) });
+  await post(mw, `${E(akron)}/roster`, { csv: "Athlete ID,Team,Jersey,Capture,Marketing,Sale,Public,Under 13\nST-7001,Cali Stars 14U,4,yes,yes,yes,yes,no\nST-7002,Akron Flag 14U,9,yes,yes,yes,yes,no\n" });
+  await post(mw, `${E(akron)}/uploads`, { csv: `path\nCali-Stars-14U_vs_Akron-Flag-14U_${ymd(D(4))}/4/4-EndZone-003.mp4\n` });
+  assert.equal((await sendOut(akron, mw, josh)).delivered, 1);
+  assert.equal((await sendOut(ontario, west, josh)).delivered, 1, "Cali Stars #4 is out in the West too; Ann's clip stays held");
+
+  sent = [];
+  const td = (await post(mw, "/api/gfs/takedowns", { event_id: akron.id, roster_row: rosterOf(akron, "ST-7001").id, reason: "consent_withdrawn" })).json.takedown;
+  assert.deepEqual(td.regions, ["midwest", "west"]);
+  assert.equal(td.clips_out, 2);
+  await wait(50);
+  assert.ok(sent.some((x) => x.to === "west@example.com"), "the West director runs an event the athlete is on, so they hear about it");
+  assert.ok((await west("/api/gfs/takedowns")).json.takedowns.some((t) => t.id === td.id), "and they see it");
+
+  let t = await patch(mw, `/api/gfs/takedowns/${td.id}`, { other_done: true });
+  assert.equal(t.status, 200, JSON.stringify(t.json));
+  assert.deepEqual([t.json.partial.removed, t.json.partial.still_out, t.json.partial.regions], [1, 1, ["west"]]);
+  assert.equal(t.json.takedown.steps[1].done_at, null, "not done while a clip is out anywhere");
+  assert.ok(G.isOut(clipOf(ontario, "4-Sideline-002.mp4")), "the West clip is the West director's to take down");
+  assert.ok(!G.isOut(clipOf(akron, "4-EndZone-003.mp4")));
+  assert.equal((await west("/api/gfs/desk")).json.rows.find((x) => x.event.id === ontario.id).needs_removal, 1);
+  t = await patch(west, `/api/gfs/takedowns/${td.id}`, { other_done: true });
+  assert.ok(t.json.takedown.steps[1].done_at, "done once the last region takes theirs down");
+  assert.equal(t.json.takedown.clips_out, 0);
+});
+
+test("B2, minor 17: a clip matches only when its team is certain; folders that aren't teams are dropped", async () => {
+  const ev2 = await newEvent(mw, { name: "Toledo Flag Fest", region: "midwest", city: "Toledo", starts_on: D(5) });
+  await post(mw, `${E(ev2)}/roster`, { csv: "Athlete ID,Team,Jersey,Capture\nLE-7,Lake Erie 10U,7,yes\nTS-7,Toledo Storm 12U,7,yes\nTS-9,Toledo Storm 12U,9,yes\nCP-12,Cedar Point 14U,12,yes\n" });
+  const g = "Lake-Erie-10U_vs_Toledo-Storm-12U_" + ymd(D(5));
+  const csv = [
+    "path,team",
+    `${g}/7/7-Sideline-001.mp4,`,
+    `Lake-Erie-10U_vs_Toledo-Storm_${ymd(D(5))}/7/7-Sideline-002.mp4,`,
+    `12/12-EndZone-003.mp4,`,
+    `${g}/9/9-EndZone-004.mp4,Toledo Storm 12U`,
+    `${g}/Lake-Erie-10U/9/9-EndZone-005.mp4,Toledo Storm 12U`,
+    `${g}/Sideline/9/9-Sideline-006.mp4,`,
+    `${g}/Emma-Smith-highlights/EndZone-007.mp4,`,
+  ].join("\n");
+  const r = await post(mw, `${E(ev2)}/uploads`, { csv });
+  assert.equal(r.status, 200, JSON.stringify(r.json));
+  const why = (f) => clipOf(ev2, f).why;
+  assert.equal(why("7-Sideline-001.mp4"), "two_teams");
+  assert.equal(why("7-Sideline-002.mp4"), "team_not_on_roster", "a game folder naming a team the roster doesn't have can't hand its #7 to the other team");
+  assert.equal(why("12-EndZone-003.mp4"), "no_team", "no game folder and no team: a person decides");
+  assert.equal(clipOf(ev2, "9-EndZone-004.mp4").roster_row, rosterOf(ev2, "TS-9").id, "a team column settles it");
+  assert.equal(why("9-EndZone-005.mp4"), "team_conflict", "the team folder and the team column disagree");
+  const angleFolder = clipOf(ev2, "9-Sideline-006.mp4");
+  assert.equal(angleFolder.match, "matched", "an angle folder isn't a team; the game folder decides");
+  assert.equal(angleFolder.team_hint, null);
+  assert.equal(clipOf(ev2, "EndZone-007.mp4").folder, null);
+  assert.ok(!JSON.stringify(db.tables.gfs_clips.filter((c) => c.event_id === ev2.id)).includes("Emma"), "a folder named for a person isn't stored, keys included");
+  const clinic = await newEvent(mw, { name: "Toledo clinic", size: "clinic", region: "midwest", city: "Toledo", starts_on: D(6) });
+  await post(mw, `${E(clinic)}/roster`, { csv: "Athlete ID,Team,Jersey,Capture\nCL-5,Clinic Group,5,yes\n" });
+  await post(mw, `${E(clinic)}/uploads`, { csv: "path\n5/5-Sideline-001.mp4\n" });
+  assert.equal(clipOf(clinic, "5-Sideline-001.mp4").match, "matched", "one team on the roster: no doubt whose #5 it is");
+});
+
+test("B2: a roster correction re-tags; number-matched clips follow it, a director's tags go back to review, clips already out are held", async () => {
+  const ev3 = await newEvent(mw, { name: "Dayton Flag", region: "midwest", city: "Dayton", starts_on: D(7) });
+  const v1 = "Athlete ID,Team,Jersey,Capture,Marketing,Sale\nDA-1,Dayton Dragons 14U,31,yes,yes,yes\nDA-2,Dayton Dragons 14U,13,yes,yes,yes\nDA-3,Dayton Dragons 14U,8,yes,yes,yes\nKF-1,Kettering Flag 14U,40,yes,yes,yes\n";
+  await post(mw, `${E(ev3)}/roster`, { csv: v1 });
+  const g = "Dayton-Dragons-14U_vs_Kettering-Flag-14U_" + ymd(D(7));
+  await post(mw, `${E(ev3)}/uploads`, { csv: `path\n${g}/40/40-EndZone-004.mp4\n` });
+  assert.equal((await sendOut(ev3, mw, josh)).delivered, 1);
+  await post(mw, `${E(ev3)}/uploads`, { csv: `path\n${g}/31/31-Sideline-001.mp4\n${g}/13/13-Sideline-002.mp4\n${g}/88/88-Sideline-003.mp4\n` });
+  const rid = (f) => (db.tables.gfs_roster.find((x) => x.id === clipOf(ev3, f).roster_row) || {}).roster_id;
+  assert.equal(rid("31-Sideline-001.mp4"), "DA-1");
+  const c88 = clipOf(ev3, "88-Sideline-003.mp4");
+  assert.equal(c88.why, "not_on_roster");
+  assert.equal((await patch(mw, `${E(ev3)}/clips/${c88.id}`, { roster_row: rosterOf(ev3, "DA-3").id })).status, 200, "the director says file 88 is #8");
+  assert.equal(clipOf(ev3, "88-Sideline-003.mp4").jersey, "88", "the file's own number stays as filed");
+
+  // Sports Thread corrects the file: 31 and 13 were swapped, #8 is #18, Kettering's #40 is #41.
+  const v2 = v1.replace("DA-1,Dayton Dragons 14U,31", "DA-1,Dayton Dragons 14U,13").replace("DA-2,Dayton Dragons 14U,13", "DA-2,Dayton Dragons 14U,31").replace(",8,", ",18,").replace(",40,", ",41,");
+  const s = (await post(mw, `${E(ev3)}/roster`, { csv: v2 })).json.summary;
+  assert.deepEqual([s.renumbered, s.clips_back_to_review, s.clips_out_held], [4, 3, 1]);
+  assert.equal(rid("31-Sideline-001.mp4"), "DA-2", "matched again to whoever wears 31 now");
+  assert.equal(rid("13-Sideline-002.mp4"), "DA-1");
+  assert.equal(clipOf(ev3, "31-Sideline-001.mp4").label, `${ev3.code}-NA-31-Sideline-001`);
+  const back = clipOf(ev3, "88-Sideline-003.mp4");
+  assert.deepEqual([back.match, back.why, back.tag_source], ["unmatched", "roster_changed", "manual"], "a director's tag waits for the director");
+  const out = clipOf(ev3, "40-EndZone-004.mp4");
+  assert.deepEqual([out.held, out.hold_reason, out.retag], [true, "roster_changed", true], "out, maybe showing the wrong child: held until it comes down");
+  assert.equal((await josh(`${E(ev3)}/clips?view=out`)).json.clips.length, 1);
+  assert.equal((await mw(E(ev3))).json.counts.needs_removal, 1);
+  assert.equal((await patch(mw, `${E(ev3)}/clips/${out.id}`, { roster_row: rosterOf(ev3, "KF-1").id })).json.error, "gfs_clip_already_out");
+  await post(mw, `${E(ev3)}/clips/removed`, { ids: [out.id] });
+  const fixed = await patch(mw, `${E(ev3)}/clips/${out.id}`, { roster_row: rosterOf(ev3, "KF-1").id });
+  assert.equal(fixed.status, 200, JSON.stringify(fixed.json));
+  assert.deepEqual([fixed.json.clip.held, fixed.json.clip.removed, fixed.json.clip.stage], [false, false, "shot"], "taken down and tagged again, it starts over");
+
+  const c31 = clipOf(ev3, "31-Sideline-001.mp4");
+  assert.equal((await patch(mw, `${E(ev3)}/clips/${c31.id}`, { untag: true })).json.clip.why, "untagged");
+  await post(mw, `${E(ev3)}/roster`, { csv: v2 });
+  assert.equal(clipOf(ev3, "31-Sideline-001.mp4").match, "unmatched", "a director's untag survives the next roster load");
+});
+
+test("B3, S11, minor 13: a youth creator always works beside a screened adult", async () => {
+  const ev4 = await newEvent(mw, { name: "Lima clinic", size: "clinic", region: "midwest", city: "Lima", starts_on: D(8) });
+  const screened = { contract_signed_on: LAST_MONTH, background_check_on: LAST_MONTH, safety_training_on: LAST_MONTH };
+  const P = (await post(kyron, "/api/gfs/creators", { name: "Creator P", region: "midwest", ...screened })).json.creator;
+  const Q = (await post(kyron, "/api/gfs/creators", { name: "Creator Q", region: "midwest", tier: "youth", ...screened })).json.creator;
+  const p = (await post(mw, `${E(ev4)}/crew`, { creator_id: P.id, role: "lead" })).json.crew;
+  const q = (await post(mw, `${E(ev4)}/crew`, { creator_id: Q.id, role: "shooter" })).json.crew;
+  await patch(mw, `${E(ev4)}/crew/${p.id}`, { status: "confirmed" });
+  assert.equal((await patch(mw, `${E(ev4)}/crew/${q.id}`, { status: "confirmed" })).status, 200);
+  assert.equal((await patch(mw, `${E(ev4)}/crew/${p.id}`, { status: "invited" })).json.error, "crew_youth_left_alone", "un-confirming the only adult");
+  assert.equal((await patch(mw, `${E(ev4)}/crew/${p.id}`, { role: "editor" })).json.error, "crew_youth_left_alone", "moving the only adult off site");
+  assert.equal((await patch(mw, `${E(ev4)}/crew/${p.id}`, { role: "shooter" })).status, 200, "still on site");
+  assert.equal((await patch(kyron, `/api/gfs/creators/${Q.id}`, { tier: "adult" })).json.error, "gfs_creator_on_crew");
+
+  // The adult's background check lapses (cleared here): they stop counting.
+  await patch(kyron, `/api/gfs/creators/${P.id}`, { background_check_on: null });
+  const plan = await mw(E(ev4));
+  const crewCheck = plan.json.checklist.find((c) => c.key === "crew");
+  assert.equal(crewCheck.done, false);
+  assert.match(crewCheck.label, /not screened for this event.*youth creator needs a screened adult/);
+  assert.deepEqual(plan.json.crew.find((c) => c.id === p.id).problems, ["background_check"]);
+
+  // A family rating after the event goes in, even with the creator paused since.
+  await patch(kyron, `/api/gfs/creators/${P.id}`, { status: "paused" });
+  const rated = await patch(mw, `${E(ev4)}/crew/${p.id}`, { family_rating: 4.8, rating_count: 3 });
+  assert.equal(rated.status, 200, JSON.stringify(rated.json));
+});
+
+test("B4: once screening is on file, a creator's name, email and return to work are Kyron's", async () => {
+  const S = (await post(kyron, "/api/gfs/creators", { name: "Creator S", email: "s@example.com", region: "midwest", contract_signed_on: LAST_MONTH, background_check_on: LAST_MONTH, safety_training_on: LAST_MONTH })).json.creator;
+  assert.equal((await patch(mw, `/api/gfs/creators/${S.id}`, { name: "Someone Else" })).json.error, "identity_owner_only");
+  assert.equal((await patch(mw, `/api/gfs/creators/${S.id}`, { email: "other@example.com" })).json.error, "identity_owner_only");
+  assert.equal((await patch(mw, `/api/gfs/creators/${S.id}`, { name: "Creator S", email: "s@example.com", home_city: "Lorain" })).status, 200, "the form sends the name back unchanged");
+  assert.equal((await patch(mw, `/api/gfs/creators/${S.id}`, { status: "paused" })).status, 200, "a director can pause");
+  assert.equal((await patch(mw, `/api/gfs/creators/${S.id}`, { status: "active" })).json.error, "reactivate_owner_only");
+  assert.equal((await patch(kyron, `/api/gfs/creators/${S.id}`, { status: "active", name: "Creator S2" })).status, 200);
+  const U = (await post(mw, "/api/gfs/creators", { name: "Creator U", region: "midwest" })).json.creator;
+  assert.equal((await patch(mw, `/api/gfs/creators/${U.id}`, { name: "Creator U2" })).status, 200, "before screening, a director fixes a typo");
+  assert.equal((await mw("/api/gfs/creators")).json.creators.find((c) => c.id === S.id).identity_locked, true);
+});
+
+test("B5: anything that posts clears only against the event's keep-out list", async () => {
+  assert.equal((await view(`/api/gfs/events/${evId}/keep-out`)).status, 403);
+  const ko = (await mw(`/api/gfs/events/${evId}/keep-out`)).json;
+  const flat = ko.teams.flatMap((t) => t.athletes.map((a) => `${t.team} #${a.jersey} ${a.why}`)).sort();
+  assert.deepEqual(flat, ["Buckeye Flag 12U #5 no_capture_consent", "Ohio Heat 14U #13 do_not_publish", "Ohio Heat 14U #21 no_marketing_consent", "Ohio Heat 14U #7 takedown"]);
+  assert.ok(!JSON.stringify(ko).includes("ST-"), "team and jersey, no roster IDs");
+  const stills = (await mw(`/api/gfs/events/${evId}`)).json.deliverables.find((d) => d.kind === "stills");
+  assert.equal(stills.featured_allowed, true);
+  const cat = rosterOf({ id: evId }, "ST-1003");
+  await patch(mw, `/api/gfs/events/${evId}/deliverables/${stills.id}`, { delivered: 40, featured: [cat.id] });
+  assert.equal((await post(mw, `/api/gfs/events/${evId}/deliverables/${stills.id}/submit`)).json.error, "gfs_featured_consent", "a still that names a do-not-publish athlete doesn't go");
+  await patch(mw, `/api/gfs/events/${evId}/deliverables/${stills.id}`, { featured: [] });
+  assert.equal((await post(mw, `/api/gfs/events/${evId}/deliverables/${stills.id}/submit`)).status, 200);
+  assert.equal((await post(josh, `/api/gfs/events/${evId}/deliverables/${stills.id}/approve`)).json.error, "attest_required");
+  const ok = await post(josh, `/api/gfs/events/${evId}/deliverables/${stills.id}/approve`, { attest: true });
+  assert.deepEqual([ok.json.deliverable.status, ok.json.deliverable.attested], ["approved", true]);
+  assert.equal(db.tables.gfs_deliverables.find((d) => d.id === stills.id).attested_by, "josh@example.com");
+});
+
+test("S8: a listing the roster stops allowing is pulled, to family-only or down", async () => {
+  const ev5 = await newEvent(mw, { name: "Mentor Flag", region: "midwest", city: "Mentor", starts_on: D(9) });
+  const v1 = "Athlete ID,Team,Division,Jersey,Capture,Marketing,Sale,Public,Under 13\nME-1,Mentor Flag 14U,14U,3,yes,yes,yes,yes,no\nME-2,Euclid 14U,14U,6,yes,yes,yes,no,no\n";
+  await post(mw, `${E(ev5)}/roster`, { csv: v1 });
+  await post(mw, `${E(ev5)}/uploads`, { csv: `path\nMentor-Flag-14U_vs_Euclid-14U_${ymd(D(9))}/3/3-Sideline-001.mp4\n` });
+  await post(mw, `${E(ev5)}/tags/approve`);
+  await post(mw, `${E(ev5)}/clips/edited`);
+  await post(josh, `${E(ev5)}/clips/approve`);
+  await josh(`${E(ev5)}/listings.csv`);
+  assert.equal((await post(josh, `${E(ev5)}/clips/listed`)).json.public, 1);
+
+  await post(mw, `${E(ev5)}/roster`, { csv: v1.replace("3,yes,yes,yes,yes,no", "3,yes,yes,yes,no,no") });
+  assert.equal(clipOf(ev5, "3-Sideline-001.mp4").pull_reason, "not_public", "the guardian turned public display off");
+  let counts = (await josh(E(ev5))).json.counts;
+  assert.deepEqual([counts.to_family_only, counts.needs_removal], [1, 0]);
+  assert.equal((await post(mw, `${E(ev5)}/clips/family-only`)).status, 403, "approvers change listings");
+  assert.equal((await post(josh, `${E(ev5)}/clips/family-only`)).json.family_only, 1);
+  assert.deepEqual([clipOf(ev5, "3-Sideline-001.mp4").visibility, clipOf(ev5, "3-Sideline-001.mp4").pull_reason], ["family", null]);
+
+  await post(mw, `${E(ev5)}/roster`, { csv: v1.replace("3,yes,yes,yes,yes,no", "3,yes,yes,no,no,no") });
+  assert.equal(clipOf(ev5, "3-Sideline-001.mp4").pull_reason, "no_sale_consent", "sale consent came off: it has to come down");
+  counts = (await josh(E(ev5))).json.counts;
+  assert.equal(counts.needs_removal, 1);
+  const outList = (await mw(`${E(ev5)}/clips?view=out`)).json.clips;
+  assert.deepEqual(outList.map((x) => x.pull_reason), ["no_sale_consent"]);
+  await post(mw, `${E(ev5)}/clips/removed`, { ids: outList.map((x) => x.id) });
+  assert.equal((await josh(E(ev5))).json.counts.needs_removal, 0);
+});
+
+test("S9: under 13, however the division is written", () => {
+  for (const d of ["12U", "U12", "U-12", "12-U", "2026 U12", "Under 12", "12 & Under", "10U Girls", "Girls U-10", "U14/U12"]) assert.equal(G.under13({ under_13: false, division: d }), true, d);
+  for (const d of ["14U", "U14", "HS Varsity", "2026", "18U", null]) assert.equal(G.under13({ under_13: false, division: d }), false, String(d));
+  assert.equal(G.under13({ under_13: null, division: "14U" }), true, "no verified age counts as under 13");
+});
+
+test("S7: the activity feed shows each person only the Pylon regions they work", async () => {
+  const studio = await as("studio@example.com");
+  const feed = async (c) => (await c("/api/team/activity?limit=100")).json.activity;
+  assert.ok((await feed(studio)).every((a) => !a.action.startsWith("gfs_")), "no Pylon events tool, no Pylon events entries");
+  const westFeed = (await feed(west)).filter((a) => a.action.startsWith("gfs_"));
+  assert.ok(westFeed.length > 0);
+  assert.ok(westFeed.every((a) => a.detail.region === "west"), JSON.stringify(westFeed.map((a) => a.detail.region)));
+  assert.ok((await feed(josh)).some((a) => a.action.startsWith("gfs_") && a.detail.region === "midwest"));
+});
+
+test("minors 14, 15: the athlete ID wins over a registration ID, and athletes missing from a later file are reported", async () => {
+  const ev6 = await newEvent(mw, { name: "Sandusky", region: "midwest", city: "Sandusky", starts_on: D(10) });
+  await post(mw, `${E(ev6)}/roster`, { csv: "Registration ID,Athlete ID,Team,Jersey,Capture\nREG-88812,ST-5501,Sandusky 14U,7,yes\nREG-88813,ST-5502,Sandusky 14U,8,yes\n" });
+  assert.deepEqual(db.tables.gfs_roster.filter((x) => x.event_id === ev6.id).map((x) => x.roster_id).sort(), ["ST-5501", "ST-5502"]);
+  const s = (await post(mw, `${E(ev6)}/roster`, { csv: "Athlete ID,Team,Jersey,Capture\nST-5501,Sandusky 14U,7,yes\n" })).json.summary;
+  assert.equal(s.missing_from_file, 1);
+});
+
+test("minor 16: viewers see that a clip is held, never why, and no takedown reasons", async () => {
+  const held = (await view(`/api/gfs/events/${evId}/clips?view=held`)).json.clips;
+  assert.ok(held.length > 0);
+  assert.ok(held.every((c) => c.held && c.hold_reason === null && c.athlete.roster_id === null));
+  const tds = (await view("/api/gfs/takedowns")).json.takedowns;
+  assert.ok(tds.length > 0);
+  assert.ok(tds.every((t) => t.reason === null && t.reason_name === null && t.note === null));
+  assert.ok((await mw("/api/gfs/takedowns")).json.takedowns.every((t) => t.reason_name));
 });

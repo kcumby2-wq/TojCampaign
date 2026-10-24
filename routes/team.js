@@ -38,6 +38,11 @@ function sb503(res) {
   return res.status(503).json({ error: "supabase_unavailable" });
 }
 function fail(res, e, what) {
+  // A Pylon events invite or region change before migration 024 adds the
+  // regions column: say what's missing instead of a bare failure.
+  if (T.missingColumn(e) && /regions/.test(String((e && e.message) || ""))) {
+    return res.status(503).json({ error: "gfs_not_set_up", hint: "Apply migration 024 in Supabase to give people Pylon events regions." });
+  }
   console.error(`[team] ${what} failed:`, e && e.message);
   return res.status(500).json({ error: `${what}_failed` });
 }
@@ -122,19 +127,32 @@ router.get("/", T.requireTeam(null, "viewer"), async (req, res) => {
   }
 });
 
+// Pylon events entries (gfs_*) go only to people with that tool, and to a
+// Regional Director or viewer only for their own regions (each entry carries
+// its event's region; one without a region is for owners and approvers).
+function seesEntry(team, a) {
+  if (!/^gfs_/.test(String(a.action || ""))) return true;
+  if (!T.can(team, "gfs", "viewer")) return false;
+  if (team.owner || team.role === "approver") return true;
+  const r = a.detail && a.detail.region;
+  return !!r && (team.regions || []).includes(r);
+}
+
 router.get("/activity", T.requireTeam(null, "viewer"), async (req, res) => {
   const sb = getSupabase();
   if (!sb) return sb503(res);
+  const limit = Math.min(100, Number(req.query.limit) || 40);
+  // Read past what this person can't see, so they still get a full page.
   const { data, error } = await sb
     .from("team_activity")
     .select("id,actor,action,subject,detail,created_at")
     .order("created_at", { ascending: false })
-    .limit(Math.min(100, Number(req.query.limit) || 40));
+    .limit(Math.min(300, limit * 4));
   if (error) return fail(res, error, "activity");
   const { data: members } = await sb.from("team_members").select("email,name");
   const names = new Map((members || []).map((m) => [m.email, m.name]));
   res.json({
-    activity: (data || []).map((a) => ({
+    activity: (data || []).filter((a) => seesEntry(req.team, a)).slice(0, limit).map((a) => ({
       ...a,
       actor_name: names.get(a.actor) || (a.actor === "api-key" ? "Automation" : a.actor === FORMER ? "A former teammate" : staffEmails().has(a.actor) ? "Owner" : null),
       actor: req.team.owner || a.actor === req.team.email ? a.actor : null,

@@ -19,22 +19,34 @@
 --   * A creator is crewed only with a signed contract, a background check and
 --     minor-safety training inside the year before the event ends (Scout
 --     Agreement v1.6 §6). A youth creator never leads or edits, and never
---     works without a confirmed adult on the crew (Creator Playbook v1.5).
+--     works without a confirmed, screened adult on site (Creator Playbook
+--     v1.5). Crew changes lock the event row, so two at once can't race past
+--     that. A creator's tier can't change while they're on an upcoming crew.
 --   * A clip's hold comes from the athlete's record: a takedown, a
---     do-not-publish flag, or no capture consent. A held clip can't be
---     approved, sent to a family or listed.
+--     do-not-publish flag, or no capture consent; or, for a clip that was out
+--     when the roster changed its athlete's number or team, "roster_changed".
+--     A held clip can't be approved, sent to a family or listed.
+--   * A roster correction (a new jersey or team) sends that athlete's clips
+--     back to tag review, unless they're already out.
 --   * Clips move shot → tagged → edited → approved, one step at a time.
+--   * A clip is marked sent or listed only after it went out in the family
+--     file or the SportsClippers file, and only as public if it was exported
+--     as public.
 --   * SportsClippers Schedule A: listing needs sale-of-media consent; public
 --     only when the guardian chose public display and the athlete is not
---     under 13 (no verified age, or a 10U/12U division, counts as under 13).
+--     under 13 (no verified age, or a division numbered 12 or under, counts as
+--     under 13). A listing the roster stops allowing gets a pull reason.
 --   * A deliverable that posts on Pylon's channels is approved only with the
---     approver recorded, and only when every athlete it features has capture
+--     approver recorded and their attestation that no athlete on the event's
+--     keep-out list appears, and only when every athlete it names has capture
 --     and marketing consent and no hold (Schedule C-1 "Consent").
 --   * A takedown sets its own clock (safety request: 2h Pylon channels, 24h
 --     elsewhere; withdrawn consent: 24h and 72h; a removal request to
 --     accounts Pylon doesn't run within 24h) and sets the athlete to
---     do-not-publish at every event the same moment. That flag can't be
---     cleared while the takedown stands.
+--     do-not-publish at every event the same moment, including events whose
+--     roster loads later. That flag can't be cleared while the takedown
+--     stands, and "off every other surface" can't be marked done while any of
+--     the athlete's clips are still out.
 --
 -- Everything is service-role only (RLS on, one service_role policy each).
 -- Functions run with an empty search_path and name every table in full.
@@ -119,6 +131,32 @@ create table if not exists public.gfs_creators (
 );
 create index if not exists gfs_creators_region_idx on public.gfs_creators (region, status);
 
+-- Screened for an event that ends on on_date: active, contract signed, and a
+-- background check and minor-safety training inside the year before.
+create or replace function public.gfs_creator_ok(c public.gfs_creators, on_date date) returns boolean
+language sql immutable set search_path = '' as $$
+  select coalesce(c.status = 'active' and c.contract_signed_on is not null
+                  and c.background_check_on >= (on_date - interval '1 year')::date
+                  and c.safety_training_on >= (on_date - interval '1 year')::date, false)
+$$;
+
+-- A youth creator's roles are limited and an adult's role can anchor a youth
+-- creator, so the tier doesn't change while they're on an upcoming crew.
+create or replace function public.gfs_creators_check() returns trigger
+language plpgsql set search_path = '' as $$
+begin
+  new.updated_at := now();
+  if new.tier is distinct from old.tier
+     and exists (select 1 from public.gfs_crew x join public.gfs_events e on e.id = x.event_id
+                 where x.creator_id = new.id and x.status in ('invited', 'confirmed') and e.ends_on >= current_date) then
+    raise exception 'gfs_creator_on_crew';
+  end if;
+  return new;
+end $$;
+drop trigger if exists gfs_creators_check on public.gfs_creators;
+create trigger gfs_creators_check before update on public.gfs_creators
+  for each row execute function public.gfs_creators_check();
+
 -- ── Crew ─────────────────────────────────────────────────────────────────
 create table if not exists public.gfs_crew (
   id uuid primary key default gen_random_uuid(),
@@ -137,41 +175,60 @@ create unique index if not exists gfs_crew_active_idx on public.gfs_crew (event_
   where status in ('invited', 'confirmed');
 create index if not exists gfs_crew_creator_idx on public.gfs_crew (creator_id);
 
+-- An "anchor" is a confirmed adult on site (lead, shooter, photographer or
+-- story camera) who is screened for the event. A confirmed youth creator
+-- needs one; the last one can't step away (decline, removal, un-confirming,
+-- or a move to an off-site role) while a youth creator is confirmed.
 create or replace function public.gfs_crew_check() returns trigger
 language plpgsql set search_path = '' as $$
 declare
   c public.gfs_creators%rowtype;
   e public.gfs_events%rowtype;
   floor_date date;
+  was_anchor boolean := false;
+  is_anchor boolean;
+  others_anchor boolean;
 begin
   new.updated_at := now();
+  if tg_op = 'UPDATE' then
+    new.event_id := old.event_id;
+    new.creator_id := old.creator_id;
+    -- A note or a family rating after the event changes nothing to check.
+    if new.role = old.role and new.status = old.status then return new; end if;
+  end if;
+  -- One crew change per event at a time: without this, confirming a youth
+  -- creator and removing the last adult at the same moment would both pass.
+  select * into e from public.gfs_events where id = new.event_id for update;
   select * into c from public.gfs_creators where id = new.creator_id;
-  select * into e from public.gfs_events where id = new.event_id;
 
-  if new.status in ('declined', 'removed') then
-    -- An adult leaving can't strand a confirmed youth creator.
-    if tg_op = 'UPDATE' and old.status = 'confirmed' and c.tier = 'adult'
-       and exists (select 1 from public.gfs_crew x join public.gfs_creators y on y.id = x.creator_id
-                   where x.event_id = new.event_id and x.status = 'confirmed' and y.tier = 'youth')
-       and not exists (select 1 from public.gfs_crew x join public.gfs_creators y on y.id = x.creator_id
-                       where x.event_id = new.event_id and x.id <> new.id and x.status = 'confirmed'
-                         and y.tier = 'adult' and x.role in ('lead', 'shooter', 'photographer', 'story')) then
-      raise exception 'crew_youth_left_alone';
-    end if;
-    return new;
+  if new.status in ('invited', 'confirmed') then
+    floor_date := (e.ends_on - interval '1 year')::date;
+    if c.status is distinct from 'active' then raise exception 'crew_creator_not_active'; end if;
+    if c.contract_signed_on is null then raise exception 'crew_no_contract'; end if;
+    if c.background_check_on is null or c.background_check_on < floor_date then raise exception 'crew_background_check'; end if;
+    if c.safety_training_on is null or c.safety_training_on < floor_date then raise exception 'crew_safety_training'; end if;
+    if c.tier = 'youth' and new.role not in ('shooter', 'photographer', 'shadow') then raise exception 'crew_youth_role'; end if;
   end if;
 
-  floor_date := (e.ends_on - interval '1 year')::date;
-  if c.status is distinct from 'active' then raise exception 'crew_creator_not_active'; end if;
-  if c.contract_signed_on is null then raise exception 'crew_no_contract'; end if;
-  if c.background_check_on is null or c.background_check_on < floor_date then raise exception 'crew_background_check'; end if;
-  if c.safety_training_on is null or c.safety_training_on < floor_date then raise exception 'crew_safety_training'; end if;
-  if c.tier = 'youth' and new.role not in ('shooter', 'photographer', 'shadow') then raise exception 'crew_youth_role'; end if;
-  if c.tier = 'youth' and new.status = 'confirmed'
-     and not exists (select 1 from public.gfs_crew x join public.gfs_creators y on y.id = x.creator_id
-                     where x.event_id = new.event_id and x.id <> new.id and x.status = 'confirmed'
-                       and y.tier = 'adult' and x.role in ('lead', 'shooter', 'photographer', 'story')) then
+  is_anchor := new.status = 'confirmed' and new.role in ('lead', 'shooter', 'photographer', 'story')
+               and c.tier = 'adult' and public.gfs_creator_ok(c, e.ends_on);
+  if tg_op = 'UPDATE' then
+    was_anchor := old.status = 'confirmed' and old.role in ('lead', 'shooter', 'photographer', 'story')
+                  and c.tier = 'adult' and public.gfs_creator_ok(c, e.ends_on);
+  end if;
+  others_anchor := exists (
+    select 1 from public.gfs_crew x join public.gfs_creators y on y.id = x.creator_id
+     where x.event_id = new.event_id and x.id <> new.id and x.status = 'confirmed'
+       and x.role in ('lead', 'shooter', 'photographer', 'story') and y.tier = 'adult'
+       and public.gfs_creator_ok(y, e.ends_on));
+
+  if c.tier = 'youth' and new.status = 'confirmed' and (tg_op = 'INSERT' or old.status <> 'confirmed') and not others_anchor then
     raise exception 'crew_youth_needs_adult';
+  end if;
+  if was_anchor and not is_anchor and not others_anchor
+     and exists (select 1 from public.gfs_crew x join public.gfs_creators y on y.id = x.creator_id
+                 where x.event_id = new.event_id and x.id <> new.id and x.status = 'confirmed' and y.tier = 'youth') then
+    raise exception 'crew_youth_left_alone';
   end if;
   return new;
 end $$;
@@ -223,20 +280,30 @@ language sql immutable set search_path = '' as $$
     else null end
 $$;
 
+-- L-5: no verified age counts as under 13, and so does a division with any
+-- standalone number of 12 or less (12U, U12, U-12, "Under 12", "12 & Under",
+-- "Girls U-10"). Mirrors utils/gfs.js under13.
 create or replace function public.gfs_under_13(r public.gfs_roster) returns boolean
 language sql immutable set search_path = '' as $$
   select r.under_13 is distinct from false
-      or coalesce(coalesce(substring(upper(coalesce(r.division, '')) from '(\d{1,2}) ?U'),
-                           substring(upper(coalesce(r.division, '')) from 'U ?(\d{1,2})'))::int <= 12, false)
+      or exists (select 1 from regexp_matches(coalesce(r.division, ''), '(?:^|\D)(\d{1,2})(?!\d)', 'g') m
+                  where m[1]::int <= 12)
 $$;
 
 -- A takedown is permanent: its time never clears, and while it stands the
--- athlete stays do-not-publish whatever a later roster file says.
+-- athlete stays do-not-publish whatever a later roster file says. A roster
+-- that loads after the takedown (the same Sports Thread ID at a later stop)
+-- picks it up as the row goes in.
 create or replace function public.gfs_roster_guard() returns trigger
 language plpgsql set search_path = '' as $$
 begin
-  if tg_op = 'UPDATE' and old.takedown_at is not null then
-    new.takedown_at := old.takedown_at;
+  if tg_op = 'UPDATE' then
+    new.event_id := old.event_id;
+    new.roster_id := old.roster_id;
+    if old.takedown_at is not null then new.takedown_at := old.takedown_at; end if;
+  end if;
+  if new.takedown_at is null then
+    new.takedown_at := (select min(t.received_at) from public.gfs_takedowns t where t.roster_id = new.roster_id);
   end if;
   if new.takedown_at is not null then
     new.do_not_publish := true;
@@ -248,13 +315,31 @@ drop trigger if exists gfs_roster_guard on public.gfs_roster;
 create trigger gfs_roster_guard before insert or update on public.gfs_roster
   for each row execute function public.gfs_roster_guard();
 
--- When an athlete's record changes, their clips re-check their hold.
+-- When an athlete's record changes, their clips follow:
+--   * a new jersey or team means the clips may show someone else: the ones
+--     that aren't out go back to tag review, and the ones that are out are
+--     held ("roster_changed") until someone takes them down and tags them
+--     again;
+--   * a change to a hold or a SportsClippers permission re-checks each clip's
+--     hold and pull reason (the clips gate recomputes both).
 create or replace function public.gfs_roster_refresh() returns trigger
 language plpgsql set search_path = '' as $$
 begin
-  if new.takedown_at is distinct from old.takedown_at
+  if new.jersey is distinct from old.jersey or new.team is distinct from old.team then
+    update public.gfs_clips
+       set match = 'unmatched', why = 'roster_changed', roster_row = null, label = null, stage = 'shot', team = team_given
+     where roster_row = new.id
+       and not ((delivered_at is not null or listed_at is not null) and removed_at is null);
+    update public.gfs_clips set retag = true
+     where roster_row = new.id
+       and (delivered_at is not null or listed_at is not null) and removed_at is null;
+  elsif new.takedown_at is distinct from old.takedown_at
      or new.do_not_publish is distinct from old.do_not_publish
-     or new.consent_capture is distinct from old.consent_capture then
+     or new.consent_capture is distinct from old.consent_capture
+     or new.consent_sale is distinct from old.consent_sale
+     or new.public_display is distinct from old.public_display
+     or new.under_13 is distinct from old.under_13
+     or new.division is distinct from old.division then
     update public.gfs_clips set updated_at = now() where roster_row = new.id;
   end if;
   return null;
@@ -269,30 +354,52 @@ create table if not exists public.gfs_clips (
   event_id uuid not null references public.gfs_events(id) on delete cascade,
   log_key text not null unique,
   game text check (game is null or char_length(game) <= 160),
+  -- The matched athlete's team; for an unmatched clip, the team the upload
+  -- log named (team_given).
   team text check (team is null or char_length(team) <= 80),
-  -- The team folder above the jersey folder, kept for re-matching once the
-  -- roster lands (B-5's jersey folders alone can't tell two teams' #7 apart).
+  -- The upload log's team column, as given. Matching treats it as certain.
+  team_given text check (team_given is null or char_length(team_given) <= 80),
+  -- The team folder above the jersey folder, kept only when it names one of
+  -- the game's teams or a roster team (B-5's jersey folders alone can't tell
+  -- two teams' #7 apart).
   team_hint text check (team_hint is null or char_length(team_hint) <= 80),
-  folder text check (folder is null or char_length(folder) <= 40),
+  -- Only a jersey folder or 00-unassigned is kept; any other folder name
+  -- could be a person's.
+  folder text check (folder is null or folder ~ '^([0-9]{1,2}|00-?[Uu][Nn][Aa][Ss][Ss][Ii][Gg][Nn][Ee][Dd])$'),
   file text not null check (file ~ '^[A-Za-z0-9._-]{1,120}$'),
   angle text check (angle is null or angle in ('Sideline', 'EndZone', 'EagleEye', 'Story')),
   clip_no int check (clip_no is null or clip_no between 0 and 99999),
+  -- The number the file was filed under; a director's tag doesn't change it.
   jersey text check (jersey is null or jersey ~ '^[0-9]{1,2}$'),
   creator_id uuid references public.gfs_creators(id) on delete set null,
   -- No delete action: a roster row with clips logged against it stays (an
   -- event deleted as a whole takes both with it).
   roster_row uuid references public.gfs_roster(id),
   match text not null default 'unmatched' check (match in ('matched', 'unmatched', 'not_a_player')),
-  why text check (why is null or why in ('no_number', 'not_on_roster', 'team_not_on_roster', 'two_teams', 'duplicate_number', 'no_roster')),
+  -- 'jersey': matched (or not) by the file's number; 'manual': a director
+  -- decided, and re-matching leaves it alone.
+  tag_source text not null default 'jersey' check (tag_source in ('jersey', 'manual')),
+  why text check (why is null or why in ('no_number', 'not_on_roster', 'team_not_on_roster', 'two_teams', 'duplicate_number', 'no_roster',
+                                         'no_team', 'team_conflict', 'roster_changed', 'untagged')),
   label text check (label is null or label ~ '^[A-Za-z0-9-]{3,120}$'),
   held boolean not null default false,
-  hold_reason text check (hold_reason is null or hold_reason in ('takedown', 'do_not_publish', 'no_capture_consent')),
+  hold_reason text check (hold_reason is null or hold_reason in ('takedown', 'do_not_publish', 'no_capture_consent', 'roster_changed')),
+  -- Out when the roster changed its athlete's number or team: held until it's
+  -- taken down and tagged again.
+  retag boolean not null default false,
   stage text not null default 'shot' check (stage in ('shot', 'tagged', 'edited', 'approved')),
   approved_by text,
   approved_at timestamptz,
+  -- In a family-links file, then marked sent.
+  family_export_at timestamptz,
   delivered_at timestamptz,
+  -- In a SportsClippers file (and how it was listed there), then marked listed.
+  exported_at timestamptz,
+  export_visibility text check (export_visibility is null or export_visibility in ('family', 'public')),
   listed_at timestamptz,
   visibility text check (visibility is null or visibility in ('family', 'public')),
+  -- A live listing the roster no longer allows (computed by the gate).
+  pull_reason text check (pull_reason is null or pull_reason in ('no_sale_consent', 'not_public')),
   removed_at timestamptz,
   uploaded_at timestamptz,
   logged_by text not null,
@@ -301,7 +408,8 @@ create table if not exists public.gfs_clips (
   check (match <> 'matched' or roster_row is not null),
   check (stage = 'shot' or match = 'matched'),
   check (stage <> 'approved' or (approved_by is not null and approved_at is not null)),
-  check (listed_at is null or visibility is not null)
+  check (listed_at is null or visibility is not null),
+  check (exported_at is null or export_visibility is not null)
 );
 create index if not exists gfs_clips_event_idx on public.gfs_clips (event_id, match, stage);
 create index if not exists gfs_clips_roster_idx on public.gfs_clips (roster_row);
@@ -328,8 +436,18 @@ begin
     raise exception 'gfs_clip_already_out';
   end if;
 
-  -- The hold always comes from the athlete's record.
-  reason := case when new.roster_row is null then null else public.gfs_hold_reason(r) end;
+  -- "Roster changed" sticks until the clip is tagged again.
+  if tg_op = 'INSERT' then
+    new.retag := false;
+  elsif new.roster_row is distinct from old.roster_row or new.match is distinct from old.match then
+    new.retag := false;
+  elsif old.retag then
+    new.retag := true;
+  end if;
+
+  -- The hold always comes from the athlete's record (and a stuck re-tag).
+  reason := case when new.roster_row is null then null
+                 else coalesce(public.gfs_hold_reason(r), case when new.retag then 'roster_changed' end) end;
   new.held := reason is not null;
   new.hold_reason := reason;
 
@@ -360,12 +478,28 @@ begin
   if (going_listed or going_delivered) and new.stage <> 'approved' then
     raise exception 'gfs_clip_not_approved';
   end if;
+  -- Marked sent or listed only once it went out in that file, and listed as
+  -- public only if the file said public.
+  if going_delivered and new.family_export_at is null then
+    raise exception 'gfs_clip_not_exported';
+  end if;
+  if going_listed and (new.exported_at is null or (new.visibility = 'public' and new.export_visibility is distinct from 'public')) then
+    raise exception 'gfs_clip_not_exported';
+  end if;
 
   -- SportsClippers Schedule A, whenever a listing starts or changes.
   if going_listed then
     if not coalesce(r.consent_sale, false) then raise exception 'gfs_clip_no_sale_consent'; end if;
     if new.visibility = 'public' and (not r.public_display or public.gfs_under_13(r)) then raise exception 'gfs_clip_not_public'; end if;
   end if;
+
+  -- A live listing the roster no longer allows: no sale consent means it
+  -- comes down; lost public display (or under 13) means family-only.
+  new.pull_reason := case
+    when new.listed_at is null or new.removed_at is not null then null
+    when not coalesce(r.consent_sale, false) then 'no_sale_consent'
+    when new.visibility = 'public' and (not coalesce(r.public_display, false) or public.gfs_under_13(r)) then 'not_public'
+    else null end;
   return new;
 end $$;
 drop trigger if exists gfs_clips_gate on public.gfs_clips;
@@ -410,6 +544,10 @@ create table if not exists public.gfs_deliverables (
   submitted_at timestamptz,
   decided_by text,
   decided_at timestamptz,
+  -- The approver's word that no athlete on the event's keep-out list (on
+  -- hold, or without marketing consent) appears in what they cleared.
+  attested_by text,
+  attested_at timestamptz,
   note text check (note is null or char_length(note) <= 300),
   updated_at timestamptz not null default now(),
   unique (event_id, kind, day),
@@ -417,7 +555,7 @@ create table if not exists public.gfs_deliverables (
   check (approved_count <= delivered),
   check (status not in ('submitted', 'approved', 'changes') or publishes),
   check (status <> 'done' or not publishes),
-  check (status <> 'approved' or (decided_by is not null and decided_at is not null))
+  check (status <> 'approved' or (decided_by is not null and decided_at is not null and attested_by is not null and attested_at is not null))
 );
 create index if not exists gfs_deliverables_event_idx on public.gfs_deliverables (event_id);
 create index if not exists gfs_deliverables_status_idx on public.gfs_deliverables (status) where status = 'submitted';
@@ -465,8 +603,19 @@ begin
     end if;
   end if;
 
+  -- An attestation belongs to one approval: it's given as the piece clears,
+  -- by the approver who clears it, and a new submission starts without one.
+  if new.status = 'submitted' and old.status is distinct from 'submitted' then
+    new.attested_by := null;
+    new.attested_at := null;
+  elsif not (new.status = 'approved' and old.status = 'submitted') then
+    new.attested_by := old.attested_by;
+    new.attested_at := old.attested_at;
+  end if;
+
   if new.status = 'approved' and old.status = 'submitted' then
     if new.decided_by is null or new.decided_at is null then raise exception 'gfs_deliverable_approver'; end if;
+    if new.attested_at is null or new.attested_by is distinct from new.decided_by then raise exception 'gfs_deliverable_attest'; end if;
     new.approved_count := new.delivered;
   elsif new.approved_count is distinct from old.approved_count then
     new.approved_count := old.approved_count;
@@ -542,6 +691,14 @@ begin
     if old.other_done_at is not null then new.other_done_at := old.other_done_at; new.other_done_by := old.other_done_by; end if;
     if old.offsite_requested_at is not null then new.offsite_requested_at := old.offsite_requested_at; new.offsite_requested_by := old.offsite_requested_by; end if;
   end if;
+  -- "Off every other surface" isn't done while a family link or a
+  -- SportsClippers listing of the athlete, at any event, is still out.
+  if new.other_done_at is not null and (tg_op = 'INSERT' or old.other_done_at is null)
+     and exists (select 1 from public.gfs_clips c join public.gfs_roster r on r.id = c.roster_row
+                  where r.roster_id = new.roster_id
+                    and (c.delivered_at is not null or c.listed_at is not null) and c.removed_at is null) then
+    raise exception 'gfs_takedown_clips_out';
+  end if;
   new.status := case when new.pylon_done_at is not null and new.other_done_at is not null and new.offsite_requested_at is not null then 'done' else 'open' end;
   return new;
 end $$;
@@ -563,10 +720,16 @@ create trigger gfs_takedowns_flag after insert on public.gfs_takedowns
   for each row execute function public.gfs_takedowns_flag();
 
 -- ── Pipeline counts for the Distribution desk ────────────────────────────
-create or replace function public.gfs_event_counts(p_events uuid[])
+--   needs_removal   out (family link or listing) and held, or listed without
+--                   sale consent: it has to come down
+--   to_family_only  a public listing that lost public display (not held)
+--   to_send         in a family-links file, not marked sent yet
+--   to_list         in a SportsClippers file, not marked listed yet
+drop function if exists public.gfs_event_counts(uuid[]);
+create function public.gfs_event_counts(p_events uuid[])
 returns table (
   event_id uuid, shot int, matched int, unmatched int, not_a_player int, tagged int, edited int,
-  approved int, delivered int, listed int, held int, needs_removal int
+  approved int, delivered int, listed int, held int, needs_removal int, to_family_only int, to_send int, to_list int
 )
 language sql stable set search_path = '' as $$
   select c.event_id,
@@ -580,7 +743,13 @@ language sql stable set search_path = '' as $$
          count(*) filter (where c.delivered_at is not null)::int,
          count(*) filter (where c.listed_at is not null and c.removed_at is null)::int,
          count(*) filter (where c.held)::int,
-         count(*) filter (where c.held and (c.listed_at is not null or c.delivered_at is not null) and c.removed_at is null)::int
+         count(*) filter (where (c.held or c.pull_reason = 'no_sale_consent')
+                            and (c.listed_at is not null or c.delivered_at is not null) and c.removed_at is null)::int,
+         count(*) filter (where c.pull_reason = 'not_public' and not c.held)::int,
+         count(*) filter (where c.family_export_at is not null and c.delivered_at is null and c.removed_at is null
+                            and c.stage = 'approved' and not c.held)::int,
+         count(*) filter (where c.exported_at is not null and c.listed_at is null and c.removed_at is null
+                            and c.stage = 'approved' and not c.held)::int
     from public.gfs_clips c
    where c.event_id = any (p_events)
    group by c.event_id
@@ -589,11 +758,13 @@ $$;
 revoke all on function public.gfs_event_counts(uuid[]) from public;
 revoke all on function public.gfs_hold_reason(public.gfs_roster) from public;
 revoke all on function public.gfs_under_13(public.gfs_roster) from public;
+revoke all on function public.gfs_creator_ok(public.gfs_creators, date) from public;
 do $$
 declare
   f text;
 begin
-  foreach f in array array['public.gfs_event_counts(uuid[])', 'public.gfs_hold_reason(public.gfs_roster)', 'public.gfs_under_13(public.gfs_roster)'] loop
+  foreach f in array array['public.gfs_event_counts(uuid[])', 'public.gfs_hold_reason(public.gfs_roster)', 'public.gfs_under_13(public.gfs_roster)',
+                           'public.gfs_creator_ok(public.gfs_creators, date)'] loop
     if exists (select 1 from pg_roles where rolname = 'anon') then execute format('revoke all on function %s from anon', f); end if;
     if exists (select 1 from pg_roles where rolname = 'authenticated') then execute format('revoke all on function %s from authenticated', f); end if;
     if exists (select 1 from pg_roles where rolname = 'service_role') then execute format('grant execute on function %s to service_role', f); end if;
