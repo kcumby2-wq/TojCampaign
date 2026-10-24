@@ -508,6 +508,20 @@ function teamHintOf(clip, rosterTeams) {
   const inGame = (clip.teams || []).some((t) => norm(t) === n);
   return inGame || (rosterTeams && rosterTeams.has(n)) ? clean(clip.teamHint, 80) : null;
 }
+// The upload log's team column, kept as given only when it names one of the
+// game's teams or a roster team. A team column naming anything else is still
+// a team the clip says it belongs to, so it's kept as UNKNOWN_TEAM ("?"): the
+// clip won't match until a person looks, and the text itself (which could be
+// anything, a name included) isn't stored.
+const UNKNOWN_TEAM = "?";
+function teamGivenOf(clip, rosterTeams) {
+  if (!clip || !clip.team) return null;
+  const n = norm(clip.team);
+  if (!n) return null;
+  const inGame = (clip.teams || []).some((t) => norm(t) === n);
+  return inGame || (rosterTeams && rosterTeams.has(n)) ? clean(clip.team, 80) : UNKNOWN_TEAM;
+}
+const shownTeam = (t) => (t && t !== UNKNOWN_TEAM ? t : null);
 
 // A time from the export: ISO with an offset, or a local "YYYY-MM-DD HH:MM"
 // in the event's zone.
@@ -579,6 +593,10 @@ function rosterIndex(rows) {
 function matchClip(clip, index) {
   if (!index.size) return { match: "unmatched", why: "no_roster" };
   if (clip.jersey == null) return { match: "unmatched", why: "no_number" };
+  // Filed in one jersey folder and named for another number: one of them is
+  // wrong.
+  if (clip.folder && /^\d{1,2}$/.test(clip.folder) && clip.folder !== clip.jersey) return { match: "unmatched", why: "number_conflict" };
+  if (clip.team === UNKNOWN_TEAM) return { match: "unmatched", why: "team_not_on_roster" };
   const given = clip.team ? norm(clip.team) : "";
   const hint = clip.teamHint ? norm(clip.teamHint) : "";
   if (given && hint && given !== hint) return { match: "unmatched", why: "team_conflict" };
@@ -617,7 +635,8 @@ function uploadKey(eventId, g) {
 // Jerseys on the clip's team(s) to offer in tag review: a swap of digits or
 // one digit off first, then the rest.
 function suggestions(clip, rosterRows, max = 3) {
-  const teams = clip.team ? [norm(clip.team)] : clip.teams ? clip.teams.map(norm) : null;
+  const given = shownTeam(clip.team);
+  const teams = given ? [norm(given)] : clip.teams ? clip.teams.map(norm) : null;
   const pool = rosterRows.filter((r) => r.jersey != null && (!teams || teams.includes(norm(r.team))));
   const j = clip.jersey;
   const score = (r) => {
@@ -832,6 +851,9 @@ module.exports = {
   safeFolder,
   parseUploadPath,
   teamHintOf,
+  UNKNOWN_TEAM,
+  teamGivenOf,
+  shownTeam,
   parseUploads,
   timeOf,
   rosterIndex,

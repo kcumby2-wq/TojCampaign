@@ -58,7 +58,7 @@ The team activity feed follows the same lines. Pylon events entries go only to p
 3. **Crew.** Assign from the region's pool. The rules:
    - A youth creator (16–17) shoots or shadows, never leads or edits.
    - A youth creator is confirmed only alongside a confirmed, screened adult on site (lead, shooter, photographer or story camera).
-   - That adult can't be removed, un-confirmed or moved off site while it would leave a youth creator alone. Two people changing the crew at the same moment can't get around this.
+   - That adult can't be removed, un-confirmed, moved off site or deleted from the crew while it would leave a youth creator alone. Two people changing the crew at the same moment can't get around this.
    - A creator whose screening lapses after they're crewed (a check over a year old at the event, or a pause) stops counting toward the crew. The crew check says so until Kyron updates it.
    - A creator's tier can't change while they're on an upcoming crew.
    - A family rating can go in after the event even if the creator has been paused since.
@@ -77,6 +77,7 @@ The team activity feed follows the same lines. Pylon events entries go only to p
 - **The approver confirms that no one on the list appears in the pieces.** The database records who confirmed it and when. Nothing clears without it.
 - From the desk, an approver can clear several events' pieces at once, with one confirmation after seeing each event's list.
 - Any piece that posts can name the athletes it shows. Each named athlete is checked for capture and marketing consent. "Who Is ___?" features, interviews and tracked Top Performers must name theirs.
+- Names on a piece that's already cleared are checked again whenever they change. Pieces that don't name athletes (the event report, say) don't take names.
 
 ### Clips to families and SportsClippers
 
@@ -84,10 +85,13 @@ The team activity feed follows the same lines. Pylon events entries go only to p
   - "Mark sent" covers only clips that were in a family-links file.
   - "Mark listed" covers only clips that were in a SportsClippers file, at the visibility that file gave.
   - A clip exported as public whose guardian then turns public display off isn't marked. Make the file again and it goes up family-only.
+  - A file belongs to the tags it was made under. A clip tagged again (by a director, or by a roster correction) goes out only in a new file, so a clip that went out as one athlete's is never marked sent as another's.
+  - A full re-export of the SportsClippers file never lists a clip as more public than the app recorded.
 - **A listing the roster stops allowing is pulled.**
   - Sale consent comes off: the clip has to come down. It shows under "out but can't stay".
   - Public display comes off, or the athlete turns out to be under 13: the listing goes family-only. An approver changes it on SportsClippers, then marks it here.
 - **A clip on hold that's already out has to come down.** That covers a takedown, do-not-publish, withdrawn capture consent, or a roster change while it was out. Take it off SportsClippers and the family links, then mark it removed.
+  - A clip held for a roster change goes back to tag review once it's down. It's matched again by its number where it can be; a director checks the rest.
 
 ### Takedowns
 
@@ -128,7 +132,7 @@ How the values are read:
 - **A correction re-tags.** When a later file gives an athlete a new jersey number or team, their clips may show someone else:
   - clips matched by number are matched again against the corrected roster;
   - clips a director tagged go back to tag review;
-  - clips already out are held until they're taken down and tagged again.
+  - clips already out are held until they're taken down, then go back to tag review.
 - **Athletes missing from a later file** are counted in the load summary. They keep the permissions they had. If a family withdrew, log a takedown.
 
 ### The upload log (GFS storage export)
@@ -155,9 +159,14 @@ TEAM-A_vs_TEAM-B_YYYYMMDD/00-unassigned/EagleEye-017.mp4                    a mi
   - the game folder names two teams and both are on the roster (then the number has to belong to only one of them);
   - the roster has a single team.
 
-  Anything else goes to tag review. That includes a game folder with a team name the roster doesn't use (`Buckeye-Flag` for "Buckeye Flag 12U"). **Name game folders with the roster's team names.**
+  Anything else goes to tag review. That includes:
+  - a game folder with a team name the roster doesn't use (`Buckeye-Flag` for "Buckeye Flag 12U");
+  - a jersey folder and a file name that give different numbers (`7/11-Sideline-003.mp4`);
+  - a `team` column naming a team that isn't in the game folder or on the roster.
+
+  **Name game folders with the roster's team names.**
 - **Team folders.** Schedule B-5 keeps one folder per jersey number per game, and that can't tell two teams' #11 apart. A team folder above the jersey folder settles it, and so does a `team` column. Without either, a number on both teams goes to tag review as *same number on both teams*.
-- **Folder names.** Only jersey folders and `00-unassigned` are stored. A team folder is kept only when it names one of the game's teams or a roster team. Any other folder name could be a person's, so it's dropped, and the clip's key is a hash.
+- **Folder names and the team column.** Only jersey folders and `00-unassigned` are stored. A team folder, or a `team` column value, is kept only when it names one of the game's teams or a roster team. Any other name could be a person's, so it isn't stored, and the clip's key is a hash.
 - **Labels.** A matched clip gets GFS's second-round label, `Event-Position-Jersey#-Angle-Clip#` (for example `Geneva2026-WR-11-EndZone-042`). Rows that don't follow the label standard are skipped, so a file named after a person never gets in.
 
 ### What leaves the app

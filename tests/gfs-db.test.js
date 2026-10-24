@@ -351,6 +351,46 @@ test("S9: under 13 in the database, however the division is written", async () =
   }
 });
 
+test("second review: exports belong to the tag, cleared pieces keep their checks, and crew deletes keep the youth rule", async () => {
+  const ev = await one(`insert into gfs_events (code, name, size, region, city, state, tz, starts_on, ends_on, ends_at, created_by)
+                        values ('Kettering2027', 'Kettering Flag', 'one_day', 'midwest', 'Kettering', 'OH', 'America/New_York', '2027-05-01', '2027-05-01', now(), 'k') returning *`);
+  const ath = (rid, jersey, dnp = false) => one(`insert into gfs_roster (event_id, roster_id, team, division, jersey, under_13, consent_capture, consent_marketing, consent_sale, public_display, do_not_publish)
+                                                 values ($1, $2, 'Kettering 14U', '14U', $3, false, true, true, true, true, $4) returning *`, [ev.id, rid, jersey, dnp]);
+  const a = await ath("KA-1", "31");
+  const b = await ath("KB-1", "13");
+  const dnp = await ath("KC-1", "5", true);
+  const c = await one(`insert into gfs_clips (event_id, log_key, file, jersey, roster_row, match, logged_by) values ($1, 'k-exp', '31-Sideline-001.mp4', '31', $2, 'matched', 'x') returning id`, [ev.id, a.id]);
+  for (const st of ["tagged", "edited"]) await q(`update gfs_clips set stage = $2 where id = $1`, [c.id, st]);
+  await q(`update gfs_clips set stage = 'approved', approved_by = 'j', approved_at = now(), family_export_at = now(), exported_at = now(), export_visibility = 'public' where id = $1`, [c.id]);
+  // A new tag, or a trip back to the start, voids the export.
+  await q(`update gfs_clips set roster_row = $2, stage = 'shot' where id = $1`, [c.id, b.id]);
+  let x = await one(`select family_export_at, exported_at, export_visibility from gfs_clips where id = $1`, [c.id]);
+  assert.deepEqual([x.family_export_at, x.exported_at, x.export_visibility], [null, null, null]);
+  for (const st of ["tagged", "edited"]) await q(`update gfs_clips set stage = $2 where id = $1`, [c.id, st]);
+  await q(`update gfs_clips set stage = 'approved', approved_by = 'j', approved_at = now(), family_export_at = now() where id = $1`, [c.id]);
+  await q(`update gfs_clips set stage = 'shot' where id = $1`, [c.id]);
+  assert.equal((await one(`select family_export_at from gfs_clips where id = $1`, [c.id])).family_export_at, null);
+  await q(`update gfs_clips set match = 'unmatched', why = 'number_conflict', roster_row = null where id = $1`, [c.id]);
+
+  // Names on a cleared piece are checked as they change, for every kind.
+  const d = await one(`insert into gfs_deliverables (event_id, kind, required, due_at, publishes) values ($1, 'stills', 1, now(), true) returning id`, [ev.id]);
+  await q(`update gfs_deliverables set delivered = 1, featured = array[$2::uuid] where id = $1`, [d.id, a.id]);
+  await q(`update gfs_deliverables set status = 'submitted', submitted_by = 'mw', submitted_at = now() where id = $1`, [d.id]);
+  await q(`update gfs_deliverables set status = 'approved', decided_by = 'j', decided_at = now(), attested_by = 'j', attested_at = now() where id = $1`, [d.id]);
+  await refused(`update gfs_deliverables set featured = array[$2::uuid] where id = $1`, [d.id, dnp.id], "gfs_featured_consent");
+  const rep = await one(`insert into gfs_deliverables (event_id, kind, required, due_at) values ($1, 'event_report', 1, now()) returning id`, [ev.id]);
+  await refused(`update gfs_deliverables set delivered = 1, featured = array[$2::uuid], status = 'done' where id = $1`, [rep.id, dnp.id], "gfs_featured_consent");
+
+  // Deleting the last screened adult's crew row is refused like removing it;
+  // deleting the event takes the whole crew.
+  const lead = await one(`insert into gfs_crew (event_id, creator_id, role, status, assigned_by) values ($1, $2, 'lead', 'confirmed', 'x') returning id`, [ev.id, adult.id]);
+  await q(`insert into gfs_crew (event_id, creator_id, role, status, assigned_by) values ($1, $2, 'shooter', 'confirmed', 'x')`, [ev.id, youth.id]);
+  await refused(`delete from gfs_crew where id = $1`, [lead.id], "crew_youth_left_alone");
+  await q(`delete from gfs_clips where event_id = $1`, [ev.id]);
+  await q(`delete from gfs_events where id = $1`, [ev.id]);
+  assert.equal((await q(`select count(*)::int as n from gfs_crew where event_id = $1`, [ev.id])).rows[0].n, 0);
+});
+
 test("everything is server-side only", async () => {
   const rls = (await q(`select relname, relrowsecurity from pg_class c join pg_namespace n on n.oid = c.relnamespace where n.nspname = $1 and relname like 'gfs_%' and relkind = 'r'`, [S])).rows;
   assert.equal(rls.length, 8);

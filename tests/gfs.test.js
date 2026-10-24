@@ -672,7 +672,10 @@ test("B2: a roster correction re-tags; number-matched clips follow it, a directo
   assert.equal((await josh(`${E(ev3)}/clips?view=out`)).json.clips.length, 1);
   assert.equal((await mw(E(ev3))).json.counts.needs_removal, 1);
   assert.equal((await patch(mw, `${E(ev3)}/clips/${out.id}`, { roster_row: rosterOf(ev3, "KF-1").id })).json.error, "gfs_clip_already_out");
-  await post(mw, `${E(ev3)}/clips/removed`, { ids: [out.id] });
+  const rem = (await post(mw, `${E(ev3)}/clips/removed`, { ids: [out.id] })).json;
+  assert.deepEqual([rem.removed, rem.back_to_review], [1, 1]);
+  assert.deepEqual([clipOf(ev3, "40-EndZone-004.mp4").match, clipOf(ev3, "40-EndZone-004.mp4").retag], ["unmatched", false], "once it's down it goes back to tag review");
+  assert.ok((await mw(`${E(ev3)}/clips?view=unmatched`)).json.clips.some((x) => x.id === out.id));
   const fixed = await patch(mw, `${E(ev3)}/clips/${out.id}`, { roster_row: rosterOf(ev3, "KF-1").id });
   assert.equal(fixed.status, 200, JSON.stringify(fixed.json));
   assert.deepEqual([fixed.json.clip.held, fixed.json.clip.removed, fixed.json.clip.stage], [false, false, "shot"], "taken down and tagged again, it starts over");
@@ -804,4 +807,60 @@ test("minor 16: viewers see that a clip is held, never why, and no takedown reas
   assert.ok(tds.length > 0);
   assert.ok(tds.every((t) => t.reason === null && t.reason_name === null && t.note === null));
   assert.ok((await mw("/api/gfs/takedowns")).json.takedowns.every((t) => t.reason_name));
+});
+
+test("second review: a file made under one tag doesn't count for another", async () => {
+  const ev7 = await newEvent(mw, { name: "Kettering Flag", region: "midwest", city: "Kettering", starts_on: D(11) });
+  const v1 = "Athlete ID,Team,Division,Jersey,Under 13,Capture,Marketing,Sale,Public\nA-1,Kettering 14U,14U,31,no,yes,yes,yes,yes\nB-1,Kettering 14U,14U,13,no,yes,yes,yes,yes\n";
+  await post(mw, `${E(ev7)}/roster`, { csv: v1 });
+  await post(mw, `${E(ev7)}/uploads`, { csv: `path,team\nKettering-14U_vs_Oakwood-14U_${ymd(D(11))}/31/31-Sideline-001.mp4,Kettering 14U\n` });
+  await post(mw, `${E(ev7)}/tags/approve`);
+  await post(mw, `${E(ev7)}/clips/edited`);
+  await post(josh, `${E(ev7)}/clips/approve`);
+  await mw(`${E(ev7)}/families.csv`);
+  await josh(`${E(ev7)}/listings.csv`);
+  // The director re-tags it to B before anything is marked.
+  const c = clipOf(ev7, "31-Sideline-001.mp4");
+  await patch(mw, `${E(ev7)}/clips/${c.id}`, { roster_row: rosterOf(ev7, "B-1").id });
+  const after = clipOf(ev7, "31-Sideline-001.mp4");
+  assert.deepEqual([after.family_export_at, after.exported_at], [null, null]);
+  await post(mw, `${E(ev7)}/tags/approve`);
+  await post(mw, `${E(ev7)}/clips/edited`);
+  await post(josh, `${E(ev7)}/clips/approve`);
+  assert.equal((await post(mw, `${E(ev7)}/clips/delivered`)).json.delivered, 0, "the family file carried it as A's");
+  assert.equal((await post(josh, `${E(ev7)}/clips/listed`)).json.listed, 0);
+});
+
+test("second review: named athletes on a cleared piece are checked as they change, and only pieces that name athletes take names", async () => {
+  const report = (await mw(`/api/gfs/events/${evId}`)).json.deliverables.find((d) => d.kind === "event_report");
+  const cat = rosterOf({ id: evId }, "ST-1003");
+  assert.equal((await patch(mw, `/api/gfs/events/${evId}/deliverables/${report.id}`, { featured: [cat.id] })).json.error, "featured_not_used");
+  const stills = (await mw(`/api/gfs/events/${evId}`)).json.deliverables.find((d) => d.kind === "stills");
+  assert.equal(stills.status, "approved");
+  const r = await patch(mw, `/api/gfs/events/${evId}/deliverables/${stills.id}`, { featured: [cat.id] });
+  assert.equal(r.json.error, "gfs_featured_consent", "a do-not-publish athlete can't be named on a cleared piece");
+  const whoIs = (await mw(`/api/gfs/events/${evId}`)).json.deliverables.find((d) => d.kind === "who_is");
+  await patch(mw, `/api/gfs/events/${evId}/deliverables/${whoIs.id}`, { delivered: 3 });
+  await post(mw, `/api/gfs/events/${evId}/deliverables/${whoIs.id}/submit`);
+  assert.equal(db.tables.gfs_deliverables.find((d) => d.id === whoIs.id).attested_at, null, "a new submission starts without the old attestation");
+});
+
+test("second review: a team column naming no known team isn't stored, a re-export never upgrades a listing, and a folder and file that disagree on the number go to review", async () => {
+  const ev8 = await newEvent(mw, { name: "Oakwood Flag", region: "midwest", city: "Oakwood", starts_on: D(12) });
+  await post(mw, `${E(ev8)}/roster`, { csv: "Athlete ID,Team,Division,Jersey,Capture,Marketing,Sale,Public,Under 13\nOK-7,Oakwood 14U,14U,7,yes,yes,yes,no,no\nOK-11,Oakwood 14U,14U,11,yes,yes,yes,yes,no\nCV-1,Centerville 14U,14U,2,yes,yes,yes,yes,no\n" });
+  const g = `Oakwood-14U_vs_Centerville-14U_${ymd(D(12))}`;
+  await post(mw, `${E(ev8)}/uploads`, { csv: `path,team\n${g}/7/7-Sideline-001.mp4,Emma Smith\n${g}/7/11-Sideline-002.mp4,\n${g}/7/7-EndZone-003.mp4,\n` });
+  const named = clipOf(ev8, "7-Sideline-001.mp4");
+  assert.deepEqual([named.team_given, named.team, named.why], [G.UNKNOWN_TEAM, null, "team_not_on_roster"]);
+  assert.ok(!JSON.stringify(db.tables.gfs_clips.filter((c) => c.event_id === ev8.id)).includes("Emma"));
+  assert.equal(clipOf(ev8, "11-Sideline-002.mp4").why, "number_conflict", "filed under 7, named 11");
+  // Listed family-only; the guardian then allows public; a full re-export stays family.
+  await post(mw, `${E(ev8)}/tags/approve`);
+  await post(mw, `${E(ev8)}/clips/edited`);
+  await post(josh, `${E(ev8)}/clips/approve`);
+  await josh(`${E(ev8)}/listings.csv`);
+  assert.equal((await post(josh, `${E(ev8)}/clips/listed`)).json.family, 1);
+  await post(mw, `${E(ev8)}/roster`, { csv: "Athlete ID,Team,Division,Jersey,Capture,Marketing,Sale,Public,Under 13\nOK-7,Oakwood 14U,14U,7,yes,yes,yes,yes,no\nOK-11,Oakwood 14U,14U,11,yes,yes,yes,yes,no\nCV-1,Centerville 14U,14U,2,yes,yes,yes,yes,no\n" });
+  const all = (await josh(`${E(ev8)}/listings.csv?all=1`)).text.split(/\r\n/).find((l) => l.includes("7-EndZone-003.mp4"));
+  assert.match(all, /,family,/, "the file says what the app recorded");
 });

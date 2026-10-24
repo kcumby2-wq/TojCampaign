@@ -21,7 +21,8 @@
 --     Agreement v1.6 §6). A youth creator never leads or edits, and never
 --     works without a confirmed, screened adult on site (Creator Playbook
 --     v1.5). Crew changes lock the event row, so two at once can't race past
---     that. A creator's tier can't change while they're on an upcoming crew.
+--     that, and deleting a crew row is held to the same rule. A creator's
+--     tier can't change while they're on an upcoming crew.
 --   * A clip's hold comes from the athlete's record: a takedown, a
 --     do-not-publish flag, or no capture consent; or, for a clip that was out
 --     when the roster changed its athlete's number or team, "roster_changed".
@@ -31,7 +32,8 @@
 --   * Clips move shot → tagged → edited → approved, one step at a time.
 --   * A clip is marked sent or listed only after it went out in the family
 --     file or the SportsClippers file, and only as public if it was exported
---     as public.
+--     as public. A new tag, or a trip back to the start, clears the export:
+--     a file made under one athlete is never marked sent under another.
 --   * SportsClippers Schedule A: listing needs sale-of-media consent; public
 --     only when the guardian chose public display and the athlete is not
 --     under 13 (no verified age, or a division numbered 12 or under, counts as
@@ -39,7 +41,8 @@
 --   * A deliverable that posts on Pylon's channels is approved only with the
 --     approver recorded and their attestation that no athlete on the event's
 --     keep-out list appears, and only when every athlete it names has capture
---     and marketing consent and no hold (Schedule C-1 "Consent").
+--     and marketing consent and no hold (Schedule C-1 "Consent"), checked
+--     again whenever the names on a cleared piece change.
 --   * A takedown sets its own clock (safety request: 2h Pylon channels, 24h
 --     elsewhere; withdrawn consent: 24h and 72h; a removal request to
 --     accounts Pylon doesn't run within 24h) and sets the athlete to
@@ -236,6 +239,33 @@ drop trigger if exists gfs_crew_check on public.gfs_crew;
 create trigger gfs_crew_check before insert or update on public.gfs_crew
   for each row execute function public.gfs_crew_check();
 
+-- Deleting a crew row is held to the same rule as removing it (an event
+-- deleted as a whole takes its crew with it).
+create or replace function public.gfs_crew_guard_delete() returns trigger
+language plpgsql set search_path = '' as $$
+declare
+  c public.gfs_creators%rowtype;
+  e public.gfs_events%rowtype;
+begin
+  select * into e from public.gfs_events where id = old.event_id for update;
+  if not found then return old; end if;
+  select * into c from public.gfs_creators where id = old.creator_id;
+  if old.status = 'confirmed' and old.role in ('lead', 'shooter', 'photographer', 'story')
+     and c.tier = 'adult' and public.gfs_creator_ok(c, e.ends_on)
+     and not exists (select 1 from public.gfs_crew x join public.gfs_creators y on y.id = x.creator_id
+                      where x.event_id = old.event_id and x.id <> old.id and x.status = 'confirmed'
+                        and x.role in ('lead', 'shooter', 'photographer', 'story') and y.tier = 'adult'
+                        and public.gfs_creator_ok(y, e.ends_on))
+     and exists (select 1 from public.gfs_crew x join public.gfs_creators y on y.id = x.creator_id
+                  where x.event_id = old.event_id and x.id <> old.id and x.status = 'confirmed' and y.tier = 'youth') then
+    raise exception 'crew_youth_left_alone';
+  end if;
+  return old;
+end $$;
+drop trigger if exists gfs_crew_guard_delete on public.gfs_crew;
+create trigger gfs_crew_guard_delete before delete on public.gfs_crew
+  for each row execute function public.gfs_crew_guard_delete();
+
 -- ── The roster: IDs, jerseys and permissions only ────────────────────────
 create table if not exists public.gfs_roster (
   id uuid primary key default gen_random_uuid(),
@@ -327,7 +357,7 @@ language plpgsql set search_path = '' as $$
 begin
   if new.jersey is distinct from old.jersey or new.team is distinct from old.team then
     update public.gfs_clips
-       set match = 'unmatched', why = 'roster_changed', roster_row = null, label = null, stage = 'shot', team = team_given
+       set match = 'unmatched', why = 'roster_changed', roster_row = null, label = null, stage = 'shot', team = nullif(team_given, '?')
      where roster_row = new.id
        and not ((delivered_at is not null or listed_at is not null) and removed_at is null);
     update public.gfs_clips set retag = true
@@ -357,7 +387,9 @@ create table if not exists public.gfs_clips (
   -- The matched athlete's team; for an unmatched clip, the team the upload
   -- log named (team_given).
   team text check (team is null or char_length(team) <= 80),
-  -- The upload log's team column, as given. Matching treats it as certain.
+  -- The upload log's team column, kept only when it names one of the game's
+  -- teams or a roster team; '?' when it named some other team (the text isn't
+  -- kept). Matching treats it as certain, and '?' never matches.
   team_given text check (team_given is null or char_length(team_given) <= 80),
   -- The team folder above the jersey folder, kept only when it names one of
   -- the game's teams or a roster team (B-5's jersey folders alone can't tell
@@ -380,7 +412,7 @@ create table if not exists public.gfs_clips (
   -- decided, and re-matching leaves it alone.
   tag_source text not null default 'jersey' check (tag_source in ('jersey', 'manual')),
   why text check (why is null or why in ('no_number', 'not_on_roster', 'team_not_on_roster', 'two_teams', 'duplicate_number', 'no_roster',
-                                         'no_team', 'team_conflict', 'roster_changed', 'untagged')),
+                                         'no_team', 'team_conflict', 'roster_changed', 'untagged', 'number_conflict')),
   label text check (label is null or label ~ '^[A-Za-z0-9-]{3,120}$'),
   held boolean not null default false,
   hold_reason text check (hold_reason is null or hold_reason in ('takedown', 'do_not_publish', 'no_capture_consent', 'roster_changed')),
@@ -434,6 +466,16 @@ begin
   was_out := tg_op = 'UPDATE' and (old.delivered_at is not null or old.listed_at is not null) and old.removed_at is null;
   if was_out and (new.roster_row is distinct from old.roster_row or new.stage <> 'approved') then
     raise exception 'gfs_clip_already_out';
+  end if;
+
+  -- An export belongs to the clip as it was tagged and approved. A new tag,
+  -- or a trip back to the start, means it goes out in a new file: otherwise
+  -- a file made under one athlete could be marked sent under another.
+  if tg_op = 'UPDATE' and (new.roster_row is distinct from old.roster_row or new.match is distinct from old.match
+                           or (new.stage = 'shot' and old.stage is distinct from 'shot')) then
+    new.family_export_at := null;
+    new.exported_at := null;
+    new.export_visibility := null;
   end if;
 
   -- "Roster changed" sticks until the clip is tagged again.
@@ -587,10 +629,12 @@ begin
     raise exception 'gfs_deliverable_short';
   end if;
 
-  -- Featuring an athlete (posted, or an interview or tracked Top Performer)
-  -- needs capture and marketing consent and no hold, checked as it clears.
+  -- Naming an athlete (posted, or an interview or tracked Top Performer)
+  -- needs capture and marketing consent and no hold: checked as a piece
+  -- clears, and again whenever the names on a cleared piece change.
   if (new.status = 'approved' and old.status = 'submitted')
-     or (new.status = 'done' and old.status is distinct from 'done' and new.kind in ('top_performers', 'who_is', 'interviews')) then
+     or (new.status = 'done' and old.status is distinct from 'done')
+     or (new.status in ('approved', 'done') and new.featured is distinct from old.featured) then
     if new.kind in ('top_performers', 'who_is', 'interviews') and cardinality(new.featured) = 0 then
       raise exception 'gfs_featured_required';
     end if;

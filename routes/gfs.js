@@ -354,8 +354,26 @@ async function retagFor(sb, rowIds) {
   const back = clips.filter((c) => !G.isOut(c));
   await inChunks(out, (chunk) => run(sb.from("gfs_clips").update({ retag: true, held: true, hold_reason: "roster_changed" }).in("id", chunk)));
   // team_given differs clip to clip, so these go one by one.
-  await pool(back, 8, (c) => run(sb.from("gfs_clips").update({ match: "unmatched", why: "roster_changed", roster_row: null, label: null, stage: "shot", team: c.team_given || null, held: false, hold_reason: null, pull_reason: null, retag: false }).eq("id", c.id)));
+  await pool(back, 8, (c) => run(sb.from("gfs_clips").update(UNTAG(c, "roster_changed")).eq("id", c.id)));
   return { untagged: back.length, held_out: out.length };
+}
+// Back to tag review. Any export made under the old tag is void (the
+// database clears it too), so the clip goes out again only in a new file.
+function UNTAG(c, why) {
+  return { match: "unmatched", why, roster_row: null, label: null, stage: "shot", team: G.shownTeam(c.team_given), held: false, hold_reason: null, pull_reason: null, retag: false, family_export_at: null, exported_at: null, export_visibility: null };
+}
+// A clip that was taken down starts over once it's tagged again: it can go
+// out again, in a new file.
+const FRESH = { delivered_at: null, family_export_at: null, listed_at: null, exported_at: null, export_visibility: null, visibility: null, removed_at: null };
+// Take clips down. One held because the roster changed its athlete's number
+// or team goes back to tag review once it's down (and is matched again by its
+// number, unless a director tagged it).
+async function removeClips(sb, clips, at) {
+  const out = clips.filter((c) => G.isOut(c));
+  await inChunks(out.map((c) => c.id), (chunk) => run(sb.from("gfs_clips").update({ removed_at: at, pull_reason: null }).in("id", chunk).is("removed_at", null)));
+  const back = out.filter((c) => c.retag);
+  await pool(back, 8, (c) => run(sb.from("gfs_clips").update(UNTAG(c, "roster_changed")).eq("id", c.id)));
+  return { removed: out.length, back: back.length, events: [...new Set(back.map((c) => c.event_id))] };
 }
 // Run fn over items, a few at a time.
 async function pool(items, size, fn) {
@@ -885,9 +903,14 @@ router.post("/events/:id/roster", member, async (req, res) => {
     }
     const inFile = new Set(rids);
     const missingFromFile = existing.filter((r) => !inFile.has(r.roster_id)).length;
+    // What a correction affects, counted before the database moves it (its
+    // trigger re-tags as the rows change).
+    const movedClips = moved.length ? await inChunks(moved, (chunk) => all(() => sb.from("gfs_clips").select("id,roster_row,delivered_at,listed_at,removed_at").in("roster_row", chunk))) : [];
+    const affected = { untagged: movedClips.filter((c) => !G.isOut(c)).length, held_out: movedClips.filter((c) => G.isOut(c)).length };
     for (let i = 0; i < upserts.length; i += 500) await run(sb.from("gfs_roster").upsert(upserts.slice(i, i + 500), { onConflict: "event_id,roster_id" }));
     await run(sb.from("gfs_events").update({ roster_in_at: now() }).eq("id", ev.id));
-    const retag = await retagFor(sb, moved);
+    await retagFor(sb, moved);
+    const retag = affected;
     const fresh = await rosterRows(sb, ev.id);
     const byId = new Map(fresh.map((r) => [r.id, r]));
     const holds = await refreshHolds(sb, ev, byId);
@@ -936,7 +959,7 @@ async function rematch(sb, ev, roster) {
     const m = G.matchClip({ jersey: c.jersey, team: c.team_given, teamHint: c.team_hint, teams: teamsOfGame(c.game) }, index);
     if (m.match === "matched") {
       const reason = G.holdReason(m.row);
-      changes.push([c.id, { match: "matched", why: null, roster_row: m.row.id, team: m.row.team, label: G.finalLabel(ev, m.row, c), held: !!reason, hold_reason: reason, retag: false }]);
+      changes.push([c.id, { ...(c.removed_at ? FRESH : { family_export_at: null, exported_at: null, export_visibility: null }), match: "matched", why: null, roster_row: m.row.id, team: m.row.team, label: G.finalLabel(ev, m.row, c), stage: "shot", held: !!reason, hold_reason: reason, retag: false }]);
       n++;
     } else if (m.why !== c.why) {
       changes.push([c.id, { why: m.why }]);
@@ -1038,15 +1061,18 @@ router.post("/events/:id/uploads", member, async (req, res) => {
       const key = G.clipKey(ev.id, c);
       if (known.has(key) || fresh.has(key)) { already++; continue; }
       // A team folder counts only when it names one of the game's teams or a
-      // roster team; any other folder (an angle, a person) is dropped.
+      // roster team; any other folder (an angle, a person) is dropped. A team
+      // column naming anything else is kept only as "?" (the clip waits for
+      // a person, and the text isn't stored).
       const hint = G.teamHintOf(c, rosterTeams);
-      const m = G.matchClip({ ...c, teamHint: hint }, index);
+      const given = G.teamGivenOf(c, rosterTeams);
+      const m = G.matchClip({ ...c, team: given, teamHint: hint }, index);
       const row = {
         event_id: ev.id,
         log_key: key,
         game: c.game ? String(c.game).slice(0, 160) : null,
-        team: m.row ? m.row.team : c.team || null,
-        team_given: c.team || null,
+        team: m.row ? m.row.team : G.shownTeam(given),
+        team_given: given,
         team_hint: hint,
         folder: c.folder || null,
         file: c.file,
@@ -1188,13 +1214,12 @@ router.patch("/events/:id/clips/:clipId", member, async (req, res) => {
     // A director's call: re-matching leaves it alone from here on. The file's
     // own jersey number stays as filed. A clip that was taken down starts
     // over (it can go out again once it's approved again).
-    const fresh = c.removed_at ? { delivered_at: null, family_export_at: null, listed_at: null, exported_at: null, export_visibility: null, visibility: null, removed_at: null } : {};
-    const reset = { ...fresh, stage: "shot", tag_source: "manual", retag: false, pull_reason: null };
+    const reset = { ...(c.removed_at ? FRESH : {}), stage: "shot", tag_source: "manual", retag: false, pull_reason: null, family_export_at: null, exported_at: null, export_visibility: null };
     let patch;
     if (b.not_a_player === true) {
-      patch = { ...reset, match: "not_a_player", why: null, roster_row: null, label: null, team: c.team_given || null, held: false, hold_reason: null };
+      patch = { ...reset, match: "not_a_player", why: null, roster_row: null, label: null, team: G.shownTeam(c.team_given), held: false, hold_reason: null };
     } else if (b.untag === true) {
-      patch = { ...reset, match: "unmatched", why: "untagged", roster_row: null, label: null, team: c.team_given || null, held: false, hold_reason: null };
+      patch = { ...reset, match: "unmatched", why: "untagged", roster_row: null, label: null, team: G.shownTeam(c.team_given), held: false, hold_reason: null };
     } else if (UUID.test(String(b.roster_row || ""))) {
       const row = await run(sb.from("gfs_roster").select("*").eq("id", b.roster_row).eq("event_id", ev.id).maybeSingle());
       if (!row) return res.status(400).json({ error: "not_on_this_roster" });
@@ -1355,7 +1380,9 @@ router.get("/events/:id/listings.csv", approver, async (req, res) => {
       position: row.position || "",
       roster_id: row.roster_id,
       angle: c.angle || "",
-      visibility: G.visibilityFor(row),
+      // A clip already listed is re-sent at what the app recorded, and never
+      // more public than the roster allows now.
+      visibility: c.listed_at ? (c.visibility === "public" && G.visibilityFor(row) === "public" ? "public" : "family") : G.visibilityFor(row),
       consent_capture: "yes",
       consent_marketing: row.consent_marketing ? "yes" : "no",
       consent_sale: "yes",
@@ -1435,12 +1462,11 @@ router.post("/events/:id/clips/removed", member, async (req, res) => {
     if (!ev) return;
     const ids = Array.isArray(req.body && req.body.ids) ? req.body.ids.map(String).filter((x) => UUID.test(x)).slice(0, 2000) : [];
     if (!ids.length) return res.status(400).json({ error: "ids_required" });
-    const at = now();
-    const rows = await inChunks(ids, (chunk) => run(sb.from("gfs_clips").select("id,listed_at,delivered_at,removed_at").eq("event_id", ev.id).in("id", chunk)));
-    const out = rows.filter((c) => G.isOut(c)).map((c) => c.id);
-    await inChunks(out, (chunk) => run(sb.from("gfs_clips").update({ removed_at: at, pull_reason: null }).in("id", chunk).is("removed_at", null)));
-    await T.logActivity(actor(req), "gfs_clips_removed", ev.code, { region: ev.region, clips: out.length });
-    res.json({ removed: out.length });
+    const rows = await inChunks(ids, (chunk) => run(sb.from("gfs_clips").select("id,event_id,team_given,retag,listed_at,delivered_at,removed_at").eq("event_id", ev.id).in("id", chunk)));
+    const done = await removeClips(sb, rows, now());
+    const rematched = done.back ? await rematch(sb, ev, await rosterRows(sb, ev.id)) : 0;
+    await T.logActivity(actor(req), "gfs_clips_removed", ev.code, { region: ev.region, clips: done.removed });
+    res.json({ removed: done.removed, back_to_review: done.back - rematched, matched_again: rematched });
   } catch (e) {
     fail(res, e, "mark_removed");
   }
@@ -1526,10 +1552,18 @@ router.patch("/events/:id/deliverables/:did", member, async (req, res) => {
     }
     if (b.late_cause !== undefined) patch.late_cause = G.clean(b.late_cause, 200) || null;
     if (b.featured !== undefined) {
+      const info = G.deliverableInfo(d.kind) || {};
+      if (!info.featured && !d.publishes) return res.status(400).json({ error: "featured_not_used", hint: "This one doesn't name athletes." });
       const list = (Array.isArray(b.featured) ? b.featured : []).map(String).filter((x) => UUID.test(x));
       const uniq = [...new Set(list)].slice(0, 200);
       const rows = uniq.length ? await inChunks(uniq, (chunk) => run(sb.from("gfs_roster").select("id,event_id").in("id", chunk))) : [];
       if (rows.filter((r) => r.event_id === ev.id).length !== uniq.length) return res.status(400).json({ error: "not_on_this_roster" });
+      // On a piece that's already cleared, the names are checked as they change.
+      if (["approved", "done"].includes(d.status)) {
+        if (info.featured && !uniq.length) return res.status(409).json({ error: "featured_required", hint: "Name the athletes it features, so their consent can be checked." });
+        const blocks = await consentBlocks(sb, ev, uniq);
+        if (blocks.length) return res.status(409).json({ error: "gfs_featured_consent", blocks });
+      }
       patch.featured = uniq;
     }
     const next = { ...d, ...patch };
@@ -1556,7 +1590,7 @@ router.post("/events/:id/deliverables/:did/submit", member, async (req, res) => 
     if (info.featured && !(d.featured || []).length) return res.status(409).json({ error: "featured_required", hint: "Name the athletes it features, so their consent can be checked." });
     const blocks = await consentBlocks(sb, ev, d.featured);
     if (blocks.length) return res.status(409).json({ error: "gfs_featured_consent", blocks });
-    const updated = await run(sb.from("gfs_deliverables").update({ status: "submitted", submitted_by: actor(req), submitted_at: now() }).eq("id", d.id).select("*").single());
+    const updated = await run(sb.from("gfs_deliverables").update({ status: "submitted", submitted_by: actor(req), submitted_at: now(), attested_by: null, attested_at: null }).eq("id", d.id).select("*").single());
     await T.logActivity(actor(req), "gfs_submitted", ev.code, { region: ev.region, kind: d.kind, day: d.day || undefined, pieces: d.delivered - d.approved_count });
     notify(regionEmails(ev.region, "approver"), { title: `${info.name} is waiting for approval`, body: `${ev.name} · ${d.delivered - d.approved_count} to clear for Pylon's channels`, url: `/app/#gfs-deliver/${ev.id}`, tag: `gfs-approve-${d.id}` });
     res.json({ deliverable: deliverableView(updated, ev) });
@@ -1621,11 +1655,10 @@ router.post("/events/:id/deliverables/:did/done", member, async (req, res) => {
     if (d.delivered < d.required) return res.status(409).json({ error: "gfs_deliverable_short", hint: `Log ${d.required} before marking it done.` });
     // Interviews and tracked Top Performers feature athletes: capture and
     // marketing consent for each, posted or not (Schedule C-1 "Consent").
-    if (G.deliverableInfo(d.kind).featured) {
-      if (!(d.featured || []).length) return res.status(409).json({ error: "featured_required", hint: "Name the athletes it features, so their consent can be checked." });
-      const blocks = await consentBlocks(sb, ev, d.featured);
-      if (blocks.length) return res.status(409).json({ error: "gfs_featured_consent", blocks });
-    }
+    // Anyone else a piece names is checked the same way.
+    if (G.deliverableInfo(d.kind).featured && !(d.featured || []).length) return res.status(409).json({ error: "featured_required", hint: "Name the athletes it features, so their consent can be checked." });
+    const blocks = await consentBlocks(sb, ev, d.featured);
+    if (blocks.length) return res.status(409).json({ error: "gfs_featured_consent", blocks });
     const updated = await run(sb.from("gfs_deliverables").update({ status: "done" }).eq("id", d.id).select("*").single());
     await T.logActivity(actor(req), "gfs_delivered", ev.code, { region: ev.region, kind: d.kind });
     res.json({ deliverable: deliverableView(updated, ev) });
@@ -1881,12 +1914,12 @@ async function outClipsFor(sb, rosterIds) {
   const rows = await inChunks(rosterIds, (chunk) => all(() => sb.from("gfs_roster").select("id,roster_id").in("roster_id", chunk)));
   const rid = new Map(rows.map((r) => [r.id, r.roster_id]));
   const ids = rows.map((r) => r.id);
-  const clips = ids.length ? await inChunks(ids, (chunk) => all(() => sb.from("gfs_clips").select("id,event_id,roster_row,listed_at,delivered_at,removed_at").in("roster_row", chunk))) : [];
+  const clips = ids.length ? await inChunks(ids, (chunk) => all(() => sb.from("gfs_clips").select("id,event_id,roster_row,team_given,retag,listed_at,delivered_at,removed_at").in("roster_row", chunk))) : [];
   for (const c of clips) {
     if (!G.isOut(c)) continue;
     const k = rid.get(c.roster_row);
     if (!out.has(k)) out.set(k, []);
-    out.get(k).push({ id: c.id, event_id: c.event_id });
+    out.get(k).push(c);
   }
   return out;
 }
@@ -2014,7 +2047,11 @@ router.patch("/takedowns/:id", member, async (req, res) => {
       // are out anywhere.
       const out = (await outClipsFor(sb, [t.roster_id])).get(t.roster_id) || [];
       const here = out.filter((c) => mine.has((events.get(c.event_id) || {}).region));
-      await inChunks(here.map((c) => c.id), (chunk) => run(sb.from("gfs_clips").update({ removed_at: at, pull_reason: null }).in("id", chunk).is("removed_at", null)));
+      const done = await removeClips(sb, here, at);
+      for (const id of done.events) {
+        const e = await run(sb.from("gfs_events").select("*").eq("id", id).maybeSingle());
+        if (e) await rematch(sb, e, await rosterRows(sb, e.id));
+      }
       const left = out.filter((c) => !here.includes(c));
       if (!left.length) Object.assign(patch, { other_done_at: at, other_done_by: actor(req) });
       else {

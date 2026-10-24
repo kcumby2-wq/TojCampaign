@@ -35,7 +35,7 @@
     credentials_owner_only: "Kyron records contracts, background checks and training.",
     already_on_crew: "They're already on this crew.",
     crew_youth_needs_adult: "A youth creator works only alongside a confirmed adult on site.",
-    crew_youth_left_alone: "A youth creator is confirmed. Confirm another adult first.",
+    crew_youth_left_alone: "A youth creator is confirmed and needs a screened adult on site. Confirm another adult first.",
     crew_youth_role: "A youth creator shoots or shadows; never leads or edits.",
     gfs_featured_consent: "An athlete it features is missing capture or marketing consent, or is on hold.",
     featured_required: "Name the athletes it features first, so their consent can be checked.",
@@ -64,9 +64,10 @@
     gfs_clip_not_exported: "Make the file first, then mark what went out in it.",
     gfs_clip_held: "That athlete is on hold, so the clip stays off every channel.",
     gfs_takedown_clips_out: "Clips are still out somewhere. Take them down first.",
+    featured_not_used: "This one doesn't name athletes.",
   };
   var PROBLEM = { creator_not_active: "Not active", no_contract: "No signed contract", background_check: "Background check missing or over a year old", safety_training: "Safety training missing or over a year old", youth_role: "Youth creators shoot or shadow only" };
-  var WHY = { no_number: "Number unreadable", not_on_roster: "Number isn't on the roster", team_not_on_roster: "A team in the folder name isn't on the roster", two_teams: "Same number on both teams", duplicate_number: "Two athletes share this number", no_roster: "No roster loaded yet", no_team: "No game or team folder to tell teams apart", team_conflict: "The team column and the team folder disagree", roster_changed: "The roster changed this athlete's number or team", untagged: "Untagged by a director" };
+  var WHY = { no_number: "Number unreadable", not_on_roster: "Number isn't on the roster", team_not_on_roster: "A team in the folder name isn't on the roster", two_teams: "Same number on both teams", duplicate_number: "Two athletes share this number", no_roster: "No roster loaded yet", no_team: "No game or team folder to tell teams apart", team_conflict: "The team column and the team folder disagree", roster_changed: "The roster changed this athlete's number or team", untagged: "Untagged by a director", number_conflict: "The jersey folder and the file name give different numbers" };
   var HOLD = { takedown: "Takedown", do_not_publish: "Do not publish", no_capture_consent: "No capture consent", roster_changed: "Roster changed" };
   var PULL = { no_sale_consent: "no sale consent now", not_public: "public display off now" };
   var BLOCK = { no_marketing_consent: "no marketing consent", no_capture_consent: "no capture consent", do_not_publish: "do not publish", takedown: "takedown", not_on_roster: "not on this roster" };
@@ -429,7 +430,8 @@
       act(b, async function () { await t.post("/api/gfs/events/" + encodeURIComponent(id) + "/crew", { creator_id: b.dataset.assign, role: role }); t.toast("Added. Confirm them once they say yes."); crew(id); }, "crMsg");
     });
     bind("[data-crew]", "change", function (s) {
-      t.post("/api/gfs/events/" + encodeURIComponent(id) + "/crew/" + encodeURIComponent(s.dataset.crew), { status: s.value }, "PATCH").then(function () { t.toast("Saved."); crew(id); }).catch(function (e) { msgEl("crMsg", say(e)); crew(id); });
+      // On a refusal, redraw first (the select snaps back), then say why.
+      t.post("/api/gfs/events/" + encodeURIComponent(id) + "/crew/" + encodeURIComponent(s.dataset.crew), { status: s.value }, "PATCH").then(function () { t.toast("Saved."); crew(id); }).catch(function (e) { crew(id).then(function () { msgEl("crMsg", say(e)); }); });
     });
   }
 
@@ -740,7 +742,7 @@
       var out = (await t.api(base + "/clips?view=out&limit=200")).clips.filter(function (x) { return x.held || x.pull_reason === "no_sale_consent"; });
       if (!out.length) { deliver(id); return; }
       var r = await t.post(base + "/clips/removed", { ids: out.map(function (x) { return x.id; }) });
-      t.toast(r.removed + " marked removed.");
+      t.toast(r.removed + " marked removed." + (r.back_to_review ? " " + r.back_to_review + " went back to tag review." : "") + (r.matched_again ? " " + r.matched_again + " matched again by number." : ""));
       deliver(id);
     });
     wire("clFamOnly", async function () { var r = await t.post(base + "/clips/family-only"); t.toast(r.family_only + " marked family-only."); deliver(id); });
