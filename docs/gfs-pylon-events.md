@@ -37,7 +37,8 @@ The team activity feed follows the same lines. Pylon events entries go only to p
    - Everything else keeps working: sign-in reads the old columns if `regions` isn't there yet.
    - **Then apply migration 025**, also with Kyron's OK. It adds the stop page's links (the stop's SportsClippers page, an on-site help number, extra placements), each creator's SportsClippers page, and the scan and click counts. Until it runs, the QR screen answers `503 gfs_qr_not_set_up` when links are saved, and the stop page shows "This page isn't here".
    - **Set `GFS_PAGE_BASE`** on Render to the address the codes use. Kyron chose `https://media.groundfloorsports.com` (October 24).
-     - Set it only once `media.groundfloorsports.com` points at the Vercel project that serves the app (`toj-campaign-noxn`) and Vercel shows it as verified.
+     - Set it only once `media.groundfloorsports.com` points at the Vercel project that serves the app (`toj-campaign-noxn`) and Vercel shows it as verified. It does as of October 24: a CNAME at GoDaddy to the project's Vercel target.
+     - That address serves only the stop pages (`/e/…`). Everything else on it goes to `groundfloorsports.com` (`vercel.json`), so it never shows TOJ's site or the app.
      - Until it's set, the QR codes screen shows the links and counts but makes no codes. A printed code can't be recalled, and TOJ's own domain must never print on Pylon's signs, so `tojcampaign.com`, Render and `vercel.app` addresses aren't accepted.
      - The stop page itself answers on any address the app serves.
    - **`GFS_HELP_EMAIL`** sets the help and takedown address on the page. It defaults to `support@groundfloorsports.com`.
