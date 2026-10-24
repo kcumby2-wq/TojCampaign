@@ -1,11 +1,15 @@
 // A small in-memory stand-in for the Supabase client: enough of the query
 // builder for the routes under test (select/insert/update/upsert/delete with
 // eq/neq/in/is/gt/gte/lt/lte/order/limit/range, single/maybeSingle, rpc, and
-// upsert on one column or a comma-separated set). Not a database.
+// upsert on one column or a comma-separated set). Not a database. Ids are
+// uuids, or growing integers for the tables named in `serial`.
 const crypto = require("crypto");
 
-function fakeSupabase(seed = {}, { unique = {}, rpc = {} } = {}) {
+function fakeSupabase(seed = {}, { unique = {}, rpc = {}, serial = [] } = {}) {
   const tables = {};
+  // Tables whose id is a growing integer (bigint identity), not a uuid.
+  const next = {};
+  const newId = (name) => (serial.includes(name) ? (next[name] = (next[name] || 0) + 1) : crypto.randomUUID());
   for (const [k, v] of Object.entries(seed)) tables[k] = v.map((r) => ({ ...r }));
   const t = (name) => (tables[name] = tables[name] || []);
 
@@ -45,7 +49,7 @@ function fakeSupabase(seed = {}, { unique = {}, rpc = {} } = {}) {
           const existing = cols.length ? rows.find((x) => cols.every((c) => x[c] === r[c])) : null;
           if (existing && this.op === "upsert") { Object.assign(existing, r); out.push(existing); continue; }
           if (keys.some((k) => rows.some((x) => x[k] === r[k]))) return { data: null, error: { code: "23505", message: "duplicate key" } };
-          const row = { id: crypto.randomUUID(), created_at: new Date().toISOString(), ...r };
+          const row = { id: newId(this.name), created_at: new Date().toISOString(), ...r };
           rows.push(row);
           out.push(row);
         }

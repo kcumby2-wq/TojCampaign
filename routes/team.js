@@ -300,6 +300,8 @@ router.delete("/me", T.requireTeam(null, "viewer"), async (req, res) => {
   if (!sb) return sb503(res);
   const email = req.team.email;
   try {
+    // Chat first: their messages lose their text, then their chat record goes.
+    await require("./chat").forgetPerson(sb, email);
     const steps = [
       sb.from("push_subscriptions").delete().eq("email", email),
       sb.from("team_invites").delete().eq("email", email),
