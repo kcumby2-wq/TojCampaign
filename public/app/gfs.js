@@ -16,6 +16,7 @@
  *   #gfs-desk                    the Distribution desk (every event; wide)
  *   #gfs-creators                creator scorecards and the pool
  *   #gfs-creator/<id|new>        a creator (screening: owner only)
+ *   (the asset library's screens, #gfs-assets and #gfs-asset/<id>, are in gfs-assets.js)
  *
  * Athletes appear as team and jersey number, never by name; the roster file
  * keeps only ID, team, division, jersey, position and permission columns
@@ -65,6 +66,7 @@
     gfs_clip_not_exported: "Make the file first, then mark what went out in it.",
     gfs_clip_held: "That athlete is on hold, so the clip stays off every channel.",
     gfs_takedown_clips_out: "Clips are still out somewhere. Take them down first.",
+    gfs_takedown_assets_out: "An asset in the library still shows this athlete live. Retire it first.",
     featured_not_used: "This one doesn't name athletes.",
     gfs_qr_not_set_up: "The stop page isn't set up on the server yet (migration 025).",
     gfs_qr_no_address: "Codes need a Ground Floor Sports or Pylon web address first. Ask Kyron.",
@@ -222,6 +224,7 @@
       '<div class="tile-grid">' +
       '<a class="tile" href="#gfs-desk">' + ICON.desk + "Distribution desk</a>" +
       '<a class="tile" href="#gfs-creators">' + ICON.crew + "Creator scorecards</a>" +
+      (window.TOJScreens && window.TOJScreens["gfs-assets"] ? '<a class="tile" href="#gfs-assets">' + ICON.box + "Asset library</a>" : "") +
       "</div>" +
       (t.atLeast("approver") ? '<a class="li list" href="#gfs-import" style="border-radius:16px"><div class="ico" style="width:36px;height:36px;border-radius:9px">' + ICON.up + '</div><div class="grow"><div class="name" style="font-size:15px">Load Pylon\'s calendar</div><div class="sub">A CSV of stops, one per row. Stops already here are skipped.</div></div>' + t.I.chev + "</a>" : "") +
       (mine.length ? "" : '<p class="empty">You don\'t have a region yet. Ask Kyron to add one.</p>') +
@@ -398,6 +401,7 @@
       (member ? '<a class="tile" href="#gfs-roster/' + h(ev.id) + '">' + ICON.list + "Roster and consent</a>" : '<a class="tile" href="#gfs-deliver/' + h(ev.id) + '">' + ICON.box + "Deliver</a>") +
       "</div>" +
       '<a class="li list" href="#gfs-qr/' + h(ev.id) + '" style="border-radius:16px"><div class="ico" style="width:36px;height:36px;border-radius:9px">' + ICON.qr + '</div><div class="grow"><div class="name" style="font-size:15px">QR codes and the stop page</div><div class="sub">Signs, the booth, wristbands, and a code for each creator</div></div>' + t.I.chev + "</a>" +
+      (window.TOJScreens && window.TOJScreens["gfs-assets"] ? '<a class="li list" href="#gfs-assets/' + h(ev.id) + '" style="border-radius:16px"><div class="ico" style="width:36px;height:36px;border-radius:9px">' + ICON.box + '</div><div class="grow"><div class="name" style="font-size:15px">Assets from this stop</div><div class="sub">Clips, edits, 3D Worlds and Moments, World Passes, NFTs, with what each may be used for</div></div>' + t.I.chev + "</a>" : "") +
       (window.TOJChat ? '<a class="li list" href="#chat-stop/' + h(ev.id) + '" style="border-radius:16px"><div class="ico" style="width:36px;height:36px;border-radius:9px">' + ICON.chat + '</div><div class="grow"><div class="name" style="font-size:15px">Stop chat</div><div class="sub">Everyone working this stop, in one room</div></div>' + t.I.chev + "</a>" : "") +
       (member ? '<a class="li list" href="#gfs-takedown/' + h(ev.id) + '" style="border-radius:16px">' + '<div class="ico" style="width:36px;height:36px;border-radius:9px;color:var(--bad)">' + ICON.stop + '</div><div class="grow"><div class="name" style="font-size:15px">Log a takedown</div><div class="sub">A safety request or withdrawn consent starts its clock now</div></div>' + t.I.chev + "</a>" : "") +
       "</div>");
@@ -924,7 +928,7 @@
   function takedownCard(td, approverOrMember) {
     var l = td.next_due_at ? left(td.next_due_at) : null;
     var elsewhere = td.clips_out - (td.clips_out_yours === undefined ? td.clips_out : td.clips_out_yours);
-    var where = [td.event ? td.event.name : "", (td.regions || []).length > 1 ? (td.regions || []).map(rname).join(" and ") : null, td.clips_out ? td.clips_out + " clips still out" + (elsewhere ? " (" + elsewhere + " in other regions)" : "") : null].filter(Boolean).join(" · ");
+    var where = [td.event ? td.event.name : "", (td.regions || []).length > 1 ? (td.regions || []).map(rname).join(" and ") : null, td.clips_out ? td.clips_out + " clips still out" + (elsewhere ? " (" + elsewhere + " in other regions)" : "") : null, td.assets_live ? td.assets_live + (td.assets_live === 1 ? " asset" : " assets") + " still live in the library" : null].filter(Boolean).join(" · ");
     return '<div class="card tight"><div class="row"><div class="grow"><div class="name" style="font-size:15px">' + (td.number ? "#" + td.number + " · " : "") + h(td.team || "Athlete") + " · " + h((td.reason_name || "takedown").toLowerCase()) + '</div><div class="sub">' + h(where) + "</div></div>" + (l ? badge(l.text, l.late || l.hours < 6 ? "bad" : "warn") : badge("Done", "ok")) + "</div>" +
       td.steps.map(function (s) { return '<div class="row" style="gap:10px"><span class="tick' + (s.done_at ? " on" : new Date(s.due_at) < new Date() ? " late" : "") + '">' + (s.done_at ? ICON.check : "") + '</span><div class="grow sub" style="color:var(--ink-2)">' + h(s.label) + " · " + (s.done_at ? "done " + h(T().ago(s.done_at)) : "by " + h(whenIn(s.due_at))) + "</div>" + (!s.done_at && approverOrMember ? '<button type="button" class="btn small soft" data-tdstep="' + h(td.id) + '" data-k="' + s.key + '">Done</button>' : "") + "</div>"; }).join("") +
       "</div>";
@@ -937,7 +941,8 @@
         var r = await T().post("/api/gfs/takedowns/" + encodeURIComponent(b.dataset.tdstep), body, "PATCH");
         // Each region takes down its own events' clips; the step closes once
         // nothing is out anywhere.
-        if (r.partial) T().toast("Taken down in your regions. " + r.partial.still_out + " still out at " + r.partial.events.join(", ") + "; their directors have been told.");
+        if (r.partial && r.partial.still_out) T().toast("Taken down in your regions. " + r.partial.still_out + " still out at " + r.partial.events.join(", ") + "; their directors have been told." + (r.partial.assets_live ? " " + r.partial.assets_live + " in the asset library still live too." : ""));
+        else if (r.partial && r.partial.assets_live) T().toast("Clips are down. " + r.partial.assets_live + (r.partial.assets_live === 1 ? " asset" : " assets") + " in the library still show this athlete live: retire " + (r.partial.assets_live === 1 ? "it" : "them") + " once the file is down, then mark the step done.");
         else T().toast("Marked.");
         refresh();
       });

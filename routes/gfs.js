@@ -2062,7 +2062,7 @@ router.get("/scorecards", viewer, async (req, res) => {
 // A takedown follows the athlete (one Sports Thread ID at every event), so who
 // sees it, and whose clips it reaches, comes from every event the athlete is
 // on: the region it was logged in, plus the regions of those events now.
-function takedownView(t, events, outClips, req, regions) {
+function takedownView(t, events, outClips, req, regions, outAssets) {
   const ev = events.get(t.event_id);
   const member = !req || atLeast(req, "member");
   const steps = [
@@ -2091,6 +2091,8 @@ function takedownView(t, events, outClips, req, regions) {
     overdue: open.some((s) => new Date(s.due_at).getTime() < Date.now()),
     clips_out: out.length,
     clips_out_yours: mine ? out.filter((c) => mine.has((events.get(c.event_id) || {}).region)).length : out.length,
+    // Live assets in the library that show the athlete (027).
+    assets_live: outAssets ? (outAssets.get(t.roster_id) || 0) : 0,
     note: member ? t.note || null : null,
   };
 }
@@ -2108,6 +2110,28 @@ async function outClipsFor(sb, rosterIds) {
     const k = rid.get(c.roster_row);
     if (!out.has(k)) out.set(k, []);
     out.get(k).push(c);
+  }
+  return out;
+}
+// The athlete's live assets in the library (027), at every event: roster ID
+// → count. Nothing before migration 027.
+async function outAssetsFor(sb, rosterIds) {
+  const out = new Map();
+  if (!rosterIds.length) return out;
+  try {
+    const rows = await inChunks(rosterIds, (chunk) => all(() => sb.from("gfs_roster").select("id,roster_id").in("roster_id", chunk)));
+    const rid = new Map(rows.map((r) => [r.id, r.roster_id]));
+    const ids = rows.map((r) => r.id);
+    const links = ids.length ? await inChunks(ids, (chunk) => run(sb.from("gfs_asset_athletes").select("asset_id,roster_row").in("roster_row", chunk))) : [];
+    const assetIds = [...new Set(links.map((l) => l.asset_id))];
+    const live = new Set((assetIds.length ? await inChunks(assetIds, (chunk) => run(sb.from("gfs_assets").select("id,stage").in("id", chunk))) : []).filter((a) => a.stage === "live").map((a) => a.id));
+    for (const l of links) {
+      if (!live.has(l.asset_id)) continue;
+      const k = rid.get(l.roster_row);
+      out.set(k, (out.get(k) || 0) + 1);
+    }
+  } catch (e) {
+    if (!/gfs_asset/.test(String((e && e.message) || ""))) throw e;
   }
   return out;
 }
@@ -2153,8 +2177,10 @@ router.get("/takedowns", viewer, async (req, res) => {
     if (!regions.length) return res.json({ takedowns: [] });
     const status = String(req.query.status || "open");
     const { list: rows, scope, events } = await visibleTakedowns(sb, req, { status: status === "all" ? "all" : status === "done" ? "done" : "open", regions });
-    const out = await outClipsFor(sb, [...new Set(rows.filter((t) => t.status === "open").map((t) => t.roster_id))]);
-    const list = rows.slice(0, 200).map((t) => takedownView(t, events, out, req, scope.get(t.id)));
+    const openIds = [...new Set(rows.filter((t) => t.status === "open").map((t) => t.roster_id))];
+    const out = await outClipsFor(sb, openIds);
+    const outAssets = await outAssetsFor(sb, openIds);
+    const list = rows.slice(0, 200).map((t) => takedownView(t, events, out, req, scope.get(t.id), outAssets));
     list.sort((a, b) => (a.status === b.status ? String(a.next_due_at || "~").localeCompare(String(b.next_due_at || "~")) : a.status === "open" ? -1 : 1));
     res.json({ takedowns: list, windows: G.TAKEDOWN });
   } catch (e) {
@@ -2202,7 +2228,7 @@ router.post("/takedowns", member, async (req, res) => {
     events.set(ev.id, ev);
     const reach = scope.get(t.id);
     const out = await outClipsFor(sb, [row.roster_id]);
-    const view = takedownView(t, events, out, req, reach);
+    const view = takedownView(t, events, out, req, reach, await outAssetsFor(sb, [row.roster_id]));
     await T.logActivity(actor(req), "gfs_takedown_logged", ev.code, { region: ev.region, number: t.number || undefined });
     const w = G.TAKEDOWN[b.reason];
     // Everyone running an event this athlete is on hears about it.
@@ -2241,12 +2267,17 @@ router.patch("/takedowns/:id", member, async (req, res) => {
         if (e) await rematch(sb, e, await rosterRows(sb, e.id));
       }
       const left = out.filter((c) => !here.includes(c));
-      if (!left.length) Object.assign(patch, { other_done_at: at, other_done_by: actor(req) });
-      else {
+      // A live asset in the library that shows the athlete is out too, and
+      // only retiring it (once the file is down) takes it off.
+      const liveAssets = (await outAssetsFor(sb, [t.roster_id])).get(t.roster_id) || 0;
+      if (!left.length && !liveAssets) Object.assign(patch, { other_done_at: at, other_done_by: actor(req) });
+      else if (left.length) {
         const regions = [...new Set(left.map((c) => (events.get(c.event_id) || {}).region).filter(Boolean))];
         const codes = [...new Set(left.map((c) => (events.get(c.event_id) || {}).code).filter(Boolean))];
-        partial = { removed: here.length, still_out: left.length, regions, events: codes };
+        partial = { removed: here.length, still_out: left.length, regions, events: codes, assets_live: liveAssets };
         notify(regionEmails(regions, "member"), { title: `Takedown${t.number ? " #" + t.number : ""} · clips still out`, body: `${left.length} still out at ${codes.join(", ")}: take them down, then mark the step done`, url: `/app/#gfs-desk`, tag: `gfs-takedown-${t.id}` });
+      } else {
+        partial = { removed: here.length, still_out: 0, regions: [], events: [], assets_live: liveAssets };
       }
     }
     if (b.offsite_requested === true && !t.offsite_requested_at) Object.assign(patch, { offsite_requested_at: at, offsite_requested_by: actor(req) });
@@ -2260,7 +2291,7 @@ router.patch("/takedowns/:id", member, async (req, res) => {
     }
     const ev = events.get(updated.event_id) || {};
     await T.logActivity(actor(req), "gfs_takedown_step", ev.code || null, { region: mine.has(t.region) ? t.region : [...reach].find((r) => mine.has(r)), number: updated.number || undefined, steps: Object.keys(patch).filter((k) => k.endsWith("_at")), removed: partial ? partial.removed : undefined });
-    res.json({ takedown: takedownView(updated, events, await outClipsFor(sb, [t.roster_id]), req, reach), partial });
+    res.json({ takedown: takedownView(updated, events, await outClipsFor(sb, [t.roster_id]), req, reach, await outAssetsFor(sb, [t.roster_id])), partial });
   } catch (e) {
     fail(res, e, "update_takedown");
   }
@@ -2383,3 +2414,5 @@ router.get("/desk", viewer, async (req, res) => {
 });
 
 module.exports = router;
+// The clip counts per event, for the asset library (routes/gfs-assets.js).
+module.exports.eventCounts = eventCounts;

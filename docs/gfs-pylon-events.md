@@ -36,6 +36,7 @@ The team activity feed follows the same lines. Pylon events entries go only to p
    - Until it runs, the API answers `503 gfs_not_set_up`.
    - Everything else keeps working: sign-in reads the old columns if `regions` isn't there yet.
    - **Then apply migration 025**, also with Kyron's OK. It adds the stop page's links (the stop's SportsClippers page, an on-site help number, extra placements), each creator's SportsClippers page, and the scan and click counts. Until it runs, the QR screen answers `503 gfs_qr_not_set_up` when links are saved, and the stop page shows "This page isn't here".
+   - **Then migrations 026 and 027**, with Kyron's OK: team chat (`docs/team-chat.md`) and the asset library (`docs/gfs-asset-library.md`). 027 also makes a takedown's "off every other surface" step wait for any live asset that shows the athlete.
    - **Set `GFS_PAGE_BASE`** on Render to the address the codes use. Kyron chose `https://media.groundfloorsports.com` (October 24).
      - Set it only once `media.groundfloorsports.com` points at the Vercel project that serves the app (`toj-campaign-noxn`) and Vercel shows it as verified.
      - Until it's set, the QR codes screen shows the links and counts but makes no codes. A printed code can't be recalled, and TOJ's own domain must never print on Pylon's signs, so `tojcampaign.com`, Render and `vercel.app` addresses aren't accepted.

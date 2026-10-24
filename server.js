@@ -186,6 +186,9 @@ app.use("/api/os", require("./routes/os"));
 // Ground Floor Sports · Pylon events: events, crews, roster consent flags,
 // the upload log, deliverables, SportsClippers listings, takedowns (024),
 // and the public stop pages its QR codes open at /e/<event code> (025).
+// The asset library: every digital asset from a stop, with its consent and
+// rights status (027). Before /api/gfs so its paths come here first.
+app.use("/api/gfs/assets", require("./routes/gfs-assets"));
 app.use("/api/gfs", require("./routes/gfs"));
 app.use("/e", require("./routes/gfs-page"));
 // The team: invites, roles, activity (utils/team.js). Owner-only consoles keep requireStaff.

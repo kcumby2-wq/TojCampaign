@@ -11,7 +11,8 @@
  *   #team, #invite    people, roles, invites (Owner)
  *   #join/<token>     accept an invite; #signin
  *   #creators …       the Creator Club tool (creators.js registers its screens)
- *   #events …         Ground Floor Sports · Pylon events (gfs.js registers its screens)
+ *   #events …         Ground Floor Sports · Pylon events (gfs.js registers its screens;
+ *                     the asset library is gfs-assets.js)
  *
  * Photos and video stills go to the Brief Writer for one run and are never
  * stored. File names never leave the phone.
@@ -251,6 +252,12 @@
     gfs_takedown_step: "moved a takedown along for",
     gfs_creator_added: "added a creator",
     gfs_creator_changed: "updated a creator",
+    gfs_asset_created: "added an asset for",
+    gfs_asset_review: "sent an asset to review for",
+    gfs_asset_draft: "sent an asset back to draft for",
+    gfs_asset_approved: "approved an asset for",
+    gfs_asset_live: "put an asset live for",
+    gfs_asset_retired: "retired an asset for",
     chat_removed_message: "removed a message in chat",
   };
   function actorName(a) {
