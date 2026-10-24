@@ -184,8 +184,10 @@ app.use("/api/creators", require("./routes/creators"));
 app.use("/c", require("./routes/creators").pageRouter);
 app.use("/api/os", require("./routes/os"));
 // Ground Floor Sports · Pylon events: events, crews, roster consent flags,
-// the upload log, deliverables, SportsClippers listings, takedowns (024).
+// the upload log, deliverables, SportsClippers listings, takedowns (024),
+// and the public stop pages its QR codes open at /e/<event code> (025).
 app.use("/api/gfs", require("./routes/gfs"));
+app.use("/e", require("./routes/gfs-page"));
 // The team: invites, roles, activity (utils/team.js). Owner-only consoles keep requireStaff.
 app.use("/api/team", require("./routes/team"));
 // Web push for the TOJ app (utils/push.js).

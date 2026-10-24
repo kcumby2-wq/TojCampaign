@@ -846,6 +846,7 @@
     else if (key.indexOf("cpreview:") === 0) { path = "/api/creators/" + encodeURIComponent(key.slice(9)) + "/page/preview"; t = { name: "Page preview" }; }
     else if (key.indexOf("ostx:") === 0) { var op = key.slice(5).split(":"); path = "/api/os/" + encodeURIComponent(op[0]) + "/transcript.html?v=" + (op[1] === "draft" ? "draft" : "approved"); t = { name: op[1] === "draft" ? "Transcript draft" : "Operational Transcript" }; }
     else if (key.indexOf("ccard:") === 0) { var cp = key.slice(6).split(":"); path = "/api/creators/" + encodeURIComponent(cp[0]) + "/events/" + encodeURIComponent(cp[1] || "") + "/card" + (cp[2] ? "?crew=" + encodeURIComponent(cp[2]) : ""); t = { name: "QR card" }; }
+    else if (key.indexOf("qrcard:") === 0) { var qp = key.slice(7).split(":"); path = "/api/gfs/events/" + encodeURIComponent(qp[0]) + "/qr/" + encodeURIComponent(qp[1] || "stop") + "/card"; t = { name: "Print the code" }; }
     else { t = TOOLS[key]; if (!t) return go("#tools"); if (!t.team && !isOwner()) return go("#tools"); path = t.path; }
     tabsEl.hidden = true;
     app.innerHTML = '<div class="frame-wrap"><div class="frame-bar"><button type="button" class="back" id="frameBack">' + I.back + 'Back</button><div class="t">' + h(t.name) + '</div><a class="back" href="' + h(path) + '" target="_blank" rel="noopener" aria-label="Open in the browser">' + I.out + '</a></div><iframe src="' + h(path) + '" title="' + h(t.name) + '"></iframe></div>';

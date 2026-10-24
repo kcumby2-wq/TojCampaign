@@ -12,7 +12,7 @@ The TOJ app runs Pylon events for Ground Floor Sports (Trail of Joy Management G
 
 Kyron and Pylon's approvers see every region from the Distribution desk.
 
-Code: `routes/gfs.js` (the API at `/api/gfs`), `utils/gfs.js` (the rules), `public/app/gfs.js` (the screens) and `db/migrations/024_gfs_events.sql` (the tables, plus the rules again as triggers, so a bug in the app can't break them).
+Code: `routes/gfs.js` (the API at `/api/gfs`), `utils/gfs.js` (the rules), `public/app/gfs.js` (the screens) and `db/migrations/024_gfs_events.sql` (the tables, plus the rules again as triggers, so a bug in the app can't break them). The QR codes and the public stop page they open are in `routes/gfs-page.js` (the page at `/e/<event code>`), `utils/gfs-page.js` and `db/migrations/025_gfs_qr.sql`.
 
 ## Who sees what
 
@@ -35,6 +35,14 @@ The team activity feed follows the same lines. Pylon events entries go only to p
 2. **Apply migration 024 in Supabase**, with Kyron's OK. It adds `regions` to `team_members` and `team_invites` and creates the `gfs_*` tables.
    - Until it runs, the API answers `503 gfs_not_set_up`.
    - Everything else keeps working: sign-in reads the old columns if `regions` isn't there yet.
+   - **Then apply migration 025**, also with Kyron's OK. It adds the stop page's links (the stop's SportsClippers page, an on-site help number, extra placements), each creator's SportsClippers page, and the scan and click counts. Until it runs, the QR screen answers `503 gfs_qr_not_set_up` when links are saved, and the stop page shows "This page isn't here".
+   - **Set `GFS_PAGE_BASE`** on Render to the address the codes use. Kyron chose `https://media.groundfloorsports.com` (October 24).
+     - Set it only once `media.groundfloorsports.com` points at the Vercel project that serves the app (`toj-campaign-noxn`) and Vercel shows it as verified.
+     - Until it's set, the QR codes screen shows the links and counts but makes no codes. A printed code can't be recalled, and TOJ's own domain must never print on Pylon's signs, so `tojcampaign.com`, Render and `vercel.app` addresses aren't accepted.
+     - The stop page itself answers on any address the app serves.
+   - **`GFS_HELP_EMAIL`** sets the help and takedown address on the page. It defaults to `support@groundfloorsports.com`.
+     - That inbox isn't set up yet (October 24).
+     - Every help and takedown request from the page goes there, so it has to receive mail, and someone has to watch it on event weekends, before the first codes go out.
 3. **Invite people.** In the app, go to Team → Invite and tick **Pylon events**.
    - **Regional Director:** pick Regional Director and at least one region.
    - **Approver** (Pylon's CEO, the Creative Lead): pick Approver. Approvers need no region.
@@ -54,7 +62,7 @@ The team activity feed follows the same lines. Pylon events entries go only to p
    - **Premier Event, One-Day Tournament or Clinic.** The size sets the Schedule C counts and the crew target (3, 2 or 1 on site).
    - **Dates, wrap time and time zone.** Every deadline runs from the wrap time on the last day, in the event's own time zone.
 2. **Plan.** Four checks before the event:
-   - QR code and storefront page (T-7);
+   - QR code and storefront page (T-7): the stop's codes printed and its page's links set, on the QR codes screen;
    - roster and consent from Sports Thread (T-72h);
    - crew brief sent (T-48h);
    - crew confirmed, with a lead.
@@ -106,6 +114,36 @@ The team activity feed follows the same lines. Pylon events entries go only to p
   - Each director takes down their own region's clips. Marking the step in one region removes that region's family links and listings.
   - The app tells the other regions' directors what's still out.
   - The step closes when the last region is clear.
+
+## QR codes and the stop page
+
+Each event has a **QR codes** screen (from the event plan). It's the Campaign Builder's tracked links and QR codes, built for a stop.
+
+- **The codes.** Every code opens the stop's public page, `/e/<event code>`. Each has its own tag, so its scans count apart.
+  - **The stop:** for signs and the announcement graphic Pylon posts (Schedule J-5).
+  - **Placements:** the booth, wristbands and team packets, plus any a director adds, like "Field 3 sign" (up to 20).
+  - **Creators:** one per active adult creator invited or confirmed on the crew who has their own SportsClippers page, for their lanyard. An invited creator's code can be printed ahead; the page shows them once they're confirmed. A youth creator never gets a code and never appears on the page.
+  - **A creator's SportsClippers page** is set on their record. A director can set it until Kyron records their screening; after that only Kyron changes it, as with their name and email.
+- **Downloads.** Each code comes as a PNG (for posts) or SVG (for print shops), or as a printable letter-size sign or 4×6 lanyard card. "Copy" gives the link itself, for a bio or an email.
+- **What the page shows.**
+  - The stop's name, dates and place.
+  - **Find your footage**, to the stop's page on SportsClippers. Until that link is saved, the page says the footage page isn't up yet. Printed codes still work, and the button appears once the link is in.
+  - For a creator's code: their first name ("Ana is on the crew"), with their SportsClippers page.
+  - How clips reach families: listed only with the permissions given at registration, and family-only by private link for an athlete under 13 or without public display.
+  - Help: email Ground Floor Sports, text the on-site number if there is one, or reach the creator through SportsClippers. A takedown request goes by email. The page promises no time for it yet (see open questions).
+- **The rules.**
+  - The page never shows anything about an athlete. It reads no roster.
+  - Links leave only for `sportsclippers.com`, and the database holds the same rule (migration 025).
+  - Creators appear by first name only.
+  - The page is Pylon's: Pylon's name and colors, with Ground Floor Sports as the crew and SportsClippers as the store. No TOJ or Subject marks.
+  - System fonts only, so no font host learns who opened the page. It runs no scripts, can't be framed, and isn't indexed or cached.
+- **Counts.**
+  - Every scan of the page, and every click on to SportsClippers, counts against the code it came from.
+  - Only the code and the day are kept, nothing about the visitor.
+  - One address counts at most 300 times a minute, and one stop 2,000. The address is used only for that cap, in memory, through a key made fresh each time the server starts, and it's never stored or logged.
+  - Someone calling the server directly, around Vercel, could still run the numbers up, so treat the counts as a guide.
+  - Links on to SportsClippers carry `utm_source=pylon`, `utm_medium=stop_page`, `utm_campaign=<event code>` and `utm_content=<code>`, so SportsClippers' own reports can show which stop and code a sale came from.
+- **Ready.** **Mark ready** ticks "QR code and storefront page" on the event plan.
 
 ## File formats
 
@@ -201,3 +239,6 @@ TEAM-A_vs_TEAM-B_YYYYMMDD/00-unassigned/EagleEye-017.mp4                    a mi
 8. **Scorecards** need `final_whistle` and `usable` in the upload log. Family ratings are typed onto each crew member from SportsClippers' statements. Uploads and ratings count in the quarter the event ended in.
 9. **The keep-out check is the approver's word.** Recaps, montages, stills and cut-downs show athletes nobody names, so the approver confirms against the list instead of the app checking each face. Is that the review Pylon wants under Schedule C-1 "Consent"?
 10. **Athletes dropped from a later roster file** keep their old permissions, and the load summary counts them. Should the app hold them instead until someone checks?
+11. **A takedown time on the page.** Section 8(b)(iii) of the draft Pylon agreement has content come down within 72 hours of a withdrawal. Once the help inbox is confirmed, and requests are logged as takedowns the day they arrive, should the page promise that?
+12. **Packages on the stop page.** Schedule J-1 calls for a QR code and storefront page per stop for photo and video packages. pylon-os keeps the package storefront's brand off Pylon's surfaces, so the stop page links only to SportsClippers. Should it also link to the packages storefront?
+13. **Credit for a creator's sales.** A creator's code tags the link on to SportsClippers with their code. Does SportsClippers credit a sale from that tag, or does the buyer still need to enter the creator's name as the referral (J-5 step 6)?

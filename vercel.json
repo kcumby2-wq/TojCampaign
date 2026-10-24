@@ -4,7 +4,8 @@
   "outputDirectory": "public",
   "rewrites": [
     { "source": "/api/:path*", "destination": "https://toj-csv-app.onrender.com/api/:path*" },
-    { "source": "/c/:slug", "destination": "https://toj-csv-app.onrender.com/c/:slug" }
+    { "source": "/c/:slug", "destination": "https://toj-csv-app.onrender.com/c/:slug" },
+    { "source": "/e/:path*", "destination": "https://toj-csv-app.onrender.com/e/:path*" }
   ],
   "redirects": [
     { "source": "/studio", "destination": "/app/#studio", "permanent": false },

@@ -14,6 +14,9 @@
 //   POST   /api/gfs/events/import                     Pylon's calendar as a CSV             approver
 //   GET    /api/gfs/events/:id                        the plan: checklist, crew, deliverables viewer
 //   PATCH  /api/gfs/events/:id                        edit, checklist, status               member
+//   GET    /api/gfs/events/:id/qr                     the stop page's codes, links, counts  viewer
+//   GET    /api/gfs/events/:id/qr/:key.svg|.png       one code (?download=1 saves it)       viewer
+//   GET    /api/gfs/events/:id/qr/:key/card           a printable sign or creator card      viewer
 //   GET    /api/gfs/events/:id/crew                   crew and who can be crewed            viewer
 //   POST   /api/gfs/events/:id/crew                   add a creator to the crew             member
 //   PATCH  /api/gfs/events/:id/crew/:cid              confirm, decline, remove, rating      member
@@ -57,9 +60,12 @@
 
 "use strict";
 
+const crypto = require("crypto");
 const express = require("express");
+const QRCode = require("qrcode");
 const T = require("../utils/team");
 const G = require("../utils/gfs");
+const GP = require("../utils/gfs-page");
 const P = require("../utils/push");
 const { getSupabase } = require("../utils/supabase");
 const { staffEmails } = require("../utils/staff");
@@ -87,6 +93,10 @@ function fail(res, e, what) {
   const rule = ruleCode(e);
   if (rule) return res.status(409).json({ error: rule });
   if (e && e.code === "23505") return res.status(409).json({ error: "already_exists" });
+  // The stop page's columns and counts aren't there yet: migration 025.
+  if (e && /sportsclippers_url|help_phone|qr_sources|gfs_qr_hits|gfs_count_hit/.test(String(e.message || "")) && (["42703", "42P01", "42883", "PGRST204", "PGRST205", "PGRST202"].includes(e.code) || /does not exist|Could not find/i.test(String(e.message || "")))) {
+    return res.status(503).json({ error: "gfs_qr_not_set_up", hint: "Apply migration 025 in Supabase." });
+  }
   // The tables aren't there yet: migration 024 hasn't been applied.
   if (e && (e.code === "42P01" || e.code === "PGRST205" || /relation .*gfs_.* does not exist|Could not find the table/i.test(String(e.message || "")))) {
     return res.status(503).json({ error: "gfs_not_set_up", hint: "Apply migration 024 in Supabase." });
@@ -165,7 +175,7 @@ async function namesFor(sb, emails) {
 }
 
 // ── Shapes ───────────────────────────────────────────────────────────────
-const EVENT_FIELDS = ["id", "code", "name", "series", "size", "region", "city", "state", "venue", "tz", "starts_on", "ends_on", "wraps_at", "ends_at", "status", "crew_target", "clip_price_cents", "storefront_url", "storefront_ready_at", "roster_in_at", "brief_sent_at", "tags_approved_at", "created_at"];
+const EVENT_FIELDS = ["id", "code", "name", "series", "size", "region", "city", "state", "venue", "tz", "starts_on", "ends_on", "wraps_at", "ends_at", "status", "crew_target", "clip_price_cents", "storefront_url", "storefront_ready_at", "sportsclippers_url", "help_phone", "qr_sources", "roster_in_at", "brief_sent_at", "tags_approved_at", "created_at"];
 function eventView(ev, req, names) {
   const out = {};
   for (const k of EVENT_FIELDS) out[k] = ev[k] === undefined ? null : ev[k];
@@ -209,6 +219,7 @@ function creatorView(c, req, ev) {
     contract_signed_on: c.contract_signed_on || null,
     background_check_on: c.background_check_on || null,
     safety_training_on: c.safety_training_on || null,
+    sportsclippers_url: c.sportsclippers_url || null,
     notes: atLeast(req, "member") ? c.notes || null : null,
     badges: G.credentialBadges(c, ev),
   };
@@ -517,6 +528,30 @@ function readEventBody(body, prev, req) {
     else if (!Number.isInteger(n) || n < 0 || n > 100000) errors.push("clip_price_cents");
     set("clip_price_cents", n);
   }
+  // The stop page (migration 025): its SportsClippers link must be on
+  // sportsclippers.com, the help number is one families can text, and the
+  // placements are the extra codes the stop prints.
+  if (b.sportsclippers_url !== undefined) {
+    const r = GP.sportsClippersUrl(b.sportsclippers_url);
+    if (r.error) errors.push("sportsclippers_url");
+    else set("sportsclippers_url", r.url);
+  }
+  if (b.help_phone !== undefined) {
+    const r = GP.phone(b.help_phone);
+    if (r.error) errors.push("help_phone");
+    else set("help_phone", r.phone);
+  }
+  if (b.qr_sources !== undefined) {
+    const list = Array.isArray(b.qr_sources) ? b.qr_sources : [];
+    const keys = [];
+    for (const label of list) {
+      const k = GP.placementKey(label);
+      if (!k) { errors.push("qr_sources"); break; }
+      if (!GP.PRESET_KEYS.includes(k) && !keys.includes(k)) keys.push(k);
+    }
+    if (!Array.isArray(b.qr_sources) || keys.length > GP.MAX_PLACEMENTS) errors.push("qr_sources");
+    set("qr_sources", keys);
+  }
   return { ev, errors };
 }
 
@@ -720,7 +755,7 @@ router.patch("/events/:id", member, async (req, res) => {
     if (errors.length) return res.status(400).json({ error: "invalid_event", fields: errors });
     if (next.region !== ev.region && !G.canSee(req.team, next.region)) return res.status(403).json({ error: "region_not_yours" });
     const patch = {};
-    for (const k of ["name", "series", "venue", "region", "city", "state", "tz", "starts_on", "ends_on", "wraps_at", "crew_target", "director_email", "storefront_url", "clip_price_cents"]) {
+    for (const k of ["name", "series", "venue", "region", "city", "state", "tz", "starts_on", "ends_on", "wraps_at", "crew_target", "director_email", "storefront_url", "clip_price_cents", "sportsclippers_url", "help_phone", "qr_sources"]) {
       if (b[k] !== undefined || (k === "tz" && next.tz !== ev.tz)) patch[k] = next[k];
     }
     if (b.storefront_ready !== undefined) patch.storefront_ready_at = b.storefront_ready ? ev.storefront_ready_at || now() : null;
@@ -738,6 +773,148 @@ router.patch("/events/:id", member, async (req, res) => {
     res.json({ event: eventView(updated, req) });
   } catch (e) {
     fail(res, e, "update_event");
+  }
+});
+
+// ── QR codes and the stop page (migration 025, routes/gfs-page.js) ───────
+// A stop has its main code (signs, the announcement graphic), one per
+// placement, and one per creator who can appear on its page: an active adult,
+// invited or confirmed on the crew, with their own SportsClippers page.
+async function qrCreators(sb, ev) {
+  const crew = await run(sb.from("gfs_crew").select("id,creator_id,status,role").eq("event_id", ev.id));
+  const active = crew.filter((c) => c.status === "invited" || c.status === "confirmed");
+  const creators = await creatorsFor(sb, active);
+  const shown = [];
+  const withoutLink = [];
+  let youth = 0;
+  const seen = new Set();
+  for (const row of active) {
+    const c = creators.get(row.creator_id);
+    if (!c || seen.has(c.id)) continue;
+    seen.add(c.id);
+    if (c.tier !== "adult") youth++;
+    else if (!c.sportsclippers_url || c.status !== "active") withoutLink.push({ id: c.id, name: c.name, code: c.code, paused: c.status !== "active" });
+    else shown.push({ c, row });
+  }
+  return { shown, withoutLink, youth };
+}
+function codeOf(ev, src, extra) {
+  return { key: GP.keyOf(src), kind: src.kind, url: GP.stopUrl(ev, src), ...extra };
+}
+async function qrCodes(sb, ev) {
+  const codes = [codeOf(ev, { kind: "stop" }, { label: "The stop", use: "Signs and the announcement graphic" })];
+  for (const p of GP.placementsOf(ev)) codes.push(codeOf(ev, { kind: "placement", placement: p.key }, { placement: p.key, label: p.label, use: p.use, custom: p.custom }));
+  const { shown, withoutLink, youth } = await qrCreators(sb, ev);
+  for (const { c, row } of shown) {
+    // An invited creator's code can be printed ahead; the page shows them
+    // once they're confirmed.
+    codes.push(codeOf(ev, { kind: "creator", creator: c.code }, { label: c.name, first: GP.firstName(c.name), role: row.role, status: row.status, on_page: row.status === "confirmed", creator: { id: c.id, name: c.name, code: c.code, sportsclippers_url: c.sportsclippers_url } }));
+  }
+  return { codes, withoutLink, youth };
+}
+// Every count row for a stop, a page at a time (the table has no id column).
+async function hitRows(sb, eventId) {
+  const out = [];
+  for (let from = 0; ; from += PAGE) {
+    const rows = await run(sb.from("gfs_qr_hits").select("day,source,kind,hits").eq("event_id", eventId).order("day", { ascending: true }).order("source", { ascending: true }).order("kind", { ascending: true }).range(from, from + PAGE - 1));
+    out.push(...(rows || []));
+    if (!rows || rows.length < PAGE) return out;
+  }
+}
+async function qrCode(sb, ev, key) {
+  const src = GP.parseKey(key);
+  if (!src) return null;
+  if (src.kind === "placement" && !GP.placementsOf(ev).some((p) => p.key === src.placement)) return null;
+  const { codes } = src.kind === "creator" ? await qrCodes(sb, ev) : { codes: [codeOf(ev, { kind: "stop" }, { label: "The stop" }), ...GP.placementsOf(ev).map((p) => codeOf(ev, { kind: "placement", placement: p.key }, { label: p.label }))] };
+  return codes.find((c) => c.key === GP.keyOf(src)) || null;
+}
+
+// No code is made until GFS_PAGE_BASE is a Ground Floor Sports or Pylon
+// address (utils/gfs-page.js): a printed code can't be recalled.
+const NO_ADDRESS = { error: "gfs_qr_no_address", hint: "Set GFS_PAGE_BASE on the server to a Ground Floor Sports or Pylon address first." };
+
+router.get("/events/:id/qr", viewer, async (req, res) => {
+  const sb = getSupabase();
+  try {
+    const ev = await loadEvent(sb, req, res);
+    if (!ev) return;
+    const problem = GP.pageBaseProblem();
+    const { codes, withoutLink, youth } = problem ? { codes: [], withoutLink: [], youth: 0 } : await qrCodes(sb, ev);
+    // Counts, per code: scans of the page, and clicks on to SportsClippers.
+    const zero = () => ({ scan: 0, footage: 0, creator: 0 });
+    const bySource = new Map();
+    const totals = zero();
+    let countsReady = true;
+    try {
+      for (const r of await hitRows(sb, ev.id)) {
+        const c = bySource.get(r.source) || zero();
+        c[r.kind] = (c[r.kind] || 0) + (r.hits || 0);
+        totals[r.kind] = (totals[r.kind] || 0) + (r.hits || 0);
+        bySource.set(r.source, c);
+      }
+    } catch (e) {
+      // Before migration 025 there's nothing to count yet.
+      countsReady = false;
+      if (!/gfs_qr_hits/.test(String(e && e.message))) console.error("[gfs] qr counts failed:", e && e.message);
+    }
+    const sourceOf = (c) => (c.kind === "placement" ? "s:" + c.placement : c.kind === "creator" ? "c:" + c.creator.code : "stop");
+    res.json({
+      event: eventView(ev, req),
+      page: { url: GP.stopUrl(ev, { kind: "stop" }), base: GP.pageBase(), address_problem: problem, live: ev.status !== "cancelled", footage_link: !!ev.sportsclippers_url },
+      help: { email: GP.helpEmail(), phone: ev.help_phone || null },
+      ready: !!ev.storefront_ready_at,
+      codes: codes.map((c) => ({ ...c, counts: bySource.get(sourceOf(c)) || zero() })),
+      creators_without_link: withoutLink,
+      youth_on_crew: youth,
+      placements_left: Math.max(0, GP.MAX_PLACEMENTS - (ev.qr_sources || []).length),
+      totals,
+      counts_ready: countsReady,
+    });
+  } catch (e) {
+    fail(res, e, "qr_codes");
+  }
+});
+
+router.get("/events/:id/qr/:key.:ext(svg|png)", viewer, async (req, res) => {
+  const sb = getSupabase();
+  try {
+    const ev = await loadEvent(sb, req, res);
+    if (!ev) return;
+    if (GP.pageBaseProblem()) return res.status(503).json(NO_ADDRESS);
+    const code = await qrCode(sb, ev, req.params.key);
+    if (!code) return res.status(404).json({ error: "not_found" });
+    const ext = String(req.params.ext).toLowerCase();
+    res.setHeader("Cache-Control", "private, no-store");
+    res.setHeader("X-Content-Type-Options", "nosniff");
+    if (req.query.download === "1") res.setHeader("Content-Disposition", `attachment; filename="${ev.code}-${code.key}.${ext}"`);
+    if (ext === "svg") {
+      res.setHeader("Content-Type", "image/svg+xml");
+      return res.send(await QRCode.toString(code.url, { type: "svg", margin: 2, errorCorrectionLevel: "M" }));
+    }
+    res.setHeader("Content-Type", "image/png");
+    res.send(await QRCode.toBuffer(code.url, { type: "png", width: 1200, margin: 2, errorCorrectionLevel: "M" }));
+  } catch (e) {
+    fail(res, e, "qr_image");
+  }
+});
+
+router.get("/events/:id/qr/:key/card", viewer, async (req, res) => {
+  const sb = getSupabase();
+  try {
+    const ev = await loadEvent(sb, req, res);
+    if (!ev) return;
+    if (GP.pageBaseProblem()) return res.status(503).json(NO_ADDRESS);
+    const code = await qrCode(sb, ev, req.params.key);
+    if (!code) return res.status(404).json({ error: "not_found" });
+    const svg = await QRCode.toString(code.url, { type: "svg", margin: 1, errorCorrectionLevel: "M" });
+    const n = crypto.randomBytes(16).toString("base64");
+    res.setHeader("Content-Type", "text/html; charset=utf-8");
+    res.setHeader("Cache-Control", "private, no-store");
+    res.setHeader("X-Content-Type-Options", "nosniff");
+    res.setHeader("Content-Security-Policy", `default-src 'none'; style-src 'nonce-${n}'; img-src 'self' data:; script-src 'nonce-${n}'; base-uri 'none'; form-action 'none'; frame-ancestors 'self'`);
+    res.send(GP.renderPrintCard(ev, { nonce: n, qrSvg: svg, url: code.url, kind: code.kind, label: code.label, creatorFirst: code.first || null }));
+  } catch (e) {
+    fail(res, e, "qr_card");
   }
 });
 
@@ -1730,10 +1907,21 @@ function readCreator(b, req, prev) {
   const tier = out.tier || (prev && prev.tier) || "adult";
   const lead = out.lead_scout !== undefined ? out.lead_scout : prev && prev.lead_scout;
   if (tier === "youth" && lead) errors.push("youth_lead_scout");
+  // Their own SportsClippers page, shown on a stop's page when their code is
+  // scanned. A youth creator never appears on a public page (migration 025).
+  // Only a change is written, so the form works before migration 025 runs.
+  if (b.sportsclippers_url !== undefined) {
+    const r = GP.sportsClippersUrl(b.sportsclippers_url);
+    if (r.error) errors.push("sportsclippers_url");
+    else if (r.url && tier === "youth") errors.push("youth_no_public_link");
+    else if ((r.url || null) !== ((prev && prev.sportsclippers_url) || null)) out.sportsclippers_url = r.url;
+  } else if (out.tier === "youth" && prev && prev.sportsclippers_url) {
+    out.sportsclippers_url = null;
+  }
   if (prev && !req.team.owner) {
     // Once screening is on file it belongs to a person: a director can't
-    // point the record at someone else.
-    if (G.screeningOnFile(prev) && ((out.name !== undefined && out.name !== prev.name) || (out.email !== undefined && (out.email || null) !== (prev.email || null)))) errors.push("identity_owner_only");
+    // point the record at someone else, or send families somewhere else.
+    if (G.screeningOnFile(prev) && ((out.name !== undefined && out.name !== prev.name) || (out.email !== undefined && (out.email || null) !== (prev.email || null)) || (out.sportsclippers_url !== undefined && b.sportsclippers_url !== undefined))) errors.push("identity_owner_only");
     // Pausing is anyone's call; putting someone back to work is Kyron's.
     if (out.status === "active" && prev.status !== "active") errors.push("reactivate_owner_only");
   }
@@ -1741,7 +1929,7 @@ function readCreator(b, req, prev) {
 }
 const OWNER_ONLY = {
   credentials_owner_only: "Kyron records contracts, background checks and training.",
-  identity_owner_only: "This creator's screening is on file, so Kyron changes their name or email.",
+  identity_owner_only: "This creator's screening is on file, so Kyron changes their name, email or SportsClippers page.",
   reactivate_owner_only: "Kyron puts a paused or inactive creator back to work.",
 };
 function ownerOnly(res, errors) {
