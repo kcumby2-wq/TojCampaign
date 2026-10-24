@@ -23,6 +23,12 @@ services:
         sync: false
       - key: DATABASE_URL
         sync: false
+      # Pylon events' QR codes: the address printed on them (a Ground Floor
+      # Sports address, never TOJ's) and the help inbox on the stop page.
+      - key: GFS_PAGE_BASE
+        sync: false
+      - key: GFS_HELP_EMAIL
+        sync: false
     disk:
       name: app-data
       mountPath: /opt/render/project/src/db
