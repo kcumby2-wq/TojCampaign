@@ -29,15 +29,17 @@
 -- No email address or phone number in a name, a title or a message. The
 -- check runs on a normalized copy: compatibility forms folded (full-width
 -- digits and @, non-breaking and other Unicode spaces), invisible characters
--- dropped, every kind of dash made a hyphen. Digits in tel:, sms: and wa.me
--- links count; a long number elsewhere in a link doesn't (a URL's ID isn't a
--- phone number). Mirrors hasContact() in utils/chat.js.
+-- dropped, every kind of dash made a hyphen. A phone-length number right
+-- after tel:, sms:, callto:, facetime: or wa.me/ counts, written as a link
+-- writes it (no space after the colon), so "FaceTime: 3pm" is fine. A long
+-- number elsewhere in a link doesn't (a URL's ID isn't a phone number).
+-- Mirrors hasContact() in utils/chat.js.
 create or replace function public.chat_text_ok(s text) returns boolean
 language sql immutable set search_path = '' as $$
   select s is null or not (
     t ~* '[a-z0-9._%+-]+@[a-z0-9-]+(\.[a-z0-9-]+)*\.[a-z]{2,}'
-    or t ~* '(^|[^a-z])(tel|sms|callto|facetime):[[:space:]]*\+?[0-9]'
-    or t ~* 'wa\.me/[[:space:]]*\+?[0-9]'
+    or t ~* '(^|[^a-z])(tel|sms|callto|facetime):\+?[0-9]([.()-]?[0-9]){6,}'
+    or t ~* 'wa\.me/\+?[0-9]([.()-]?[0-9]){6,}'
     or regexp_replace(t, 'https?://[^ \t\n\r\f\v<>"'']+', ' ', 'gi') ~ '(?<![0-9])(\+?1[ .-]?)?\(?[2-9][0-9]{2}\)?[ .-]?[0-9]{3}[ .-]?[0-9]{4}(?![0-9])'
     or regexp_replace(t, 'https?://[^ \t\n\r\f\v<>"'']+', ' ', 'gi') ~ '(?<![0-9])\+[1-9]([ .-]?[0-9]){7,14}(?![0-9])'
   )

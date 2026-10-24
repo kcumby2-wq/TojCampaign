@@ -476,3 +476,79 @@ test("contact details in other forms: Unicode spaces and hyphens, full-width cha
   }
   assert.equal(C.cleanBody("a\u2060b\u00adc"), "abc", "hidden characters don't survive");
 });
+
+test("ordinary words after a colon aren't contact details; a dial link with a number is", () => {
+  for (const s of ["FaceTime: 3pm with the Dallas crew", "SMS: 2 bounced", "Tel: 4 cameras on field 2", "tel:4", "sms: 503-555"]) {
+    assert.equal(C.hasContact(s), false, JSON.stringify(s));
+  }
+  for (const s of ["tel:5550142", "tel:+15035550142", "sms:+1-503-555-0142", "facetime:+15035550142", "callto:503.555.0142", "wa.me/15035550142", "TEL:(503)5550142"]) {
+    assert.equal(C.hasContact(s), true, JSON.stringify(s));
+  }
+});
+
+// A query that fails, for checking what happens when the database errors
+// partway through a request.
+function failingQuery() {
+  const res = { data: null, error: { code: "XX000", message: "boom" } };
+  const q = new Proxy(function () {}, {
+    get(_t, k) { return k === "then" ? (ok, bad) => Promise.resolve(res).then(ok, bad) : () => q; },
+    apply() { return q; },
+  });
+  return q;
+}
+// Runs fn while every query on `table` fails, from the first query on
+// `after` (when given) onward.
+async function whileFailing(table, fn, { after } = {}) {
+  const real = db.from;
+  let armed = !after;
+  db.from = (name) => {
+    if (name === after) armed = true;
+    return armed && name === table ? failingQuery() : real.call(db, name);
+  };
+  try {
+    return await fn();
+  } finally {
+    db.from = real;
+  }
+}
+
+test("a saved message answers 201 even if a lookup after it fails, so a retry can't post it twice", async () => {
+  const room = roomOf(await wes("/api/chat"), "all").id;
+  const r = await whileFailing("users", () => wes(`/api/chat/rooms/${room}/messages`, { method: "POST", body: { body: "Wrap at 6." } }), { after: "chat_messages" });
+  assert.equal(r.status, 201, JSON.stringify(r.json));
+  assert.equal(db.tables.chat_messages.filter((m) => m.body === "Wrap at 6.").length, 1);
+  await new Promise((done) => setTimeout(done, 50));
+});
+
+test("if the crew list can't be read, nobody new joins chat", async () => {
+  db.tables.team_members.push({ email: "nia@example.com", name: "Nia North", role: "viewer", tools: ["gfs"], regions: ["northeast"], status: "active" });
+  T.forget();
+  const nia = await as("nia@example.com");
+  const r = await whileFailing("gfs_creators", () => nia("/api/chat/me", { method: "POST", body: { name: "Nia", adult: true } }));
+  assert.equal(r.status, 500);
+  assert.ok(!db.tables.chat_people.some((p) => p.email === "nia@example.com"));
+  assert.equal((await nia("/api/chat/me", { method: "POST", body: { name: "Nia", adult: true } })).status, 201, "once it reads, they join");
+});
+
+test("taking someone off the team works when chat fails, and joining again drops the rooms from before", async () => {
+  const made = await abby("/api/chat/rooms", { method: "POST", body: { title: "Booth crew", people: [people.Sam] } });
+  assert.equal(made.status, 201, JSON.stringify(made.json));
+  const id = made.json.room.id;
+  assert.equal((await sam(`/api/chat/rooms/${id}`)).status, 200);
+  const off = await whileFailing("chat_people", () => kyron("/api/team/members/sam@example.com", { method: "DELETE" }));
+  assert.equal(off.status, 200, "chat can't hold up a removal");
+  assert.equal(db.tables.team_members.find((m) => m.email === "sam@example.com").status, "removed");
+  assert.ok(db.tables.chat_room_members.some((m) => m.room_id === id && m.person_id === people.Sam), "the chat step failed, so the row is still there");
+  await abby(`/api/chat/rooms/${id}/messages`, { method: "POST", body: { body: "Said while Sam was away." } });
+  // Invited back.
+  const token = crypto.randomBytes(24).toString("hex");
+  db.tables.team_invites = db.tables.team_invites || [];
+  db.tables.team_invites.push({
+    id: crypto.randomUUID(), email: "sam@example.com", name: "Sam South", role: "member", tools: ["gfs"], regions: ["south_central"], invited_by: "kyron@example.com",
+    token_hash: crypto.createHash("sha256").update(token).digest("hex"), expires_at: new Date(Date.now() + 86400000).toISOString(), used_at: null, revoked_at: null,
+  });
+  const back = await (await as(null))("/api/team/join", { method: "POST", body: { token, password: "a-long-test-password" } });
+  assert.equal(back.status, 200, JSON.stringify(back.json));
+  assert.ok(!db.tables.chat_room_members.some((m) => m.room_id === id && m.person_id === people.Sam));
+  assert.equal((await sam(`/api/chat/rooms/${id}`)).status, 404, "back on the team, but not back in the room");
+});

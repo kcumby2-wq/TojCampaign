@@ -52,10 +52,12 @@ function cleanBody(s) {
 // Mirrors public.chat_text_ok (migration 026). The check runs on a
 // normalized copy: compatibility forms folded (full-width digits and @,
 // non-breaking and other Unicode spaces), invisible characters dropped,
-// every kind of dash made a hyphen. Digits in tel:, sms: and wa.me links
-// count; a long number elsewhere in a link doesn't (a URL's ID isn't a phone).
+// every kind of dash made a hyphen. A phone-length number right after tel:,
+// sms:, callto:, facetime: or wa.me/ counts, written as a link writes it (no
+// space after the colon), so "FaceTime: 3pm" and "SMS: 2 bounced" are fine. A
+// long number elsewhere in a link doesn't (a URL's ID isn't a phone number).
 const EMAIL = /[a-z0-9._%+-]+@[a-z0-9-]+(\.[a-z0-9-]+)*\.[a-z]{2,}/i;
-const DIAL = /(^|[^a-z])(tel|sms|callto|facetime):\s*\+?[0-9]|wa\.me\/\s*\+?[0-9]/i;
+const DIAL = /(^|[^a-z])(tel|sms|callto|facetime):\+?[0-9]([.()-]?[0-9]){6,}|wa\.me\/\+?[0-9]([.()-]?[0-9]){6,}/i;
 const LINKS = /https?:\/\/[^ \t\n\r\f\v<>"']+/gi;
 const US_PHONE = /(?<![0-9])(\+?1[ .-]?)?\(?[2-9][0-9]{2}\)?[ .-]?[0-9]{3}[ .-]?[0-9]{4}(?![0-9])/;
 const INTL_PHONE = /(?<![0-9])\+[1-9]([ .-]?[0-9]){7,14}(?![0-9])/;

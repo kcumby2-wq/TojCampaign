@@ -215,6 +215,16 @@ async function rolesOf(sb, ids) {
   }
   return out;
 }
+// For a send or an edit, the mark is an extra: a failed lookup shows no mark
+// rather than failing a message.
+async function rolesSafe(sb, ids) {
+  try {
+    return await rolesOf(sb, ids);
+  } catch (e) {
+    console.warn("[chat] role lookup failed", (e && e.code) || "");
+    return new Map();
+  }
+}
 
 function messageView(m, me, names, roles) {
   const removed = !!m.removed_at;
@@ -281,11 +291,11 @@ async function nameTaken(sb, name, myId) {
   return rows.some((p) => p.id !== myId && String(p.display_name).toLowerCase() === want);
 }
 // A youth creator's address on the crew list never joins chat, whatever the
-// form says. Before migration 024 there's no list to check.
+// form says. 026 needs 024, so the list is always there; if it can't be read,
+// nobody new joins (the error fails the request).
 async function youthCreator(sb, email) {
-  const { data, error } = await sb.from("gfs_creators").select("id,tier").eq("email", email);
-  if (error) return false;
-  return (data || []).some((c) => c.tier === "youth");
+  const rows = await run(sb.from("gfs_creators").select("id,tier").eq("email", email));
+  return (rows || []).some((c) => c.tier === "youth");
 }
 
 router.post("/me", team, async (req, res) => {
@@ -682,6 +692,8 @@ router.post("/rooms/:id/messages", team, joined, async (req, res) => {
     const body = readBody(req, res);
     if (!body) return;
     if (C.tooFast(me.id)) return res.status(429).json({ error: "chat_too_fast" });
+    // Looked up before the insert: once it's saved, nothing fails the send.
+    const roles = await rolesSafe(sb, [me.id]);
     const row = await run(sb.from("chat_messages").insert({ room_id: r.room.id, author_id: me.id, body }).select("id,room_id,author_id,body,created_at,edited_at,removed_at").single());
     // Sent. The room's sort time (the database sets it too) and "they're
     // looking at it" are extras: a failure there doesn't fail the send, so
@@ -693,7 +705,6 @@ router.post("/rooms/:id/messages", team, joined, async (req, res) => {
     } catch (e2) {
       console.warn("[chat] after-send update failed for room", r.room.id, (e2 && e2.code) || "");
     }
-    const roles = await rolesOf(sb, [me.id]);
     res.status(201).json({ message: messageView(row, me, new Map([[me.id, me.display_name]]), roles) });
     notifyRoom(sb, r, me, body).catch((e) => console.warn("[chat] notify failed for room", r.room.id, (e && e.code) || ""));
   } catch (e) {
@@ -722,8 +733,9 @@ router.patch("/messages/:mid", team, joined, async (req, res) => {
     const body = readBody(req, res);
     if (!body) return;
     const at = now();
+    const roles = await rolesSafe(sb, [me.id]);
     await run(sb.from("chat_messages").update({ body, edited_at: at }).eq("id", x.m.id));
-    res.json({ message: messageView({ ...x.m, body, edited_at: at }, me, new Map([[me.id, me.display_name]]), await rolesOf(sb, [me.id])) });
+    res.json({ message: messageView({ ...x.m, body, edited_at: at }, me, new Map([[me.id, me.display_name]]), roles) });
   } catch (e) {
     fail(res, e, "chat_edit");
   }

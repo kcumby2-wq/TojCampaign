@@ -14,7 +14,7 @@ Code:
 - Everyone on the team can use chat. That means owners on `ADMIN_EMAILS` and active team members, in any role.
 - Each person joins once. They confirm they're 18 or older and pick the name people see.
   - Nobody joins without the confirmation, and the database won't store a person without it.
-  - An address on the crew list as a youth creator can't join, whatever the form says.
+  - An address on the crew list as a youth creator can't join, whatever the form says. If the crew list can't be read, nobody new joins until it can.
   - Names are unique whatever the case, so nobody can post as someone else. Messages from owners and approvers carry their role.
 - Team emails never leave the server. People appear by the name they chose and their role:
   - Owner
@@ -34,7 +34,7 @@ Code:
 | **A direct message** | The two people in it, and nobody else (the owner included) | Anyone on the team, with anyone else on the team who has joined chat |
 
 - **Roles and regions decide rooms on every request.** Change someone's regions, and their region and stop rooms change with them.
-- **Taking someone off the team** takes them out of every room they were added to. If they're invited back, they aren't handed what was said while they were gone.
+- **Taking someone off the team** takes them out of every room they were added to. If they're invited back, they aren't handed what was said while they were gone. Chat can't hold up a removal: if that step fails, they leave those rooms when they join again.
 - **A room you can't read answers "not found",** as if it weren't there.
 - **A DM closes when the other person leaves the team.** You can still read it, but you can't send in it.
 
@@ -44,7 +44,7 @@ Code:
 - **No email addresses or phone numbers.** The app refuses them, and so does the database, on a normalized copy of the text:
   - full-width digits and @ count, and so do non-breaking spaces and every kind of dash;
   - hidden characters don't hide anything;
-  - a number in a `tel:`, `sms:` or `wa.me` link counts;
+  - a phone-length number in a `tel:`, `sms:` or `wa.me` link counts, written as a link writes it, so "FaceTime: 3pm" and "SMS: 2 bounced" are fine;
   - a long number elsewhere in a link doesn't (a URL's ID isn't a phone number).
 
   Chat is the contact channel for the team, and families' details stay in the event's tools.

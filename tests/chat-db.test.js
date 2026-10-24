@@ -95,7 +95,9 @@ test("026: no contact details in a message, a name or a room title", async () =>
   // The app's check and the database's agree.
   for (const s of ["call 214-555-0199", "+44 20 7946 0958", "x@y.co", "https://sportsclippers.com/e/12345678901", "Bulldogs 21-14", "5035550142", "ok 1234567",
     "503\u00a0555\u00a00142", "503\u2011555\u20110142", "503\u2013555\u20130142", "\uff15\uff10\uff13-555-0142", "jane\uff20example.com", "503\u2060555\u20600142",
-    "https://wa.me/15035550142", "call tel:+15035550142", "SMS:5035550142", "https://x.co\u00a0503-555-0142", "2026\u201310\u201324", "Field 3 at 9:00\u201310:30", "hotel:5"]) {
+    "https://wa.me/15035550142", "call tel:+15035550142", "SMS:5035550142", "https://x.co\u00a0503-555-0142", "2026\u201310\u201324", "Field 3 at 9:00\u201310:30", "hotel:5",
+    "FaceTime: 3pm with the Dallas crew", "SMS: 2 bounced", "Tel: 4 cameras on field 2", "tel:4", "sms: 503-555", "tel:5550142", "sms:+1-503-555-0142", "facetime:+15035550142",
+    "callto:503.555.0142", "wa.me/15035550142", "TEL:(503)5550142"]) {
     const db = (await one("select chat_text_ok($1) as ok", [s])).ok;
     assert.equal(db, !C.hasContact(s), s);
   }
