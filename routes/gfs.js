@@ -189,6 +189,8 @@ function eventView(ev, req, names) {
   const out = {};
   for (const k of EVENT_FIELDS) out[k] = ev[k] === undefined ? null : ev[k];
   out.wraps_at = String(ev.wraps_at || "18:00").slice(0, 5);
+  // The review note is Kyron's: it may well mention a hold or a takedown.
+  if (!req.team.owner) out.review_note = null;
   out.region_name = G.REGIONS[ev.region] || ev.region;
   out.size_name = G.SIZES[ev.size] || ev.size;
   out.days = G.eventDays(ev);
@@ -256,10 +258,10 @@ function checklist(ev, crew, creators) {
   if (lapsed) notes.push(`${lapsed} not screened for this event`);
   if (alone) notes.push("a youth creator needs a screened adult");
   return [
-    { key: "storefront", label: "QR code and storefront page", due_at: at(7 * 24), done: !!ev.storefront_ready_at, done_at: ev.storefront_ready_at || null },
+    { key: "storefront", label: "QR code and storefront page", due_at: new Date(G.daysBeforeStart(ev, 7)).toISOString(), done: !!ev.storefront_ready_at, done_at: ev.storefront_ready_at || null },
     { key: "roster", label: "Roster and consent from Sports Thread", due_at: at(72), done: !!ev.roster_in_at, done_at: ev.roster_in_at || null },
     { key: "brief", label: "Crew brief sent", due_at: at(48), done: !!ev.brief_sent_at, done_at: ev.brief_sent_at || null },
-    { key: "crew", label: `Crew ${onSite.length} of ${ev.crew_target} confirmed on site${notes.length ? ", " + notes.join(", ") : ""}`, due_at: at(14 * 24), done: crewDone, done_at: null, confirmed: onSite.length, target: ev.crew_target, lead, not_screened: lapsed, youth_alone: alone },
+    { key: "crew", label: `Crew ${onSite.length} of ${ev.crew_target} confirmed on site${notes.length ? ", " + notes.join(", ") : ""}`, due_at: new Date(G.daysBeforeStart(ev, 14)).toISOString(), done: crewDone, done_at: null, confirmed: onSite.length, target: ev.crew_target, lead, not_screened: lapsed, youth_alone: alone },
   ];
 }
 // The creators behind a set of crew rows.
@@ -308,9 +310,10 @@ function deliverableView(d, ev) {
 // Pipeline counts: the SQL function, or the same counts from the clips.
 const ZERO_COUNTS = { shot: 0, matched: 0, unmatched: 0, not_a_player: 0, tagged: 0, edited: 0, approved: 0, delivered: 0, listed: 0, held: 0, needs_removal: 0, to_family_only: 0, to_send: 0, to_list: 0 };
 function countClips(rows) {
-  const c = { ...ZERO_COUNTS };
+  const c = { ...ZERO_COUNTS, not_out: 0 };
   for (const r of rows) {
     c.shot++;
+    if (r.stage === "approved" && !r.held && !r.removed_at && !r.listed_at && !r.delivered_at) c.not_out++;
     if (r.match === "matched") c.matched++;
     if (r.match === "unmatched") c.unmatched++;
     if (r.match === "not_a_player") c.not_a_player++;
@@ -884,7 +887,7 @@ router.get("/events/:id/brief", member, async (req, res) => {
       .map(({ c, p }) => ({ name: p.name, role_name: G.CREW_ROLES[c.role] || c.role, status: c.status, youth: p.tier !== "adult", email: p.email || null }));
     const brief = G.crewBrief(ev, {
       crew: people,
-      director: ev.director_email ? { name: names.get(ev.director_email) || null, email: ev.director_email } : null,
+      director: ev.director_email ? { name: names.get(ev.director_email) || null, email: req.team.owner || ev.director_email === req.team.email ? ev.director_email : null } : null,
       roster,
       help: { email: GP.helpEmail(), phone: ev.help_phone ? GP.phoneWords(ev.help_phone) : null, page: GP.stopUrl(ev, { kind: "stop" }) },
     });
@@ -1355,8 +1358,13 @@ router.post("/events/:id/uploads", member, async (req, res) => {
     // stop's games (angles, late files, missing whistles), plus clips in this
     // file that landed over 12 hours after their game's final whistle.
     const eventUploads = await all(() => sb.from("gfs_uploads").select("game,angle,uploaded_at,final_whistle_at,usable").eq("event_id", ev.id));
-    const whistles = new Map(eventUploads.filter((u) => u.final_whistle_at).map((u) => [G.norm(u.game), Date.parse(u.final_whistle_at)]));
-    const lateClips = parsed.clips.filter((c) => c.game && c.uploaded_at && whistles.has(G.norm(c.game)) && Date.parse(c.uploaded_at) - whistles.get(G.norm(c.game)) > G.UPLOAD_HOURS * 3600000).length;
+    const whistles = new Map();
+    for (const u of eventUploads) {
+      if (!u.final_whistle_at) continue;
+      const k = G.norm(u.game), t = Date.parse(u.final_whistle_at);
+      if (!whistles.has(k) || t < whistles.get(k)) whistles.set(k, t);
+    }
+    const lateClips = rows.filter((c) => c.game && c.uploaded_at && whistles.has(G.norm(c.game)) && Date.parse(c.uploaded_at) - whistles.get(G.norm(c.game)) > G.UPLOAD_HOURS * 3600000).length;
     res.json({
       summary: {
         games: { added: gamesAdded, updated: gamesUpdated },
@@ -2407,11 +2415,15 @@ router.get("/today", viewer, async (req, res) => {
     const byId = new Map(events.map((e) => [e.id, e]));
     const needs = [];
     for (const t of tds.list) needs.push({ kind: "takedown", ...takedownView(t, tds.events, null, req, tds.scope.get(t.id)) });
-    // The run sheet: every stage due within a week or late, for whoever owns
-    // it (utils/gfs.js runSheet, stageIsMine).
+    // The run sheet (utils/gfs.js runSheet, stageIsMine): one card per stop
+    // with the stages due within a week or late that are this person's, the
+    // most pressing on top. Stops nearest today, about to start or just
+    // wrapped, come first.
     const horizon = nowMs + 52 * 86400000;
+    const stops = [];
     for (const ev of events) {
-      if (G.zonedToUtc(ev.starts_on, "00:00", ev.tz).getTime() > horizon) continue;
+      const startMs = G.zonedToUtc(ev.starts_on, "00:00", ev.tz).getTime();
+      if (startMs > horizon) continue;
       const mine = crew.filter((c) => c.event_id === ev.id);
       const sheet = G.runSheet(ev, {
         checklist: checklist(ev, mine, creators),
@@ -2421,10 +2433,14 @@ router.get("/today", viewer, async (req, res) => {
         uploads: ups.filter((u) => u.event_id === ev.id),
         deliverables: dels.filter((d) => d.event_id === ev.id).map((d) => deliverableView(d, ev)),
       }, nowMs);
-      for (const st of sheet) {
-        if ((st.status === "late" || st.status === "soon") && G.stageIsMine(st, req.team, ev, actor(req))) needs.push({ kind: "stage", event: eventView(ev, req), stage: st });
-      }
+      const open = sheet.filter((st) => (st.status === "late" || st.status === "soon") && G.stageIsMine(st, req.team, ev, actor(req)));
+      if (!open.length) continue;
+      open.sort((a, b) => (a.status === b.status ? a.due_at.localeCompare(b.due_at) : a.status === "late" ? -1 : 1));
+      const wrapMs = Date.parse(ev.ends_at);
+      const nearness = nowMs < startMs ? startMs - nowMs : nowMs > wrapMs ? nowMs - wrapMs : 0;
+      stops.push({ nearness, card: { kind: "stage", event: eventView(ev, req), stage: open[0], more: open.slice(1).map((st) => ({ key: st.key, label: st.label, status: st.status, due_at: st.due_at })) } });
     }
+    stops.sort((a, b) => a.nearness - b.nearness);
     for (const d of dels) {
       const ev = byId.get(d.event_id);
       if (!ev) continue;
@@ -2433,16 +2449,17 @@ router.get("/today", viewer, async (req, res) => {
       else if (d.status === "changes" && (d.submitted_by === actor(req) || ev.director_email === actor(req))) needs.push({ kind: "changes", event: eventView(ev, req), deliverable: v });
       else if (v.late && !v.cleared && ev.status !== "cancelled" && (atLeast(req, "approver") || ev.director_email === actor(req) || !ev.director_email)) needs.push({ kind: "overdue", event: eventView(ev, req), deliverable: v });
     }
-    // Takedowns, then approvals, sent-back work, late stages (oldest first),
-    // late Schedule C pieces, and stages due this week (soonest first).
-    const order = { takedown: 0, approve: 1, changes: 2, overdue: 4 };
-    const rank = (n) => (n.kind === "stage" ? (n.stage.status === "late" ? 3 : 5) : order[n.kind]);
-    needs.sort((a, b) => rank(a) - rank(b) || (a.kind === "stage" && b.kind === "stage" ? a.stage.due_at.localeCompare(b.stage.due_at) : 0));
+    // Takedowns, approvals, sent-back work, stops with open stages, then late
+    // Schedule C pieces: each kind capped, so no one kind crowds out the rest.
+    const kind = (k) => needs.filter((n) => n.kind === k);
+    const STOP_CARDS = 15;
+    const list = [...kind("takedown"), ...kind("approve").slice(0, 10), ...kind("changes").slice(0, 10), ...stops.slice(0, STOP_CARDS).map((x) => x.card), ...kind("overdue").slice(0, 10)];
     const upcoming = events.filter((e) => new Date(e.ends_at).getTime() + 24 * 3600000 > Date.now() && e.status !== "closed");
     const next = upcoming[0] || null;
     const names = await namesFor(sb, upcoming.slice(0, 4).map((e) => e.director_email));
     res.json({
-      needs: needs.slice(0, 40),
+      needs: list,
+      more_stops: Math.max(0, stops.length - STOP_CARDS),
       next: next ? { ...eventView(next, req, names), checklist: checklist(next, crew.filter((c) => c.event_id === next.id), creators) } : null,
       upcoming: upcoming.slice(1, 4).map((e) => eventView(e, req, names)),
       regions,

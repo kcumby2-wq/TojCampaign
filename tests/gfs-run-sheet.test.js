@@ -19,9 +19,11 @@ test("twelve stages, in order, with deadlines from the start (before) and the wr
   const sheet = G.runSheet(LA, {}, at("2026-10-01T12:00:00Z"));
   assert.deepEqual(sheet.map((s) => s.key), ["staff", "screened", "crew", "storefront", "roster", "brief", "capture", "uploads", "tags", "sale", "deliverables", "review"]);
   const due = Object.fromEntries(sheet.map((s) => [s.key, s.due_at]));
-  // Start: Nov 21, 00:00 Pacific = 08:00Z. Wrap: 18:00 Pacific = Nov 22, 02:00Z.
-  assert.equal(due.staff, "2026-10-07T08:00:00.000Z");
-  assert.equal(due.screened, "2026-10-31T08:00:00.000Z");
+  // Day deadlines are local midnights: 07:00Z while Pacific is on daylight
+  // time (until Nov 1), 08:00Z after. Hour deadlines count from the start
+  // (Nov 21, 00:00 Pacific = 08:00Z) or the wrap (18:00 Pacific = Nov 22, 02:00Z).
+  assert.equal(due.staff, "2026-10-07T07:00:00.000Z");
+  assert.equal(due.screened, "2026-10-31T07:00:00.000Z");
   assert.equal(due.crew, "2026-11-07T08:00:00.000Z");
   assert.equal(due.storefront, "2026-11-14T08:00:00.000Z");
   assert.equal(due.roster, "2026-11-18T08:00:00.000Z");
@@ -31,6 +33,18 @@ test("twelve stages, in order, with deadlines from the start (before) and the wr
   assert.equal(due.tags, "2026-11-23T02:00:00.000Z");
   assert.equal(due.sale, "2026-11-24T02:00:00.000Z");
   assert.equal(due.review, "2026-12-06T02:00:00.000Z");
+});
+
+test("day deadlines fall on the same local date across a daylight-saving change", () => {
+  // Chicago, Sat Mar 20, 2027: clocks went forward on Mar 14.
+  const ev = { ...LA, code: "Chicago2027", starts_on: "2027-03-20", ends_on: "2027-03-20", tz: "America/Chicago" };
+  ev.ends_at = G.endsAt(ev);
+  const due = Object.fromEntries(G.runSheet(ev, {}, at("2027-01-01T12:00:00Z")).map((s) => [s.key, s.due_at]));
+  assert.equal(due.staff, "2027-02-03T06:00:00.000Z", "Feb 3, midnight CST");
+  assert.equal(due.crew, "2027-03-06T06:00:00.000Z", "Mar 6, midnight CST, not 11 p.m. the day before");
+  assert.equal(due.storefront, "2027-03-13T06:00:00.000Z", "Mar 13, the day before the change");
+  assert.equal(due.roster, "2027-03-17T05:00:00.000Z", "72 hours before midnight CDT on the 20th");
+  assert.equal(due.review, "2027-04-03T23:00:00.000Z", "Apr 3, 6 p.m. CDT");
 });
 
 test("a stage is soon a week ahead and late after its deadline; after-event stages wait for the wrap", () => {
@@ -81,9 +95,13 @@ test("done tests: staffing, screening, uploads, tags and getting clips out", () 
   assert.equal(stage(sheet, "sale").done, true);
   // Anything still in the edit, waiting for approval, approved but not out,
   // or in a file nobody marked, keeps the stage open.
-  for (const counts of [{ approved: 30, tagged: 35, edited: 30, listed: 30, delivered: 30 }, { approved: 25, tagged: 30, edited: 30, listed: 25, delivered: 25 }, { approved: 30, tagged: 30, edited: 30, listed: 20, delivered: 10 }, { approved: 30, tagged: 30, edited: 30, listed: 30, delivered: 30, to_send: 2 }]) {
+  for (const counts of [{ approved: 30, tagged: 35, edited: 30, listed: 30, delivered: 30 }, { approved: 25, tagged: 30, edited: 30, listed: 25, delivered: 25 }, { approved: 30, tagged: 30, edited: 30, listed: 20, delivered: 10, not_out: 10 }, { approved: 30, tagged: 30, edited: 30, listed: 30, delivered: 30, to_send: 2 }]) {
     assert.equal(stage(G.runSheet(LA, { counts }, now), "sale").done, false, JSON.stringify(counts));
   }
+  // A held clip can't go out, so it doesn't keep the stage open (not_out
+  // counts only clips that aren't held or taken down).
+  const heldOne = G.runSheet(LA, { counts: { approved: 2, tagged: 2, edited: 2, listed: 1, delivered: 1, held: 1, not_out: 0 } }, now);
+  assert.equal(stage(heldOne, "sale").done, true);
   const unmatched = G.runSheet({ ...LA, tags_approved_at: "2026-11-22T12:00:00Z" }, { counts: { shot: 40, unmatched: 3 } }, now);
   assert.equal(stage(unmatched, "tags").done, false);
   assert.match(stage(unmatched, "tags").note, /3 to review/);

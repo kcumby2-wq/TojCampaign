@@ -849,10 +849,10 @@ function uploadCheck(uploads) {
 // has started: undone then, they're "missed", shown on the plan, not nagged.
 // The roster and the storefront are still needed after it, for tags and sales.
 const RUN_SHEET = Object.freeze([
-  { key: "staff", label: "Staff the stop", owner: "director", who: "Director", from: "start", hours: -45 * 24, when: "T-45 days", closes: true },
-  { key: "screened", label: "Screening complete", owner: "owner", who: "Kyron", from: "start", hours: -21 * 24, when: "T-21 days", closes: true },
-  { key: "crew", label: "Crew confirmed", owner: "director", who: "Director", from: "start", hours: -14 * 24, when: "T-14 days", closes: true },
-  { key: "storefront", label: "QR codes and storefront", owner: "director", who: "Director, approver", from: "start", hours: -7 * 24, when: "T-7 days" },
+  { key: "staff", label: "Staff the stop", owner: "director", who: "Director", from: "start", days: -45, when: "T-45 days", closes: true },
+  { key: "screened", label: "Screening complete", owner: "owner", who: "Kyron", from: "start", days: -21, when: "T-21 days", closes: true },
+  { key: "crew", label: "Crew confirmed", owner: "director", who: "Director", from: "start", days: -14, when: "T-14 days", closes: true },
+  { key: "storefront", label: "QR codes and storefront", owner: "director", who: "Director, approver", from: "start", days: -7, when: "T-7 days" },
   { key: "roster", label: "Roster and consent", owner: "director", who: "Director", from: "start", hours: -72, when: "T-72 hours" },
   { key: "brief", label: "Crew brief sent", owner: "director", who: "Director", from: "start", hours: -48, when: "T-48 hours", closes: true },
   { key: "capture", label: "Capture", owner: "lead", who: "Crew lead", from: "wrap", hours: 0, when: "Event day", actionable: false },
@@ -860,9 +860,18 @@ const RUN_SHEET = Object.freeze([
   { key: "tags", label: "Tag review done", owner: "director", who: "Director", from: "wrap", hours: 24, when: "T+24 hours" },
   { key: "sale", label: "On sale and sent", owner: "approver", who: "Approver, director", from: "wrap", hours: 48, when: "T+48 hours" },
   { key: "deliverables", label: "Pylon deliverables", owner: "approver", who: "Approver", from: "wrap", hours: null, when: "Schedule C dates", actionable: false },
-  { key: "review", label: "Stop review", owner: "owner", who: "Kyron", from: "wrap", hours: 14 * 24, when: "T+14 days" },
+  { key: "review", label: "Stop review", owner: "owner", who: "Kyron", from: "wrap", days: 14, when: "T+14 days" },
 ]);
 const SOON_MS = 7 * 86400000;
+// "T-n days" is local midnight n calendar days before the first day, and
+// "T+n days" the wrap time n days after the last, so a deadline lands on the
+// same local date across a daylight-saving change. Hours are plain hours.
+function daysBeforeStart(ev, n) {
+  return zonedToUtc(addDays(ev.starts_on, -n), "00:00", ev.tz).getTime();
+}
+function daysAfterWrap(ev, n) {
+  return zonedToUtc(addDays(ev.ends_on, n), String(ev.wraps_at || "18:00").slice(0, 5), ev.tz).getTime();
+}
 // ctx: checklist (the four pre-event checks), crew rows, creators (Map of id
 // → row), counts (the clip pipeline), uploads (gfs_uploads rows) or an
 // uploadCheck, deliverables (their views: required, cleared, due_at).
@@ -880,7 +889,9 @@ function runSheet(ev, ctx = {}, nowMs = Date.now()) {
   const n = (k) => Number((ctx.counts || {})[k]) || 0;
   const toEdit = Math.max(0, n("tagged") - n("edited"));
   const toApprove = Math.max(0, n("edited") - n("approved"));
-  const notOut = Math.max(0, n("approved") - Math.max(n("listed"), n("delivered")));
+  // Approved, not held, not taken down, and neither listed nor sent: the
+  // count migration 029 adds (absent before it, when this check is skipped).
+  const notOut = n("not_out");
   const toMark = n("to_list") + n("to_send");
   const owed = (ctx.deliverables || []).filter((d) => d.required > 0);
   const cleared = owed.filter((d) => d.cleared).length;
@@ -902,8 +913,10 @@ function runSheet(ev, ctx = {}, nowMs = Date.now()) {
   };
   return RUN_SHEET.map((s) => {
     const f = facts[s.key];
-    const base = s.from === "start" ? startMs : wrapMs;
-    const dueMs = s.hours === null ? (owed.length ? Math.max(...owed.map((d) => Date.parse(d.due_at))) : wrapMs) : base + s.hours * 3600000;
+    const dueMs =
+      s.hours === null ? (owed.length ? Math.max(...owed.map((d) => Date.parse(d.due_at))) : wrapMs)
+      : s.days !== undefined ? (s.from === "start" ? daysBeforeStart(ev, -s.days) : daysAfterWrap(ev, s.days))
+      : (s.from === "start" ? startMs : wrapMs) + s.hours * 3600000;
     const done = !!f.done;
     const open = s.from === "start" || nowMs >= wrapMs;
     const status = done ? "done" : s.closes && nowMs >= startMs ? "missed" : !open ? "upcoming" : nowMs > dueMs ? "late" : nowMs >= dueMs - SOON_MS ? "soon" : "upcoming";
@@ -1103,6 +1116,7 @@ module.exports = {
   scorecard,
   quarterOf,
   takedownDue,
+  daysBeforeStart,
   uploadCheck,
   RUN_SHEET,
   runSheet,

@@ -1268,13 +1268,14 @@
         return '<a class="card tight" href="#gfs-desk" style="text-decoration:none;color:inherit"><div class="row"><div class="grow"><div class="name" style="font-size:15px">Takedown' + (n.number ? " #" + n.number : "") + " · " + h(n.team || "") + '</div><div class="sub">' + h([n.reason_name, n.event ? n.event.name : ""].filter(Boolean).join(" · ")) + "</div></div>" + badge(l.text, "bad") + "</div></a>";
       }
       if (n.kind === "stage") {
-        var st = n.stage;
-        return '<a class="card tight" href="' + stageHref(st.key, n.event.id) + '" style="text-decoration:none;color:inherit"><div class="row"><div class="grow"><div class="name" style="font-size:15px">' + h(st.label) + '</div><div class="sub">' + h([n.event.name, st.who || STAGE_OWNER[st.owner], st.note].filter(Boolean).join(" · ")) + "</div></div>" + stageBadge(st) + "</div></a>";
+        var st = n.stage, more = n.more || [];
+        var also = more.length ? "Also: " + more.map(function (m) { return m.label + (m.status === "late" ? " (late)" : ""); }).join(", ") : "";
+        return '<a class="card tight" href="' + stageHref(st.key, n.event.id) + '" style="text-decoration:none;color:inherit"><div class="row"><div class="grow"><div class="name" style="font-size:15px">' + h(n.event.name) + " · " + h(st.label) + '</div><div class="sub">' + h([st.who || STAGE_OWNER[st.owner], st.note].filter(Boolean).join(" · ")) + "</div>" + (also ? '<div class="sub">' + h(also) + "</div>" : "") + "</div>" + stageBadge(st) + "</div></a>";
       }
       if (n.kind === "event_gaps") { var dd = daysUntil(n.event.starts_on, n.event.tz); return '<a class="card tight" href="#event/' + h(n.event.id) + '" style="text-decoration:none;color:inherit"><div class="row"><div class="grow"><div class="name" style="font-size:15px">' + h(n.event.name) + '</div><div class="sub">' + h(n.gaps.join(" · ")) + "</div></div>" + badge(dd <= 0 ? "Today" : dd === 1 ? "Tomorrow" : "In " + dd + " days", "gold") + "</div></a>"; }
       var label = { approve: "To approve", changes: "Changes asked", overdue: "Late" }[n.kind];
       return '<a class="card tight" href="#gfs-deliver/' + h(n.event.id) + '" style="text-decoration:none;color:inherit"><div class="row"><div class="grow"><div class="name" style="font-size:15px">' + h(n.deliverable.name) + '</div><div class="sub">' + h(n.event.name + (n.kind === "approve" ? " · " + n.deliverable.to_submit + " to clear" : "")) + "</div></div>" + badge(label, n.kind === "approve" ? "gold" : "bad") + "</div></a>";
-    }).join("");
+    }).join("") + (d.more_stops ? '<p class="sub" style="margin:0">' + d.more_stops + (d.more_stops === 1 ? " more stop has" : " more stops have") + " open stages. See Events.</p>" : "");
     var nx = d.next;
     var next = "";
     if (nx) {

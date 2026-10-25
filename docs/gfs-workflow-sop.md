@@ -6,7 +6,7 @@ Code: `utils/gfs.js` (`RUN_SHEET`, `runSheet`, `stageIsMine`, `uploadCheck`, `cr
 
 ## The stages
 
-Deadlines before the event count back from midnight on its first day; after it, from the wrap on its last day, both in the stop's time zone.
+All deadlines are in the stop's time zone. Day deadlines fall on a calendar day, at midnight before the event and at the wrap time after it, so a daylight-saving change never moves them by an hour. Hour deadlines count from midnight on the first day or from the wrap on the last.
 
 | Stage | Due | Owner | Done when |
 | --- | --- | --- | --- |
@@ -19,9 +19,9 @@ Deadlines before the event count back from midnight on its first day; after it, 
 | Capture | Wrap | Crew lead | Game files are logged and every game has two wide angles (measured, not nagged) |
 | Footage uploaded | T+12 hours | Crew, director | The upload log is loaded |
 | Tag review done | T+24 hours | Director | Tags approved and nothing unmatched |
-| On sale and sent | T+48 hours | Approver, director | Clips approved, nothing waiting for the edit or approval, every approved clip out, every file marked |
+| On sale and sent | T+48 hours | Approver, director | Clips approved, nothing waiting for the edit or approval, every approved clip out unless it's held or taken down (from migration 029), every file marked |
 | Pylon deliverables | Schedule C dates | Approver | Every Schedule C piece cleared (Deliver has its own queue) |
-| Stop review | T+14 days | Kyron | Marked reviewed, with one line on any change to the SOP (migration 029) |
+| Stop review | T+14 days | Kyron | Marked reviewed, with one line on any change to the SOP (migration 029). Only Kyron sees the line; others see that it was reviewed |
 
 ## Status and "Needs you"
 
@@ -29,13 +29,13 @@ Deadlines before the event count back from midnight on its first day; after it, 
 - **Late:** past the deadline and not done.
 - **Missed:** staffing, screening, the crew and the brief, undone when the stop starts. They show on the plan but aren't nagged, since they can't be done anymore. The roster and the storefront stay late, because tags and sales still need them.
 - **Who sees what:** the owner sees every stage. An approver sees the storefront and getting clips out. A director sees their own stages and getting clips out, for stops they direct or that have no director yet. Viewers see none.
-- **When:** `/today` looks at stops from 52 days before their start to 45 days after they end, and lists late stages (oldest first) before stages due this week.
+- **When:** `/today` looks at stops from 52 days before their start to 45 days after they end. Each stop gets one card: its most pressing stage (late before due this week, oldest deadline first), with its other open stages on an "Also" line. Up to 15 cards, nearest stop first, after takedowns, approvals and change requests and before overdue Schedule C pieces; the rest are counted as `more_stops`.
 
 ## The crew brief
 
 `GET /api/gfs/events/:id/brief` (directors and up) builds the brief from the stop's own data:
 
-- when and where, the crew and the director;
+- when and where, the crew and the director (the director's email only for Kyron and that director, as on the plan);
 - the teams by their roster names;
 - pre-sold athletes to cover first, and athletes no clip may feature, by team and jersey only;
 - the capture, naming and upload standards;
@@ -49,7 +49,7 @@ Every upload-log load returns a `check` covering the whole stop:
 
 - games logged;
 - games missing a wide angle (Sideline and End Zone, or any two wide angles, as the scorecard counts them);
-- game files and clips uploaded more than 12 hours after their final whistle;
+- game files uploaded more than 12 hours after their final whistle, and clips in this load uploaded more than 12 hours after their game's earliest final whistle;
 - games with no final whistle;
 - files marked unusable.
 

@@ -77,7 +77,8 @@ async function signedIn(email = "kyron@example.com", role = "admin") {
   await c("/test-login", { method: "POST", body: { email, role } });
   return c;
 }
-const stagesFor = (needs, evId) => needs.filter((n) => n.kind === "stage" && n.event.id === evId).map((n) => n.stage.key);
+// One card per stop: its most pressing stage, and the rest under "more".
+const stagesFor = (needs, evId) => needs.filter((n) => n.kind === "stage" && n.event.id === evId).flatMap((n) => [n.stage.key, ...(n.more || []).map((m) => m.key)]);
 
 test("the event plan carries the twelve-stage run sheet and the upload check", async () => {
   const mw = await signedIn("mw@example.com", "creator");
@@ -100,9 +101,11 @@ test("Needs you shows each stop's late and due-this-week stages to whoever owns 
   assert.ok(!stagesFor(mw.json.needs, ev.near.id).includes("screened"), "screening is Kyron's");
   assert.deepEqual(stagesFor(mw.json.needs, ev.joes.id), [], "another director's stop");
   assert.ok(stagesFor(mw.json.needs, ev.done.id).includes("uploads"), "wrapped three days ago with no upload log");
-  const late = mw.json.needs.filter((n) => n.kind === "stage" && n.stage.status === "late");
-  const soon = mw.json.needs.filter((n) => n.kind === "stage" && n.stage.status === "soon");
-  assert.ok(mw.json.needs.indexOf(late.at(-1)) < mw.json.needs.indexOf(soon[0]), "late stages come before this week's");
+  const cards = mw.json.needs.filter((n) => n.kind === "stage");
+  assert.equal(new Set(cards.map((n) => n.event.id)).size, cards.length, "one card per stop");
+  assert.deepEqual(cards.map((n) => n.event.id).slice(0, 2), [ev.done.id, ev.near.id], "stops nearest today first: wrapped 3 days ago, then 10 days out");
+  const near = cards.find((n) => n.event.id === ev.near.id);
+  assert.equal(near.stage.status, "late", "a stop's late stages come before its stages due this week");
 
   const kyron = await (await signedIn())("/api/gfs/today");
   assert.ok(stagesFor(kyron.json.needs, ev.near.id).includes("screened"), "Kyron sees screening");
@@ -136,6 +139,9 @@ test("the crew brief: built from the stop, team and jersey only, with the crew's
   assert.deepEqual(r.json.emails, ["ana@example.com"]);
   assert.equal(r.json.sent_at, null);
   assert.equal((await (await signedIn("viewer@example.com", "creator"))(`/api/gfs/events/${ev.near.id}/brief`)).status, 403, "viewers can't open it");
+  const joe = await (await signedIn("joe@example.com", "creator"))(`/api/gfs/events/${ev.near.id}/brief`);
+  assert.match(joe.json.text, /Director: Mia Director\n/, "another director sees the name, not the email (as on the plan)");
+  assert.doesNotMatch(joe.json.text, /mw@example\.com/);
   // Marked sent from the brief, the run sheet ticks it.
   await mw(`/api/gfs/events/${ev.near.id}`, { method: "PATCH", body: { brief_sent: true } });
   const plan = await mw(`/api/gfs/events/${ev.near.id}`);
@@ -155,6 +161,11 @@ test("the stop review is Kyron's: one line on the SOP, or none", async () => {
   const row = await one(`select reviewed_by from gfs_events where id = $1`, [ev.done.id]);
   assert.equal(row.reviewed_by, "kyron@example.com");
   assert.equal((await kyron(`/api/gfs/events/${ev.done.id}`)).json.run_sheet.find((s) => s.key === "review").done, true);
+  for (const who of ["mw@example.com", "viewer@example.com", "ap@example.com"]) {
+    const seen = await (await signedIn(who, "creator"))(`/api/gfs/events/${ev.done.id}`);
+    assert.equal(seen.json.event.review_note, null, `${who} doesn't see Kyron's review note`);
+    assert.ok(seen.json.event.reviewed_at, "only that it was reviewed");
+  }
   const undo = await kyron(`/api/gfs/events/${ev.done.id}`, { method: "PATCH", body: { reviewed: false } });
   assert.equal(undo.json.event.reviewed_at, null);
   assert.equal(undo.json.event.review_note, null);
@@ -185,6 +196,7 @@ test("the upload check on arrival: a missing angle, a late file, a late clip", a
   const r2 = await mw(`/api/gfs/events/${ev.done.id}/uploads`, { method: "POST", body: { csv: ["path,uploaded_at,final_whistle", `${g2}/Sideline/${g2}_Sideline.mp4,${D(-2)} 09:00,${day} 15:00`].join("\n") } });
   const k2 = r2.json.summary.check;
   assert.equal(k2.games, 2);
+  assert.equal(k2.late_clips, 0, "only clips in this file count: the first file's late clip isn't counted again");
   assert.equal(k2.missing_angle, 1);
   assert.equal(k2.late_files, 1);
   assert.deepEqual(k2.issues.find((x) => x.game === g2).missing, ["EndZone"]);
@@ -195,6 +207,57 @@ test("the upload check on arrival: a missing angle, a late file, a late clip", a
   assert.match(sheet.uploads.note, /1 file over 12 hours/);
   assert.equal(sheet.capture.done, false);
   assert.match(sheet.capture.note, /1 missing an angle/);
+});
+
+test("a late clip counts from its game's earliest final whistle, whatever the order of the file", async () => {
+  const mw = await signedIn("mw@example.com", "creator");
+  const day = ev.done.starts_on;
+  const g3 = `Toledo-Stars_vs_Dayton-Flash_${day.replace(/-/g, "")}`;
+  const csv = [
+    "path,uploaded_at,final_whistle",
+    `${g3}/Toledo-Stars/5/5-Sideline-001.mp4,${day} 23:30,`, // the clip before its game's files
+    `${g3}/EndZone/${g3}_EndZone.mp4,${day} 16:00,${day} 14:00`,
+    `${g3}/Sideline/${g3}_Sideline.mp4,${day} 13:00,${day} 11:00`,
+  ].join("\n");
+  const r = await mw(`/api/gfs/events/${ev.done.id}/uploads`, { method: "POST", body: { csv } });
+  assert.equal(r.status, 200, JSON.stringify(r.json));
+  assert.equal(r.json.summary.check.late_clips, 1, "12.5 hours after the earlier whistle, though 9.5 after the later one");
+  assert.equal(r.json.summary.check.late_files, 1, "unchanged: both of this game's files landed within 2 hours");
+  const again = await mw(`/api/gfs/events/${ev.done.id}/uploads`, { method: "POST", body: { csv } });
+  assert.equal(again.json.summary.clips.already, 1);
+  assert.equal(again.json.summary.check.late_clips, 0, "a clip already logged isn't counted twice");
+});
+
+test("On sale and sent: held and taken-down clips don't keep it open; an approved clip not out yet does", async () => {
+  const e = await stop("Canton2026", -5, { city: "Canton", director: "mw@example.com" });
+  const ok = await one(`insert into gfs_roster (event_id, roster_id, team, jersey, consent_capture, consent_sale) values ($1, 'C1', 'Canton Bolts', '9', true, true) returning id`, [e.id]);
+  const dnp = await one(`insert into gfs_roster (event_id, roster_id, team, jersey, consent_capture, consent_sale, do_not_publish) values ($1, 'C2', 'Canton Bolts', '4', true, true, true) returning id`, [e.id]);
+  // Approved clips in each state, inserted as they'd stand (the clip gate is
+  // tested in its own file).
+  const clip = (n, row, { held = false, listed = false, removed = false } = {}) =>
+    q(`insert into gfs_clips (event_id, log_key, file, roster_row, match, stage, approved_by, approved_at, held, hold_reason, listed_at, visibility, removed_at, logged_by)
+       values ($1, $2, $3, $4, 'matched', 'approved', 'ap@example.com', now(), $5, $6, $7, $8, $9, 'kyron@example.com')`,
+      [e.id, `canton-${n}`, `Sideline-00${n}.mp4`, row, held, held ? "do_not_publish" : null, listed ? new Date() : null, listed ? "family" : null, removed ? new Date() : null]);
+  const withoutGate = async (fn) => {
+    await q(`alter table gfs_clips disable trigger gfs_clips_gate`);
+    try { await fn(); } finally { await q(`alter table gfs_clips enable trigger gfs_clips_gate`); }
+  };
+  await withoutGate(async () => {
+    await clip(1, ok.id, { listed: true }); // out
+    await clip(2, dnp.id, { held: true }); // held: can't go out
+    await clip(3, ok.id, { listed: true, removed: true }); // taken down
+  });
+  const counts = () => one(`select approved, held, not_out from gfs_event_counts($1::uuid[])`, [[e.id]]);
+  assert.deepEqual(await counts(), { approved: 3, held: 1, not_out: 0 });
+  const mw = await signedIn("mw@example.com", "creator");
+  const sale = async () => (await mw(`/api/gfs/events/${e.id}`)).json.run_sheet.find((s) => s.key === "sale");
+  const done = await sale();
+  assert.equal(done.done, true, done.note);
+  await withoutGate(() => clip(4, ok.id)); // approved, not listed or sent
+  assert.equal((await counts()).not_out, 1);
+  const open = await sale();
+  assert.equal(open.done, false);
+  assert.match(open.note, /1 approved, not out yet/);
 });
 
 test("before migration 029: the run sheet works without the review, and marking one says to apply it", async () => {
