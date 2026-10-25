@@ -19,6 +19,10 @@
 -- its tier, age check or guardian changes, so an adult saved before this
 -- migration can still be paused or edited; the crew rule below keeps them off
 -- crews until their age is checked.
+--
+-- Crew rows that already exist aren't changed (production had none when this
+-- was written); the app lists anyone unchecked as a crew problem. This
+-- replaces 024's gfs_creator_ok: if 024 is ever run again, run 028 after it.
 
 alter table public.gfs_creators add column if not exists age_checked_on date;
 alter table public.gfs_creators add column if not exists age_checked_by text;
@@ -39,14 +43,36 @@ alter table public.gfs_creators add constraint gfs_creators_age_fields_chk
 create or replace function public.gfs_creators_age_check() returns trigger
 language plpgsql set search_path = '' as $$
 begin
+  -- A check is something that happened (a day's slack for time zones).
+  if new.age_checked_on > current_date + 1
+     and (tg_op = 'INSERT' or new.age_checked_on is distinct from old.age_checked_on) then
+    raise exception 'gfs_age_check_in_future';
+  end if;
   if new.tier = 'adult' and new.age_checked_on is null
      and (tg_op = 'INSERT' or new.tier is distinct from old.tier or new.age_checked_on is distinct from old.age_checked_on) then
     raise exception 'gfs_adult_needs_age_check';
+  end if;
+  -- The check that showed someone was 16 or 17 can't also show they're 18:
+  -- moving a checked youth creator to adult takes a new, later check.
+  if tg_op = 'UPDATE' and new.tier = 'adult' and old.tier is distinct from 'adult'
+     and old.age_checked_on is not null
+     and (new.age_checked_on is null or new.age_checked_on <= old.age_checked_on) then
+    raise exception 'gfs_adult_needs_new_age_check';
   end if;
   if new.tier = 'adult' and (new.guardian_name is not null or new.guardian_email is not null)
      and (tg_op = 'INSERT' or new.tier is distinct from old.tier
           or new.guardian_name is distinct from old.guardian_name or new.guardian_email is distinct from old.guardian_email) then
     raise exception 'gfs_adult_has_guardian';
+  end if;
+  -- The crew rule below is checked when a crew row is written, so while
+  -- someone is on an upcoming crew their age check, and a youth creator's
+  -- guardian, stay on file.
+  if tg_op = 'UPDATE'
+     and ((old.age_checked_on is not null and new.age_checked_on is null)
+          or (new.tier <> 'adult' and old.guardian_email is not null and new.guardian_email is null))
+     and exists (select 1 from public.gfs_crew x join public.gfs_events e on e.id = x.event_id
+                 where x.creator_id = new.id and x.status in ('invited', 'confirmed') and e.ends_on >= current_date) then
+    raise exception 'gfs_creator_on_crew';
   end if;
   return new;
 end $$;
@@ -66,7 +92,9 @@ $$;
 
 -- Nobody joins a crew before their age is checked; a youth creator also needs
 -- a guardian of record. Runs before 024's gfs_crew_check (triggers fire in
--- name order) and skips the changes that one skips too.
+-- name order) and skips the changes that one skips too. The creator's row is
+-- locked until this commits, so a change to their age check or guardian
+-- can't slip in between this check and the crew row.
 create or replace function public.gfs_crew_age_check() returns trigger
 language plpgsql set search_path = '' as $$
 declare
@@ -75,7 +103,8 @@ begin
   if tg_op = 'UPDATE' and new.role = old.role and new.status = old.status then return new; end if;
   if new.status not in ('invited', 'confirmed') then return new; end if;
   select * into c from public.gfs_creators
-   where id = case when tg_op = 'UPDATE' then old.creator_id else new.creator_id end;
+   where id = case when tg_op = 'UPDATE' then old.creator_id else new.creator_id end
+   for share;
   if c.age_checked_on is null then raise exception 'crew_age_not_checked'; end if;
   if c.tier = 'youth' and c.guardian_email is null then raise exception 'crew_youth_no_guardian'; end if;
   return new;

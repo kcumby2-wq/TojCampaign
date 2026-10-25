@@ -800,10 +800,9 @@ async function qrCreators(sb, ev) {
     const c = creators.get(row.creator_id);
     if (!c || seen.has(c.id)) continue;
     seen.add(c.id);
-    if (c.tier !== "adult") youth++;
-    // An adult whose age isn't checked (a crew row from before migration 028)
-    // gets no code until Kyron records it.
-    else if (!c.age_checked_on || !c.sportsclippers_url || c.status !== "active") withoutLink.push({ id: c.id, name: c.name, code: c.code, paused: c.status !== "active", unchecked: !c.age_checked_on });
+    // Unchecked counts as youth (migration 028): counted, never named here.
+    if (c.tier !== "adult" || !c.age_checked_on) youth++;
+    else if (!c.sportsclippers_url || c.status !== "active") withoutLink.push({ id: c.id, name: c.name, code: c.code, paused: c.status !== "active" });
     else shown.push({ c, row });
   }
   return { shown, withoutLink, youth };
@@ -1936,16 +1935,23 @@ function readCreator(b, req, prev) {
   const checked = out.age_checked_on !== undefined ? out.age_checked_on : (prev && prev.age_checked_on) || null;
   const tierMoved = out.tier !== undefined && out.tier !== (prev && prev.tier);
   if (tier === "adult" && !checked && (!prev || tierMoved || out.age_checked_on !== undefined)) errors.push("adult_needs_age_check");
+  // The check that showed someone was 16 or 17 can't also show they're 18:
+  // moving a checked youth creator to adult takes a new, later check.
+  else if (tier === "adult" && prev && prev.tier !== "adult" && prev.age_checked_on && !(checked > prev.age_checked_on)) errors.push("adult_needs_new_age_check");
   // A youth creator's guardian of record: the parent who signs the Youth
-  // Creator Agreement. An adult has none on file.
+  // Creator Agreement. An adult has none on file. Written only when it
+  // changes, so a youth creator can still be paused before migration 028.
   if (tier === "adult") {
     if (prev && (prev.guardian_name || prev.guardian_email)) Object.assign(out, { guardian_name: null, guardian_email: null });
   } else {
-    if (b.guardian_name !== undefined) out.guardian_name = G.clean(b.guardian_name, 80) || null;
+    if (b.guardian_name !== undefined) {
+      const n = G.clean(b.guardian_name, 80) || null;
+      if (n !== ((prev && prev.guardian_name) || null)) out.guardian_name = n;
+    }
     if (b.guardian_email !== undefined) {
       const e = String(b.guardian_email || "").trim().toLowerCase();
       if (e && (!EMAIL_RE.test(e) || e.length > 200)) errors.push("guardian_email");
-      out.guardian_email = e || null;
+      else if ((e || null) !== ((prev && prev.guardian_email) || null)) out.guardian_email = e || null;
     }
   }
   // Their own SportsClippers page, shown on a stop's page when their code is
@@ -2060,8 +2066,11 @@ router.patch("/creators/:id", member, async (req, res) => {
     if (errors.length) return res.status(400).json({ error: "invalid_creator", fields: errors });
     if (!Object.keys(out).length) return res.json({ creator: creatorView(prev, req) });
     // A youth creator's roles are limited, and an adult may be the one a youth
-    // creator works alongside: the tier doesn't change mid-crew.
-    if (out.tier !== undefined && out.tier !== prev.tier) {
+    // creator works alongside: the tier doesn't change mid-crew. Nor does the
+    // age check go, or a youth creator's guardian (migration 028).
+    const clearsAge = out.age_checked_on === null && !!prev.age_checked_on;
+    const clearsGuardian = out.guardian_email === null && !!prev.guardian_email && (out.tier || prev.tier) !== "adult";
+    if ((out.tier !== undefined && out.tier !== prev.tier) || clearsAge || clearsGuardian) {
       const rows = await run(sb.from("gfs_crew").select("id,event_id,status").eq("creator_id", prev.id).in("status", ["invited", "confirmed"]));
       const evIds = [...new Set(rows.map((r) => r.event_id))];
       const upcoming = evIds.length ? (await run(sb.from("gfs_events").select("id,ends_on").in("id", evIds))).filter((e) => e.ends_on >= today()) : [];

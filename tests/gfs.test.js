@@ -699,7 +699,8 @@ test("B3, S11, minor 13: a youth creator always works beside a screened adult", 
   assert.equal((await patch(mw, `${E(ev4)}/crew/${p.id}`, { status: "invited" })).json.error, "crew_youth_left_alone", "un-confirming the only adult");
   assert.equal((await patch(mw, `${E(ev4)}/crew/${p.id}`, { role: "editor" })).json.error, "crew_youth_left_alone", "moving the only adult off site");
   assert.equal((await patch(mw, `${E(ev4)}/crew/${p.id}`, { role: "shooter" })).status, 200, "still on site");
-  assert.equal((await patch(kyron, `/api/gfs/creators/${Q.id}`, { tier: "adult" })).json.error, "gfs_creator_on_crew");
+  // Even with a new age check (so the flip itself is valid), the tier holds mid-crew.
+  assert.equal((await patch(kyron, `/api/gfs/creators/${Q.id}`, { tier: "adult", age_checked_on: D(-7) })).json.error, "gfs_creator_on_crew");
 
   // The adult's background check lapses (cleared here): they stop counting.
   await patch(kyron, `/api/gfs/creators/${P.id}`, { background_check_on: null });

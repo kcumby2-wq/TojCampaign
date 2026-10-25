@@ -180,6 +180,57 @@ test("routes: a director adds a youth creator with a guardian; only Kyron record
   assert.ok(seen.age_checked_on, "the date itself shows, as the screening dates do");
 });
 
+test("a youth creator becomes an adult only with a new, later age check", async () => {
+  const kyron = await signedIn();
+  const add = await kyron("/api/gfs/creators", { method: "POST", body: { name: "Mae Turning", region: "midwest", guardian_name: "Mae Parent", guardian_email: "maep@example.com", age_checked_on: D(-200), contract_signed_on: D(-5), background_check_on: D(-5), safety_training_on: D(-5) } });
+  assert.equal(add.status, 200, JSON.stringify(add.json));
+  const mae = add.json.creator;
+  assert.equal(mae.tier, "youth");
+  // The form's Adult toggle used to send the youth check back unchanged.
+  const same = await kyron(`/api/gfs/creators/${mae.id}`, { method: "PATCH", body: { tier: "adult", age_checked_on: D(-200) } });
+  assert.equal(same.status, 400, JSON.stringify(same.json));
+  assert.ok(same.json.fields.includes("adult_needs_new_age_check"));
+  const earlier = await kyron(`/api/gfs/creators/${mae.id}`, { method: "PATCH", body: { tier: "adult", age_checked_on: D(-300) } });
+  assert.ok(earlier.json.fields.includes("adult_needs_new_age_check"), "an earlier date can't show they've since turned 18");
+  await refused(`update gfs_creators set tier = 'adult', guardian_name = null, guardian_email = null where id = $1`, [mae.id], /gfs_adult_needs_new_age_check/);
+  const later = await kyron(`/api/gfs/creators/${mae.id}`, { method: "PATCH", body: { tier: "adult", age_checked_on: D(0) } });
+  assert.equal(later.status, 200, JSON.stringify(later.json));
+  assert.equal(later.json.creator.tier, "adult");
+  assert.equal(later.json.creator.guardian_email, null);
+  // Recorded as youth by mistake today: clear the date, then mark adult.
+  const oops = (await kyron("/api/gfs/creators", { method: "POST", body: { name: "Oz Oops", region: "midwest", age_checked_on: D(0) } })).json.creator;
+  assert.ok((await kyron(`/api/gfs/creators/${oops.id}`, { method: "PATCH", body: { tier: "adult", age_checked_on: D(0) } })).json.fields.includes("adult_needs_new_age_check"));
+  assert.equal((await kyron(`/api/gfs/creators/${oops.id}`, { method: "PATCH", body: { age_checked_on: null } })).status, 200);
+  const fixed = await kyron(`/api/gfs/creators/${oops.id}`, { method: "PATCH", body: { tier: "adult", age_checked_on: D(0) } });
+  assert.equal(fixed.status, 200, JSON.stringify(fixed.json));
+  assert.equal(fixed.json.creator.tier, "adult");
+});
+
+test("on an upcoming crew, the age check and a youth creator's guardian stay on file; a check can't be dated ahead", async () => {
+  const kyron = await signedIn();
+  const stop = await one(`insert into gfs_events (code, name, series, size, region, city, state, tz, starts_on, ends_on, ends_at, created_by)
+                          values ('Kent2027', 'Legacy Tour · Kent', 'Legacy Tour', 'premier', 'midwest', 'Kent', 'OH', 'America/New_York', $1, $2, now(), 'kyron@example.com') returning *`, [D(30), D(31)]);
+  const [a] = screened();
+  const anchor = await one(`insert into gfs_creators (code, name, region, tier, contract_signed_on, background_check_on, safety_training_on, age_checked_on, age_checked_by, created_by)
+                            values ('ANCH9', 'Ann Anchor', 'midwest', 'adult', $1, $1, $1, $1, 'kyron@example.com', 'kyron@example.com') returning *`, [a]);
+  const kid = await one(`insert into gfs_creators (code, name, region, tier, contract_signed_on, background_check_on, safety_training_on, age_checked_on, age_checked_by, guardian_name, guardian_email, created_by)
+                         values ('KIDC9', 'Kit Crewed', 'midwest', 'youth', $1, $1, $1, $1, 'kyron@example.com', 'Kit Parent', 'kitp@example.com', 'kyron@example.com') returning *`, [a]);
+  await q(`insert into gfs_crew (event_id, creator_id, role, status, assigned_by) values ($1, $2, 'photographer', 'confirmed', 'kyron@example.com')`, [stop.id, anchor.id]);
+  await q(`insert into gfs_crew (event_id, creator_id, role, status, assigned_by) values ($1, $2, 'shooter', 'confirmed', 'kyron@example.com')`, [stop.id, kid.id]);
+  await refused(`update gfs_creators set age_checked_on = null, age_checked_by = null where id = $1`, [kid.id], /gfs_creator_on_crew/);
+  await refused(`update gfs_creators set guardian_email = null where id = $1`, [kid.id], /gfs_creator_on_crew/);
+  const clearAge = await kyron(`/api/gfs/creators/${kid.id}`, { method: "PATCH", body: { age_checked_on: null } });
+  assert.equal(clearAge.status, 409, JSON.stringify(clearAge.json));
+  assert.equal(clearAge.json.error, "gfs_creator_on_crew");
+  assert.equal((await kyron(`/api/gfs/creators/${kid.id}`, { method: "PATCH", body: { guardian_email: "" } })).status, 409);
+  assert.equal((await kyron(`/api/gfs/creators/${kid.id}`, { method: "PATCH", body: { guardian_email: "kit.parent@example.com" } })).status, 200, "a different guardian is fine");
+  await refused(`update gfs_creators set age_checked_on = $1, age_checked_by = 'kyron@example.com' where id = $2`, [D(5), anchor.id], /gfs_age_check_in_future/);
+  // Off the crew, it can change again.
+  await q(`update gfs_crew set status = 'removed' where event_id = $1 and creator_id = $2`, [stop.id, kid.id]);
+  assert.equal((await kyron(`/api/gfs/creators/${kid.id}`, { method: "PATCH", body: { guardian_email: "" } })).status, 200);
+  await q(`update gfs_crew set status = 'removed' where event_id = $1`, [stop.id]);
+});
+
 test("routes: the crew screen blocks an unchecked creator and a youth creator with no guardian, and says why", async () => {
   const kyron = await signedIn();
   const add = await kyron("/api/gfs/creators", { method: "POST", body: { name: "Al Unchecked", region: "midwest", tier: "youth", contract_signed_on: D(-5), background_check_on: D(-5), safety_training_on: D(-5) } });
@@ -207,7 +258,8 @@ test("routes: an unchecked adult from before 028 gets no QR code and never appea
   const qr = await kyron(`/api/gfs/events/${ev.id}/qr`);
   assert.equal(qr.status, 200, JSON.stringify(qr.json));
   assert.ok(!qr.json.codes.some((c) => c.kind === "creator" && c.creator.code === "OLDB2"), "no code for them");
-  assert.ok(qr.json.creators_without_link.some((c) => c.code === "OLDB2" && c.unchecked), "listed as not checked");
+  assert.ok(!qr.json.creators_without_link.some((c) => c.code === "OLDB2"), "not named on the list: unchecked counts as youth");
+  assert.ok(qr.json.youth_on_crew >= 1, "counted with the youth creators instead");
   const page = await kyron(`/e/${ev.code}?c=OLDB2`);
   assert.equal(page.status, 200, "the stop page itself loads");
   assert.doesNotMatch(page.text, /Ola/, "the stop page doesn't show them");
@@ -236,6 +288,14 @@ test("before 028 runs: nobody can be crewed (it fails closed), and adding an adu
     const crew = await kyron(`/api/gfs/events/${e.json.event.id}/crew`, { method: "POST", body: { creator_id: youth.json.creator.id, role: "shooter" } });
     assert.equal(crew.status, 409);
     assert.ok(crew.json.problems.includes("age_not_checked"));
+    // Pausing a youth creator still works from the full form, which sends
+    // the (empty) guardian fields along.
+    const form = { name: "Pre Youth", email: "", region: "midwest", home_city: "", notes: "", status: "paused", guardian_name: null, guardian_email: null };
+    const paused = await kyron(`/api/gfs/creators/${youth.json.creator.id}`, { method: "PATCH", body: { ...form, contract_signed_on: D(-5), background_check_on: D(-5), safety_training_on: D(-5), age_checked_on: null, tier: "youth", shadow_events: 0, lead_scout: false } });
+    assert.equal(paused.status, 200, JSON.stringify(paused.json));
+    await old.query(`insert into team_members (email, name, role, tools, regions) values ('mw@example.com', 'Midwest Director', 'member', array['gfs'], array['midwest'])`);
+    const mw = await signedIn("mw@example.com", "creator");
+    assert.equal((await mw(`/api/gfs/creators/${youth.json.creator.id}`, { method: "PATCH", body: { ...form, status: "paused" } })).status, 200, "a director can pause them too");
   } finally {
     setSupabase(pgSupabase(pool, S));
     await old.query("drop schema gfs_age_pre028_test cascade");

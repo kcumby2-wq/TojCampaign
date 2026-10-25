@@ -238,7 +238,8 @@ test("crews on the real database: the youth rule holds, deletes too, and a ratin
   assert.equal((await patch(mw, `${E(ev)}/crew/${y.id}`, { status: "confirmed" })).status, 200);
   assert.equal((await patch(mw, `${E(ev)}/crew/${a.id}`, { role: "editor" })).json.error, "crew_youth_left_alone");
   await refusedSql(`delete from gfs_crew where id = $1`, [a.id], "crew_youth_left_alone");
-  assert.equal((await patch(kyron, `/api/gfs/creators/${Y.id}`, { tier: "adult" })).json.error, "gfs_creator_on_crew");
+  // Even with a new age check (so the flip itself is valid), the tier holds mid-crew.
+  assert.equal((await patch(kyron, `/api/gfs/creators/${Y.id}`, { tier: "adult", age_checked_on: D(-7) })).json.error, "gfs_creator_on_crew");
   // The crew is ready; the adult is paused after the event; a rating still lands.
   assert.equal((await mw(E(ev))).json.checklist.find((c) => c.key === "crew").done, true);
   await patch(kyron, `/api/gfs/creators/${A.id}`, { status: "paused" });

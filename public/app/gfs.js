@@ -38,6 +38,8 @@
     crew_youth_no_guardian: "A youth creator needs a guardian of record before they work.",
     gfs_adult_needs_age_check: "Record the age check before marking them an adult.",
     gfs_adult_has_guardian: "An adult creator has no guardian on file.",
+    gfs_adult_needs_new_age_check: "Moving a youth creator to adult takes a new age check, dated after their youth check.",
+    gfs_age_check_in_future: "The age-check date can't be in the future.",
     gfs_age_not_set_up: "Age checks aren't set up on the server yet (migration 028).",
     already_on_crew: "They're already on this crew.",
     crew_youth_needs_adult: "A youth creator works only alongside a confirmed adult on site.",
@@ -82,6 +84,7 @@
     qr_sources: "Name a placement with letters and numbers (2 to 24), up to 20 of them.",
     youth_no_public_link: "A youth creator never appears on a stop's page, so they don't get a public link.",
     adult_needs_age_check: "Add the date you checked their age before marking them an adult.",
+    adult_needs_new_age_check: "Their age check on file showed they were 16 or 17. Enter the later date you checked they're 18 or older. Recorded as youth by mistake? Clear the date and save first.",
     age_checked_on: "Use the date you checked their age, not a future date.",
     guardian_email: "Check the guardian's email.",
   };
@@ -454,7 +457,7 @@
     var stopCodes = d.codes.filter(function (c) { return c.kind !== "creator"; });
     var creatorCodes = d.codes.filter(function (c) { return c.kind === "creator"; });
     var noLink = d.creators_without_link.map(function (c) {
-      return '<a class="li" href="#gfs-creator/' + h(c.id) + '"><div class="grow"><div class="name" style="font-size:15px">' + h(c.name) + '</div><div class="sub">' + h(c.paused ? "Paused, so no code" : c.unchecked ? "Age not checked, so no code" : "Add their SportsClippers page to give them a code") + "</div></div>" + t.I.chev + "</a>";
+      return '<a class="li" href="#gfs-creator/' + h(c.id) + '"><div class="grow"><div class="name" style="font-size:15px">' + h(c.name) + '</div><div class="sub">' + h(c.paused ? "Paused, so no code" : "Add their SportsClippers page to give them a code") + "</div></div>" + t.I.chev + "</a>";
     }).join("");
     var tot = d.totals;
     var links = member
@@ -481,7 +484,7 @@
       (creatorCodes.length ? creatorCodes.map(codeCard).join("") : "") +
       (noLink ? '<div class="list">' + noLink + "</div>" : "") +
       (!creatorCodes.length && !noLink ? '<p class="sub" style="margin:0">Crew the stop, and each adult creator with a SportsClippers page gets a code for their lanyard.</p>' : "") +
-      (d.youth_on_crew ? '<p class="sub" style="margin:0">' + d.youth_on_crew + (d.youth_on_crew === 1 ? " youth creator on this crew gets" : " youth creators on this crew get") + " no code: a youth creator never appears on a public page.</p>" : "") +
+      (d.youth_on_crew ? '<p class="sub" style="margin:0">' + d.youth_on_crew + (d.youth_on_crew === 1 ? " creator on this crew gets" : " creators on this crew get") + " no code: they're youth creators or their age isn't checked yet, and only a checked adult appears on a public page.</p>" : "") +
       "</section>") +
       (member && (!noAddress || d.ready) ? '<section class="card tight"><div class="row"><span class="tick' + (d.ready ? " on" : "") + '">' + (d.ready ? ICON.check : "") + '</span><div class="grow"><div class="name" style="font-size:15px">' + (d.ready ? "Marked ready" : "Ready to go?") + '</div><div class="sub">Ticks "QR code and storefront page" on the event plan.</div></div><button type="button" class="btn small ' + (d.ready ? "ghost" : "") + '" id="qrReady">' + (d.ready ? "Undo" : "Mark ready") + "</button></div></section>" : "") +
       "</div>");
@@ -1108,7 +1111,7 @@
       (c.badges.length ? '<div class="pill-row">' + c.badges.map(function (b) { return badge(b.label + (b.until && b.ok ? " · to " + day(b.until, { month: "short", year: "numeric" }) : ""), b.ok ? "ok" : "warn"); }).join("") + "</div>" : "") +
       dateIn("contract_signed_on", "Contract signed") + dateIn("background_check_on", "Background check") + dateIn("safety_training_on", "Minor-safety training") +
       (owner ? '<div class="field"><span class="label">Tier</span><div class="seg" role="group" aria-label="Tier"><button type="button" data-tier="adult" aria-pressed="' + (c.tier === "adult") + '">Adult (18+)</button><button type="button" data-tier="youth" aria-pressed="' + (c.tier !== "adult") + '">Youth (16–17)</button></div><span class="sub">A youth creator signs the Youth Creator Agreement through a parent, shoots alongside an adult, and never sells or messages a family.</span></div>' +
-        input("c_age_checked_on", "Age checked", 'type="date"', c.age_checked_on, "The day you saw proof of age: 18 or older for adult, 16 or 17 for youth. No birth date is kept. Adult needs this.") +
+        input("c_age_checked_on", "Age checked", 'type="date"', c.age_checked_on, "The day you saw proof of age: 18 or older for adult, 16 or 17 for youth. No birth date is kept. Adult needs this, and moving a youth creator to adult needs a new, later date.") +
         input("c_shadow", "Shadowed events", 'type="number" min="0" max="50" inputmode="numeric"', c.shadow_events || 0) +
         '<label class="check"><span><b style="display:block;font-size:15px">Lead scout</b><span class="sub">Regional quality control and mentoring</span></span><input type="checkbox" class="switch" id="c_lead"' + (c.lead_scout ? " checked" : "") + "></label>" : "") +
       '<p class="sub" style="margin:0">Each check is good for a year (Scout Agreement §6). Nobody is crewed without all three and an age check; a youth creator also needs a guardian of record.</p></section>' +
@@ -1118,7 +1121,16 @@
       '<div class="dock"><div class="dock-inner"><button type="button" class="btn block" id="cGo">' + (isNew ? "Add the creator" : "Save") + "</button></div></div>");
     var region = c.region, tier = c.tier, status = c.status;
     bind("[data-creg]", "click", function (b) { region = b.dataset.creg; app().querySelectorAll("[data-creg]").forEach(function (x) { x.setAttribute("aria-pressed", String(x === b)); }); });
-    bind("[data-tier]", "click", function (b) { tier = b.dataset.tier; app().querySelectorAll("[data-tier]").forEach(function (x) { x.setAttribute("aria-pressed", String(x === b)); }); document.getElementById("scWrap").hidden = tier === "youth"; document.getElementById("gWrap").hidden = tier !== "youth"; });
+    bind("[data-tier]", "click", function (b) {
+      tier = b.dataset.tier;
+      app().querySelectorAll("[data-tier]").forEach(function (x) { x.setAttribute("aria-pressed", String(x === b)); });
+      document.getElementById("scWrap").hidden = tier === "youth";
+      document.getElementById("gWrap").hidden = tier !== "youth";
+      // A youth creator's age check can't carry over to adult: clear it so a
+      // new date goes in, and put it back if they stay youth.
+      var age = document.getElementById("c_age_checked_on");
+      if (age && c.tier !== "adult" && c.age_checked_on) age.value = tier === "adult" ? "" : age.value || c.age_checked_on;
+    });
     bind("[data-cst]", "click", function (b) { status = b.dataset.cst; app().querySelectorAll("[data-cst]").forEach(function (x) { x.setAttribute("aria-pressed", String(x === b)); }); });
     document.getElementById("cGo").addEventListener("click", function () {
       var btn = this;
