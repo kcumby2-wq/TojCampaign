@@ -228,9 +228,9 @@ async function refusedSql(sql, params, code) {
 
 test("crews on the real database: the youth rule holds, deletes too, and a rating lands for a paused creator", async () => {
   const ev = await newEvent(mw, { name: "Lima clinic", size: "clinic", city: "Lima", starts_on: D(8) });
-  const screened = { contract_signed_on: LAST_MONTH, background_check_on: LAST_MONTH, safety_training_on: LAST_MONTH };
-  const A = (await post(kyron, "/api/gfs/creators", { name: "Creator A", region: "midwest", ...screened })).json.creator;
-  const Y = (await post(kyron, "/api/gfs/creators", { name: "Creator Y", region: "midwest", tier: "youth", ...screened })).json.creator;
+  const screened = { contract_signed_on: LAST_MONTH, background_check_on: LAST_MONTH, safety_training_on: LAST_MONTH, age_checked_on: LAST_MONTH };
+  const A = (await post(kyron, "/api/gfs/creators", { name: "Creator A", region: "midwest", tier: "adult", ...screened })).json.creator;
+  const Y = (await post(kyron, "/api/gfs/creators", { name: "Creator Y", region: "midwest", tier: "youth", guardian_name: "Parent Y", guardian_email: "parent.y@example.com", ...screened })).json.creator;
   const a = (await post(mw, `${E(ev)}/crew`, { creator_id: A.id, role: "lead" })).json.crew;
   const y = (await post(mw, `${E(ev)}/crew`, { creator_id: Y.id, role: "shooter" })).json.crew;
   assert.equal((await patch(mw, `${E(ev)}/crew/${y.id}`, { status: "confirmed" })).json.error, "crew_youth_needs_adult");

@@ -201,18 +201,19 @@ test("creators: directors add them, only the owner records screening, and crews 
     assert.equal(r.status, 200, JSON.stringify(r.json));
     creators[key] = r.json.creator;
   }
-  creators.w = (await add(kyron, { name: "Creator W", region: "west", contract_signed_on: LAST_MONTH, background_check_on: LAST_MONTH, safety_training_on: LAST_MONTH })).json.creator;
+  creators.w = (await add(kyron, { name: "Creator W", region: "west", tier: "adult", age_checked_on: LAST_MONTH, contract_signed_on: LAST_MONTH, background_check_on: LAST_MONTH, safety_training_on: LAST_MONTH })).json.creator;
 
-  // Unscreened creators can't be crewed.
+  // Unscreened creators can't be crewed: a new creator is youth with no age
+  // check and no guardian until someone records them (migration 028).
   let r = await post(mw, `/api/gfs/events/${evId}/crew`, { creator_id: creators.a.id, role: "lead" });
   assert.equal(r.status, 409);
-  assert.deepEqual(r.json.problems.sort(), ["background_check", "no_contract", "safety_training"]);
+  assert.deepEqual(r.json.problems.sort(), ["age_not_checked", "background_check", "no_contract", "safety_training", "youth_no_guardian", "youth_role"]);
 
-  const screen = (id, extra = {}) => patch(kyron, `/api/gfs/creators/${id}`, { contract_signed_on: LAST_MONTH, background_check_on: LAST_MONTH, safety_training_on: LAST_MONTH, ...extra });
+  const screen = (id, extra = {}) => patch(kyron, `/api/gfs/creators/${id}`, { contract_signed_on: LAST_MONTH, background_check_on: LAST_MONTH, safety_training_on: LAST_MONTH, tier: "adult", age_checked_on: LAST_MONTH, ...extra });
   assert.equal((await screen(creators.a.id)).status, 200);
   await screen(creators.b.id);
   await screen(creators.c.id, { safety_training_on: LONG_AGO });
-  await screen(creators.y.id, { tier: "youth" });
+  await screen(creators.y.id, { tier: "youth", guardian_name: "Parent Y", guardian_email: "parent.y@example.com" });
   assert.equal((await patch(mw, `/api/gfs/creators/${creators.b.id}`, { safety_training_on: TODAY })).status, 403);
   assert.equal((await patch(kyron, `/api/gfs/creators/${creators.b.id}`, { background_check_on: "2999-01-01" })).status, 400, "a check can't be dated in the future");
 
@@ -688,9 +689,9 @@ test("B2: a roster correction re-tags; number-matched clips follow it, a directo
 
 test("B3, S11, minor 13: a youth creator always works beside a screened adult", async () => {
   const ev4 = await newEvent(mw, { name: "Lima clinic", size: "clinic", region: "midwest", city: "Lima", starts_on: D(8) });
-  const screened = { contract_signed_on: LAST_MONTH, background_check_on: LAST_MONTH, safety_training_on: LAST_MONTH };
-  const P = (await post(kyron, "/api/gfs/creators", { name: "Creator P", region: "midwest", ...screened })).json.creator;
-  const Q = (await post(kyron, "/api/gfs/creators", { name: "Creator Q", region: "midwest", tier: "youth", ...screened })).json.creator;
+  const screened = { contract_signed_on: LAST_MONTH, background_check_on: LAST_MONTH, safety_training_on: LAST_MONTH, age_checked_on: LAST_MONTH };
+  const P = (await post(kyron, "/api/gfs/creators", { name: "Creator P", region: "midwest", tier: "adult", ...screened })).json.creator;
+  const Q = (await post(kyron, "/api/gfs/creators", { name: "Creator Q", region: "midwest", tier: "youth", guardian_name: "Parent Q", guardian_email: "parent.q@example.com", ...screened })).json.creator;
   const p = (await post(mw, `${E(ev4)}/crew`, { creator_id: P.id, role: "lead" })).json.crew;
   const q = (await post(mw, `${E(ev4)}/crew`, { creator_id: Q.id, role: "shooter" })).json.crew;
   await patch(mw, `${E(ev4)}/crew/${p.id}`, { status: "confirmed" });

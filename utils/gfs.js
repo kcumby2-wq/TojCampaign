@@ -664,6 +664,10 @@ function credentialProblems(c, ev, role) {
   const floor = yearBefore(ev.ends_on);
   if (!c.background_check_on || c.background_check_on < floor) out.push("background_check");
   if (!c.safety_training_on || c.safety_training_on < floor) out.push("safety_training");
+  // Migration 028: nobody works before their age is checked, and a youth
+  // creator needs a guardian of record (public.gfs_crew_age_check).
+  if (!c.age_checked_on) out.push("age_not_checked");
+  if (c.tier !== "adult" && !c.guardian_email) out.push("youth_no_guardian");
   if (c.tier === "youth" && role && !YOUTH_ROLES.includes(role)) out.push("youth_role");
   return out;
 }
@@ -674,14 +678,17 @@ function credentialBadges(c, ev) {
     { key: "contract", ok: !!c.contract_signed_on, label: c.contract_signed_on ? "Contract signed" : "No contract" },
     { key: "background", ok: !!c.background_check_on && c.background_check_on >= floor, label: !c.background_check_on ? "No background check" : c.background_check_on >= floor ? "Background check" : "Background check expired", until: exp(c.background_check_on) },
     { key: "training", ok: !!c.safety_training_on && c.safety_training_on >= floor, label: !c.safety_training_on ? "No safety training" : c.safety_training_on >= floor ? "Safety trained" : "Training expired", until: exp(c.safety_training_on) },
+    { key: "age", ok: !!c.age_checked_on, label: !c.age_checked_on ? "Age not checked" : c.tier === "adult" ? "Adult · age checked" : "Youth · age checked" },
+    ...(c.tier !== "adult" ? [{ key: "guardian", ok: !!c.guardian_email, label: c.guardian_email ? "Guardian on file" : "No guardian on file" }] : []),
     ...(c.tier === "youth" ? [{ key: "youth", ok: true, label: `Youth · shadowed ${c.shadow_events || 0}` }] : []),
   ];
 }
 
-// Screening dates on file: from then on, who the record belongs to (name,
-// email) and whether it's active are the owner's to change.
+// Screening on file (dates or an age check): from then on, who the record
+// belongs to (name, email, guardian) and whether it's active are the owner's
+// to change.
 function screeningOnFile(c) {
-  return !!(c && (c.contract_signed_on || c.background_check_on || c.safety_training_on));
+  return !!(c && (c.contract_signed_on || c.background_check_on || c.safety_training_on || c.age_checked_on));
 }
 
 // Creator Playbook v1.5: a youth creator works only alongside a confirmed,
@@ -690,7 +697,7 @@ function screeningOnFile(c) {
 // can't race past it.
 function isAnchor(row, creators, ev) {
   const c = row && creators.get(row.creator_id);
-  return !!c && row.status === "confirmed" && ADULT_ON_SITE.includes(row.role) && (c.tier || "adult") === "adult" && !credentialProblems(c, ev, row.role).length;
+  return !!c && row.status === "confirmed" && ADULT_ON_SITE.includes(row.role) && c.tier === "adult" && !credentialProblems(c, ev, row.role).length;
 }
 const isYouth = (row, creators) => ((creators.get(row.creator_id) || {}).tier || "adult") === "youth";
 // A confirmed youth creator with no screened adult on site (screening that

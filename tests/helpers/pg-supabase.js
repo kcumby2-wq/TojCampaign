@@ -22,9 +22,10 @@ types.setTypeParser(20, (v) => (v == null ? null : Number(v))); // int8
 
 const MIGRATIONS = path.join(__dirname, "..", "..", "db", "migrations");
 
-// A fresh schema with the team tables (019, 020) and Pylon events (024, 025),
+// A fresh schema with the team tables (019, 020) and Pylon events (024, 025,
+// 028),
 // or the migrations named (to test the app before a migration has run).
-const ALL = ["019_team.sql", "020_native_push.sql", "024_gfs_events.sql", "025_gfs_qr.sql"];
+const ALL = ["019_team.sql", "020_native_push.sql", "024_gfs_events.sql", "025_gfs_qr.sql", "028_gfs_creator_age.sql"];
 async function makeSchema(url, schema, files = ALL) {
   if (!/^gfs_[a-z0-9_]+_test$/.test(schema)) throw new Error("test schemas are named gfs_*_test");
   const admin = new Pool({ connectionString: url });

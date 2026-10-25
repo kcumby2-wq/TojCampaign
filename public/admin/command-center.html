@@ -359,10 +359,11 @@
       .then(function(r){ return r.ok ? r.json() : null; })
       .then(function(h){
         if (!h || !h.ok) { pill.className = "pill warn"; pill.textContent = "Backend unreachable"; return; }
-        var bits = [ h.backend === "supabase" ? "Supabase live" : "JSON fallback" ];
+        var broken = h.supabase === "invalid";
+        var bits = [ broken ? "Supabase settings invalid" : h.backend === "supabase" ? "Supabase live" : "JSON fallback" ];
         if (h.voyage) bits.push("RAG on");
-        if (h.sessionStore === "postgres") bits.push("persistent login");
-        pill.className = "pill " + (h.backend === "supabase" ? "ok" : "warn");
+        if (h.sessionStore === "postgres" || h.sessionStore === "supabase") bits.push("persistent login");
+        pill.className = "pill " + (h.backend === "supabase" && !broken ? "ok" : "warn");
         pill.textContent = bits.join(" · ");
       })
       .catch(function(){ pill.className = "pill warn"; pill.textContent = "Backend unreachable"; });

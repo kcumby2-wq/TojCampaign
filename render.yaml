@@ -8,7 +8,7 @@ services:
     healthCheckPath: /api/me
     envVars:
       - key: NODE_VERSION
-        value: 20
+        value: 22
       - key: PORT
         value: 3000
       - key: SESSION_SECRET

@@ -27,6 +27,10 @@ const { initializeSchedulers } = require("./utils/reportScheduler");
 })();
 
 const app = express();
+// Render (and Vercel's rewrite before it) proxies every request: trust one
+// hop so req.secure reflects HTTPS and the session cookie can be Secure.
+const { sessionCookie, TRUST_PROXY_HOPS } = require("./utils/session-cookie");
+app.set("trust proxy", TRUST_PROXY_HOPS);
 const PORT = process.env.PORT || 3000;
 
 // The Creator Club's Stripe webhook needs the exact bytes Stripe signed.
@@ -81,7 +85,7 @@ const sessionOpts = {
   secret: process.env.SESSION_SECRET || "toj-dev-secret-change-me",
   resave: false,
   saveUninitialized: false,
-  cookie: { maxAge: 1000 * 60 * 60 * 24 * 7 }, // 1 week
+  cookie: sessionCookie(), // 1 week, httpOnly, Secure over HTTPS (utils/session-cookie.js)
 };
 if (process.env.DATABASE_URL) {
   try {
@@ -226,6 +230,8 @@ app.get("/api/health", (req, res) => {
   res.json({
     ok: true,
     backend: supa ? "supabase" : "json",
+    // "ok", "not_set", or "invalid": set, but no client can be made from it.
+    supabase: require("./utils/supabase").supabaseStatus(),
     voyage: !!process.env.VOYAGE_API_KEY,
     anthropic: !!process.env.ANTHROPIC_API_KEY,
     sessionStore: sessionStoreKind,
