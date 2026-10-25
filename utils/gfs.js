@@ -789,6 +789,243 @@ function takedownDue(reason, receivedAt) {
   return { pylon_due_at: hoursAfter(receivedAt, w.pylon), other_due_at: hoursAfter(receivedAt, w.other), offsite_due_at: hoursAfter(receivedAt, w.offsite) };
 }
 
+// ── The upload check ─────────────────────────────────────────────────────
+// What the upload log says about capture, game by game: the two wide angles
+// the standard asks for (Sideline and End Zone, or any two wide ones, as the
+// scorecard counts them), files that landed more than 12 hours after their
+// final whistle, games with no whistle logged, and files marked unusable.
+// uploads: gfs_uploads rows for one event (game files).
+function uploadCheck(uploads) {
+  const games = new Map();
+  for (const u of uploads || []) {
+    const k = norm(u.game);
+    if (!games.has(k)) games.set(k, { game: u.game, angles: new Set(), files: 0, late: 0, worst: 0, unwhistled: 0, unusable: 0 });
+    const g = games.get(k);
+    g.files++;
+    if (WIDE.includes(u.angle)) g.angles.add(u.angle);
+    if (!u.final_whistle_at) g.unwhistled++;
+    else if (u.uploaded_at) {
+      const over = (Date.parse(u.uploaded_at) - Date.parse(u.final_whistle_at)) / 3600000 - UPLOAD_HOURS;
+      if (over > 0) {
+        g.late++;
+        g.worst = Math.max(g.worst, over);
+      }
+    }
+    if (u.usable === false) g.unusable++;
+  }
+  const list = [...games.values()]
+    .map((g) => ({
+      game: g.game,
+      angles: [...g.angles].sort(),
+      missing: g.angles.size >= 2 ? [] : ["Sideline", "EndZone"].filter((a) => !g.angles.has(a)),
+      files: g.files,
+      late: g.late,
+      hours_late: Math.round(g.worst * 10) / 10,
+      files_no_whistle: g.unwhistled,
+      unusable: g.unusable,
+    }))
+    .sort((a, b) => a.game.localeCompare(b.game));
+  return {
+    games: list.length,
+    missing_angle: list.filter((g) => g.missing.length).length,
+    late_files: list.reduce((s, g) => s + g.late, 0),
+    late_games: list.filter((g) => g.late).length,
+    hours_late: list.reduce((m, g) => Math.max(m, g.hours_late), 0),
+    no_whistle: list.filter((g) => g.files_no_whistle).length,
+    unusable: list.reduce((s, g) => s + g.unusable, 0),
+    issues: list.filter((g) => g.missing.length || g.late || g.files_no_whistle || g.unusable),
+  };
+}
+
+// ── The run sheet (docs/gfs-workflow-sop.md) ─────────────────────────────
+// Twelve stages every stop runs, each with one deadline, one owner and one
+// test for done. Before the event a deadline counts back from the first
+// day's start; after it, from the wrap on the last day, in the stop's zone.
+// A stage is "soon" from a week before its deadline (after-event stages only
+// once the stop has wrapped) and "late" past it, until it's done. Capture and
+// the Schedule C pieces are measured here but worked elsewhere (the upload
+// check, and Deliver's own queue), so they never go to "Needs you".
+// Staffing, screening, the crew and the brief can't be done once the stop
+// has started: undone then, they're "missed", shown on the plan, not nagged.
+// The roster and the storefront are still needed after it, for tags and sales.
+const RUN_SHEET = Object.freeze([
+  { key: "staff", label: "Staff the stop", owner: "director", who: "Director", from: "start", days: -45, when: "T-45 days", closes: true },
+  { key: "screened", label: "Screening complete", owner: "owner", who: "Kyron", from: "start", days: -21, when: "T-21 days", closes: true },
+  { key: "crew", label: "Crew confirmed", owner: "director", who: "Director", from: "start", days: -14, when: "T-14 days", closes: true },
+  { key: "storefront", label: "QR codes and storefront", owner: "director", who: "Director, approver", from: "start", days: -7, when: "T-7 days" },
+  { key: "roster", label: "Roster and consent", owner: "director", who: "Director", from: "start", hours: -72, when: "T-72 hours" },
+  { key: "brief", label: "Crew brief sent", owner: "director", who: "Director", from: "start", hours: -48, when: "T-48 hours", closes: true },
+  { key: "capture", label: "Capture", owner: "lead", who: "Crew lead", from: "wrap", hours: 0, when: "Event day", actionable: false },
+  { key: "uploads", label: "Footage uploaded", owner: "director", who: "Crew, director", from: "wrap", hours: 12, when: "T+12 hours" },
+  { key: "tags", label: "Tag review done", owner: "director", who: "Director", from: "wrap", hours: 24, when: "T+24 hours" },
+  { key: "sale", label: "On sale and sent", owner: "approver", who: "Approver, director", from: "wrap", hours: 48, when: "T+48 hours" },
+  { key: "deliverables", label: "Pylon deliverables", owner: "approver", who: "Approver", from: "wrap", hours: null, when: "Schedule C dates", actionable: false },
+  { key: "review", label: "Stop review", owner: "owner", who: "Kyron", from: "wrap", days: 14, when: "T+14 days" },
+]);
+const SOON_MS = 7 * 86400000;
+// "T-n days" is local midnight n calendar days before the first day, and
+// "T+n days" the wrap time n days after the last, so a deadline lands on the
+// same local date across a daylight-saving change. Hours are plain hours.
+function daysBeforeStart(ev, n) {
+  return zonedToUtc(addDays(ev.starts_on, -n), "00:00", ev.tz).getTime();
+}
+function daysAfterWrap(ev, n) {
+  return zonedToUtc(addDays(ev.ends_on, n), String(ev.wraps_at || "18:00").slice(0, 5), ev.tz).getTime();
+}
+// ctx: checklist (the four pre-event checks), crew rows, creators (Map of id
+// → row), counts (the clip pipeline), uploads (gfs_uploads rows) or an
+// uploadCheck, deliverables (their views: required, cleared, due_at).
+function runSheet(ev, ctx = {}, nowMs = Date.now()) {
+  const startMs = zonedToUtc(ev.starts_on, "00:00", ev.tz).getTime();
+  const wrapMs = Date.parse(ev.ends_at || endsAt(ev));
+  const check = (k) => (ctx.checklist || []).find((c) => c.key === k) || {};
+  const creators = ctx.creators || new Map();
+  const active = (ctx.crew || []).filter((c) => c.status === "invited" || c.status === "confirmed");
+  const onSite = active.filter((c) => ON_SITE.includes(c.role)).length;
+  const target = Number(ev.crew_target) || 0;
+  const lead = active.some((c) => c.role === "lead");
+  const unscreened = active.filter((c) => credentialProblems(creators.get(c.creator_id), ev, c.role).length).length;
+  const up = ctx.uploadCheck || uploadCheck(ctx.uploads || []);
+  const n = (k) => Number((ctx.counts || {})[k]) || 0;
+  const toEdit = Math.max(0, n("tagged") - n("edited"));
+  const toApprove = Math.max(0, n("edited") - n("approved"));
+  // Approved, not held, not taken down, and neither listed nor sent: the
+  // count migration 029 adds (absent before it, when this check is skipped).
+  const notOut = n("not_out");
+  const toMark = n("to_list") + n("to_send");
+  const owed = (ctx.deliverables || []).filter((d) => d.required > 0);
+  const cleared = owed.filter((d) => d.cleared).length;
+  const reviewTracked = Object.prototype.hasOwnProperty.call(ev, "reviewed_at");
+  const some = (x, one, many) => `${x} ${x === 1 ? one : many}`;
+  const facts = {
+    staff: { done: onSite >= target && (lead || target === 0), note: [`${onSite} of ${target} on site`, target && !lead ? "no lead yet" : null] },
+    screened: { done: onSite >= target && !unscreened, note: [unscreened ? `${some(unscreened, "creator", "creators")} not screened for this stop` : null, onSite < target ? "crew not at target" : null] },
+    crew: { done: !!check("crew").done, note: [check("crew").label ? String(check("crew").label).replace(/^Crew /, "") : null] },
+    storefront: { done: !!check("storefront").done, note: [ev.sportsclippers_url ? null : "no SportsClippers page saved"] },
+    roster: { done: !!check("roster").done, note: [] },
+    brief: { done: !!check("brief").done, note: [] },
+    capture: { done: up.games > 0 && !up.missing_angle, note: [up.games ? `${some(up.games, "game", "games")} logged` : "no game files logged yet", up.missing_angle ? `${up.missing_angle} missing an angle` : null] },
+    uploads: { done: up.games > 0 || n("shot") > 0, note: [up.late_files ? `${some(up.late_files, "file", "files")} over 12 hours` : null, up.no_whistle ? `${some(up.no_whistle, "game", "games")} without a final whistle` : null] },
+    tags: { done: n("shot") > 0 && !!ev.tags_approved_at && n("unmatched") === 0, note: [n("unmatched") ? `${n("unmatched")} to review` : null, n("shot") && !ev.tags_approved_at ? "tags not approved yet" : null] },
+    sale: { done: n("approved") > 0 && !toEdit && !toApprove && !notOut && !toMark, note: [toEdit ? `${toEdit} to edit` : null, toApprove ? `${toApprove} to approve` : null, notOut ? `${notOut} approved, not out yet` : null, toMark ? `${toMark} to mark listed or sent` : null, n("listed") ? `${n("listed")} listed` : null] },
+    deliverables: { done: cleared === owed.length, note: [owed.length ? `${cleared} of ${owed.length} cleared` : "nothing owed"] },
+    review: { done: !!ev.reviewed_at, note: [reviewTracked ? null : "starts with migration 029"] },
+  };
+  return RUN_SHEET.map((s) => {
+    const f = facts[s.key];
+    const dueMs =
+      s.hours === null ? (owed.length ? Math.max(...owed.map((d) => Date.parse(d.due_at))) : wrapMs)
+      : s.days !== undefined ? (s.from === "start" ? daysBeforeStart(ev, -s.days) : daysAfterWrap(ev, s.days))
+      : (s.from === "start" ? startMs : wrapMs) + s.hours * 3600000;
+    const done = !!f.done;
+    const open = s.from === "start" || nowMs >= wrapMs;
+    const status = done ? "done" : s.closes && nowMs >= startMs ? "missed" : !open ? "upcoming" : nowMs > dueMs ? "late" : nowMs >= dueMs - SOON_MS ? "soon" : "upcoming";
+    return {
+      key: s.key,
+      label: s.label,
+      when: s.when,
+      from: s.from,
+      owner: s.owner,
+      who: s.who,
+      due_at: new Date(dueMs).toISOString(),
+      done,
+      status,
+      note: f.note.filter(Boolean).join(" · ") || null,
+      actionable: s.actionable !== false && (s.key !== "review" || reviewTracked),
+    };
+  });
+}
+// Whose "Needs you" a stage belongs in. The owner sees every stage; an
+// approver, theirs and the storefront; a director, theirs and getting clips
+// out (family links are theirs), for stops they direct or nobody does yet.
+function stageIsMine(stage, access, ev, email) {
+  if (!access || !stage.actionable) return false;
+  if (access.owner) return true;
+  if (access.role === "approver") return stage.owner === "approver" || stage.key === "storefront";
+  if (access.role === "member") return (stage.owner === "director" || stage.key === "sale") && (!ev.director_email || ev.director_email === email);
+  return false;
+}
+
+// ── The crew brief ───────────────────────────────────────────────────────
+// Built from the stop's own data: when and where, the crew, the teams by
+// their roster names, the pre-sold athletes to cover first and the ones no
+// clip may feature (team and jersey only, never a name or a reason), the
+// capture, naming and upload standards, and where help goes. Plain text, so
+// it pastes into any email or message.
+// info: { crew: [{ name, role_name, status, youth }], director: { name,
+// email } | null, roster: rows, help: { email, phone, page } }
+function briefDate(d) {
+  return new Date(String(d).slice(0, 10) + "T12:00:00Z").toLocaleDateString("en-US", { timeZone: "UTC", weekday: "short", month: "short", day: "numeric", year: "numeric" });
+}
+function briefTime(hhmm) {
+  const [h, m] = String(hhmm || "18:00").slice(0, 5).split(":").map(Number);
+  return `${((h + 11) % 12) + 1}:${String(m).padStart(2, "0")} ${h < 12 ? "AM" : "PM"}`;
+}
+function zoneName(tz, dateStr) {
+  try {
+    const part = new Intl.DateTimeFormat("en-US", { timeZone: tz, timeZoneName: "short" }).formatToParts(new Date(String(dateStr).slice(0, 10) + "T18:00:00Z")).find((p) => p.type === "timeZoneName");
+    return part ? part.value : tz;
+  } catch (e) {
+    return tz;
+  }
+}
+function byTeam(rows) {
+  const teams = new Map();
+  for (const r of rows) {
+    if (!teams.has(r.team)) teams.set(r.team, []);
+    teams.get(r.team).push(r);
+  }
+  return [...teams.entries()]
+    .sort((a, b) => a[0].localeCompare(b[0]))
+    .map(([team, list]) => {
+      const nums = list.filter((r) => r.jersey != null).sort((a, b) => Number(a.jersey) - Number(b.jersey)).map((r) => `#${r.jersey}${r.position ? " " + r.position : ""}`);
+      const none = list.filter((r) => r.jersey == null).length;
+      return `- ${team}: ${[...nums, none ? `${none} with no number on the roster` : null].filter(Boolean).join(", ")}`;
+    });
+}
+function crewBrief(ev, info = {}) {
+  const roster = info.roster || [];
+  const teams = [...new Set(roster.map((r) => r.team))].sort((a, b) => a.localeCompare(b));
+  const priority = roster.filter((r) => r.priority && !holdReason(r));
+  const holds = roster.filter((r) => holdReason(r));
+  const crew = (info.crew || []).filter((c) => c.status === "invited" || c.status === "confirmed");
+  const help = info.help || {};
+  const when = ev.starts_on === ev.ends_on ? briefDate(ev.starts_on) : `${briefDate(ev.starts_on)} to ${briefDate(ev.ends_on)}`;
+  const place = [ev.venue, [ev.city, ev.state].filter(Boolean).join(", ")].filter(Boolean).join(", ");
+  const lines = [];
+  const section = (title, body) => {
+    if (!body.length) return;
+    lines.push("", title.toUpperCase(), ...body);
+  };
+  lines.push(`CREW BRIEF · ${ev.name}`, `${when} · wraps ${briefTime(ev.wraps_at)} ${zoneName(ev.tz, ev.ends_on)} · ${place || "venue to come"}`);
+  section("Crew", [
+    ...crew.map((c) => `- ${c.name} · ${c.role_name}${c.youth ? " (youth creator)" : ""}${c.status === "invited" ? " · not confirmed yet" : ""}`),
+    ...(crew.length ? [] : ["- Nobody is on the crew yet."]),
+    ...(info.director ? [`Director: ${[info.director.name, info.director.email].filter(Boolean).join(" · ")}`] : []),
+  ]);
+  section("Cover first: pre-sold athletes, by team and jersey", priority.length ? [...byTeam(priority), "Get them clips in every game they play."] : []);
+  section("No clips of these athletes (team and jersey only)", holds.length ? [...byTeam(holds), "Film the game as usual, but cut no clip that features them."] : []);
+  section("Capture", [
+    "- Two angles every game: Sideline and End Zone, plus Eagle Eye where the venue allows. One angle and the game isn't covered.",
+    "- Full games at 1080p60.",
+    "- A youth creator shoots beside a confirmed, screened adult, never alone with a minor, and never sells to or messages a family.",
+  ]);
+  section("Naming (Schedule B)", [
+    `- Game folder: TEAM-A_vs_TEAM-B_YYYYMMDD, with the roster's team names exactly${teams.length ? ": " + teams.join(", ") : ""}.`,
+    "- A team folder above each jersey folder. Clips are named Jersey#-Angle-Clip#, for example 11-EndZone-042.",
+    "- Can't place a clip? Put it in 00-unassigned.",
+  ]);
+  section("Uploads", [
+    "- At midday, upload the morning's games and check that both angles arrived.",
+    "- Upload every file within 12 hours of its game's final whistle, and note each final whistle.",
+  ]);
+  section("Help", [
+    ...(help.page ? [`- Families find their footage at ${help.page} (the QR codes open it).`] : []),
+    `- Questions, help and takedown requests go to ${help.email || "Ground Floor Sports"}${help.phone ? ", or text " + help.phone : ""}. Don't promise a family anything on site.`,
+  ]);
+  return { text: lines.join("\n") + "\n", counts: { crew: crew.length, teams: teams.length, priority: priority.length, holds: holds.length } };
+}
+
 // ── CSV out ──────────────────────────────────────────────────────────────
 // Quote when needed, and keep a spreadsheet from reading a cell as a formula.
 function cell(v) {
@@ -879,6 +1116,12 @@ module.exports = {
   scorecard,
   quarterOf,
   takedownDue,
+  daysBeforeStart,
+  uploadCheck,
+  RUN_SHEET,
+  runSheet,
+  stageIsMine,
+  crewBrief,
   cell,
   toCsv,
 };

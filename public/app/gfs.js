@@ -7,6 +7,7 @@
  *   #event/<id>                  the plan: checklist, crew, deliverables
  *   #gfs-edit/<id>               edit the event
  *   #gfs-qr/<id>                 QR codes: the stop page, its codes, scans and clicks
+ *   #gfs-brief/<id>              the crew brief, built from the stop (T-48h)
  *   #gfs-crew/<id>               crew: who's on it, who can be
  *   #gfs-roster/<id>             load the Sports Thread roster
  *   #gfs-live/<id>               live: the upload log, counts, crew
@@ -40,6 +41,8 @@
     gfs_adult_has_guardian: "An adult creator has no guardian on file.",
     gfs_adult_needs_new_age_check: "Moving a youth creator to adult takes a new age check, dated after their youth check.",
     gfs_age_check_in_future: "The age-check date can't be in the future.",
+    review_owner_only: "Kyron reviews a stop.",
+    gfs_review_not_set_up: "Stop reviews aren't set up on the server yet (migration 029).",
     gfs_age_not_set_up: "Age checks aren't set up on the server yet (migration 028).",
     already_on_crew: "They're already on this crew.",
     crew_youth_needs_adult: "A youth creator works only alongside a confirmed adult on site.",
@@ -358,8 +361,28 @@
     });
   }
 
+  // ── The run sheet (docs/gfs-workflow-sop.md) ───────────────────────────
+  // Twelve stages per stop, each with a deadline and an owner; the event plan
+  // lists them all, and "Needs you" shows the ones due this week or late.
+  var STAGE_OWNER = { director: "Director", owner: "Kyron", approver: "Approver", lead: "Crew lead" };
+  function stageHref(key, id) {
+    var to = { staff: "gfs-crew", screened: "gfs-crew", crew: "gfs-crew", storefront: "gfs-qr", roster: "gfs-roster", brief: "gfs-brief", capture: "gfs-live", uploads: "gfs-live", tags: "gfs-tags", sale: "gfs-deliver", deliverables: "gfs-deliver" }[key];
+    return "#" + (to || "event") + "/" + id;
+  }
+  function stageDue(s, tz) {
+    var o = s.from === "start" ? { month: "short", day: "numeric", timeZone: tz || undefined } : { month: "short", day: "numeric", hour: "numeric", minute: "2-digit", timeZone: tz || undefined };
+    try { return new Date(s.due_at).toLocaleString(undefined, o); } catch (e) { return new Date(s.due_at).toLocaleDateString(); }
+  }
+  function stageBadge(s) {
+    if (s.done) return "";
+    var l = left(s.due_at);
+    if (s.status === "missed") return badge("MISSED", "bad");
+    if (s.status === "late") return badge(l.text, "bad");
+    if (s.status === "soon") return badge("IN " + l.text, "gold");
+    return "";
+  }
+
   // ── The event plan ─────────────────────────────────────────────────────
-  var DUE = { storefront: "T-7", roster: "T-72H", brief: "T-48H", crew: "T-48H" };
   async function event(id) {
     if (!guard()) return;
     loading("events", T().backBtn("#events", "Events"));
@@ -370,18 +393,22 @@
     var st = eventStatus(ev, d.checklist);
     var d0 = daysUntil(ev.starts_on, ev.tz);
     var when = d0 === 0 ? "Today" : d0 === 1 ? "Tomorrow" : d0 > 1 && d0 < 7 ? "In " + d0 + " days" : st[0];
-    var ready = d.checklist.filter(function (c) { return c.done; }).length;
     var member = t.atLeast("member");
-    var items = d.checklist.map(function (c) {
-      var sub = c.key === "roster" ? (d.roster.athletes ? d.roster.athletes + " athletes on " + d.roster.teams + " teams · " + d.roster.do_not_publish + " do-not-publish" : "Sports Thread sends it 72 hours out") :
-        c.key === "storefront" ? (ev.sportsclippers_url ? (c.done ? "The codes and the stop page are ready" : "Print the codes, then mark them ready") : "Add the stop's SportsClippers page") :
-        c.key === "brief" ? "From the Pylon production playbook" :
-        c.done ? "Ready" : "Tap to fill";
-      var href = c.key === "crew" ? "#gfs-crew/" + ev.id : c.key === "roster" ? "#gfs-roster/" + ev.id : c.key === "storefront" ? "#gfs-qr/" + ev.id : null;
-      var right = '<span class="sub mono" style="font-size:11px">' + DUE[c.key] + "</span>";
-      var inner = '<span class="tick' + (c.done ? " on" : left(c.due_at).late ? " late" : "") + '">' + (c.done ? ICON.check : "") + '</span><div class="grow"><div class="name" style="font-size:15px">' + h(c.label) + '</div><div class="sub">' + h(sub) + "</div></div>" + right;
-      if (c.key === "brief" && member) return '<button type="button" class="li" data-brief="' + (c.done ? "0" : "1") + '">' + inner + "</button>";
-      return href ? '<a class="li" href="' + href + '">' + inner + "</a>" : '<div class="li" style="cursor:default">' + inner + "</div>";
+    var owner = t.isOwner();
+    var sheet = d.run_sheet || [];
+    var sheetDone = sheet.filter(function (s) { return s.done; }).length;
+    var items = sheet.map(function (s) {
+      var sub = [s.who || STAGE_OWNER[s.owner] || s.owner, (s.done ? "done" : "due " + stageDue(s, ev.tz)), s.key === "roster" && d.roster.athletes ? d.roster.athletes + " athletes on " + d.roster.teams + " teams" : null, s.note].filter(Boolean).join(" · ");
+      var right = '<div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px"><span class="sub mono" style="font-size:11px">' + h(s.when.toUpperCase()) + "</span>" + stageBadge(s) + "</div>";
+      var inner = '<span class="tick' + (s.done ? " on" : s.status === "late" || s.status === "missed" ? " late" : "") + '">' + (s.done ? ICON.check : "") + '</span><div class="grow"><div class="name" style="font-size:15px">' + h(s.label) + '</div><div class="sub">' + h(sub) + "</div></div>" + right;
+      if (s.key === "review") {
+        if (!owner || !s.actionable || (!s.done && Date.parse(ev.ends_at) > Date.now())) return '<div class="li" style="cursor:default">' + inner + "</div>";
+        var form = s.done
+          ? (ev.review_note ? '<p class="body" style="margin:0">' + h(ev.review_note) + "</p>" : '<p class="sub" style="margin:0">No change to the SOP.</p>') + '<button type="button" class="btn ghost small" data-review="0" style="align-self:flex-start">Undo</button>'
+          : '<textarea class="textarea" id="reviewNote" maxlength="500" placeholder="One change to the SOP from this stop, or leave it blank for none" style="min-height:70px"></textarea><button type="button" class="btn small" data-review="1" style="align-self:flex-start">Mark reviewed</button>';
+        return '<div class="li" style="cursor:default;flex-wrap:wrap">' + inner + '<div style="flex-basis:100%;display:flex;flex-direction:column;gap:8px;padding-top:8px">' + form + '<p id="reviewMsg" class="body" role="status" style="margin:0"></p></div></div>';
+      }
+      return '<a class="li" href="' + stageHref(s.key, ev.id) + '">' + inner + "</a>";
     }).join("");
     var dl = d.deliverables;
     var cleared = dl.filter(function (x) { return x.cleared; }).length;
@@ -398,7 +425,7 @@
       '<div class="screen">' + t.backBtn("#events", "Events") +
       head(when + " · " + ev.size_name, ev.name, member ? '<a class="btn small soft" href="#gfs-edit/' + h(ev.id) + '">Edit</a>' : "", span(ev) + " · " + rname(ev.region) + (ev.director ? " · " + (ev.director.you ? "you direct it" : "director " + (ev.director.name || ev.director.email || "")) : " · no director yet")) +
       (tds ? '<section class="sec"><h2 class="sec-h">Takedowns</h2><div class="list">' + tds + "</div></section>" : "") +
-      '<section class="sec"><h2 class="sec-h">Before the event · ' + ready + " of 4 ready</h2><div class=\"list\">" + items + "</div></section>" +
+      '<section class="sec"><h2 class="sec-h">Run sheet · ' + sheetDone + " of " + sheet.length + " done</h2><div class=\"list\">" + items + "</div></section>" +
       '<section class="card"><div class="row"><div class="ico">' + ICON.box + '</div><div class="grow"><div class="name">Owed to Pylon · ' + cleared + " of " + dl.length + ' cleared</div><div class="sub">' + h((waiting ? waiting + " waiting for an approver · " : "") + (late.length ? late.length + " late · " : "") + (next ? "next: " + next.name + ", " + whenIn(next.due_at, ev.tz) : "nothing due")) + '</div></div></div><div class="meter"><i style="width:' + Math.round((cleared / Math.max(1, dl.length)) * 100) + '%"></i></div><a class="btn soft small" href="#gfs-deliver/' + h(ev.id) + '" style="align-self:flex-start">Open deliverables</a></section>' +
       '<section class="card tight"><div class="name" style="font-size:15px">Capture standard</div><p class="sub" style="margin:0">Two angles or a game isn\'t covered: Sideline and End Zone, Eagle Eye where the venue allows. Full game at 1080p60. Footage uploads within 12 hours of the final whistle, clips named Jersey#-Angle-Clip#.</p></section>' +
       '<div class="tile-grid">' +
@@ -410,7 +437,15 @@
       '<a class="li list" href="#gfs-qr/' + h(ev.id) + '" style="border-radius:16px"><div class="ico" style="width:36px;height:36px;border-radius:9px">' + ICON.qr + '</div><div class="grow"><div class="name" style="font-size:15px">QR codes and the stop page</div><div class="sub">Signs, the booth, wristbands, and a code for each creator</div></div>' + t.I.chev + "</a>" +
       (member ? '<a class="li list" href="#gfs-takedown/' + h(ev.id) + '" style="border-radius:16px">' + '<div class="ico" style="width:36px;height:36px;border-radius:9px;color:var(--bad)">' + ICON.stop + '</div><div class="grow"><div class="name" style="font-size:15px">Log a takedown</div><div class="sub">A safety request or withdrawn consent starts its clock now</div></div>' + t.I.chev + "</a>" : "") +
       "</div>");
-    bind("[data-brief]", "click", function (b) { act(b, async function () { await t.post("/api/gfs/events/" + encodeURIComponent(id), { brief_sent: b.dataset.brief === "1" }, "PATCH"); t.toast(b.dataset.brief === "1" ? "Marked: crew brief sent." : "Unmarked."); event(id); }); });
+    bind("[data-review]", "click", function (b) {
+      act(b, async function () {
+        var on = b.dataset.review === "1";
+        var note = document.getElementById("reviewNote");
+        await t.post("/api/gfs/events/" + encodeURIComponent(id), on ? { reviewed: true, review_note: note ? note.value.trim() : "" } : { reviewed: false }, "PATCH");
+        t.toast(on ? "Reviewed." : "Review undone.");
+        event(id);
+      }, "reviewMsg");
+    });
   }
 
   // ── QR codes and the stop page ─────────────────────────────────────────
@@ -660,6 +695,26 @@
   }
 
   // ── Live ───────────────────────────────────────────────────────────────
+  // The upload check (utils/gfs.js uploadCheck): what to fix while the crew
+  // can still fix it.
+  function checkLine(k) {
+    if (!k || !k.games) return "";
+    return [k.games + (k.games === 1 ? " game" : " games") + " logged",
+      k.missing_angle ? k.missing_angle + " missing an angle" : "both angles on every game",
+      k.late_files ? k.late_files + (k.late_files === 1 ? " file" : " files") + " over 12 hours (up to " + k.hours_late + "h)" : null,
+      k.late_clips ? k.late_clips + (k.late_clips === 1 ? " clip" : " clips") + " over 12 hours" : null,
+      k.no_whistle ? k.no_whistle + (k.no_whistle === 1 ? " game" : " games") + " without a final whistle" : null,
+      k.unusable ? k.unusable + " marked unusable" : null].filter(Boolean).join(" · ");
+  }
+  function checkCard(k) {
+    if (!k || !k.games) return "";
+    var bad = k.missing_angle || k.late_files || k.no_whistle || k.unusable;
+    var rows = (k.issues || []).slice(0, 8).map(function (g) {
+      var what = [g.missing.length ? "no " + g.missing.map(function (a) { return a === "EndZone" ? "End Zone" : a; }).join(" or ") : null, g.late ? g.late + " late (up to " + g.hours_late + "h)" : null, g.files_no_whistle ? "no final whistle" : null, g.unusable ? g.unusable + " unusable" : null].filter(Boolean).join(" · ");
+      return '<li><b style="font-weight:600">' + h(String(g.game).replace(/_\d{8}$/, "").replace(/_vs_/, " vs ").replace(/-/g, " ")) + "</b> · " + h(what) + "</li>";
+    }).join("");
+    return '<section class="card tight"><div class="row"><div class="grow"><div class="name" style="font-size:15px">Upload check</div><div class="sub">' + h(checkLine(k)) + "</div></div>" + badge(bad ? "Fix" : "On standard", bad ? "warn" : "ok") + "</div>" + (rows ? '<ul class="sub" style="margin:0;padding-left:18px">' + rows + "</ul>" : "") + "</section>";
+  }
   async function live(id) {
     if (!guard()) return;
     loading("events", T().backBtn("#event/" + id, "Event plan"));
@@ -683,6 +738,7 @@
       '<div class="stat' + (c.held ? " warnb" : "") + '"><b>' + (c.held || 0) + "</b><span>Held</span></div>" +
       '<div class="stat"><b>' + cutDone + "/" + cutReq + "</b><span>Cut-downs" + (nextCut ? " · due " + h(whenIn(nextCut.due_at, ev.tz)) : "") + "</span></div>" +
       "</div>" +
+      checkCard(d.upload_check) +
       (c.unmatched ? '<a class="li list" href="#gfs-tags/' + h(id) + '" style="border-radius:16px"><div class="ico" style="width:36px;height:36px;border-radius:9px">' + ICON.tag + '</div><div class="grow"><div class="name" style="font-size:15px">Review tags</div><div class="sub">' + c.unmatched + " clip" + (c.unmatched === 1 ? " doesn't" : "s don't") + " match the roster yet</div></div>" + badge(String(c.unmatched), "gold") + "</a>" : "") +
       (member ? '<section class="card"><div class="name">Load the upload log</div><p class="sub" style="margin:0">The storage export: one row per file, with its path, upload time and the creator\'s code. Game files (TEAM-A_vs_TEAM-B_YYYYMMDD_ANGLE) feed the scorecards; clips (Jersey#-Angle-Clip#) are tagged against the roster. Add a final_whistle column to measure on-time uploads.</p>' +
         '<label class="btn soft small" style="align-self:flex-start;cursor:pointer">' + ICON.up + 'Choose a CSV<input type="file" id="upFile" accept=".csv,.tsv,.txt,text/csv,text/plain" hidden></label>' +
@@ -701,8 +757,48 @@
         var r = await t.post("/api/gfs/events/" + encodeURIComponent(id) + "/uploads", { csv: text });
         var s = r.summary;
         await live(id);
-        msgEl("upMsg", s.clips.added + " new clips (" + s.clips.matched + " matched, " + s.clips.unmatched + " to review, " + s.clips.held + " held) · " + (s.games.added + s.games.updated) + " game files" + (s.clips.already ? " · " + s.clips.already + " already logged" : "") + (s.skipped ? " · " + s.skipped + " rows skipped (not a label)" : "") + (s.unknown_creators ? " · " + s.unknown_creators + " unknown creator codes" : "") + (s.roster_loaded ? "" : " · No roster yet, so nothing could be matched."), true);
+        msgEl("upMsg", s.clips.added + " new clips (" + s.clips.matched + " matched, " + s.clips.unmatched + " to review, " + s.clips.held + " held) · " + (s.games.added + s.games.updated) + " game files" + (s.clips.already ? " · " + s.clips.already + " already logged" : "") + (s.skipped ? " · " + s.skipped + " rows skipped (not a label)" : "") + (s.unknown_creators ? " · " + s.unknown_creators + " unknown creator codes" : "") + (s.roster_loaded ? "" : " · No roster yet, so nothing could be matched.") + (s.check && s.check.games ? " · Check: " + checkLine(s.check) : ""), !(s.check && (s.check.missing_angle || s.check.late_files || s.check.late_clips || s.check.no_whistle)));
       }, "upMsg");
+    });
+  }
+
+  // ── The crew brief (T-48h) ─────────────────────────────────────────────
+  // Built by the server from the stop's own data. The director copies it, or
+  // opens their own email with the crew in BCC, then marks it sent; the app
+  // emails nobody.
+  async function brief(id) {
+    if (!guard()) return;
+    loading("events", T().backBtn("#event/" + id, "Event plan"));
+    var t = T();
+    var d = await t.api("/api/gfs/events/" + encodeURIComponent(id) + "/brief");
+    var ev = d.event, c = d.counts;
+    var subject = "Crew brief · " + ev.name;
+    var mailBody = d.text.length <= 1600 ? d.text : "The crew brief is on my clipboard. Paste it here.\n";
+    var mail = "mailto:?bcc=" + encodeURIComponent(d.emails.join(",")) + "&subject=" + encodeURIComponent(subject) + "&body=" + encodeURIComponent(mailBody);
+    t.show("events",
+      '<div class="screen">' + t.backBtn("#event/" + id, "Event plan") +
+      head("Crew brief · T-48 hours", ev.name, "", c.crew + " on the crew · " + c.teams + (c.teams === 1 ? " team" : " teams") + " · " + c.priority + " pre-sold · " + c.holds + " held. Built from this stop's plan, crew and roster; no athlete names.") +
+      '<section class="card"><pre class="mono" id="briefText" style="white-space:pre-wrap;margin:0;font-size:13px;line-height:1.5">' + h(d.text) + "</pre></section>" +
+      '<div class="btn-row">' +
+      '<button type="button" class="btn small soft" id="briefCopy">Copy</button>' +
+      (d.emails.length ? '<a class="btn small soft" id="briefMail" href="' + h(mail) + '">Email the crew</a>' : "") +
+      '<button type="button" class="btn small' + (d.sent_at ? " ghost" : "") + '" id="briefSent">' + (d.sent_at ? "Sent · undo" : "Mark sent") + "</button>" +
+      "</div>" +
+      (d.emails.length ? "" : '<p class="sub" style="margin:0">Nobody on the crew has an email on file yet, so copy it instead.</p>') +
+      '<p id="briefMsg" class="body" role="status"></p></div>');
+    async function copy() {
+      try { await navigator.clipboard.writeText(d.text); return true; } catch (e) { return false; }
+    }
+    document.getElementById("briefCopy").addEventListener("click", async function () { t.toast((await copy()) ? "Brief copied." : "Couldn't copy here. Select the text and copy it."); });
+    var m = document.getElementById("briefMail");
+    if (m && d.text.length > 1600) m.addEventListener("click", function () { copy(); });
+    document.getElementById("briefSent").addEventListener("click", function () {
+      var btn = this;
+      act(btn, async function () {
+        await t.post("/api/gfs/events/" + encodeURIComponent(id), { brief_sent: !d.sent_at }, "PATCH");
+        t.toast(d.sent_at ? "Unmarked." : "Marked: crew brief sent.");
+        brief(id);
+      }, "briefMsg");
     });
   }
 
@@ -1171,10 +1267,15 @@
         var l = n.next_due_at ? left(n.next_due_at) : { text: "", late: false };
         return '<a class="card tight" href="#gfs-desk" style="text-decoration:none;color:inherit"><div class="row"><div class="grow"><div class="name" style="font-size:15px">Takedown' + (n.number ? " #" + n.number : "") + " · " + h(n.team || "") + '</div><div class="sub">' + h([n.reason_name, n.event ? n.event.name : ""].filter(Boolean).join(" · ")) + "</div></div>" + badge(l.text, "bad") + "</div></a>";
       }
+      if (n.kind === "stage") {
+        var st = n.stage, more = n.more || [];
+        var also = more.length ? "Also: " + more.map(function (m) { return m.label + (m.status === "late" ? " (late)" : ""); }).join(", ") : "";
+        return '<a class="card tight" href="' + stageHref(st.key, n.event.id) + '" style="text-decoration:none;color:inherit"><div class="row"><div class="grow"><div class="name" style="font-size:15px">' + h(n.event.name) + " · " + h(st.label) + '</div><div class="sub">' + h([st.who || STAGE_OWNER[st.owner], st.note].filter(Boolean).join(" · ")) + "</div>" + (also ? '<div class="sub">' + h(also) + "</div>" : "") + "</div>" + stageBadge(st) + "</div></a>";
+      }
       if (n.kind === "event_gaps") { var dd = daysUntil(n.event.starts_on, n.event.tz); return '<a class="card tight" href="#event/' + h(n.event.id) + '" style="text-decoration:none;color:inherit"><div class="row"><div class="grow"><div class="name" style="font-size:15px">' + h(n.event.name) + '</div><div class="sub">' + h(n.gaps.join(" · ")) + "</div></div>" + badge(dd <= 0 ? "Today" : dd === 1 ? "Tomorrow" : "In " + dd + " days", "gold") + "</div></a>"; }
       var label = { approve: "To approve", changes: "Changes asked", overdue: "Late" }[n.kind];
       return '<a class="card tight" href="#gfs-deliver/' + h(n.event.id) + '" style="text-decoration:none;color:inherit"><div class="row"><div class="grow"><div class="name" style="font-size:15px">' + h(n.deliverable.name) + '</div><div class="sub">' + h(n.event.name + (n.kind === "approve" ? " · " + n.deliverable.to_submit + " to clear" : "")) + "</div></div>" + badge(label, n.kind === "approve" ? "gold" : "bad") + "</div></a>";
-    }).join("");
+    }).join("") + (d.more_stops ? '<p class="sub" style="margin:0">' + d.more_stops + (d.more_stops === 1 ? " more stop has" : " more stops have") + " open stages. See Events.</p>" : "");
     var nx = d.next;
     var next = "";
     if (nx) {
@@ -1195,6 +1296,7 @@
     "gfs-import": gfsImport,
     "gfs-edit": gfsEdit,
     "gfs-qr": qr,
+    "gfs-brief": brief,
     event: event,
     "gfs-crew": crew,
     "gfs-roster": roster,

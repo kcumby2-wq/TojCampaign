@@ -59,6 +59,8 @@ The team activity feed follows the same lines. Pylon events entries go only to p
 
 ## An event, start to finish
 
+Every stop runs the same 12-stage run sheet, with a deadline and an owner for each stage. Late and due-this-week stages show in "Needs you" from T-45 (`docs/gfs-workflow-sop.md`).
+
 1. **New event.** Pick a size:
    - **Premier Event, One-Day Tournament or Clinic.** The size sets the Schedule C counts and the crew target (3, 2 or 1 on site).
    - **Dates, wrap time and time zone.** Every deadline runs from the wrap time on the last day, in the event's own time zone.
