@@ -93,6 +93,10 @@ function fail(res, e, what) {
   const rule = ruleCode(e);
   if (rule) return res.status(409).json({ error: rule });
   if (e && e.code === "23505") return res.status(409).json({ error: "already_exists" });
+  // A creator's age check and guardian aren't there yet: migration 028.
+  if (e && /age_checked_on|age_checked_by|guardian_name|guardian_email/.test(String(e.message || "")) && (["42703", "PGRST204"].includes(e.code) || /does not exist|Could not find/i.test(String(e.message || "")))) {
+    return res.status(503).json({ error: "gfs_age_not_set_up", hint: "Apply migration 028 in Supabase." });
+  }
   // The stop page's columns and counts aren't there yet: migration 025.
   if (e && /sportsclippers_url|help_phone|qr_sources|gfs_qr_hits|gfs_count_hit/.test(String(e.message || "")) && (["42703", "42P01", "42883", "PGRST204", "PGRST205", "PGRST202"].includes(e.code) || /does not exist|Could not find/i.test(String(e.message || "")))) {
     return res.status(503).json({ error: "gfs_qr_not_set_up", hint: "Apply migration 025 in Supabase." });
@@ -219,6 +223,10 @@ function creatorView(c, req, ev) {
     contract_signed_on: c.contract_signed_on || null,
     background_check_on: c.background_check_on || null,
     safety_training_on: c.safety_training_on || null,
+    age_checked_on: c.age_checked_on || null,
+    age_checked_by: atLeast(req, "member") ? c.age_checked_by || null : null,
+    guardian_name: atLeast(req, "member") ? c.guardian_name || null : null,
+    guardian_email: atLeast(req, "member") ? c.guardian_email || null : null,
     sportsclippers_url: c.sportsclippers_url || null,
     notes: atLeast(req, "member") ? c.notes || null : null,
     badges: G.credentialBadges(c, ev),
@@ -792,7 +800,8 @@ async function qrCreators(sb, ev) {
     const c = creators.get(row.creator_id);
     if (!c || seen.has(c.id)) continue;
     seen.add(c.id);
-    if (c.tier !== "adult") youth++;
+    // Unchecked counts as youth (migration 028): counted, never named here.
+    if (c.tier !== "adult" || !c.age_checked_on) youth++;
     else if (!c.sportsclippers_url || c.status !== "active") withoutLink.push({ id: c.id, name: c.name, code: c.code, paused: c.status !== "active" });
     else shown.push({ c, row });
   }
@@ -1860,7 +1869,7 @@ router.post("/events/:id/deliverables/:did/reopen", member, async (req, res) => 
 });
 
 // ── Creators ─────────────────────────────────────────────────────────────
-const CREDENTIAL_FIELDS = ["contract_signed_on", "background_check_on", "safety_training_on", "tier", "lead_scout", "shadow_events"];
+const CREDENTIAL_FIELDS = ["contract_signed_on", "background_check_on", "safety_training_on", "age_checked_on", "tier", "lead_scout", "shadow_events"];
 function readCreator(b, req, prev) {
   const out = {};
   const errors = [];
@@ -1898,15 +1907,53 @@ function readCreator(b, req, prev) {
     if (!["adult", "youth"].includes(b.tier)) errors.push("tier");
     out.tier = b.tier;
   }
+  // Migration 028: the date Kyron saw proof of age (adult means 18+, youth
+  // 16 or 17), and who recorded it. Never a birth date. Written only when it
+  // changes, so the form can send it back untouched.
+  if (b.age_checked_on !== undefined) {
+    const d = b.age_checked_on || null;
+    if (d && (!G.isDate(d) || d > today())) errors.push("age_checked_on");
+    else if (d !== ((prev && prev.age_checked_on) || null)) {
+      out.age_checked_on = d;
+      out.age_checked_by = d ? actor(req) : null;
+    }
+  }
   if (b.lead_scout !== undefined) out.lead_scout = !!b.lead_scout;
   if (b.shadow_events !== undefined) {
     const n = Number(b.shadow_events);
     if (!Number.isInteger(n) || n < 0 || n > 50) errors.push("shadow_events");
     out.shadow_events = n;
   }
-  const tier = out.tier || (prev && prev.tier) || "adult";
+  // A new creator is youth until an age check says otherwise (migration 028).
+  const tier = out.tier || (prev && prev.tier) || "youth";
   const lead = out.lead_scout !== undefined ? out.lead_scout : prev && prev.lead_scout;
   if (tier === "youth" && lead) errors.push("youth_lead_scout");
+  // Adult needs an age check whenever a creator is added or their tier or age
+  // check changes (public.gfs_creators_age_check), so an unchecked adult saved
+  // before migration 028 can still be paused; the crew rules keep them off
+  // crews until checked.
+  const checked = out.age_checked_on !== undefined ? out.age_checked_on : (prev && prev.age_checked_on) || null;
+  const tierMoved = out.tier !== undefined && out.tier !== (prev && prev.tier);
+  if (tier === "adult" && !checked && (!prev || tierMoved || out.age_checked_on !== undefined)) errors.push("adult_needs_age_check");
+  // The check that showed someone was 16 or 17 can't also show they're 18:
+  // moving a checked youth creator to adult takes a new, later check.
+  else if (tier === "adult" && prev && prev.tier !== "adult" && prev.age_checked_on && !(checked > prev.age_checked_on)) errors.push("adult_needs_new_age_check");
+  // A youth creator's guardian of record: the parent who signs the Youth
+  // Creator Agreement. An adult has none on file. Written only when it
+  // changes, so a youth creator can still be paused before migration 028.
+  if (tier === "adult") {
+    if (prev && (prev.guardian_name || prev.guardian_email)) Object.assign(out, { guardian_name: null, guardian_email: null });
+  } else {
+    if (b.guardian_name !== undefined) {
+      const n = G.clean(b.guardian_name, 80) || null;
+      if (n !== ((prev && prev.guardian_name) || null)) out.guardian_name = n;
+    }
+    if (b.guardian_email !== undefined) {
+      const e = String(b.guardian_email || "").trim().toLowerCase();
+      if (e && (!EMAIL_RE.test(e) || e.length > 200)) errors.push("guardian_email");
+      else if ((e || null) !== ((prev && prev.guardian_email) || null)) out.guardian_email = e || null;
+    }
+  }
   // Their own SportsClippers page, shown on a stop's page when their code is
   // scanned. A youth creator never appears on a public page (migration 025).
   // Only a change is written, so the form works before migration 025 runs.
@@ -1921,15 +1968,16 @@ function readCreator(b, req, prev) {
   if (prev && !req.team.owner) {
     // Once screening is on file it belongs to a person: a director can't
     // point the record at someone else, or send families somewhere else.
-    if (G.screeningOnFile(prev) && ((out.name !== undefined && out.name !== prev.name) || (out.email !== undefined && (out.email || null) !== (prev.email || null)) || (out.sportsclippers_url !== undefined && b.sportsclippers_url !== undefined))) errors.push("identity_owner_only");
+    const moved = (k) => out[k] !== undefined && (out[k] || null) !== (prev[k] || null);
+    if (G.screeningOnFile(prev) && ((out.name !== undefined && out.name !== prev.name) || moved("email") || moved("guardian_name") || moved("guardian_email") || (out.sportsclippers_url !== undefined && b.sportsclippers_url !== undefined))) errors.push("identity_owner_only");
     // Pausing is anyone's call; putting someone back to work is Kyron's.
     if (out.status === "active" && prev.status !== "active") errors.push("reactivate_owner_only");
   }
   return { out, errors };
 }
 const OWNER_ONLY = {
-  credentials_owner_only: "Kyron records contracts, background checks and training.",
-  identity_owner_only: "This creator's screening is on file, so Kyron changes their name, email or SportsClippers page.",
+  credentials_owner_only: "Kyron records contracts, background checks, training, age checks and the tier.",
+  identity_owner_only: "This creator's screening is on file, so Kyron changes their name, email, guardian or SportsClippers page.",
   reactivate_owner_only: "Kyron puts a paused or inactive creator back to work.",
 };
 function ownerOnly(res, errors) {
@@ -1995,7 +2043,7 @@ router.post("/creators", member, async (req, res) => {
     const row = await run(
       sb
         .from("gfs_creators")
-        .insert({ tier: "adult", lead_scout: false, shadow_events: 0, ...out, code: await uniqueCreatorCode(sb), status: out.status || "active", created_by: actor(req) })
+        .insert({ tier: "youth", lead_scout: false, shadow_events: 0, ...out, code: await uniqueCreatorCode(sb), status: out.status || "active", created_by: actor(req) })
         .select("*")
         .single()
     );
@@ -2018,8 +2066,11 @@ router.patch("/creators/:id", member, async (req, res) => {
     if (errors.length) return res.status(400).json({ error: "invalid_creator", fields: errors });
     if (!Object.keys(out).length) return res.json({ creator: creatorView(prev, req) });
     // A youth creator's roles are limited, and an adult may be the one a youth
-    // creator works alongside: the tier doesn't change mid-crew.
-    if (out.tier !== undefined && out.tier !== prev.tier) {
+    // creator works alongside: the tier doesn't change mid-crew. Nor does the
+    // age check go, or a youth creator's guardian (migration 028).
+    const clearsAge = out.age_checked_on === null && !!prev.age_checked_on;
+    const clearsGuardian = out.guardian_email === null && !!prev.guardian_email && (out.tier || prev.tier) !== "adult";
+    if ((out.tier !== undefined && out.tier !== prev.tier) || clearsAge || clearsGuardian) {
       const rows = await run(sb.from("gfs_crew").select("id,event_id,status").eq("creator_id", prev.id).in("status", ["invited", "confirmed"]));
       const evIds = [...new Set(rows.map((r) => r.event_id))];
       const upcoming = evIds.length ? (await run(sb.from("gfs_events").select("id,ends_on").in("id", evIds))).filter((e) => e.ends_on >= today()) : [];

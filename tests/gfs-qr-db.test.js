@@ -56,8 +56,9 @@ before(async () => {
   base = `http://127.0.0.1:${server.address().port}`;
   ev = await one(`insert into gfs_events (code, name, series, size, region, city, state, tz, starts_on, ends_on, ends_at, created_by)
                   values ('Dallas2027', 'Legacy Tour · Dallas', 'Legacy Tour', 'premier', 'south_central', 'Dallas', 'TX', 'America/Chicago', $1, $2, now(), 'kyron@example.com') returning *`, [D(20), D(21)]);
-  const creator = (code, name, tier) => one(`insert into gfs_creators (code, name, region, tier, contract_signed_on, background_check_on, safety_training_on, created_by)
-      values ($1, $2, 'south_central', $3, $4, $4, $4, 'kyron@example.com') returning *`, [code, name, tier, D(-30)]);
+  // Age checked (migration 028); the youth creator has a guardian of record.
+  const creator = (code, name, tier) => one(`insert into gfs_creators (code, name, region, tier, contract_signed_on, background_check_on, safety_training_on, age_checked_on, age_checked_by, guardian_name, guardian_email, created_by)
+      values ($1, $2, 'south_central', $3, $4, $4, $4, $4, 'kyron@example.com', $5, $6, 'kyron@example.com') returning *`, [code, name, tier, D(-30), tier === "youth" ? "Pat Guardian" : null, tier === "youth" ? "pat.guardian@example.com" : null]);
   adult = await creator("MAYA1", "Maya Brooks", "adult");
   youth = await creator("TEEN1", "Teen Creator", "youth");
 });
@@ -88,7 +89,8 @@ test("before 025 runs: creators and events keep working, and the new parts say s
   try {
     const c = await signedIn();
     // The creator form's body, with the link left blank.
-    const add = await c("/api/gfs/creators", { method: "POST", body: { name: "Pre Creator", email: "pre@example.com", region: "south_central", home_city: "", notes: "", sportsclippers_url: null, contract_signed_on: D(-10), background_check_on: D(-10), safety_training_on: D(-10), tier: "adult", shadow_events: 0, lead_scout: false } });
+    // The creator form's body, as youth: before 028 there's no age check to record.
+    const add = await c("/api/gfs/creators", { method: "POST", body: { name: "Pre Creator", email: "pre@example.com", region: "south_central", home_city: "", notes: "", sportsclippers_url: null, contract_signed_on: D(-10), background_check_on: D(-10), safety_training_on: D(-10), tier: "youth", shadow_events: 0, lead_scout: false } });
     assert.equal(add.status, 200, JSON.stringify(add.json));
     const edit = await c(`/api/gfs/creators/${add.json.creator.id}`, { method: "PATCH", body: { name: "Pre Creator", home_city: "Waco", sportsclippers_url: "" } });
     assert.equal(edit.status, 200, JSON.stringify(edit.json));

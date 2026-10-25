@@ -42,11 +42,11 @@ function hitRpc(tables, { p_event, p_source, p_kind }) {
 const hits = (kind, source) => (db.tables.gfs_qr_hits || []).filter((x) => x.event_id === evId && x.kind === kind && (!source || x.source === source)).reduce((n, x) => n + x.hits, 0);
 
 before(async () => {
-  const screened = { contract_signed_on: LAST_MONTH, background_check_on: LAST_MONTH, safety_training_on: LAST_MONTH, status: "active", lead_scout: false, shadow_events: 0, created_by: "kyron@example.com" };
+  const screened = { contract_signed_on: LAST_MONTH, background_check_on: LAST_MONTH, safety_training_on: LAST_MONTH, age_checked_on: LAST_MONTH, age_checked_by: "kyron@example.com", status: "active", lead_scout: false, shadow_events: 0, created_by: "kyron@example.com" };
   const creator = (code, name, tier, extra) => ({ id: crypto.randomUUID(), code, name, region: "midwest", tier, ...screened, ...extra });
   people.ana = creator("ANA01", "Ana Lopez", "adult", { sportsclippers_url: "https://sportsclippers.com/ana-films" });
   people.ben = creator("BEN01", "Ben Okafor", "adult", {});
-  people.yuri = creator("YURI1", "Yuri Kim", "youth", {});
+  people.yuri = creator("YURI1", "Yuri Kim", "youth", { guardian_name: "Parent Kim", guardian_email: "parent.kim@example.com" });
   people.paula = creator("PAUL1", "Paula Reyes", "adult", { sportsclippers_url: "https://sportsclippers.com/paula", status: "paused" });
   people.otto = creator("OTTO1", "Otto Vance", "adult", { sportsclippers_url: "https://sportsclippers.com/otto" });
   db = fakeSupabase(
@@ -176,10 +176,14 @@ test("creators: an adult's own SportsClippers page; a youth creator never gets o
   assert.equal(ok.status, 200);
   assert.equal(ok.json.creator.sportsclippers_url, "https://sportsclippers.com/ben");
   assert.equal((await patch(mw, `/api/gfs/creators/${people.ben.id}`, { sportsclippers_url: "https://sportsclippers.com/ben" })).status, 200, "the same link again changes nothing");
-  // A director adding a creator who isn't screened yet can set it.
+  // A new creator is youth until Kyron records an age check (migration 028),
+  // so a director can't give one a public link; Kyron adds a checked adult.
   const fresh = await mw("/api/gfs/creators", { method: "POST", body: { name: "Cara New", region: "midwest", sportsclippers_url: "https://sportsclippers.com/cara" } });
-  assert.equal(fresh.status, 200, JSON.stringify(fresh.json));
-  assert.equal(fresh.json.creator.sportsclippers_url, "https://sportsclippers.com/cara");
+  assert.equal(fresh.status, 400, JSON.stringify(fresh.json));
+  assert.deepEqual(fresh.json.fields, ["youth_no_public_link"]);
+  const cara = await kyron("/api/gfs/creators", { method: "POST", body: { name: "Cara New", region: "midwest", tier: "adult", age_checked_on: LAST_MONTH, sportsclippers_url: "https://sportsclippers.com/cara" } });
+  assert.equal(cara.status, 200, JSON.stringify(cara.json));
+  assert.equal(cara.json.creator.sportsclippers_url, "https://sportsclippers.com/cara");
   // Kyron moves Otto (on no crew) to youth: his public link goes with it.
   const moved = await patch(kyron, `/api/gfs/creators/${people.otto.id}`, { tier: "youth" });
   assert.equal(moved.status, 200, JSON.stringify(moved.json));

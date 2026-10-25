@@ -33,7 +33,14 @@
     role_too_low: "Your role can't do that.",
     region_not_yours: "That region isn't one of yours.",
     credentials: "Not screened for this event yet.",
-    credentials_owner_only: "Kyron records contracts, background checks and training.",
+    credentials_owner_only: "Kyron records contracts, background checks, training, age checks and the tier.",
+    crew_age_not_checked: "Their age isn't checked yet. Kyron records it before they work.",
+    crew_youth_no_guardian: "A youth creator needs a guardian of record before they work.",
+    gfs_adult_needs_age_check: "Record the age check before marking them an adult.",
+    gfs_adult_has_guardian: "An adult creator has no guardian on file.",
+    gfs_adult_needs_new_age_check: "Moving a youth creator to adult takes a new age check, dated after their youth check.",
+    gfs_age_check_in_future: "The age-check date can't be in the future.",
+    gfs_age_not_set_up: "Age checks aren't set up on the server yet (migration 028).",
     already_on_crew: "They're already on this crew.",
     crew_youth_needs_adult: "A youth creator works only alongside a confirmed adult on site.",
     crew_youth_left_alone: "A youth creator is confirmed and needs a screened adult on site. Confirm another adult first.",
@@ -57,7 +64,7 @@
     size_fixed: "The size is fixed. Cancel the event and make a new one.",
     invalid_event: "Check the highlighted fields.",
     regions_required: "Pick at least one region for a Regional Director.",
-    identity_owner_only: "Their screening is on file, so Kyron changes their name or email.",
+    identity_owner_only: "Their screening is on file, so Kyron changes their name, email or guardian.",
     reactivate_owner_only: "Kyron puts a paused or inactive creator back to work.",
     gfs_creator_on_crew: "They're on an upcoming crew. Take them off it first.",
     attest_required: "Check the pieces against the keep-out list, then confirm.",
@@ -76,9 +83,13 @@
     help_phone: "Use a 10-digit US number, or a full number starting with +.",
     qr_sources: "Name a placement with letters and numbers (2 to 24), up to 20 of them.",
     youth_no_public_link: "A youth creator never appears on a stop's page, so they don't get a public link.",
+    adult_needs_age_check: "Add the date you checked their age before marking them an adult.",
+    adult_needs_new_age_check: "Their age check on file showed they were 16 or 17. Enter the later date you checked they're 18 or older. Recorded as youth by mistake? Clear the date and save first.",
+    age_checked_on: "Use the date you checked their age, not a future date.",
+    guardian_email: "Check the guardian's email.",
   };
   var fieldSay = function (e) { return say(e); };
-  var PROBLEM = { creator_not_active: "Not active", no_contract: "No signed contract", background_check: "Background check missing or over a year old", safety_training: "Safety training missing or over a year old", youth_role: "Youth creators shoot or shadow only" };
+  var PROBLEM = { creator_not_active: "Not active", no_contract: "No signed contract", background_check: "Background check missing or over a year old", safety_training: "Safety training missing or over a year old", youth_role: "Youth creators shoot or shadow only", age_not_checked: "Age not checked", youth_no_guardian: "No guardian of record" };
   var WHY = { no_number: "Number unreadable", not_on_roster: "Number isn't on the roster", team_not_on_roster: "A team in the folder name isn't on the roster", two_teams: "Same number on both teams", duplicate_number: "Two athletes share this number", no_roster: "No roster loaded yet", no_team: "No game or team folder to tell teams apart", team_conflict: "The team column and the team folder disagree", roster_changed: "The roster changed this athlete's number or team", untagged: "Untagged by a director", number_conflict: "The jersey folder and the file name give different numbers" };
   var HOLD = { takedown: "Takedown", do_not_publish: "Do not publish", no_capture_consent: "No capture consent", roster_changed: "Roster changed" };
   var PULL = { no_sale_consent: "no sale consent now", not_public: "public display off now" };
@@ -473,7 +484,7 @@
       (creatorCodes.length ? creatorCodes.map(codeCard).join("") : "") +
       (noLink ? '<div class="list">' + noLink + "</div>" : "") +
       (!creatorCodes.length && !noLink ? '<p class="sub" style="margin:0">Crew the stop, and each adult creator with a SportsClippers page gets a code for their lanyard.</p>' : "") +
-      (d.youth_on_crew ? '<p class="sub" style="margin:0">' + d.youth_on_crew + (d.youth_on_crew === 1 ? " youth creator on this crew gets" : " youth creators on this crew get") + " no code: a youth creator never appears on a public page.</p>" : "") +
+      (d.youth_on_crew ? '<p class="sub" style="margin:0">' + d.youth_on_crew + (d.youth_on_crew === 1 ? " creator on this crew gets" : " creators on this crew get") + " no code: they're youth creators or their age isn't checked yet, and only a checked adult appears on a public page.</p>" : "") +
       "</section>") +
       (member && (!noAddress || d.ready) ? '<section class="card tight"><div class="row"><span class="tick' + (d.ready ? " on" : "") + '">' + (d.ready ? ICON.check : "") + '</span><div class="grow"><div class="name" style="font-size:15px">' + (d.ready ? "Marked ready" : "Ready to go?") + '</div><div class="sub">Ticks "QR code and storefront page" on the event plan.</div></div><button type="button" class="btn small ' + (d.ready ? "ghost" : "") + '" id="qrReady">' + (d.ready ? "Undo" : "Mark ready") + "</button></div></section>" : "") +
       "</div>");
@@ -1073,7 +1084,8 @@
     await getMeta();
     var t = T();
     var isNew = id === "new";
-    var c = { region: meta.you.regions.length === 1 ? meta.you.regions[0] : "", tier: "adult", status: "active", badges: [] };
+    // Youth until Kyron records an age check (migration 028).
+    var c = { region: meta.you.regions.length === 1 ? meta.you.regions[0] : "", tier: "youth", status: "active", badges: [] };
     if (!isNew) {
       var list = await t.api("/api/gfs/creators");
       c = (list.creators || []).find(function (x) { return x.id === id; });
@@ -1087,24 +1099,38 @@
       '<div class="screen"><div class="head"><a class="back" href="#gfs-creators">' + t.I.back + "Cancel</a></div>" + head(isNew ? null : "Code " + c.code, isNew ? "Add a creator" : c.name) +
       input("c_name", "Name", 'type="text" maxlength="80"' + (locked ? " disabled" : ""), c.name) +
       input("c_email", "Email <small>(a parent's, for a youth creator)</small>", 'type="email" inputmode="email" autocomplete="off"' + (locked ? " disabled" : ""), c.email) +
-      (locked ? '<p class="sub" style="margin:-8px 0 0">Their screening is on file, so Kyron changes their name, email or SportsClippers page.</p>' : "") +
+      (locked ? '<p class="sub" style="margin:-8px 0 0">Their screening is on file, so Kyron changes their name, email, guardian or SportsClippers page.</p>' : "") +
+      '<div id="gWrap"' + (c.tier !== "youth" ? " hidden" : "") + '><section class="card"><div class="name">Guardian of record</div>' +
+      input("c_gname", "Guardian name", 'type="text" maxlength="80" autocomplete="off"' + (locked ? " disabled" : ""), c.guardian_name) +
+      input("c_gemail", "Guardian email", 'type="email" inputmode="email" autocomplete="off"' + (locked ? " disabled" : ""), c.guardian_email, "The parent or guardian who signs the Youth Creator Agreement. A youth creator can't be crewed without one.") +
+      "</section></div>" +
       '<div class="field"><span class="label">Region</span><div class="chips" role="radiogroup" aria-label="Region" style="flex-wrap:wrap;margin:0;padding:0">' + meta.you.regions.map(function (r) { return '<button type="button" role="radio" class="chip" data-creg="' + r + '" aria-pressed="' + (c.region === r) + '">' + h(rname(r)) + "</button>"; }).join("") + "</div></div>" +
       input("c_city", "Home city", 'type="text" maxlength="80"', c.home_city) +
       '<div id="scWrap"' + (c.tier === "youth" ? " hidden" : "") + ">" + input("c_sc", "SportsClippers page <small>(optional)</small>", 'type="url" inputmode="url" autocomplete="off" placeholder="https://sportsclippers.com/…"' + (locked ? " disabled" : ""), c.sportsclippers_url, "Shown on a stop's page when their code is scanned, with their first name. Adults only.") + "</div>" +
       '<section class="card"><div class="name">Screening' + (owner ? "" : " · Kyron records this") + '</div>' +
       (c.badges.length ? '<div class="pill-row">' + c.badges.map(function (b) { return badge(b.label + (b.until && b.ok ? " · to " + day(b.until, { month: "short", year: "numeric" }) : ""), b.ok ? "ok" : "warn"); }).join("") + "</div>" : "") +
       dateIn("contract_signed_on", "Contract signed") + dateIn("background_check_on", "Background check") + dateIn("safety_training_on", "Minor-safety training") +
-      (owner ? '<div class="field"><span class="label">Tier</span><div class="seg" role="group" aria-label="Tier"><button type="button" data-tier="adult" aria-pressed="' + (c.tier !== "youth") + '">Adult (18+)</button><button type="button" data-tier="youth" aria-pressed="' + (c.tier === "youth") + '">Youth (16–17)</button></div><span class="sub">A youth creator signs the Youth Creator Agreement through a parent, shoots alongside an adult, and never sells or messages a family.</span></div>' +
+      (owner ? '<div class="field"><span class="label">Tier</span><div class="seg" role="group" aria-label="Tier"><button type="button" data-tier="adult" aria-pressed="' + (c.tier === "adult") + '">Adult (18+)</button><button type="button" data-tier="youth" aria-pressed="' + (c.tier !== "adult") + '">Youth (16–17)</button></div><span class="sub">A youth creator signs the Youth Creator Agreement through a parent, shoots alongside an adult, and never sells or messages a family.</span></div>' +
+        input("c_age_checked_on", "Age checked", 'type="date"', c.age_checked_on, "The day you saw proof of age: 18 or older for adult, 16 or 17 for youth. No birth date is kept. Adult needs this, and moving a youth creator to adult needs a new, later date.") +
         input("c_shadow", "Shadowed events", 'type="number" min="0" max="50" inputmode="numeric"', c.shadow_events || 0) +
         '<label class="check"><span><b style="display:block;font-size:15px">Lead scout</b><span class="sub">Regional quality control and mentoring</span></span><input type="checkbox" class="switch" id="c_lead"' + (c.lead_scout ? " checked" : "") + "></label>" : "") +
-      '<p class="sub" style="margin:0">Each is good for a year (Scout Agreement §6). A creator can\'t be crewed without all three.</p></section>' +
+      '<p class="sub" style="margin:0">Each check is good for a year (Scout Agreement §6). Nobody is crewed without all three and an age check; a youth creator also needs a guardian of record.</p></section>' +
       (isNew ? "" : '<div class="field"><span class="label">Status</span><div class="seg" role="group" aria-label="Status">' + ["active", "paused", "inactive"].map(function (s) { return '<button type="button" data-cst="' + s + '" aria-pressed="' + (c.status === s) + '"' + (s === "active" && c.status !== "active" && !owner ? " disabled" : "") + ">" + s[0].toUpperCase() + s.slice(1) + "</button>"; }).join("") + "</div>" + (c.status !== "active" && !owner ? '<span class="sub">Kyron puts a paused or inactive creator back to work.</span>' : "") + "</div>") +
       '<div class="field"><label class="label" for="c_notes">Notes</label><textarea class="textarea" id="c_notes" maxlength="500" style="min-height:80px">' + h(c.notes || "") + "</textarea></div>" +
       '<p id="cMsg" class="body" role="status"></p></div>' +
       '<div class="dock"><div class="dock-inner"><button type="button" class="btn block" id="cGo">' + (isNew ? "Add the creator" : "Save") + "</button></div></div>");
     var region = c.region, tier = c.tier, status = c.status;
     bind("[data-creg]", "click", function (b) { region = b.dataset.creg; app().querySelectorAll("[data-creg]").forEach(function (x) { x.setAttribute("aria-pressed", String(x === b)); }); });
-    bind("[data-tier]", "click", function (b) { tier = b.dataset.tier; app().querySelectorAll("[data-tier]").forEach(function (x) { x.setAttribute("aria-pressed", String(x === b)); }); document.getElementById("scWrap").hidden = tier === "youth"; });
+    bind("[data-tier]", "click", function (b) {
+      tier = b.dataset.tier;
+      app().querySelectorAll("[data-tier]").forEach(function (x) { x.setAttribute("aria-pressed", String(x === b)); });
+      document.getElementById("scWrap").hidden = tier === "youth";
+      document.getElementById("gWrap").hidden = tier !== "youth";
+      // A youth creator's age check can't carry over to adult: clear it so a
+      // new date goes in, and put it back if they stay youth.
+      var age = document.getElementById("c_age_checked_on");
+      if (age && c.tier !== "adult" && c.age_checked_on) age.value = tier === "adult" ? "" : age.value || c.age_checked_on;
+    });
     bind("[data-cst]", "click", function (b) { status = b.dataset.cst; app().querySelectorAll("[data-cst]").forEach(function (x) { x.setAttribute("aria-pressed", String(x === b)); }); });
     document.getElementById("cGo").addEventListener("click", function () {
       var btn = this;
@@ -1115,10 +1141,13 @@
         var sc = v("c_sc") || null;
         if (tier !== "youth" && !locked && sc !== (c.sportsclippers_url || null)) body.sportsclippers_url = sc;
         if (!isNew) body.status = status;
+        // A youth creator's guardian of record; the server clears it for an adult.
+        if (tier === "youth") { body.guardian_name = v("c_gname") || null; body.guardian_email = v("c_gemail") || null; }
         if (owner) {
           body.contract_signed_on = v("c_contract_signed_on") || null;
           body.background_check_on = v("c_background_check_on") || null;
           body.safety_training_on = v("c_safety_training_on") || null;
+          body.age_checked_on = v("c_age_checked_on") || null;
           body.tier = tier;
           body.shadow_events = Number(v("c_shadow")) || 0;
           body.lead_scout = !!(document.getElementById("c_lead") && document.getElementById("c_lead").checked);
@@ -1126,7 +1155,7 @@
         }
         if (isNew) await t.post("/api/gfs/creators", body);
         else await t.post("/api/gfs/creators/" + encodeURIComponent(id), body, "PATCH");
-        t.toast(isNew ? "Added." + (owner ? "" : " Kyron records their screening before they can be crewed.") : "Saved.");
+        t.toast(isNew ? "Added." + (owner ? "" : " Kyron records their screening and age check before they can be crewed.") : "Saved.");
         t.go("#gfs-creators");
       }, "cMsg");
     });

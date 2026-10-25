@@ -87,16 +87,19 @@ async function stopFor(sb, code) {
   return data || null;
 }
 // The creator a code belongs to, if they can appear on this stop's page: an
-// active adult, confirmed on its crew, with their own page.
+// active adult whose age is checked (migration 028), confirmed on its crew,
+// with their own page. Every column is read so the page still works, showing
+// no creator, before migration 028 adds the age check.
 async function creatorFor(sb, ev, code) {
   if (!CREATOR_CODE.test(String(code || ""))) return null;
-  const { data: c, error } = await sb.from("gfs_creators").select("id,code,name,tier,status,sportsclippers_url").eq("code", code).maybeSingle();
+  const { data: c, error } = await sb.from("gfs_creators").select("*").eq("code", code).maybeSingle();
   if (error) throw error;
-  if (!c || c.tier !== "adult" || c.status !== "active" || !c.sportsclippers_url || !GP.SC_URL.test(c.sportsclippers_url)) return null;
+  if (!c || c.tier !== "adult" || !c.age_checked_on || c.status !== "active" || !c.sportsclippers_url || !GP.SC_URL.test(c.sportsclippers_url)) return null;
   const { data: rows, error: e2 } = await sb.from("gfs_crew").select("id,status").eq("event_id", ev.id).eq("creator_id", c.id);
   if (e2) throw e2;
   if (!(rows || []).some((r) => r.status === "confirmed")) return null;
-  return c;
+  // Only what the page uses leaves this function.
+  return { id: c.id, code: c.code, name: c.name, sportsclippers_url: c.sportsclippers_url };
 }
 const live = (ev) => ev.status !== "cancelled";
 const footageOk = (ev) => live(ev) && !!ev.sportsclippers_url && GP.SC_URL.test(ev.sportsclippers_url);
