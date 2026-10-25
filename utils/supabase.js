@@ -1,10 +1,11 @@
 // One service-role Supabase client for the server (lazy). Returns false when
-// SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY aren't set, or are set but no
-// client can be made from them (a URL without https://, or in quotes).
-// supabaseStatus() says which for /api/health, and the server log says why,
-// once. Tests swap the client with setSupabase().
+// SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY aren't set, or when no client can
+// be made: an address without https:// or in quotes, or Node.js older than 22
+// (supabase-js needs its built-in WebSocket; that took the live app down on
+// Oct 24, 2026). supabaseStatus() says which for /api/health, and the server
+// log says why, once. Tests swap the client with setSupabase().
 let client = null;
-let status = null; // "ok" | "not_set" | "invalid", never the values themselves
+let status = null; // "ok" | "not_set" | "error", never the values themselves
 
 function getSupabase() {
   if (client !== null) return client;
@@ -22,8 +23,13 @@ function getSupabase() {
   } catch (e) {
     // Everything that reads the database, the Pylon stop pages included,
     // acts as if it were empty until this is fixed, so say it where it's seen.
-    status = "invalid";
-    console.error(`[supabase] SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY are set but can't be used (${e.message}). SUPABASE_URL should be https://<project-ref>.supabase.co, with no quotes.`);
+    status = "error";
+    const hint = /supabaseUrl/i.test(e.message)
+      ? " SUPABASE_URL should be https://<project-ref>.supabase.co, with no quotes."
+      : /WebSocket/i.test(e.message)
+        ? " supabase-js needs Node.js 22 or later: set NODE_VERSION to 22 on Render."
+        : "";
+    console.error(`[supabase] Can't create the Supabase client (${e.message}).${hint}`);
     return (client = false);
   }
 }

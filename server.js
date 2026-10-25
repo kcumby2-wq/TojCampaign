@@ -230,7 +230,8 @@ app.get("/api/health", (req, res) => {
   res.json({
     ok: true,
     backend: supa ? "supabase" : "json",
-    // "ok", "not_set", or "invalid": set, but no client can be made from it.
+    // "ok", "not_set", or "error": set, but no client can be made (bad
+    // address, or Node.js older than 22). The server log says which.
     supabase: require("./utils/supabase").supabaseStatus(),
     voyage: !!process.env.VOYAGE_API_KEY,
     anthropic: !!process.env.ANTHROPIC_API_KEY,
