@@ -118,6 +118,7 @@
     plus: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>',
     grid: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1.6"/><rect x="14" y="3" width="7" height="7" rx="1.6"/><rect x="3" y="14" width="7" height="7" rx="1.6"/><rect x="14" y="14" width="7" height="7" rx="1.6"/></svg>',
     people: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c.8-3.6 3.4-5.5 6.5-5.5s5.7 1.9 6.5 5.5"/><circle cx="17" cy="9" r="2.8"/><path d="M16 14.6c2.7.2 4.6 1.9 5.3 4.9"/></svg>',
+    chat: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true"><path d="M4 5h16v11H9.5L4 20.5z"/><path d="M8.5 9.5h7M8.5 12.5h4.5" stroke-linecap="round"/></svg>',
     chev: '<svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg>',
     back: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="m15 5-7 7 7 7"/></svg>',
     check: '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg>',
@@ -147,8 +148,10 @@
       return '<a href="' + href + '"' + (active === key ? ' aria-current="page"' : "") + ">" + ico + "<span>" + label + "</span></a>";
     }
     // Pylon events people get an Events tab; Tools moves into Team when
-    // Studio takes its place.
+    // Studio takes its place. Chat holds the last place, and Team opens from
+    // it (and from your initials on Today).
     var gfs = hasTool("gfs"), studioTool = hasTool("studio");
+    var unread = state.chatUnread || 0;
     var plus = atLeast("member") && studioTool ? '<a href="#new" class="plus" aria-label="New idea"><span class="p">' + I.plus + "</span></a>" :
       atLeast("member") && gfs ? '<a href="#gfs-new" class="plus" aria-label="New event"><span class="p">' + I.plus + "</span></a>" : '<span aria-hidden="true"></span>';
     tabsEl.innerHTML =
@@ -156,7 +159,7 @@
       (gfs ? t("events", "#events", "Events", I.cal) : t("studio", "#studio", "Studio", I.layers)) +
       plus +
       (gfs && studioTool ? t("studio", "#studio", "Studio", I.layers) : t("tools", "#tools", "Tools", I.grid)) +
-      t("team", "#team", "Team", I.people);
+      t("chat", "#chat", "Chat", I.chat).replace("</a>", '<span class="tab-dot" id="chatDot"' + (unread ? "" : " hidden") + ">" + (unread > 99 ? "99+" : unread || "") + "</span></a>");
   }
   function toolsInTabs() { return !(hasTool("gfs") && hasTool("studio")); }
 
@@ -164,6 +167,10 @@
   var PUBLIC = { join: 1, signin: 1 };
   async function render() {
     stopPolling();
+    // A chat room turns this off while it updates itself, and pads the page
+    // for its composer (chat.js).
+    app.setAttribute("aria-live", "polite");
+    app.style.paddingBottom = "";
     var my = ++gen;
     var parts = location.hash.replace(/^#\/?/, "").split("/");
     var name = parts[0] || "today";
@@ -244,6 +251,7 @@
     gfs_takedown_step: "moved a takedown along for",
     gfs_creator_added: "added a creator",
     gfs_creator_changed: "updated a creator",
+    chat_removed_message: "removed a message in chat",
   };
   function actorName(a) {
     if (a.actor && state.me && a.actor === state.me.email) return "You";
@@ -870,7 +878,7 @@
   var REGION_NAMES = { west: "West", south_central: "South Central", northeast: "Northeast", southeast: "Southeast", midwest: "Midwest" };
   function regionText(list) { return (list || []).map(function (r) { return REGION_NAMES[r] || r; }).join(", "); }
   async function team() {
-    show("team", '<div class="screen"><h1 class="title">Team</h1><div class="spin"></div></div>');
+    show("chat", '<div class="screen"><h1 class="title">Team</h1><div class="spin"></div></div>');
     var res = await settled([api("/api/team"), isOwner() ? api("/api/team/invites") : Promise.resolve({ invites: [] })]);
     var people = res[0].status === "fulfilled" ? res[0].value.people : [];
     var invites = res[1].status === "fulfilled" ? res[1].value.invites : [];
@@ -888,7 +896,7 @@
     var inv = invites.map(function (i) {
       return '<div class="li" style="cursor:default"><span class="avatar" style="width:38px;height:38px;background:transparent;border:1.5px dashed #5A6B84;color:var(--muted)">@</span><div class="grow"><div class="name" style="font-size:15px;overflow-wrap:anywhere">' + h(i.name || i.email) + '</div><div class="sub">Invited as ' + h((i.tools || []).indexOf("gfs") >= 0 && GFS_ROLE[i.role] ? GFS_ROLE[i.role][0] + ((i.regions || []).length ? " · " + regionText(i.regions) : "") : i.role) + " · link works until " + h(new Date(i.expires_at).toLocaleDateString(undefined, { month: "short", day: "numeric" })) + '</div></div><button type="button" class="btn small soft" data-renew="' + h(i.id) + '">New link</button><button type="button" class="x" data-cancel="' + h(i.id) + '" aria-label="Cancel invite">×</button></div>';
     }).join("");
-    show("team",
+    show("chat",
       '<div class="screen"><div class="head"><div><h1 class="title">Team</h1><p class="lede">' + people.length + " " + (people.length === 1 ? "person" : "people") + (invites.length ? " · " + invites.length + " invite" + (invites.length > 1 ? "s" : "") + " waiting" : "") + "</p></div>" +
       (isOwner() ? '<a class="btn small" href="#invite">' + I.plus.replace("<svg", '<svg width="16" height="16"') + "Invite</a>" : "") + "</div>" +
       '<div class="list">' + rows + inv + "</div>" +

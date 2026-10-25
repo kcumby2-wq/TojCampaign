@@ -264,7 +264,7 @@ test("the stop page: footage on SportsClippers, the creator, help; nothing about
 
   const anaPage = await visitor(`/e/${ev.code}?c=ANA01`);
   assert.match(textOf(anaPage.text), /Ana is on the crew/);
-  assert.ok(!anaPage.text.includes("Lopez"));
+  assert.ok(!textOf(anaPage.text).includes("Lopez"));
   assert.ok(anaPage.text.includes(`href="/e/${ev.code}/go/creator/ANA01"`));
   assert.ok(anaPage.text.includes(`href="/e/${ev.code}/go/footage?c=ANA01"`));
   // Ben is only invited so far: his code works, and the page shows him once he's confirmed.
@@ -272,7 +272,9 @@ test("the stop page: footage on SportsClippers, the creator, help; nothing about
     const p = await visitor(`/e/${ev.code}?c=${encodeURIComponent(c)}`);
     assert.equal(p.status, 200);
     assert.ok(!/is on the crew/.test(p.text), `${c}: no creator section`);
-    assert.ok(!p.text.includes("Yuri") && !p.text.includes("Ben") && !p.text.includes("<script>"));
+    // Names are checked in the page's words: the raw HTML carries a random
+    // style nonce, which can spell anything.
+    assert.ok(!textOf(p.text).includes("Yuri") && !textOf(p.text).includes("Ben") && !p.text.includes("<script>"), c);
   }
   assert.equal((await mw(`/api/gfs/events/${evId}/qr`)).json.codes.find((c) => c.key === "c-BEN01").on_page, false);
   await wait(20);

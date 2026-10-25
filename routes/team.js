@@ -280,6 +280,15 @@ router.delete("/members/:email", requireStaff, async (req, res) => {
   if (error) return fail(res, error, "remove_member");
   if (!data || !data.length) return res.status(404).json({ error: "not_found" });
   T.forget(email);
+  // Off the team first, so chat can't hold it up and nobody can add them to a
+  // room in between. Then they leave the chat rooms they were added to
+  // (routes/chat.js), so coming back doesn't hand them what was said while
+  // they were gone. If that fails, joining again does it (POST /join).
+  try {
+    await require("./chat").dropRooms(sb, email);
+  } catch (e) {
+    console.warn("[team] chat rooms not dropped on removal; they go when the person rejoins", (e && e.code) || "");
+  }
   await T.logActivity(T.emailOf(req), "removed_member", email);
   res.json({ ok: true });
 });
@@ -300,6 +309,8 @@ router.delete("/me", T.requireTeam(null, "viewer"), async (req, res) => {
   if (!sb) return sb503(res);
   const email = req.team.email;
   try {
+    // Chat first: their messages lose their text, then their chat record goes.
+    await require("./chat").forgetPerson(sb, email);
     const steps = [
       sb.from("push_subscriptions").delete().eq("email", email),
       sb.from("team_invites").delete().eq("email", email),
@@ -368,6 +379,13 @@ router.post("/join", async (req, res) => {
       if (error) throw new Error(error.message);
       accountRole = ACCOUNT_ROLES.CREATOR;
     }
+    // Coming back after being taken off the team: they leave any chat rooms
+    // still on record from before (routes/chat.js), so they aren't handed what
+    // was said while they were gone. Before the invite is used, so a failure
+    // here can be retried with the same link.
+    const { data: prior, error: pErr } = await sb.from("team_members").select("status").eq("email", inv.email).maybeSingle();
+    if (pErr) throw new Error(pErr.message);
+    if (!prior || prior.status !== "active") await require("./chat").dropRooms(sb, inv.email);
     // Use the invite first, so the same link can't add someone twice.
     const { data: used, error: useErr } = await sb
       .from("team_invites")

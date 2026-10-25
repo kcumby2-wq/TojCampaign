@@ -111,6 +111,7 @@
     up: svg('<path d="M12 16V4M7 9l5-5 5 5"/><path d="M5 20h14"/>', 22),
     desk: svg('<rect x="3" y="4" width="18" height="13" rx="2"/><path d="M8 21h8M12 17v4"/>', 22),
     qr: svg('<rect x="4" y="4" width="6" height="6" rx="1"/><rect x="14" y="4" width="6" height="6" rx="1"/><rect x="4" y="14" width="6" height="6" rx="1"/><path d="M14 14h2v2h-2zM18 18h2v2h-2zM14 18h2M18 14h2"/>', 22),
+    chat: svg('<path d="M4 5h16v11H9.5L4 20.5z"/><path d="M8.5 9.5h7M8.5 12.5h4.5"/>', 22),
     check: '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg>',
   };
 
@@ -397,6 +398,7 @@
       (member ? '<a class="tile" href="#gfs-roster/' + h(ev.id) + '">' + ICON.list + "Roster and consent</a>" : '<a class="tile" href="#gfs-deliver/' + h(ev.id) + '">' + ICON.box + "Deliver</a>") +
       "</div>" +
       '<a class="li list" href="#gfs-qr/' + h(ev.id) + '" style="border-radius:16px"><div class="ico" style="width:36px;height:36px;border-radius:9px">' + ICON.qr + '</div><div class="grow"><div class="name" style="font-size:15px">QR codes and the stop page</div><div class="sub">Signs, the booth, wristbands, and a code for each creator</div></div>' + t.I.chev + "</a>" +
+      (window.TOJChat ? '<a class="li list" href="#chat-stop/' + h(ev.id) + '" style="border-radius:16px"><div class="ico" style="width:36px;height:36px;border-radius:9px">' + ICON.chat + '</div><div class="grow"><div class="name" style="font-size:15px">Stop chat</div><div class="sub">Everyone working this stop, in one room</div></div>' + t.I.chev + "</a>" : "") +
       (member ? '<a class="li list" href="#gfs-takedown/' + h(ev.id) + '" style="border-radius:16px">' + '<div class="ico" style="width:36px;height:36px;border-radius:9px;color:var(--bad)">' + ICON.stop + '</div><div class="grow"><div class="name" style="font-size:15px">Log a takedown</div><div class="sub">A safety request or withdrawn consent starts its clock now</div></div>' + t.I.chev + "</a>" : "") +
       "</div>");
     bind("[data-brief]", "click", function (b) { act(b, async function () { await t.post("/api/gfs/events/" + encodeURIComponent(id), { brief_sent: b.dataset.brief === "1" }, "PATCH"); t.toast(b.dataset.brief === "1" ? "Marked: crew brief sent." : "Unmarked."); event(id); }); });

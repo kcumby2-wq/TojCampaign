@@ -190,6 +190,9 @@ app.use("/api/gfs", require("./routes/gfs"));
 app.use("/e", require("./routes/gfs-page"));
 // The team: invites, roles, activity (utils/team.js). Owner-only consoles keep requireStaff.
 app.use("/api/team", require("./routes/team"));
+// Team chat: rooms for each Pylon stop and region, topic rooms and direct
+// messages, for the team only (026).
+app.use("/api/chat", require("./routes/chat"));
 // Web push for the TOJ app (utils/push.js).
 app.use("/api/push", require("./routes/push"));
 app.get(["/studio", "/studio/"], (_req, res) => res.redirect(302, "/app/#studio"));
