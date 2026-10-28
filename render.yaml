@@ -30,9 +30,9 @@ services:
       - key: GFS_HELP_EMAIL
         sync: false
       # Subject Medias bookings (routes/sm-bookings.js). The shared secret
-      # subjectmedias.com's Stripe webhook sends (24+ characters, the same
-      # value on the site's Vercel project), and the Gmail account and app
-      # password that send the staff alert emails.
+      # subjectmedias.com's booking form and Stripe webhook send (24+
+      # characters, the same value on the site's Vercel project), and the
+      # Gmail account and app password that send the staff alert emails.
       - key: SM_BOOKINGS_SECRET
         sync: false
       - key: EMAIL_USER

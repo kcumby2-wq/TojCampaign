@@ -54,20 +54,32 @@ after(async () => {
   if (pool) await pool.end();
 });
 
-test("a form booking needs an adult who said so; a paid one needs its Stripe checkout", async () => {
+test("a form booking needs an adult who said so and an email; a paid one needs its Stripe checkout", async () => {
   const [ok, args] = form();
   assert.equal((await q(ok, args)).rows[0].status, "new");
   await refused(...form({ adult_confirmed: false }), "sm_bookings_source_chk");
-  await refused(...form({ stripe_session_id: "cs_test_abcdefgh123" }), "sm_bookings_source_chk");
+  await refused(...form({ contact_email: null }), "sm_bookings_source_chk");
+  // A request paid from the success panel carries its checkout.
+  const joined = (await q(...form({ stripe_session_id: "cs_test_abcdefgh123", amount_cents: 13999 }))).rows[0];
+  assert.equal(joined.source, "form");
   await refused(...form({ source: "stripe" }), "sm_bookings_source_chk");
   const [paid, pargs] = form({ source: "stripe", adult_confirmed: false, stripe_session_id: "cs_live_abcdefgh123" });
   assert.equal((await q(paid, pargs)).rows[0].source, "stripe");
   await refused(paid, pargs, "stripe_session_id");
+  await refused(...form({ source: "form", stripe_session_id: "cs_live_abcdefgh123" }), "stripe_session_id");
   await refused(...form({ source: "stripe", stripe_session_id: "not-a-session" }));
+  // A checkout without an email still lands.
+  const bare = (await q(...form({ source: "stripe", adult_confirmed: false, stripe_session_id: "cs_live_noemail1234", contact_email: null }))).rows[0];
+  assert.equal(bare.contact_email, null);
 });
 
 test("contact and place stay in shape", async () => {
   await refused(...form({ contact_email: "Jamie@Example.com" }));
+  await refused(...form({ contact_email: "x@y.co?cc=thief%40evil.example" }));
+  await refused(...form({ contact_email: "x y@z.co" }));
+  assert.ok((await q(...form({ contact_email: "o'brien+games@example.co.uk" }))).rows[0].id);
+  await refused(...form({ amount_cents: 100000000 }));
+  await refused(...form({ amount_cents: -1 }));
   await refused(...form({ event_state: "California" }));
   await refused(...form({ region: "mars" }));
   await refused(...form({ athletes: 0 }));
