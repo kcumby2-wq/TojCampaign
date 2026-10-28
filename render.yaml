@@ -29,6 +29,22 @@ services:
         sync: false
       - key: GFS_HELP_EMAIL
         sync: false
+      # Subject Medias bookings (routes/sm-bookings.js). The shared secret
+      # subjectmedias.com's Stripe webhook sends (24+ characters, the same
+      # value on the site's Vercel project), and the Gmail account and app
+      # password that send the staff alert emails.
+      - key: SM_BOOKINGS_SECRET
+        sync: false
+      - key: EMAIL_USER
+        sync: false
+      - key: EMAIL_PASS
+        sync: false
+      # Creator pages' public address (subjectmedias.com once its /c/ rewrite
+      # is live) and the TOJ app's own address for links back into it.
+      - key: CREATOR_PAGE_BASE
+        sync: false
+      - key: APP_BASE
+        sync: false
     disk:
       name: app-data
       mountPath: /opt/render/project/src/db
