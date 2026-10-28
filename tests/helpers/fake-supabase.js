@@ -44,7 +44,8 @@ function fakeSupabase(seed = {}, { unique = {}, rpc = {} } = {}) {
           const cols = this.conflict ? String(this.conflict).split(",").map((c) => c.trim()) : [];
           const existing = cols.length ? rows.find((x) => cols.every((c) => x[c] === r[c])) : null;
           if (existing && this.op === "upsert") { Object.assign(existing, r); out.push(existing); continue; }
-          if (keys.some((k) => rows.some((x) => x[k] === r[k]))) return { data: null, error: { code: "23505", message: "duplicate key" } };
+          // Like Postgres, a null never clashes with another null.
+          if (keys.some((k) => r[k] != null && rows.some((x) => x[k] === r[k]))) return { data: null, error: { code: "23505", message: "duplicate key" } };
           const row = { id: crypto.randomUUID(), created_at: new Date().toISOString(), ...r };
           rows.push(row);
           out.push(row);

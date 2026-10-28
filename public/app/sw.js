@@ -3,8 +3,8 @@
  * /api always goes to the network, so data is never stale or stored here.
  * Push: shows the notification the server sends and opens the app on tap.
  */
-const VERSION = "toj-app-v5";
-const SHELL = ["/app/", "/app/app.css", "/app/app.js", "/app/creators.js", "/app/os.js", "/app/gfs.js", "/app/push.js", "/app/manifest.webmanifest", "/app/icons/icon-192.png", "/app/icons/apple-touch-icon.png"];
+const VERSION = "toj-app-v6";
+const SHELL = ["/app/", "/app/app.css", "/app/app.js", "/app/creators.js", "/app/os.js", "/app/gfs.js", "/app/bookings.js", "/app/push.js", "/app/manifest.webmanifest", "/app/icons/icon-192.png", "/app/icons/apple-touch-icon.png"];
 
 self.addEventListener("install", (e) => {
   e.waitUntil(caches.open(VERSION).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting()));
