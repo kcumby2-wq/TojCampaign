@@ -143,6 +143,7 @@
       crew + pages + "</section>" +
       '<section class="card"><h2 class="sec-h">Status</h2><div class="chips" style="display:flex;flex-wrap:wrap;gap:8px">' + steps + "</div>" +
       '<p class="sub" id="bkMsg" role="status" style="margin-top:8px">' + (b.status_by ? "Last changed by " + h(b.status_by) + "." : "") + "</p></section>" +
+      (window.TOJChat && window.TOJChat.workRow ? window.TOJChat.workRow("booking", b.id, "Owners only, about this booking") : "") +
       "</div>");
 
     function save(body, done) {

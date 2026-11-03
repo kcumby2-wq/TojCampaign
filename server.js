@@ -199,6 +199,8 @@ app.use("/api/team", require("./routes/team"));
 // Team chat: rooms for each Pylon stop and region, topic rooms and direct
 // messages, for the team only (026).
 app.use("/api/chat", require("./routes/chat"));
+// The tool shelf: links the owner adds under Team > Tools (routes/team-tools.js, migration 031).
+app.use("/api/team-tools", require("./routes/team-tools"));
 // Web push for the TOJ app (utils/push.js).
 app.use("/api/push", require("./routes/push"));
 app.get(["/studio", "/studio/"], (_req, res) => res.redirect(302, "/app/#studio"));

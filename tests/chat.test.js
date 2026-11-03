@@ -12,6 +12,7 @@ const crypto = require("crypto");
 const express = require("express");
 const session = require("express-session");
 
+process.env.CHAT_DMS = "on"; // DMs are off by default; these tests cover them on (the "off" test sets it back).
 process.env.ADMIN_EMAILS = "kyron@example.com";
 const { fakeSupabase } = require("./helpers/fake-supabase");
 const { setSupabase } = require("../utils/supabase");
@@ -159,13 +160,13 @@ test("joining: signed in and on the team, 18 or older, a name without contact de
   stu = await joinedAs("Stu", "stu@example.com");
 });
 
-test("rooms follow roles and regions: All of Pylon, your regions, stops you can see", async () => {
+test("rooms follow roles and regions: Team, All of Pylon, your regions, stops you can see", async () => {
   const w = await wes("/api/chat");
-  assert.deepEqual(w.json.rooms.map((r) => r.title).sort(), ["All of Pylon", "West region"]);
+  assert.deepEqual(w.json.rooms.map((r) => r.title).sort(), ["All of Pylon", "Team", "West region"]);
   const k = await kyron("/api/chat");
   assert.deepEqual(k.json.rooms.filter((r) => r.kind === "region").map((r) => r.region).sort(), ["midwest", "northeast", "south_central", "southeast", "west"]);
   assert.equal((await abby("/api/chat")).json.rooms.filter((r) => r.kind === "region").length, 5, "approvers see every region");
-  assert.deepEqual((await stu("/api/chat")).json.rooms, [], "no Pylon events, no Pylon rooms");
+  assert.deepEqual((await stu("/api/chat")).json.rooms.map((r) => r.kind), ["team"], "no Pylon events, no Pylon rooms: only the Team room");
   assert.equal(k.json.can_make_rooms, true);
   assert.equal(w.json.can_make_rooms, false);
 
@@ -293,6 +294,21 @@ test("direct messages: two people on the team; nobody else can read them", async
   assert.equal((await wes(`/api/chat/rooms/${dm.json.room.id}/messages`, { method: "POST", body: { body: "hello?" } })).json.error, "chat_dm_gone");
   assert.equal((await wes("/api/chat/dm", { method: "POST", body: { person: people.Stu } })).json.error, "person_not_found");
   setMember("stu@example.com", { status: "active" });
+});
+
+test("direct messages are off unless the server says CHAT_DMS=on: no new ones, and old ones go quiet", async () => {
+  const dm = await wes("/api/chat/dm", { method: "POST", body: { person: people.Sam } });
+  assert.equal(dm.status, 200);
+  process.env.CHAT_DMS = "";
+  try {
+    assert.equal((await wes("/api/chat")).json.dms, false);
+    assert.equal((await wes("/api/chat/dm", { method: "POST", body: { person: people.Sam } })).json.error, "dms_off");
+    assert.ok(!(await wes("/api/chat")).json.rooms.some((r) => r.kind === "dm"), "a DM from before is out of the list");
+    assert.equal((await wes(`/api/chat/rooms/${dm.json.room.id}`)).status, 404);
+    assert.equal((await wes(`/api/chat/rooms/${dm.json.room.id}/messages`, { method: "POST", body: { body: "still there?" } })).status, 404);
+  } finally {
+    process.env.CHAT_DMS = "on";
+  }
 });
 
 test("topic rooms: owners and approvers make them; only the people listed read them", async () => {

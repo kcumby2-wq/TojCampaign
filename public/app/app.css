@@ -276,3 +276,9 @@ button, input, textarea, select { font: inherit; color: inherit; }
 .mention-list button + button { border-top: 1px solid var(--line); }
 .mention-list button span { color: var(--muted); font-size: 12.5px; }
 .newpill { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(var(--bottom) + 96px); z-index: 25; min-height: 36px; padding: 0 14px; border-radius: 18px; border: 0; background: var(--ink); color: var(--bg); font: 700 13px/1 var(--text); box-shadow: 0 6px 18px rgba(0, 0, 0, .35); cursor: pointer; }
+/* ── Tool shelf (shelf.js) ───────────────────────────────────────────── */
+.shelf-li { cursor: default; gap: 10px; }
+.shelf-go { display: flex; align-items: center; gap: 12px; flex: 1; min-width: 0; color: var(--ink); text-decoration: none; }
+.shelf-go > svg { color: var(--faint); flex: none; }
+.shelf-mark { width: 36px; height: 36px; border-radius: 9px; font: 700 12px/1 var(--text); color: var(--bg); background: var(--gold); }
+.shelf-off summary { cursor: pointer; padding: 4px 2px 10px; }

@@ -8,7 +8,11 @@
 //   region  everyone with Pylon events in that region
 //   stop    everyone who can see that Pylon event
 //   topic   the people listed (owners and approvers make them)
-//   dm      two people
+//   dm      two people (only when CHAT_DMS=on; off by default)
+//   team    everyone on the team                                (migration 031)
+//   kit     everyone with Studio, on one Studio kit             (031)
+//   booking owners, on one Subject Medias booking               (031)
+//   os      everyone with Operating Systems, on one build       (031)
 //
 // Text only. A message can't carry an email address or a phone number, and
 // people talk about athletes by team and jersey number only.
@@ -19,8 +23,17 @@ const crypto = require("crypto");
 const T = require("./team");
 const G = require("./gfs");
 
-const KINDS = Object.freeze(["all", "region", "stop", "topic", "dm"]);
-const DERIVED = Object.freeze(["all", "region", "stop"]);
+const KINDS = Object.freeze(["all", "region", "stop", "topic", "dm", "team", "kit", "booking", "os"]);
+// Rooms whose readers follow the team's roles, tools and regions (no member rows).
+const DERIVED = Object.freeze(["all", "region", "stop", "team", "kit", "booking", "os"]);
+// The rooms that hang on a piece of work, and the context each one needs.
+const WORK = Object.freeze({ stop: "ev", kit: "kit", booking: "booking", os: "os" });
+const KIT_SLUG = /^[a-z0-9][a-z0-9-]{0,79}$/;
+// Direct messages: Kyron chose team rooms and work conversations without
+// them (Nov 3). CHAT_DMS=on on the server turns them on.
+function dmsOn() {
+  return String(process.env.CHAT_DMS || "").toLowerCase() === "on";
+}
 const NAME_MAX = 40;
 const TITLE_MAX = 60;
 const BODY_MAX = 2000;
@@ -80,11 +93,19 @@ function slugFor(kind, key) {
   if (kind === "stop") return "stop:" + key;
   if (kind === "dm") return "dm:" + [...key].sort().join(":");
   if (kind === "topic") return "topic:" + (key || crypto.randomUUID());
+  if (kind === "team") return "team";
+  if (kind === "kit") {
+    if (!KIT_SLUG.test(String(key))) throw new Error("bad kit slug");
+    return "kit:" + key;
+  }
+  if (kind === "booking") return "booking:" + key;
+  if (kind === "os") return "os:" + key;
   throw new Error("unknown room kind");
 }
 
 // Can this person (a team access, utils/team.js accessFor) read the room?
-// ctx.event: the stop's event; ctx.member: on the room's member list.
+// ctx.event: the stop's event; ctx.kit, ctx.booking, ctx.os: the work a room
+// hangs on (null when it's gone); ctx.member: on the room's member list.
 function canRead(access, room, ctx = {}) {
   if (!access || !room) return false;
   const pylon = T.can(access, "gfs", "viewer");
@@ -96,8 +117,18 @@ function canRead(access, room, ctx = {}) {
     case "stop":
       return pylon && !!ctx.event && G.canSee(access, ctx.event.region);
     case "topic":
-    case "dm":
       return !!ctx.member;
+    case "dm":
+      return dmsOn() && !!ctx.member;
+    case "team":
+      return true;
+    case "kit":
+      return T.can(access, "studio", "viewer") && !!ctx.kit;
+    case "booking":
+      // Bookings hold a family's contact: owners only, like the booking itself.
+      return !!access.owner && !!ctx.booking;
+    case "os":
+      return T.can(access, "os", "viewer") && !!ctx.os;
     default:
       return false;
   }
@@ -127,18 +158,33 @@ function regionName(r) {
 }
 // A room's name as its reader sees it. ev: the stop's event; other: the other
 // person in a DM ({ name } or null for a former teammate).
-function titleOf(room, { ev, other } = {}) {
+function titleOf(room, { ev, other, kit, booking, os, bookingTitle } = {}) {
   if (room.kind === "all") return "All of Pylon";
   if (room.kind === "region") return regionName(room.region) + " region";
   if (room.kind === "stop") return ev ? ev.name : "A Pylon stop";
   if (room.kind === "dm") return other && other.name ? other.name : "Former teammate";
+  if (room.kind === "team") return "Team";
+  if (room.kind === "kit") return kit && kit.title ? kit.title : "A Studio kit";
+  if (room.kind === "booking") return booking && bookingTitle ? bookingTitle : "A booking";
+  if (room.kind === "os") return os && os.name ? os.name : "An operating system";
   return room.title || "Room";
+}
+// What a notification may call a room: fixed words for a booking and an
+// operating system build (a family's event, a client's name), never typed text.
+function pushTitleOf(room, ctx = {}) {
+  if (room.kind === "booking") return "A booking";
+  if (room.kind === "os") return "An operating system build";
+  return titleOf(room, ctx);
 }
 function audienceText(room, { ev } = {}) {
   if (room.kind === "all") return "Everyone with Pylon events";
   if (room.kind === "region") return "Everyone with Pylon events in " + regionName(room.region);
   if (room.kind === "stop") return "Everyone who can see this stop: owners, approvers and " + (ev ? regionName(ev.region) : "its region") + "'s team";
   if (room.kind === "dm") return "Just the two of you";
+  if (room.kind === "team") return "Everyone on the team";
+  if (room.kind === "kit") return "Everyone with Studio";
+  if (room.kind === "booking") return "Owners";
+  if (room.kind === "os") return "Everyone with Operating Systems";
   return "Only the people listed can read it";
 }
 // Shown at the top of every room.
@@ -146,8 +192,10 @@ function ruleFor(room, { ev } = {}) {
   const who =
     room.kind === "dm" ? "Only the two of you can read this." :
     room.kind === "topic" ? "Only the people listed can read this room." :
+    room.kind === "booking" ? "Only owners can read this room." :
     audienceText(room, { ev }) + " can read this room, viewers included.";
-  return who + " Talk about athletes by team and jersey number only: no names, contact details, film links, permission flags or takedown reasons. Those stay in the event's tools.";
+  const where = room.kind === "booking" ? "the booking" : room.kind === "kit" || room.kind === "os" || room.kind === "team" || room.kind === "topic" || room.kind === "dm" ? "the app's tools" : "the event's tools";
+  return who + " Talk about athletes by team and jersey number only: no names, contact details, film links, permission flags or takedown reasons. Those stay in " + where + ".";
 }
 
 // ── Mentions ─────────────────────────────────────────────────────────────
@@ -204,6 +252,10 @@ setInterval(() => {
 module.exports = {
   KINDS,
   DERIVED,
+  WORK,
+  KIT_SLUG,
+  dmsOn,
+  pushTitleOf,
   NAME_MAX,
   TITLE_MAX,
   BODY_MAX,

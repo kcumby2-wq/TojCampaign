@@ -456,6 +456,7 @@
       '<div class="chips" role="group" aria-label="Milanote columns">' + chips + "</div>" +
       '<div class="sec"><p class="lede" style="margin:0">' + h(c.lead) + ' <span class="sub">· Milanote color: ' + h(c.color) + '</span></p><div style="display:flex;flex-direction:column;gap:8px">' + cards + "</div></div>" +
       '<a class="li list" href="#tool/kitpage:' + h(row.id) + '" style="border-radius:16px"><div class="grow"><div class="name" style="font-size:15px">Open the full kit page</div><div class="sub">Every card at once, for a laptop</div></div>' + I.chev + "</a>" +
+      (window.TOJChat && window.TOJChat.workRow && row.slug ? window.TOJChat.workRow("kit", row.slug, "Everyone with Studio, about this kit") : "") +
       "</div>");
     app.querySelectorAll("[data-col]").forEach(function (b) {
       b.addEventListener("click", function () { state.kitCol[id] = Number(b.dataset.col); kit(id); });
@@ -847,7 +848,9 @@
       "</div></section>" : "";
     var rest = isOwner() ? TOOL_GROUPS.map(function (g) { return '<section class="sec"><h2 class="sec-h">' + h(g[0]) + '</h2><div class="list">' + g[1].map(toolRow).join("") + "</div></section>"; }).join("") :
       '<p class="empty">More tools show up here as they move into the app. The CRMs and anything holding minors\' data stay with Kyron.</p>';
-    show(toolsInTabs() ? "tools" : "team", '<div class="screen"><div><h1 class="title">Tools</h1><p class="lede">' + (isOwner() ? "Everything from the Command Center, opened inside the app." : "What your role can open.") + "</p></div>" + events + make + rest + "</div>");
+    // The team's tool shelf (shelf.js): links the owner adds, for the people they pick.
+    var shelf = window.TOJShelf ? await window.TOJShelf.section() : "";
+    show(toolsInTabs() ? "tools" : "team", '<div class="screen"><div><h1 class="title">Tools</h1><p class="lede">' + (isOwner() ? "Your team's tools, and everything from the Command Center." : "What your role can open.") + "</p></div>" + shelf + events + make + rest + "</div>");
   }
   async function tool(key) {
     var t, path;

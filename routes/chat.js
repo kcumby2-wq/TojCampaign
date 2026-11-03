@@ -6,8 +6,11 @@
 //   GET    /api/chat                       → your rooms and DMs, with unread counts
 //   GET    /api/chat/unread                → the unread total (for the tab)
 //   GET    /api/chat/people                → people you can message
-//   POST   /api/chat/dm                    → open a DM   { person }
+//   POST   /api/chat/dm                    → open a DM   { person }   (only with CHAT_DMS=on)
 //   GET    /api/chat/stop/:eventId         → a Pylon stop's room (made on first open)
+//   GET    /api/chat/kit/:slug             → a Studio kit's room          (migration 031)
+//   GET    /api/chat/booking/:id           → a booking's room (owners)    (031)
+//   GET    /api/chat/os/:id                → an operating system build's room (031)
 //   POST   /api/chat/rooms                 → make a room (owner, approvers)   { title, people }
 //   GET    /api/chat/rooms/:id             → a room: who can read it, its rule, what you can do
 //   PATCH  /api/chat/rooms/:id             → rename, add or remove people (owner, approvers)
@@ -29,6 +32,7 @@ const T = require("../utils/team");
 const G = require("../utils/gfs");
 const C = require("../utils/chat");
 const P = require("../utils/push");
+const B = require("../utils/sm-bookings");
 const { getSupabase } = require("../utils/supabase");
 const { staffEmails } = require("../utils/staff");
 
@@ -151,6 +155,41 @@ async function ensureMember(sb, roomId, personId, addedBy) {
 async function stopEvent(sb, eventId) {
   return run(sb.from("gfs_events").select("id,name,region,city,state,starts_on,ends_on,status").eq("id", eventId).maybeSingle());
 }
+// A Studio kit by its slug: the approved version, else the newest.
+async function kitBySlug(sb, slug) {
+  if (!C.KIT_SLUG.test(String(slug || ""))) return null;
+  const rows = (await run(sb.from("studio_kits").select("id,slug,title,version,status").eq("slug", slug).order("version", { ascending: false }).limit(10))) || [];
+  return rows.find((r) => r.status === "approved") || rows[0] || null;
+}
+async function bookingById(sb, id) {
+  return UUID.test(String(id || "")) ? run(sb.from("sm_bookings").select("*").eq("id", id).maybeSingle()) : null;
+}
+async function osById(sb, id) {
+  return UUID.test(String(id || "")) ? run(sb.from("os_builds").select("id,name").eq("id", id).maybeSingle()) : null;
+}
+// The work a room hangs on, or nulls (a room with no work, or work that's gone).
+async function workOf(sb, room) {
+  const w = { ev: null, kit: null, booking: null, os: null };
+  if (room.kind === "stop") w.ev = await stopEvent(sb, room.event_id);
+  else if (room.kind === "kit") w.kit = await kitBySlug(sb, room.kit_slug);
+  else if (room.kind === "booking") w.booking = await bookingById(sb, room.booking_id);
+  else if (room.kind === "os") w.os = await osById(sb, room.os_build_id);
+  return w;
+}
+function readCtx(work, extra) {
+  return { event: work.ev, kit: work.kit, booking: work.booking, os: work.os, ...(extra || {}) };
+}
+function titleCtx(work, extra) {
+  return { ev: work.ev, kit: work.kit, booking: work.booking, os: work.os, bookingTitle: work.booking ? B.summary(work.booking) : null, ...(extra || {}) };
+}
+// Where the work itself opens in the app.
+function workLink(room, work) {
+  if (room.kind === "stop" && work.ev) return "#event/" + work.ev.id;
+  if (room.kind === "kit" && work.kit) return "#kit/" + work.kit.id;
+  if (room.kind === "booking" && work.booking) return "#booking/" + work.booking.id;
+  if (room.kind === "os" && work.os) return "#osb/" + work.os.id;
+  return null;
+}
 // The other person in a DM, or null once they've deleted their account.
 async function dmOther(sb, room, me) {
   const mem = await run(sb.from("chat_room_members").select("person_id").eq("room_id", room.id));
@@ -169,18 +208,19 @@ async function loadRoom(sb, req, res, me, id = req.params.id) {
     res.status(404).json({ error: "not_found" });
     return null;
   }
-  const ev = room.kind === "stop" ? await stopEvent(sb, room.event_id) : null;
+  const work = await workOf(sb, room);
+  const ev = work.ev;
   const member = room.kind === "topic" || room.kind === "dm" ? await memberOf(sb, room.id, me.id) : false;
-  if (!C.canRead(req.team, room, { event: ev, member })) {
+  if (!C.canRead(req.team, room, readCtx(work, { member }))) {
     res.status(404).json({ error: "not_found" });
     return null;
   }
-  return { room, ev, member };
+  return { room, ev, member, work };
 }
 
 // Who can read a room now: [{ id, email, name, access }] (people who joined
 // chat and are still on the team).
-async function audienceOf(sb, room, ev, teamMap) {
+async function audienceOf(sb, room, work, teamMap) {
   const map = teamMap || (await teamAccess(sb));
   let rows;
   if (room.kind === "topic" || room.kind === "dm") {
@@ -191,7 +231,7 @@ async function audienceOf(sb, room, ev, teamMap) {
   }
   return rows
     .map((p) => ({ id: p.id, email: p.email, name: p.display_name, access: map.get(p.email) || null }))
-    .filter((p) => p.access && (room.kind === "topic" || room.kind === "dm" || C.canRead(p.access, room, { event: ev })));
+    .filter((p) => p.access && (room.kind === "topic" || room.kind === "dm" || C.canRead(p.access, room, readCtx(work))));
 }
 
 async function namesOf(sb, ids) {
@@ -329,14 +369,27 @@ router.post("/me", team, async (req, res) => {
 // ── Rooms ────────────────────────────────────────────────────────────────
 // All of Pylon and the person's region rooms, made the first time anyone
 // needs them.
+// The Team room for everyone; All of Pylon and the person's region rooms for
+// people with Pylon events. Made the first time anyone needs them.
 async function derivedRooms(sb, access) {
-  if (!T.can(access, "gfs", "viewer")) return [];
-  const want = [{ slug: "all", kind: "all" }, ...G.regionsOf(access).map((r) => ({ slug: C.slugFor("region", r), kind: "region", region: r }))];
+  const want = [{ slug: "team", kind: "team" }];
+  if (T.can(access, "gfs", "viewer")) {
+    want.push({ slug: "all", kind: "all" }, ...G.regionsOf(access).map((r) => ({ slug: C.slugFor("region", r), kind: "region", region: r })));
+  }
   const slugs = want.map((w) => w.slug);
   let have = (await run(sb.from("chat_rooms").select("*").in("slug", slugs))) || [];
   const gone = want.filter((w) => !have.some((h) => h.slug === w.slug));
   if (gone.length) {
-    for (const row of gone) await insertOnce(sb.from("chat_rooms").insert(row));
+    for (const row of gone) {
+      try {
+        await insertOnce(sb.from("chat_rooms").insert(row));
+      } catch (e) {
+        // Before migration 031 the database doesn't know the Team room yet:
+        // chat goes on without it.
+        if (row.kind === "team" && e && e.code === "23514") continue;
+        throw e;
+      }
+    }
     have = (await run(sb.from("chat_rooms").select("*").in("slug", slugs))) || [];
   }
   return have;
@@ -356,8 +409,30 @@ async function myRooms(sb, access, me) {
     evRows.forEach((e) => events.set(e.id, e));
     stops = rows.filter((r) => events.has(r.event_id) && G.canSee(access, events.get(r.event_id).region));
   }
+  // Kits, bookings and operating system builds someone has talked about,
+  // that this person can open.
+  const kits = new Map(), bookings = new Map(), builds = new Map();
+  const workKinds = [T.can(access, "studio", "viewer") && "kit", access.owner && "booking", T.can(access, "os", "viewer") && "os"].filter(Boolean);
+  let works = [];
+  if (workKinds.length) {
+    const rows = (await run(sb.from("chat_rooms").select("*").in("kind", workKinds).gt("last_message_at", "1970-01-01T00:00:00Z"))) || [];
+    const slugs = [...new Set(rows.filter((r) => r.kind === "kit").map((r) => r.kit_slug))];
+    if (slugs.length) {
+      const kitRows = await inChunks(slugs, (part) => run(sb.from("studio_kits").select("id,slug,title,version,status").in("slug", part)));
+      for (const k of kitRows.sort((a, b) => b.version - a.version)) {
+        const had = kits.get(k.slug);
+        if (!had || (had.status !== "approved" && k.status === "approved")) kits.set(k.slug, k);
+      }
+    }
+    const bIds = [...new Set(rows.filter((r) => r.kind === "booking").map((r) => r.booking_id))];
+    if (bIds.length) (await inChunks(bIds, (part) => run(sb.from("sm_bookings").select("*").in("id", part)))).forEach((b) => bookings.set(b.id, b));
+    const oIds = [...new Set(rows.filter((r) => r.kind === "os").map((r) => r.os_build_id))];
+    if (oIds.length) (await inChunks(oIds, (part) => run(sb.from("os_builds").select("id,name").in("id", part)))).forEach((o) => builds.set(o.id, o));
+    works = rows.filter((r) => C.canRead(access, r, { kit: kits.get(r.kit_slug), booking: bookings.get(r.booking_id), os: builds.get(r.os_build_id) }));
+  }
   const seen = new Set();
-  const rooms = [...derived, ...listed, ...stops].filter((r) => (seen.has(r.id) ? false : seen.add(r.id)));
+  // With direct messages off, a DM from before stays out of the list too.
+  const rooms = [...derived, ...listed.filter((r) => r.kind !== "dm" || C.dmsOn()), ...stops, ...works].filter((r) => (seen.has(r.id) ? false : seen.add(r.id)));
   if (!rooms.length) return [];
   const ids = rooms.map((r) => r.id);
 
@@ -379,6 +454,8 @@ async function myRooms(sb, access, me) {
     .map((r) => {
       const s = statOf.get(r.id) || {};
       const ev = r.kind === "stop" ? events.get(r.event_id) : null;
+      const booking = r.kind === "booking" ? bookings.get(r.booking_id) : null;
+      const work = { ev, kit: r.kind === "kit" ? kits.get(r.kit_slug) : null, booking, os: r.kind === "os" ? builds.get(r.os_build_id) : null };
       const inRoom = pairs.filter((m) => m.room_id === r.id);
       let other = null;
       if (r.kind === "dm") {
@@ -389,7 +466,7 @@ async function myRooms(sb, access, me) {
       return {
         id: r.id,
         kind: r.kind,
-        title: C.titleOf(r, { ev, other }),
+        title: C.titleOf(r, titleCtx(work, { other })),
         region: r.region || (ev ? ev.region : null),
         event: ev ? { id: ev.id, starts_on: ev.starts_on, ends_on: ev.ends_on, city: ev.city, state: ev.state, status: ev.status } : null,
         people: r.kind === "topic" ? inRoom.filter((m) => m.person_id === me.id || teamMap.has((personOf.get(m.person_id) || {}).email)).length : null,
@@ -417,6 +494,7 @@ router.get("/", team, async (req, res) => {
       rooms,
       unread_total: rooms.reduce((n, r) => n + (r.muted ? 0 : r.unread), 0),
       can_make_rooms: C.canMakeRooms(req.team),
+      dms: C.dmsOn(),
     });
   } catch (e) {
     fail(res, e, "chat_rooms");
@@ -453,6 +531,7 @@ router.get("/people", team, joined, async (req, res) => {
 
 router.post("/dm", team, joined, async (req, res) => {
   const { sb, me } = req.chat;
+  if (!C.dmsOn()) return res.status(404).json({ error: "dms_off" });
   const otherId = String((req.body && req.body.person) || "").toLowerCase();
   if (!UUID.test(otherId) || otherId === me.id) return res.status(400).json({ error: "person_required" });
   try {
@@ -492,6 +571,40 @@ router.get("/stop/:eventId", team, joined, async (req, res) => {
   }
 });
 
+// A kit's, a booking's or an operating system build's room: checked like the
+// work itself, made the first time someone opens it. Before migration 031
+// the database refuses these rooms and the answer is chat_not_set_up.
+async function openWorkRoom(req, res, kind, find) {
+  const { sb, me } = req.chat;
+  try {
+    const work = await find(sb);
+    const ctx = { kit: kind === "kit" ? work : null, booking: kind === "booking" ? work : null, os: kind === "os" ? work : null };
+    if (!work || !C.canRead(req.team, { kind }, ctx)) return res.status(404).json({ error: "not_found" });
+    const key = kind === "kit" ? work.slug : work.id;
+    const slug = C.slugFor(kind, key);
+    let room = await run(sb.from("chat_rooms").select("id").eq("slug", slug).maybeSingle());
+    if (!room) {
+      const row = { slug, kind, created_by: me.id, ...(kind === "kit" ? { kit_slug: key } : kind === "booking" ? { booking_id: key } : { os_build_id: key }) };
+      try {
+        await insertOnce(sb.from("chat_rooms").insert(row));
+      } catch (e) {
+        if (e && (e.code === "23514" || e.code === "42703" || e.code === "PGRST204")) return res.status(503).json({ error: "chat_not_set_up", hint: "Apply migration 031 in Supabase." });
+        throw e;
+      }
+      room = await run(sb.from("chat_rooms").select("id").eq("slug", slug).single());
+    }
+    res.json({ room: { id: room.id } });
+  } catch (e) {
+    fail(res, e, "chat_" + kind);
+  }
+}
+router.get("/kit/:slug", team, joined, (req, res) =>
+  openWorkRoom(req, res, "kit", (sb) => (C.KIT_SLUG.test(String(req.params.slug)) && T.can(req.team, "studio", "viewer") ? kitBySlug(sb, String(req.params.slug)) : null)));
+router.get("/booking/:id", team, joined, (req, res) =>
+  openWorkRoom(req, res, "booking", (sb) => (req.team.owner ? bookingById(sb, String(req.params.id).toLowerCase()) : null)));
+router.get("/os/:id", team, joined, (req, res) =>
+  openWorkRoom(req, res, "os", (sb) => (T.can(req.team, "os", "viewer") ? osById(sb, String(req.params.id).toLowerCase()) : null)));
+
 // People for a topic room: on the team and joined chat.
 async function teamPeopleByIds(sb, ids, teamMap) {
   const list = [...new Set((Array.isArray(ids) ? ids : []).map(String))];
@@ -526,9 +639,9 @@ router.get("/rooms/:id", team, joined, async (req, res) => {
   try {
     const r = await loadRoom(sb, req, res, me);
     if (!r) return;
-    const { room, ev } = r;
+    const { room, ev, work } = r;
     const teamMap = await teamAccess(sb);
-    const people = await audienceOf(sb, room, ev, teamMap);
+    const people = await audienceOf(sb, room, work, teamMap);
     const read = await run(sb.from("chat_reads").select("muted").eq("person_id", me.id).eq("room_id", room.id).maybeSingle());
     const other = room.kind === "dm" ? await dmOther(sb, room, me) : null;
     const otherHere = !!other && teamMap.has(other.email);
@@ -536,7 +649,8 @@ router.get("/rooms/:id", team, joined, async (req, res) => {
       room: {
         id: room.id,
         kind: room.kind,
-        title: C.titleOf(room, { ev, other: other ? { name: other.display_name } : null }),
+        title: C.titleOf(room, titleCtx(work, { other: other ? { name: other.display_name } : null })),
+        link: workLink(room, work),
         region: room.region || (ev ? ev.region : null),
         event: ev ? { id: ev.id, name: ev.name, starts_on: ev.starts_on, ends_on: ev.ends_on, city: ev.city, state: ev.state, status: ev.status } : null,
         audience: C.audienceText(room, { ev }),
@@ -655,7 +769,7 @@ router.get("/rooms/:id/messages", team, joined, async (req, res) => {
 // Notifications carry the room and the sender's name, never the text.
 async function notifyRoom(sb, r, me, body) {
   const teamMap = await teamAccess(sb);
-  const people = (await audienceOf(sb, r.room, r.ev, teamMap)).filter((p) => p.id !== me.id);
+  const people = (await audienceOf(sb, r.room, r.work, teamMap)).filter((p) => p.id !== me.id);
   if (!people.length) return;
   const reads = (await run(sb.from("chat_reads").select("person_id,muted,seen_at").eq("room_id", r.room.id))) || [];
   const readOf = new Map(reads.map((x) => [x.person_id, x]));
@@ -673,7 +787,7 @@ async function notifyRoom(sb, r, me, body) {
     if (to.length) P.notifySoon(to.map((p) => p.email), { title: me.display_name, body: "Sent you a message", url, tag, renotify: true });
     return;
   }
-  const title = C.titleOf(r.room, { ev: r.ev });
+  const title = C.pushTitleOf(r.room, titleCtx(r.work));
   const tagged = people.filter((p) => mentioned.has(p.id) && !looking(p));
   const rest = people.filter((p) => !mentioned.has(p.id) && !muted(p) && !looking(p));
   if (tagged.length) P.notifySoon(tagged.map((p) => p.email), { title, body: me.display_name + " mentioned you", url, tag, renotify: true });

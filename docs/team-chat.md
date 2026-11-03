@@ -27,11 +27,15 @@ Code:
 
 | Room | Who can read it | Made |
 | --- | --- | --- |
+| **Team** | Everyone on the team | The first time anyone opens chat (migration 031) |
 | **All of Pylon** | Everyone with Pylon events | The first time someone with Pylon events opens chat |
 | **A region** (West, South Central, Northeast, Southeast, Midwest) | Everyone with Pylon events in that region. Owners and approvers read every region. | The same way |
 | **A stop** | Everyone who can see that Pylon event: owners, approvers and the region's directors and viewers | The first time someone opens **Stop chat** on the event plan. It appears in the Chat list once someone writes in it. |
 | **A room someone made** | Only the people listed | Owners and approvers make them and add or remove people. Anyone added can leave. |
-| **A direct message** | The two people in it, and nobody else (the owner included) | Anyone on the team, with anyone else on the team who has joined chat |
+| **A Studio kit** | Everyone with Studio. One room per kit, across its versions. | The first time someone opens **Conversation** on the kit (031) |
+| **A booking** | Owners only, like the booking itself | The first time an owner opens **Conversation** on the booking (031) |
+| **An operating system build** | Everyone with Operating Systems | The first time someone opens **Conversation** on the build (031) |
+| **A direct message** | The two people in it, and nobody else (the owner included) | **Off** unless the server has `CHAT_DMS=on` (Kyron chose rooms and work conversations without DMs, Nov 3). With it off, nobody can start one and any from before stay hidden. |
 
 - **Roles and regions decide rooms on every request.** Change someone's regions, and their region and stop rooms change with them.
 - **Taking someone off the team** takes them out of every room they were added to. If they're invited back, they aren't handed what was said while they were gone. Chat can't hold up a removal: if that step fails, they leave those rooms when they join again.
@@ -71,7 +75,7 @@ Code:
   - the sender;
   - anyone who had the room open in the last 20 seconds;
   - anyone who muted it. Muted people still hear about an @mention of their name.
-- **What a notification says.** It carries the room's name and the sender's chat name, such as "Wes sent a message" or "Wes mentioned you". It never carries the message, so what people write in chat doesn't pass through Apple's or Google's push services. Room names never name an athlete, since they show in notifications.
+- **What a notification says.** It carries the room's name and the sender's chat name, such as "Wes sent a message" or "Wes mentioned you". A booking's room is "A booking" and a build's is "An operating system build", never the family's event or the client's name. It never carries the message, so what people write in chat doesn't pass through Apple's or Google's push services. Room names never name an athlete, since they show in notifications.
 - **Mentions.** Type @ and the start of a name to mention someone in the room.
 
 ## Setting it up
@@ -79,7 +83,8 @@ Code:
 1. **Apply migration 026 in Supabase, with Kyron's OK, after 024.** A stop's room points at its event. It only adds: five `chat_*` tables, with the functions and triggers that check them.
    - Everything is service-role only: RLS is on with one service-role policy per table, and the API roles can't call the two functions the server uses.
    - Until it runs, the Chat tab says chat isn't set up yet. The Team screen still opens from it and from your initials on Today, and deleting an account still works.
-2. **Merge, then let Vercel and Render deploy main.** Nothing to set on the server.
+2. **Apply migration 031 in Supabase, with Kyron's OK, after 026 and 030.** It adds the Team, kit, booking and build rooms to `chat_rooms` (three columns and their checks) and the `team_tools` table for the tool shelf. Until it runs, chat works without them: there's no Team room, a work conversation says chat isn't set up yet, and the tool shelf is empty.
+3. **Merge, then let Vercel and Render deploy main.** Nothing to set on the server. `CHAT_DMS=on` on Render turns direct messages on, if that's ever wanted.
 
 ## API
 
@@ -92,8 +97,11 @@ All routes need a signed-in team member. Every route but `/me` needs them to hav
 | `GET /api/chat` | Your rooms and DMs, with unread counts and the latest message |
 | `GET /api/chat/unread` | The unread total, for the tab |
 | `GET /api/chat/people` | People you can message |
-| `POST /api/chat/dm` | Open a DM: `{ person }` |
+| `POST /api/chat/dm` | Open a DM: `{ person }` (only with `CHAT_DMS=on`) |
 | `GET /api/chat/stop/:eventId` | A Pylon stop's room |
+| `GET /api/chat/kit/:slug` | A Studio kit's room |
+| `GET /api/chat/booking/:id` | A booking's room (owners) |
+| `GET /api/chat/os/:id` | An operating system build's room |
 | `POST /api/chat/rooms` | Make a room (owner, approvers): `{ title, people }` |
 | `GET /api/chat/rooms/:id` | A room: who can read it, its rule, what you can do |
 | `PATCH /api/chat/rooms/:id` | Rename it, or add or remove people (owner, approvers) |
@@ -102,6 +110,16 @@ All routes need a signed-in team member. Every route but `/me` needs them to hav
 | `POST /api/chat/rooms/:id/messages` | Send: `{ body }` |
 | `PATCH /api/chat/messages/:id` | Edit your message |
 | `DELETE /api/chat/messages/:id` | Remove your message (the owner can remove any) |
+
+## The tool shelf
+
+Under Tools. The owner adds a name, an `https://` link, a short note and who sees it: everyone on the team, people with one tool, or owners only. Links open in a new tab; nothing on the shelf runs inside the app. Taking a tool off the shelf hides it, and it can go back later. Code: `routes/team-tools.js`, `utils/tools.js`, `public/app/shelf.js`; the table is in migration 031.
+
+| Route | What it does |
+| --- | --- |
+| `GET /api/team-tools` | The tools you can open (the owner also gets the ones off the shelf) |
+| `POST /api/team-tools` | Add one (owner): `{ name, url, about?, audience? }` |
+| `PATCH /api/team-tools/:id` | Change it, or `{ archived: true }` to take it off the shelf (owner) |
 
 ## Open questions
 

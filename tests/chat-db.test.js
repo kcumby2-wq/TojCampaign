@@ -25,6 +25,7 @@ if (!URL_) {
 }
 
 process.env.ADMIN_EMAILS = "kyron@example.com";
+process.env.CHAT_DMS = "on"; // this file covers direct messages; they're off by default (tests/chat-work-db.test.js)
 const { makeSchema, pgSupabase } = require("./helpers/pg-supabase");
 const { setSupabase } = require("../utils/supabase");
 const C = require("../utils/chat");

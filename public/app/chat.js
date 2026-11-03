@@ -7,6 +7,9 @@
  *   #chat-people          start a direct message
  *   #chat-new             make a room (owner, approvers)
  *   #chat-stop/<event id> a Pylon stop's room (from the event plan)
+ *   #chat-kit/<slug>      a Studio kit's room (from the kit)
+ *   #chat-booking/<id>    a booking's room (owners, from the booking)
+ *   #chat-os/<id>         an operating system build's room (from the build)
  *
  * The team only. Text only: no photos or video. Messages can't carry email
  * addresses or phone numbers, and athletes come up by team and jersey number.
@@ -19,7 +22,8 @@
   var app = function () { return document.getElementById("app"); };
 
   var MSG = {
-    chat_not_set_up: "Chat isn't set up on the server yet (migration 026).",
+    chat_not_set_up: "Chat isn't fully set up on the server yet (migrations 026 and 031).",
+    dms_off: "Direct messages are off. Talk in a room, or in the conversation on the work.",
     chat_join_first: "Join chat first.",
     chat_contact_details: "Leave out email addresses and phone numbers. Chat is the contact channel here, and families' details stay in the event's tools.",
     chat_too_fast: "That's a lot of messages at once. Wait a minute.",
@@ -52,6 +56,8 @@
     chat: svg('<path d="M4 5.5h16v10H9l-5 4z"/>', 22),
     room: svg('<path d="M5 9h14M5 15h14M10 4 8 20M16 4l-2 16"/>', 22),
     pin: svg('<path d="M12 21s-6-5.4-6-10a6 6 0 0 1 12 0c0 4.6-6 10-6 10z"/><circle cx="12" cy="11" r="2.2"/>', 22),
+    work: svg('<rect x="4" y="5" width="16" height="14" rx="2"/><path d="M8 9h8M8 13h5"/>', 22),
+    team: svg('<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c.8-3.6 3.4-5.5 6.5-5.5s5.7 1.9 6.5 5.5"/><circle cx="17" cy="9" r="2.8"/><path d="M16 14.6c2.7.2 4.6 1.9 5.3 4.9"/>', 22),
     mute: svg('<path d="M4 9v6h4l5 4V5L8 9z"/><path d="m17 9 4 6M21 9l-4 6"/>', 16),
     more: svg('<circle cx="5" cy="12" r="1.3"/><circle cx="12" cy="12" r="1.3"/><circle cx="19" cy="12" r="1.3"/>', 18),
     people: svg('<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c.8-3.6 3.4-5.5 6.5-5.5s5.7 1.9 6.5 5.5"/><circle cx="17" cy="9" r="2.8"/><path d="M16 14.6c2.7.2 4.6 1.9 5.3 4.9"/>', 22),
@@ -216,12 +222,18 @@
     if (r.kind === "stop") return [dates(r.event), REGION[r.region] || ""].filter(Boolean).join(" · ");
     if (r.kind === "region") return "Everyone with Pylon events in " + (REGION[r.region] || "the region");
     if (r.kind === "all") return "Everyone with Pylon events";
+    if (r.kind === "team") return "Everyone on the team";
+    if (r.kind === "kit") return "Studio kit";
+    if (r.kind === "booking") return "Booking · owners only";
+    if (r.kind === "os") return "Operating system";
     return r.people + (r.people === 1 ? " person" : " people");
   }
   function roomIcon(r) {
     if (r.kind === "dm") return '<span class="avatar" style="width:40px;height:40px;border-width:0;background:#22364F;font-size:13.5px">' + h(initials(r.title)) + "</span>";
-    return '<div class="ico" style="width:40px;height:40px;border-radius:11px">' + (r.kind === "stop" ? ICON.pin : r.kind === "topic" ? ICON.chat : ICON.room) + "</div>";
+    var ico = r.kind === "stop" ? ICON.pin : r.kind === "topic" ? ICON.chat : r.kind === "team" ? ICON.team : WORK[r.kind] ? ICON.work : ICON.room;
+    return '<div class="ico" style="width:40px;height:40px;border-radius:11px">' + ico + "</div>";
   }
+  var WORK = { kit: "Studio kit", booking: "Booking", os: "Operating system" };
   function roomRow(r) {
     var last = r.last ? (r.last.removed ? r.last.by + ": message removed" : r.last.by + ": " + r.last.text) : roomSub(r);
     return '<a class="li" href="#chat/' + h(r.id) + '">' + roomIcon(r) +
@@ -255,18 +267,22 @@
     homeSig = sig;
     if (quiet) app().setAttribute("aria-live", "off");
     var dms = d.rooms.filter(function (r) { return r.kind === "dm"; });
-    var rooms = d.rooms.filter(function (r) { return r.kind === "all" || r.kind === "region" || r.kind === "topic"; });
+    // The Team room leads; the rest by latest message.
+    var rooms = d.rooms.filter(function (r) { return r.kind === "team" || r.kind === "all" || r.kind === "region" || r.kind === "topic"; })
+      .sort(function (a, b) { return (b.kind === "team") - (a.kind === "team"); });
     var stops = d.rooms.filter(function (r) { return r.kind === "stop"; });
+    var work = d.rooms.filter(function (r) { return !!WORK[r.kind]; });
     function sec(title, list, empty) {
       return '<section class="sec"><h2 class="sec-h">' + h(title) + "</h2>" + (list.length ? '<div class="list">' + list.map(roomRow).join("") + "</div>" : '<p class="empty">' + h(empty) + "</p>") + "</section>";
     }
     t.show("chat",
       '<div class="screen">' +
-      head("Chat", '<a class="btn small" href="#chat-people">' + t.I.plus.replace("<svg", '<svg width="16" height="16"') + "Message</a>", "You're " + d.me.name + ".") +
+      head("Chat", d.dms ? '<a class="btn small" href="#chat-people">' + t.I.plus.replace("<svg", '<svg width="16" height="16"') + "Message</a>" : "", "You're " + d.me.name + ".") +
       (d.can_make_rooms ? '<a class="li list" href="#chat-new" style="border-radius:16px"><div class="ico" style="width:36px;height:36px;border-radius:9px">' + ICON.chat + '</div><div class="grow"><div class="name" style="font-size:15px">Make a room</div><div class="sub">For a crew, a project or a partner, with the people you pick</div></div>' + t.I.chev + "</a>" : "") +
-      sec("Direct messages", dms, "No direct messages yet. Tap Message to start one.") +
-      sec("Rooms", rooms, t.hasTool("gfs") ? "No rooms yet." : "No rooms yet. Owners and approvers make them, and add you.") +
+      (d.dms ? sec("Direct messages", dms, "No direct messages yet. Tap Message to start one.") : "") +
+      sec("Rooms", rooms, "No rooms yet. Owners and approvers make them, and add you.") +
       (t.hasTool("gfs") ? sec("Stops", stops, "A stop's room shows up here once someone writes in it. Open one from the event plan.") : "") +
+      (t.hasTool("studio") || t.hasTool("os") || t.isOwner() ? sec("Work", work, "A kit's, a booking's or a build's conversation shows up here once someone writes in it. Open one from the kit, the booking or the build.") : "") +
       teamRow() + "</div>");
     scheduleHome();
   }
@@ -295,12 +311,13 @@
     if (firstNew && msgs.length && msgs[0].id === firstNew) firstNew = null;
     var names = info.people.map(function (p) { return p.name; });
     var sub = info.kind === "stop" && info.event ? dates(info.event) + " · " + (REGION[info.region] || "") : info.audience;
+    var workLink = info.link ? '<a class="btn small soft" href="' + h(info.link) + '">' + h(info.kind === "stop" ? "Event plan" : "Open the " + (WORK[info.kind] || "work").toLowerCase()) + "</a>" : "";
     var canPost = info.can.post;
 
     t.show(null,
       '<div class="screen chat-room">' +
       '<div class="head" style="align-items:center">' + t.backBtn("#chat", "Chat") + '<a class="btn small soft" href="#chat-room/' + h(info.id) + '">' + (info.muted ? ICON.mute : "") + "Details</a></div>" +
-      '<div><h1 class="title sm" style="overflow-wrap:anywhere">' + h(info.title) + '</h1><p class="lede">' + h(sub) + "</p></div>" +
+      '<div><h1 class="title sm" style="overflow-wrap:anywhere">' + h(info.title) + '</h1><p class="lede">' + h(sub) + "</p>" + (workLink ? '<div style="margin-top:10px">' + workLink + "</div>" : "") + "</div>" +
       '<p class="chat-rule">' + h(info.rule) + "</p>" +
       '<button type="button" class="btn small ghost" id="older"' + (more ? "" : " hidden") + ">Earlier messages</button>" +
       '<div id="msgs" class="msgs" aria-label="Messages"></div>' +
@@ -650,12 +667,40 @@
     }
   }
 
-  window.TOJChat = { refreshUnread: refreshUnread, merge: merge };
+  // ── A kit's, a booking's or a build's room, from the work itself ───────
+  function workOpener(kind, back) {
+    return async function (key) {
+      var t = T();
+      current = null;
+      var to = back(key);
+      loading(null, t.backBtn(to[0], to[1]));
+      try {
+        var r = await t.api("/api/chat/" + kind + "/" + encodeURIComponent(key));
+        location.replace("#chat/" + r.room.id);
+      } catch (e) {
+        if (e.stale) throw e;
+        if (failed(e, "#chat-" + kind + "/" + key)) return;
+        t.show(null, '<div class="screen">' + t.backBtn(to[0], to[1]) + '<p class="body err">' + h(say(e)) + "</p></div>");
+      }
+    };
+  }
+  var kitRoom = workOpener("kit", function () { return ["#studio", "Studio"]; });
+  var bookingRoom = workOpener("booking", function (id) { return ["#booking/" + id, "Booking"]; });
+  var osRoom = workOpener("os", function (id) { return ["#osb/" + id, "Operating system"]; });
+  // A link to a piece of work's conversation, for its screen (gfs.js has the stop's).
+  function workRow(kind, key, sub) {
+    return '<a class="li list" href="#chat-' + kind + "/" + h(key) + '" style="border-radius:16px"><div class="ico" style="width:36px;height:36px;border-radius:9px">' + ICON.chat + '</div><div class="grow"><div class="name" style="font-size:15px">Conversation</div><div class="sub">' + h(sub) + "</div></div>" + T().I.chev + "</a>";
+  }
+
+  window.TOJChat = { refreshUnread: refreshUnread, merge: merge, workRow: workRow };
   window.TOJScreens = Object.assign(window.TOJScreens || {}, {
     chat: chat,
     "chat-room": details,
     "chat-people": peopleScreen,
     "chat-new": newRoom,
     "chat-stop": stopRoom,
+    "chat-kit": kitRoom,
+    "chat-booking": bookingRoom,
+    "chat-os": osRoom,
   });
 })();
