@@ -48,6 +48,10 @@ const member = T.requireTeam("creators", "member");
 const owner = T.requireTeam("creators", "owner");
 
 const BASE = () => String(process.env.CREATOR_PAGE_BASE || "https://tojcampaign.com").replace(/\/+$/, "");
+// The TOJ app itself, for links back into it (Stripe onboarding returns). Kept
+// apart from BASE so the public pages can move to subjectmedias.com/c/<slug>
+// (CREATOR_PAGE_BASE) while the app stays on tojcampaign.com.
+const APP_BASE = () => String(process.env.APP_BASE || "https://tojcampaign.com").replace(/\/+$/, "");
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const PUBLIC_FIELDS = ["brand_name", "handle", "location", "tagline", "hero_lines", "theme", "packages", "team_tier", "footer_note"];
 const MEMBER_FIELDS = [...PUBLIC_FIELDS, "creator_email", "under_18", "guardian_email", "camera", "slug"];
@@ -573,8 +577,8 @@ router.post("/:id/stripe/connect", owner, async (req, res) => {
     const link = await s.stripe.accountLinks.create({
       account: acct,
       type: "account_onboarding",
-      refresh_url: `${BASE()}/app/#creator/${c.id}`,
-      return_url: `${BASE()}/app/#creator/${c.id}`,
+      refresh_url: `${APP_BASE()}/app/#creator/${c.id}`,
+      return_url: `${APP_BASE()}/app/#creator/${c.id}`,
     });
     await T.logActivity(req.team.email, "started_stripe", c.slug, { mode: s.mode });
     res.json({ url: link.url, mode: s.mode, holder: c.under_18 ? "parent_or_guardian" : "creator", holder_email: holderEmail });

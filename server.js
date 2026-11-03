@@ -186,6 +186,8 @@ app.use("/api/studio-agents", require("./routes/studio-agents"));
 // and the creators' public pages at /c/<slug>.
 app.use("/api/creators", require("./routes/creators"));
 app.use("/c", require("./routes/creators").pageRouter);
+// Subject Medias bookings from subjectmedias.com (the form is public; the list is staff only).
+app.use("/api/sm/bookings", require("./routes/sm-bookings"));
 app.use("/api/os", require("./routes/os"));
 // Ground Floor Sports · Pylon events: events, crews, roster consent flags,
 // the upload log, deliverables, SportsClippers listings, takedowns (024),

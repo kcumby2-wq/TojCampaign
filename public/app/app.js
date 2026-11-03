@@ -296,6 +296,7 @@
     }).join("");
 
     var tiles =
+      (isOwner() ? '<a class="tile" href="#bookings">' + I.cal + "Bookings</a>" : "") +
       (hasTool("gfs") ? '<a class="tile" href="#events">' + I.cal + "Events</a>" + '<a class="tile" href="#gfs-desk">' + I.desk + "Distribution desk</a>" : "") +
       (atLeast("member") && studioTool ? '<a class="tile" href="#new">' + I.plus + "New idea</a>" : "") +
       (atLeast("member") && approved ? '<a class="tile" href="#new/gear">' + I.refresh + "Re-check gear</a>" : "") +
