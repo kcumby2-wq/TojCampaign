@@ -34,7 +34,7 @@ Code:
 | **A room someone made** | Only the people listed | Owners and approvers make them and add or remove people. Anyone added can leave. |
 | **A Studio kit** | Everyone with Studio. One room per kit, across its versions, built-in kits included. | The first time someone opens **Conversation** on the kit (031) |
 | **A booking** | Owners only, like the booking itself | The first time an owner opens **Conversation** on the booking (031) |
-| **An operating system build** | Everyone with Operating Systems. An Authority build is owners only, as in the Operating Systems tool, because it can hold minors' details. | The first time someone opens **Conversation** on the build (031) |
+| **An operating system build** | Everyone with Operating Systems. An Authority build is owners only, as in the Operating Systems tool, because it can hold minors' details; its room says so. Chat never loads a build's intake, only its saved name. | The first time someone opens **Conversation** on the build (031) |
 | **A direct message** | The two people in it, and nobody else (the owner included) | **Off** unless the server has `CHAT_DMS=on` (Kyron chose rooms and work conversations without DMs, Nov 3). With it off, nobody can start one and any from before stay hidden. |
 
 - **Roles and regions decide rooms on every request.** Change someone's regions, and their region and stop rooms change with them.
@@ -113,7 +113,7 @@ All routes need a signed-in team member. Every route but `/me` needs them to hav
 
 ## The tool shelf
 
-Under Tools. The owner adds a name, an `https://` link, a short note and who sees it: everyone on the team, people with one tool, or owners only. Links open in a new tab; nothing on the shelf runs inside the app. Taking a tool off the shelf hides it, and it can go back later. The activity feed names a new tool only when the whole team can see it, and shows the entry only to the people the tool is for. Code: `routes/team-tools.js`, `utils/tools.js`, `public/app/shelf.js`; the table is in migration 031.
+Under Tools. The owner adds a name, an `https://` link, a short note and who sees it: everyone on the team, people with one tool, or owners only. Links open in a new tab; nothing on the shelf runs inside the app. Taking a tool off the shelf hides it, and it can go back later. The activity feed says a tool was added without naming it (who sees a tool can change later), and only to the people it was for. Code: `routes/team-tools.js`, `utils/tools.js`, `public/app/shelf.js`; the table is in migration 031.
 
 | Route | What it does |
 | --- | --- |

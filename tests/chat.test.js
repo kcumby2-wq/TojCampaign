@@ -313,6 +313,10 @@ test("the newer rooms: who reads them, and what a push may call them", () => {
   assert.equal(R.canRead(os, { kind: "os" }, { os: { vertical: "authority" } }), false, "Authority builds: owners only");
   assert.equal(R.canRead(owner, { kind: "os" }, { os: { vertical: "authority" } }), true);
   assert.equal(R.canRead(studio, { kind: "os" }, { os: { vertical: "nonprofit" } }), false, "no Operating Systems");
+  assert.equal(R.canRead(os, { kind: "os" }, { os: { id: "x", name: "No vertical loaded" } }), false, "an unknown vertical is refused");
+  assert.equal(R.audienceText({ kind: "os" }, { os: { vertical: "authority" } }), "Owners");
+  assert.match(R.ruleFor({ kind: "os" }, { os: { vertical: "authority" } }), /^Only owners can read this room\./);
+  assert.match(R.ruleFor({ kind: "os" }, { os: { vertical: "nonprofit" } }), /^Everyone with Operating Systems can read this room/);
   assert.equal(R.pushTitleOf({ kind: "booking" }, { booking: {}, bookingTitle: "Video coverage · Los Angeles, CA" }), "A booking");
   assert.equal(R.pushTitleOf({ kind: "os" }, { os: { name: "Jordan Example" } }), "An operating system build");
   assert.equal(R.pushTitleOf({ kind: "kit" }, { kit: { title: "Same Work Milanote Kit" } }), "Same Work Milanote Kit");

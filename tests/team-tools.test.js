@@ -119,15 +119,21 @@ test("the owner adds tools by link; each person sees the ones meant for them", a
   assert.deepEqual([back.data.tool.name, back.data.tool.archived], ["Crew sheet 2027", false]);
 });
 
-test("the activity feed names a tool only for the people it's for", async () => {
+test("the activity feed never names a tool, and shows the entry only to the people it was for", async () => {
   await call("POST", "/api/team-tools", { name: "Bookings Secret Maker", url: "https://claude.ai/artifact/x", audience: "owners" }, await as(OWNER));
   await call("POST", "/api/team-tools", { name: "Shoot board", url: "https://app.milanote.com/b", audience: "studio" }, await as(OWNER));
   await call("POST", "/api/team-tools", { name: "Crew sheet", url: "https://docs.google.com/s", audience: "team" }, await as(OWNER));
   const feed = async (who) => (await call("GET", "/api/team/activity", undefined, await as(who))).data.activity.filter((a) => a.action === "tool_added").map((a) => a.subject);
-  assert.deepEqual(await feed(DEV), ["Crew sheet"], "no Studio: only the team-wide tool");
-  assert.deepEqual((await feed(VAL)).sort((a, b) => String(a).localeCompare(String(b))), ["Crew sheet", null], "a Studio tool shows unnamed");
-  assert.equal((await feed(OWNER)).length, 3);
-  assert.ok(!JSON.stringify((await call("GET", "/api/team/activity", undefined, await as(VAL))).data).includes("Bookings Secret Maker"));
+  assert.deepEqual(await feed(DEV), [null], "no Studio: only the team-wide tool's entry");
+  assert.deepEqual(await feed(VAL), [null, null], "with Studio: the Studio tool's entry too");
+  assert.deepEqual(await feed(OWNER), [null, null, null]);
+  // Narrowing who sees a tool later can't leave its name behind in the feed.
+  const id = (await call("GET", "/api/team-tools", undefined, await as(OWNER))).data.tools.find((t) => t.name === "Crew sheet").id;
+  await call("PATCH", "/api/team-tools/" + id, { audience: "owners" }, await as(OWNER));
+  for (const who of [DEV, VAL]) {
+    const raw = JSON.stringify((await call("GET", "/api/team/activity", undefined, await as(who))).data);
+    for (const name of ["Bookings Secret Maker", "Shoot board", "Crew sheet"]) assert.ok(!raw.includes(name), who + " sees " + name);
+  }
 });
 
 test("before migration 031 the shelf is just empty", async () => {

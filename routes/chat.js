@@ -177,8 +177,9 @@ const BOOKING_COLS = "id,kind,package,sport,event_city,event_state,event_date";
 async function bookingById(sb, id) {
   return UUID.test(String(id || "")) ? run(sb.from("sm_bookings").select(BOOKING_COLS).eq("id", id).maybeSingle()) : null;
 }
-// The vertical decides who can see a build; the intake names it.
-const OS_COLS = "id,name,vertical,intake";
+// The vertical decides who can see a build. Never the intake: it can hold
+// details about people (an Authority intake names athletes).
+const OS_COLS = "id,name,vertical";
 async function osById(sb, id) {
   return UUID.test(String(id || "")) ? run(sb.from("os_builds").select(OS_COLS).eq("id", id).maybeSingle()) : null;
 }
@@ -195,8 +196,8 @@ function readCtx(work, extra) {
   return { event: work.ev, kit: work.kit, booking: work.booking, os: work.os, ...(extra || {}) };
 }
 function titleCtx(work, extra) {
-  // A build shows under the name the Operating Systems screens use.
-  const os = work.os ? { ...work.os, name: O.displayName(work.os.intake, work.os.name) } : null;
+  // A build shows under the name it was saved with.
+  const os = work.os ? { ...work.os, name: O.displayName(null, work.os.name) } : null;
   return { ev: work.ev, kit: work.kit, booking: work.booking, os, bookingTitle: work.booking ? B.summary(work.booking) : null, ...(extra || {}) };
 }
 // Where the work itself opens in the app.
@@ -387,6 +388,10 @@ router.post("/me", team, async (req, res) => {
 // All of Pylon and the person's region rooms, made the first time anyone
 // needs them.
 let noTeamRoomUntil = 0;
+// For tests that move from a database before 031 to one after it.
+router._resetTeamRoomWait = () => {
+  noTeamRoomUntil = 0;
+};
 // The Team room for everyone; All of Pylon and the person's region rooms for
 // people with Pylon events. Made the first time anyone needs them.
 async function derivedRooms(sb, access) {
@@ -677,8 +682,8 @@ router.get("/rooms/:id", team, joined, async (req, res) => {
         link: workLink(room, work),
         region: room.region || (ev ? ev.region : null),
         event: ev ? { id: ev.id, name: ev.name, starts_on: ev.starts_on, ends_on: ev.ends_on, city: ev.city, state: ev.state, status: ev.status } : null,
-        audience: C.audienceText(room, { ev }),
-        rule: C.ruleFor(room, { ev }),
+        audience: C.audienceText(room, { ev, os: work.os }),
+        rule: C.ruleFor(room, { ev, os: work.os }),
         people: people.map((p) => ({ id: p.id, name: p.name, role: C.roleLabel(p.access), you: p.id === me.id })).sort(byName),
         other_gone: room.kind === "dm" && !otherHere,
         muted: !!(read && read.muted),

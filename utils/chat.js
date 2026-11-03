@@ -131,7 +131,8 @@ function canRead(access, room, ctx = {}) {
     case "os":
       // Authority builds can hold minors' details: owners only, like the
       // Operating Systems tool itself (routes/os.js canSee).
-      return T.can(access, "os", "viewer") && !!ctx.os && (ctx.os.vertical !== "authority" || !!access.owner);
+      // Unknown vertical: refused, so a caller that forgot to load it can't open one.
+      return T.can(access, "os", "viewer") && !!ctx.os && !!ctx.os.vertical && (ctx.os.vertical !== "authority" || !!access.owner);
     default:
       return false;
   }
@@ -179,7 +180,7 @@ function pushTitleOf(room, ctx = {}) {
   if (room.kind === "os") return "An operating system build";
   return titleOf(room, ctx);
 }
-function audienceText(room, { ev } = {}) {
+function audienceText(room, { ev, os } = {}) {
   if (room.kind === "all") return "Everyone with Pylon events";
   if (room.kind === "region") return "Everyone with Pylon events in " + regionName(room.region);
   if (room.kind === "stop") return "Everyone who can see this stop: owners, approvers and " + (ev ? regionName(ev.region) : "its region") + "'s team";
@@ -187,16 +188,16 @@ function audienceText(room, { ev } = {}) {
   if (room.kind === "team") return "Everyone on the team";
   if (room.kind === "kit") return "Everyone with Studio";
   if (room.kind === "booking") return "Owners";
-  if (room.kind === "os") return "Everyone with Operating Systems";
+  if (room.kind === "os") return os && os.vertical === "authority" ? "Owners" : "Everyone with Operating Systems";
   return "Only the people listed can read it";
 }
 // Shown at the top of every room.
-function ruleFor(room, { ev } = {}) {
+function ruleFor(room, { ev, os } = {}) {
   const who =
     room.kind === "dm" ? "Only the two of you can read this." :
     room.kind === "topic" ? "Only the people listed can read this room." :
-    room.kind === "booking" ? "Only owners can read this room." :
-    audienceText(room, { ev }) + " can read this room, viewers included.";
+    room.kind === "booking" || (room.kind === "os" && os && os.vertical === "authority") ? "Only owners can read this room." :
+    audienceText(room, { ev, os }) + " can read this room, viewers included.";
   const where = room.kind === "booking" ? "the booking" : room.kind === "kit" || room.kind === "os" || room.kind === "team" || room.kind === "topic" || room.kind === "dm" ? "the app's tools" : "the event's tools";
   return who + " Talk about athletes by team and jersey number only: no names, contact details, film links, permission flags or takedown reasons. Those stay in " + where + ".";
 }

@@ -193,13 +193,19 @@ test("routes on Postgres: the Team room for everyone; kit, booking and build roo
   assert.ok(!JSON.stringify(pushes).includes("Sample Client"), "the build's name stays out of pushes");
   assert.ok(!JSON.stringify(pushes).includes("Intake is in"), "the message stays out of pushes");
 
-  assert.equal((await ola(`/api/chat/rooms/${o.json.room.id}`)).json.room.title, "Sample Nonprofit", "the name the OS screens use");
+  const oInfo = (await ola(`/api/chat/rooms/${o.json.room.id}`)).json.room;
+  assert.equal(oInfo.title, "Sample Client", "the name the build was saved with");
+  assert.equal(oInfo.audience, "Everyone with Operating Systems");
 
   // An Authority build: owners only. Not for Ola or Ana, not in their lists, no push to them.
   assert.equal((await ola(`/api/chat/os/${authority.id}`)).status, 404);
   assert.equal((await ana(`/api/chat/os/${authority.id}`)).status, 404);
   const auth = await kyron(`/api/chat/os/${authority.id}`);
   assert.equal(auth.status, 200);
+  const authInfo = (await kyron(`/api/chat/rooms/${auth.json.room.id}`)).json.room;
+  assert.equal(authInfo.audience, "Owners");
+  assert.match(authInfo.rule, /^Only owners can read this room\./);
+  assert.deepEqual(authInfo.people.map((p) => p.name).sort(), ["Kyron", "Owen"]);
   assert.equal((await ola(`/api/chat/rooms/${auth.json.room.id}`)).status, 404);
   assert.equal((await ola(`/api/chat/rooms/${auth.json.room.id}/messages`, { method: "POST", body: { body: "hi" } })).status, 404);
   pushes = [];
@@ -231,6 +237,11 @@ test("routes on Postgres: a built-in kit (no row of its own) has its room too", 
   const info = await val(`/api/chat/rooms/${r.json.room.id}`);
   assert.equal(info.json.room.title, "Same Work Milanote Kit");
   assert.equal(info.json.room.link, "#kit/builtin:same-work:v1");
+  // A refresh draft of a built-in kit doesn't take over: Studio still opens the built-in one.
+  await q(`insert into studio_kits (slug, version, status, title, kit) values ('same-work', 2, 'draft', 'Same Work (draft)', '{}'::jsonb)`);
+  const again = await val(`/api/chat/rooms/${r.json.room.id}`);
+  assert.equal(again.json.room.title, "Same Work Milanote Kit");
+  assert.equal(again.json.room.link, "#kit/builtin:same-work:v1");
 });
 
 test("routes on Postgres: the tool shelf", async () => {
