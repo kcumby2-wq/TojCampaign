@@ -259,6 +259,7 @@
       step(4, cur, "Operational Transcript", s4) +
       step(5, cur, "Systemized · Intake, Delivery, Follow-up", s5) +
       step(6, cur, "Trail of Joy · running", s6) +
+      (window.TOJChat && window.TOJChat.workRow && b.id ? window.TOJChat.workRow("os", b.id, b.vertical === "authority" ? "Owners only, about this build" : "Everyone with Operating Systems, about this build") : "") +
       "</div>");
 
     var base = "/api/os/" + encodeURIComponent(b.id);

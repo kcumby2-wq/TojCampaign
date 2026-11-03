@@ -99,6 +99,11 @@ async function main() {
       ["GET", "/api/gfs/desk"],
       ["GET", "/api/gfs/events/00000000-0000-0000-0000-000000000000/qr"],
       ["GET", "/api/gfs/events/00000000-0000-0000-0000-000000000000/qr/stop.png"],
+      ["GET", "/api/chat"],
+      ["GET", "/api/chat/unread"],
+      ["POST", "/api/chat/me"],
+      ["GET", "/api/chat/rooms/00000000-0000-0000-0000-000000000000/messages"],
+      ["POST", "/api/chat/rooms/00000000-0000-0000-0000-000000000000/messages"],
     ]) {
       await expect(
         method + " " + url + " (must be auth-gated)",
