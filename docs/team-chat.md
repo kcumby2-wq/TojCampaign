@@ -32,9 +32,9 @@ Code:
 | **A region** (West, South Central, Northeast, Southeast, Midwest) | Everyone with Pylon events in that region. Owners and approvers read every region. | The same way |
 | **A stop** | Everyone who can see that Pylon event: owners, approvers and the region's directors and viewers | The first time someone opens **Stop chat** on the event plan. It appears in the Chat list once someone writes in it. |
 | **A room someone made** | Only the people listed | Owners and approvers make them and add or remove people. Anyone added can leave. |
-| **A Studio kit** | Everyone with Studio. One room per kit, across its versions. | The first time someone opens **Conversation** on the kit (031) |
+| **A Studio kit** | Everyone with Studio. One room per kit, across its versions, built-in kits included. | The first time someone opens **Conversation** on the kit (031) |
 | **A booking** | Owners only, like the booking itself | The first time an owner opens **Conversation** on the booking (031) |
-| **An operating system build** | Everyone with Operating Systems | The first time someone opens **Conversation** on the build (031) |
+| **An operating system build** | Everyone with Operating Systems. An Authority build is owners only, as in the Operating Systems tool, because it can hold minors' details. | The first time someone opens **Conversation** on the build (031) |
 | **A direct message** | The two people in it, and nobody else (the owner included) | **Off** unless the server has `CHAT_DMS=on` (Kyron chose rooms and work conversations without DMs, Nov 3). With it off, nobody can start one and any from before stay hidden. |
 
 - **Roles and regions decide rooms on every request.** Change someone's regions, and their region and stop rooms change with them.
@@ -83,7 +83,7 @@ Code:
 1. **Apply migration 026 in Supabase, with Kyron's OK, after 024.** A stop's room points at its event. It only adds: five `chat_*` tables, with the functions and triggers that check them.
    - Everything is service-role only: RLS is on with one service-role policy per table, and the API roles can't call the two functions the server uses.
    - Until it runs, the Chat tab says chat isn't set up yet. The Team screen still opens from it and from your initials on Today, and deleting an account still works.
-2. **Apply migration 031 in Supabase, with Kyron's OK, after 026 and 030.** It adds the Team, kit, booking and build rooms to `chat_rooms` (three columns and their checks) and the `team_tools` table for the tool shelf. Until it runs, chat works without them: there's no Team room, a work conversation says chat isn't set up yet, and the tool shelf is empty.
+2. **Apply migration 031 in Supabase, with Kyron's OK, after 026 and 030 (both already in production).** It adds the Team, kit, booking and build rooms to `chat_rooms` (three columns and their checks) and the `team_tools` table for the tool shelf. Until it runs, chat works without them: there's no Team room, a work conversation says chat isn't set up yet, and the tool shelf is empty.
 3. **Merge, then let Vercel and Render deploy main.** Nothing to set on the server. `CHAT_DMS=on` on Render turns direct messages on, if that's ever wanted.
 
 ## API
@@ -113,7 +113,7 @@ All routes need a signed-in team member. Every route but `/me` needs them to hav
 
 ## The tool shelf
 
-Under Tools. The owner adds a name, an `https://` link, a short note and who sees it: everyone on the team, people with one tool, or owners only. Links open in a new tab; nothing on the shelf runs inside the app. Taking a tool off the shelf hides it, and it can go back later. Code: `routes/team-tools.js`, `utils/tools.js`, `public/app/shelf.js`; the table is in migration 031.
+Under Tools. The owner adds a name, an `https://` link, a short note and who sees it: everyone on the team, people with one tool, or owners only. Links open in a new tab; nothing on the shelf runs inside the app. Taking a tool off the shelf hides it, and it can go back later. The activity feed names a new tool only when the whole team can see it, and shows the entry only to the people the tool is for. Code: `routes/team-tools.js`, `utils/tools.js`, `public/app/shelf.js`; the table is in migration 031.
 
 | Route | What it does |
 | --- | --- |

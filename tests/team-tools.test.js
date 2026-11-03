@@ -15,6 +15,7 @@ const T = require("../utils/team");
 const { setSupabase } = require("../utils/supabase");
 const { fakeSupabase } = require("./helpers/fake-supabase");
 const shelf = require("../routes/team-tools");
+const teamRoutes = require("../routes/team");
 
 const OWNER = "kyron@toj.test", ANA = "ana@toj.test", DEV = "devin@toj.test", VAL = "val@toj.test";
 
@@ -66,6 +67,7 @@ before(async () => {
   app.use(session({ secret: "tools-test", resave: false, saveUninitialized: false }));
   app.post("/__test/session", (req, res) => { req.session.userEmail = req.body.email; req.session.userRole = req.body.role; res.json({ ok: true }); });
   app.use("/api/team-tools", shelf);
+  app.use("/api/team", teamRoutes);
   await new Promise((r) => { server = app.listen(0, r); });
   base = `http://127.0.0.1:${server.address().port}`;
 });
@@ -115,6 +117,17 @@ test("the owner adds tools by link; each person sees the ones meant for them", a
   assert.equal((await call("PATCH", "/api/team-tools/not-an-id", { name: "x" }, await as(OWNER))).status, 404);
   const back = await call("PATCH", "/api/team-tools/" + crew.data.tool.id, { archived: false, name: "Crew sheet 2027" }, await as(OWNER));
   assert.deepEqual([back.data.tool.name, back.data.tool.archived], ["Crew sheet 2027", false]);
+});
+
+test("the activity feed names a tool only for the people it's for", async () => {
+  await call("POST", "/api/team-tools", { name: "Bookings Secret Maker", url: "https://claude.ai/artifact/x", audience: "owners" }, await as(OWNER));
+  await call("POST", "/api/team-tools", { name: "Shoot board", url: "https://app.milanote.com/b", audience: "studio" }, await as(OWNER));
+  await call("POST", "/api/team-tools", { name: "Crew sheet", url: "https://docs.google.com/s", audience: "team" }, await as(OWNER));
+  const feed = async (who) => (await call("GET", "/api/team/activity", undefined, await as(who))).data.activity.filter((a) => a.action === "tool_added").map((a) => a.subject);
+  assert.deepEqual(await feed(DEV), ["Crew sheet"], "no Studio: only the team-wide tool");
+  assert.deepEqual((await feed(VAL)).sort((a, b) => String(a).localeCompare(String(b))), ["Crew sheet", null], "a Studio tool shows unnamed");
+  assert.equal((await feed(OWNER)).length, 3);
+  assert.ok(!JSON.stringify((await call("GET", "/api/team/activity", undefined, await as(VAL))).data).includes("Bookings Secret Maker"));
 });
 
 test("before migration 031 the shelf is just empty", async () => {

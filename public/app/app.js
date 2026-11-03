@@ -252,6 +252,7 @@
     gfs_creator_added: "added a creator",
     gfs_creator_changed: "updated a creator",
     chat_removed_message: "removed a message in chat",
+    tool_added: "added a tool to Tools",
   };
   function actorName(a) {
     if (a.actor && state.me && a.actor === state.me.email) return "You";

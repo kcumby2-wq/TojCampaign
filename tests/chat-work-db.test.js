@@ -23,13 +23,13 @@ if (!URL_) {
 }
 
 delete process.env.CHAT_DMS; // the default: direct messages off
-process.env.ADMIN_EMAILS = "kyron@example.com";
+process.env.ADMIN_EMAILS = "kyron@example.com,owen@example.com";
 const { makeSchema, pgSupabase } = require("./helpers/pg-supabase");
 const { setSupabase } = require("../utils/supabase");
 const T = require("../utils/team");
 const P = require("../utils/push");
 
-let pool, server, base, kit, build, booking;
+let pool, server, base, kit, build, authority, booking;
 const q = async (sql, params) => (await pool.query(sql, params)).rows;
 const one = async (sql, params) => (await q(sql, params))[0];
 const apply = async (file) => pool.query(fs.readFileSync(path.join(__dirname, "..", "db", "migrations", file), "utf8").replace(/public\./g, `${S}.`));
@@ -66,7 +66,7 @@ before(async () => {
   await q(`create table ${S}.foundation_scores (id uuid primary key default gen_random_uuid())`);
   for (const f of ["018_studio_kits.sql", "022_operating_systems.sql", "026_team_chat.sql", "030_sm_bookings.sql", "031_chat_work_rooms_and_tools.sql", "031_chat_work_rooms_and_tools.sql"]) await apply(f);
   await q("create table users (email text primary key, hash text, role text)");
-  await q("insert into users (email, hash, role) values ('kyron@example.com', 'x', 'admin')");
+  await q("insert into users (email, hash, role) values ('kyron@example.com', 'x', 'admin'), ('owen@example.com', 'x', 'admin')");
   await q(`insert into team_members (email, name, role, tools, regions) values
     ('val@example.com', 'Val Viewer', 'viewer', array['studio'], '{}'),
     ('ola@example.com', 'Ola Os', 'member', array['os'], '{}'),
@@ -74,7 +74,9 @@ before(async () => {
     ('wes@example.com', 'Wes West', 'member', array['gfs'], array['west'])`);
   kit = await one(`insert into studio_kits (slug, version, status, title, kit) values ('same-work', 1, 'approved', 'Same Work Milanote Kit', '{}'::jsonb) returning *`);
   await one(`insert into studio_kits (slug, version, status, title, kit) values ('same-work', 2, 'draft', 'Same Work Milanote Kit', '{}'::jsonb) returning *`);
-  build = await one(`insert into os_builds (name, vertical) values ('Sample Client', 'authority') returning *`);
+  build = await one(`insert into os_builds (name, vertical, intake) values ('Sample Client', 'nonprofit', '{"business_name":"Sample Nonprofit"}'::jsonb) returning *`);
+  // Authority builds can hold minors' details: owners only, in Operating Systems and in chat.
+  authority = await one(`insert into os_builds (name, vertical) values ('Jordan Example (QB)', 'authority') returning *`);
   booking = await one(`insert into sm_bookings (source, kind, contact_name, contact_email, adult_confirmed, event_state, event_city, event_date, sport) values ('form', 'athlete', 'Sample Parent', 'parent@example.com', true, 'CA', 'Los Angeles', '2026-11-21', 'Girls Flag Football') returning *`);
 
   setSupabase(pgSupabase(pool, S));
@@ -98,10 +100,12 @@ after(async () => {
 test("031: the new rooms keep their shapes, and the old ones still work", async () => {
   assert.equal((await q("insert into chat_rooms (slug, kind) values ('team', 'team') returning id")).length, 1);
   await refused("insert into chat_rooms (slug, kind) values ('team-2', 'team')", [], /chat_rooms_team_chk/);
-  await refused("insert into chat_rooms (slug, kind, title) values ('team', 'team', 'x')", [], /chat_rooms_team_chk|chat_rooms_slug_key/);
+  await q("delete from chat_rooms where slug = 'team'");
+  await refused("insert into chat_rooms (slug, kind, title) values ('team', 'team', 'x')", [], /chat_rooms_team_chk/);
   assert.equal((await q("insert into chat_rooms (slug, kind, kit_slug) values ('kit:same-work', 'kit', 'same-work') returning id")).length, 1);
   await refused("insert into chat_rooms (slug, kind, kit_slug) values ('kit:other', 'kit', 'same-work')", [], /chat_rooms_kit_chk/);
   await refused("insert into chat_rooms (slug, kind, kit_slug) values ('kit:../x', 'kit', '../x')", [], /chat_rooms_kit_chk/);
+  await refused("insert into chat_rooms (slug, kind) values ('kit:anything', 'kit')", [], /chat_rooms_kit_chk/);
   await refused("insert into chat_rooms (slug, kind, booking_id) values ($1, 'booking', $2)", ["booking:00000000-0000-4000-8000-000000000000", booking.id], /chat_rooms_booking_chk/);
   await refused("insert into chat_rooms (slug, kind, os_build_id) values ('os:x', 'os', $1)", [build.id], /chat_rooms_os_chk/);
   // A work column on another kind of room.
@@ -136,11 +140,12 @@ test("031: tool shelf links are https with no sign-in details; server only", asy
 test("routes on Postgres: the Team room for everyone; kit, booking and build rooms for the people who can open the work", async () => {
   T.forget();
   const kyron = await as("kyron@example.com", "staff");
+  const owen = await as("owen@example.com", "staff");
   const val = await as("val@example.com");
   const ola = await as("ola@example.com");
   const ana = await as("ana@example.com");
   const wes = await as("wes@example.com");
-  for (const [c, name] of [[kyron, "Kyron"], [val, "Val"], [ola, "Ola"], [ana, "Ana"], [wes, "Wes"]]) {
+  for (const [c, name] of [[kyron, "Kyron"], [owen, "Owen"], [val, "Val"], [ola, "Ola"], [ana, "Ana"], [wes, "Wes"]]) {
     assert.equal((await c("/api/chat/me", { method: "POST", body: { name, adult: true } })).status, 201, name);
   }
   // Everyone has the Team room, once.
@@ -160,7 +165,7 @@ test("routes on Postgres: the Team room for everyone; kit, booking and build roo
   const kInfo = await val(`/api/chat/rooms/${k.json.room.id}`);
   assert.equal(kInfo.json.room.title, "Same Work Milanote Kit");
   assert.equal(kInfo.json.room.link, "#kit/" + kit.id);
-  assert.deepEqual(kInfo.json.room.people.map((p) => p.name).sort(), ["Ana", "Kyron", "Val"]);
+  assert.deepEqual(kInfo.json.room.people.map((p) => p.name).sort(), ["Ana", "Kyron", "Owen", "Val"]);
   assert.equal((await wes(`/api/chat/rooms/${k.json.room.id}`)).status, 404);
 
   // A booking's room: owners only. Its push says "A booking", never the family's details.
@@ -188,12 +193,44 @@ test("routes on Postgres: the Team room for everyone; kit, booking and build roo
   assert.ok(!JSON.stringify(pushes).includes("Sample Client"), "the build's name stays out of pushes");
   assert.ok(!JSON.stringify(pushes).includes("Intake is in"), "the message stays out of pushes");
 
+  assert.equal((await ola(`/api/chat/rooms/${o.json.room.id}`)).json.room.title, "Sample Nonprofit", "the name the OS screens use");
+
+  // An Authority build: owners only. Not for Ola or Ana, not in their lists, no push to them.
+  assert.equal((await ola(`/api/chat/os/${authority.id}`)).status, 404);
+  assert.equal((await ana(`/api/chat/os/${authority.id}`)).status, 404);
+  const auth = await kyron(`/api/chat/os/${authority.id}`);
+  assert.equal(auth.status, 200);
+  assert.equal((await ola(`/api/chat/rooms/${auth.json.room.id}`)).status, 404);
+  assert.equal((await ola(`/api/chat/rooms/${auth.json.room.id}/messages`, { method: "POST", body: { body: "hi" } })).status, 404);
+  pushes = [];
+  assert.equal((await kyron(`/api/chat/rooms/${auth.json.room.id}/messages`, { method: "POST", body: { body: "@Ana @Ola nothing for you here" } })).status, 201);
+  await new Promise((r) => setTimeout(r, 400));
+  assert.ok(!pushes.some((p) => p.to === "ana@example.com" || p.to === "ola@example.com"), "no push to non-owners");
+  for (const c of [ola, ana]) assert.ok(!(await c("/api/chat")).json.rooms.some((r) => r.id === auth.json.room.id));
+  assert.ok((await owen("/api/chat")).json.rooms.some((r) => r.id === auth.json.room.id), "another owner has it");
+
   // Rooms someone wrote in show in the list for the people who can open them.
   assert.ok((await ana("/api/chat")).json.rooms.some((r) => r.kind === "os"));
   assert.ok(!(await val("/api/chat")).json.rooms.some((r) => r.kind === "os"));
+  await q("insert into push_subscriptions (email, endpoint, p256dh, auth) values ('owen@example.com', 'https://push.example.com/owen', 'k', 'a')");
+  pushes = [];
   await kyron(`/api/chat/rooms/${b.json.room.id}/messages`, { method: "POST", body: { body: "Calling them back tomorrow." } });
+  await new Promise((r) => setTimeout(r, 400));
+  assert.deepEqual(pushes.map((p) => [p.to, p.payload.title, p.payload.body]), [["owen@example.com", "A booking", "Kyron sent a message"]]);
   assert.ok((await kyron("/api/chat")).json.rooms.some((r) => r.kind === "booking"));
   assert.ok(!(await ana("/api/chat")).json.rooms.some((r) => r.kind === "booking"));
+});
+
+test("routes on Postgres: a built-in kit (no row of its own) has its room too", async () => {
+  T.forget();
+  await q("delete from chat_rooms where kind = 'kit'");
+  await q("delete from studio_kits where slug = 'same-work'");
+  const val = await as("val@example.com");
+  const r = await val("/api/chat/kit/same-work");
+  assert.equal(r.status, 200);
+  const info = await val(`/api/chat/rooms/${r.json.room.id}`);
+  assert.equal(info.json.room.title, "Same Work Milanote Kit");
+  assert.equal(info.json.room.link, "#kit/builtin:same-work:v1");
 });
 
 test("routes on Postgres: the tool shelf", async () => {

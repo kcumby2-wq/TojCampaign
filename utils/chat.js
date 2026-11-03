@@ -13,6 +13,7 @@
 //   kit     everyone with Studio, on one Studio kit             (031)
 //   booking owners, on one Subject Medias booking               (031)
 //   os      everyone with Operating Systems, on one build       (031)
+//           (an Authority build: owners only, as in the OS tool)
 //
 // Text only. A message can't carry an email address or a phone number, and
 // people talk about athletes by team and jersey number only.
@@ -128,7 +129,9 @@ function canRead(access, room, ctx = {}) {
       // Bookings hold a family's contact: owners only, like the booking itself.
       return !!access.owner && !!ctx.booking;
     case "os":
-      return T.can(access, "os", "viewer") && !!ctx.os;
+      // Authority builds can hold minors' details: owners only, like the
+      // Operating Systems tool itself (routes/os.js canSee).
+      return T.can(access, "os", "viewer") && !!ctx.os && (ctx.os.vertical !== "authority" || !!access.owner);
     default:
       return false;
   }

@@ -65,7 +65,9 @@ router.post("/", team, safe(async (req, res) => {
   if (errors.length) return res.status(400).json({ error: "invalid", fields: errors });
   const { data, error } = await sb.from("team_tools").insert({ ...value, created_by: req.team.email }).select(COLS).single();
   if (error) return fail(res, error);
-  T.logActivity(req.team.email, "tool_added", data.name);
+  // The feed names a tool only when the whole team can see it; who it's for
+  // rides along so routes/team.js shows the entry to those people only.
+  T.logActivity(req.team.email, "tool_added", data.audience === "team" ? data.name : null, { audience: data.audience });
   res.status(201).json({ tool: { id: data.id, name: data.name, url: data.url, about: data.about, audience: data.audience, archived: false } });
 }));
 

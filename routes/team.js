@@ -131,6 +131,8 @@ router.get("/", T.requireTeam(null, "viewer"), async (req, res) => {
 // Regional Director or viewer only for their own regions (each entry carries
 // its event's region; one without a region is for owners and approvers).
 function seesEntry(team, a) {
+  // A tool on the shelf: only the people it's for (utils/tools.js).
+  if (a.action === "tool_added") return require("../utils/tools").sees(team, (a.detail && a.detail.audience) || "owners");
   if (!/^gfs_/.test(String(a.action || ""))) return true;
   if (!T.can(team, "gfs", "viewer")) return false;
   if (team.owner || team.role === "approver") return true;

@@ -1,8 +1,8 @@
 -- 031: Team chat, more places to talk; and the tool shelf.
 --
--- Builds on 026 (team chat), 030 (Subject Medias bookings) and the
--- operating system builds (os_builds). routes/chat.js and utils/chat.js have
--- the rules; routes/team-tools.js the tool shelf.
+-- Builds on 026 (team chat), 030 (Subject Medias bookings; run 030 first) and
+-- the operating system builds (os_builds, 022). routes/chat.js and
+-- utils/chat.js have the rules; routes/team-tools.js the tool shelf.
 --
 -- New rooms (no member rows: who can read one follows the team's roles and
 -- tools on every request, like a stop's room):
@@ -10,6 +10,7 @@
 --   kit      one Studio kit, across its versions      everyone with Studio
 --   booking  one Subject Medias booking                owners only
 --   os       one operating system build                everyone with Operating Systems
+--                                                      (an Authority build: owners only)
 -- Direct messages stay in the database's rules but are off in the app unless
 -- the server has CHAT_DMS=on.
 --
@@ -33,7 +34,7 @@ alter table public.chat_rooms add constraint chat_rooms_team_chk
   check (kind <> 'team' or (slug = 'team' and region is null and event_id is null and title is null));
 alter table public.chat_rooms drop constraint if exists chat_rooms_kit_chk;
 alter table public.chat_rooms add constraint chat_rooms_kit_chk
-  check (kind <> 'kit' or (kit_slug ~ '^[a-z0-9][a-z0-9-]{0,79}$' and slug = 'kit:' || kit_slug and region is null and event_id is null and title is null));
+  check (kind <> 'kit' or (kit_slug is not null and kit_slug ~ '^[a-z0-9][a-z0-9-]{0,79}$' and slug = 'kit:' || kit_slug and region is null and event_id is null and title is null));
 alter table public.chat_rooms drop constraint if exists chat_rooms_booking_chk;
 alter table public.chat_rooms add constraint chat_rooms_booking_chk
   check (kind <> 'booking' or (booking_id is not null and slug = 'booking:' || booking_id::text and region is null and event_id is null and title is null));

@@ -33,6 +33,8 @@ const G = require("../utils/gfs");
 const C = require("../utils/chat");
 const P = require("../utils/push");
 const B = require("../utils/sm-bookings");
+const O = require("../utils/os");
+const K = require("../agents/studio/kit");
 const { getSupabase } = require("../utils/supabase");
 const { staffEmails } = require("../utils/staff");
 
@@ -155,17 +157,30 @@ async function ensureMember(sb, roomId, personId, addedBy) {
 async function stopEvent(sb, eventId) {
   return run(sb.from("gfs_events").select("id,name,region,city,state,starts_on,ends_on,status").eq("id", eventId).maybeSingle());
 }
-// A Studio kit by its slug: the approved version, else the newest.
+// A Studio kit for a slug, the way Studio picks it: the approved version,
+// else the built-in one that ships with the app, else the newest draft.
+const KIT_COLS = "id,slug,title,version,status";
+function pickKit(slug, rows) {
+  const approved = rows.find((r) => r.status === "approved");
+  if (approved) return approved;
+  const b = K.builtinKits().find((x) => x.slug === slug);
+  if (b) return { id: b.id, slug: b.slug, title: b.title, version: b.version, status: "approved", builtin: true };
+  return [...rows].sort((a, b2) => b2.version - a.version)[0] || null;
+}
 async function kitBySlug(sb, slug) {
   if (!C.KIT_SLUG.test(String(slug || ""))) return null;
-  const rows = (await run(sb.from("studio_kits").select("id,slug,title,version,status").eq("slug", slug).order("version", { ascending: false }).limit(10))) || [];
-  return rows.find((r) => r.status === "approved") || rows[0] || null;
+  const rows = (await run(sb.from("studio_kits").select(KIT_COLS).eq("slug", slug))) || [];
+  return pickKit(slug, rows);
 }
+// Only what a booking's one-line summary needs: never its contact or notes.
+const BOOKING_COLS = "id,kind,package,sport,event_city,event_state,event_date";
 async function bookingById(sb, id) {
-  return UUID.test(String(id || "")) ? run(sb.from("sm_bookings").select("*").eq("id", id).maybeSingle()) : null;
+  return UUID.test(String(id || "")) ? run(sb.from("sm_bookings").select(BOOKING_COLS).eq("id", id).maybeSingle()) : null;
 }
+// The vertical decides who can see a build; the intake names it.
+const OS_COLS = "id,name,vertical,intake";
 async function osById(sb, id) {
-  return UUID.test(String(id || "")) ? run(sb.from("os_builds").select("id,name").eq("id", id).maybeSingle()) : null;
+  return UUID.test(String(id || "")) ? run(sb.from("os_builds").select(OS_COLS).eq("id", id).maybeSingle()) : null;
 }
 // The work a room hangs on, or nulls (a room with no work, or work that's gone).
 async function workOf(sb, room) {
@@ -180,7 +195,9 @@ function readCtx(work, extra) {
   return { event: work.ev, kit: work.kit, booking: work.booking, os: work.os, ...(extra || {}) };
 }
 function titleCtx(work, extra) {
-  return { ev: work.ev, kit: work.kit, booking: work.booking, os: work.os, bookingTitle: work.booking ? B.summary(work.booking) : null, ...(extra || {}) };
+  // A build shows under the name the Operating Systems screens use.
+  const os = work.os ? { ...work.os, name: O.displayName(work.os.intake, work.os.name) } : null;
+  return { ev: work.ev, kit: work.kit, booking: work.booking, os, bookingTitle: work.booking ? B.summary(work.booking) : null, ...(extra || {}) };
 }
 // Where the work itself opens in the app.
 function workLink(room, work) {
@@ -369,6 +386,7 @@ router.post("/me", team, async (req, res) => {
 // ── Rooms ────────────────────────────────────────────────────────────────
 // All of Pylon and the person's region rooms, made the first time anyone
 // needs them.
+let noTeamRoomUntil = 0;
 // The Team room for everyone; All of Pylon and the person's region rooms for
 // people with Pylon events. Made the first time anyone needs them.
 async function derivedRooms(sb, access) {
@@ -381,12 +399,16 @@ async function derivedRooms(sb, access) {
   const gone = want.filter((w) => !have.some((h) => h.slug === w.slug));
   if (gone.length) {
     for (const row of gone) {
+      if (row.kind === "team" && Date.now() < noTeamRoomUntil) continue;
       try {
         await insertOnce(sb.from("chat_rooms").insert(row));
       } catch (e) {
         // Before migration 031 the database doesn't know the Team room yet:
-        // chat goes on without it.
-        if (row.kind === "team" && e && e.code === "23514") continue;
+        // chat goes on without it, and doesn't ask again for ten minutes.
+        if (row.kind === "team" && e && e.code === "23514") {
+          noTeamRoomUntil = Date.now() + 10 * 60 * 1000;
+          continue;
+        }
         throw e;
       }
     }
@@ -415,19 +437,21 @@ async function myRooms(sb, access, me) {
   const workKinds = [T.can(access, "studio", "viewer") && "kit", access.owner && "booking", T.can(access, "os", "viewer") && "os"].filter(Boolean);
   let works = [];
   if (workKinds.length) {
-    const rows = (await run(sb.from("chat_rooms").select("*").in("kind", workKinds).gt("last_message_at", "1970-01-01T00:00:00Z"))) || [];
+    // The 200 most recently active: enough for a list on a phone, and a
+    // poll stays light however long chat has been running.
+    const rows = (await run(sb.from("chat_rooms").select("*").in("kind", workKinds).gt("last_message_at", "1970-01-01T00:00:00Z").order("last_message_at", { ascending: false }).limit(200))) || [];
     const slugs = [...new Set(rows.filter((r) => r.kind === "kit").map((r) => r.kit_slug))];
     if (slugs.length) {
-      const kitRows = await inChunks(slugs, (part) => run(sb.from("studio_kits").select("id,slug,title,version,status").in("slug", part)));
-      for (const k of kitRows.sort((a, b) => b.version - a.version)) {
-        const had = kits.get(k.slug);
-        if (!had || (had.status !== "approved" && k.status === "approved")) kits.set(k.slug, k);
+      const kitRows = await inChunks(slugs, (part) => run(sb.from("studio_kits").select(KIT_COLS).in("slug", part)));
+      for (const slug of slugs) {
+        const k = pickKit(slug, kitRows.filter((r) => r.slug === slug));
+        if (k) kits.set(slug, k);
       }
     }
     const bIds = [...new Set(rows.filter((r) => r.kind === "booking").map((r) => r.booking_id))];
-    if (bIds.length) (await inChunks(bIds, (part) => run(sb.from("sm_bookings").select("*").in("id", part)))).forEach((b) => bookings.set(b.id, b));
+    if (bIds.length) (await inChunks(bIds, (part) => run(sb.from("sm_bookings").select(BOOKING_COLS).in("id", part)))).forEach((b) => bookings.set(b.id, b));
     const oIds = [...new Set(rows.filter((r) => r.kind === "os").map((r) => r.os_build_id))];
-    if (oIds.length) (await inChunks(oIds, (part) => run(sb.from("os_builds").select("id,name").in("id", part)))).forEach((o) => builds.set(o.id, o));
+    if (oIds.length) (await inChunks(oIds, (part) => run(sb.from("os_builds").select(OS_COLS).in("id", part)))).forEach((o) => builds.set(o.id, o));
     works = rows.filter((r) => C.canRead(access, r, { kit: kits.get(r.kit_slug), booking: bookings.get(r.booking_id), os: builds.get(r.os_build_id) }));
   }
   const seen = new Set();

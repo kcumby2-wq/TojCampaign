@@ -296,6 +296,32 @@ test("direct messages: two people on the team; nobody else can read them", async
   setMember("stu@example.com", { status: "active" });
 });
 
+test("the newer rooms: who reads them, and what a push may call them", () => {
+  const R = require("../utils/chat");
+  const owner = { owner: true, role: "owner", tools: [], regions: [] };
+  const studio = { owner: false, role: "viewer", tools: ["studio"], regions: [] };
+  const os = { owner: false, role: "member", tools: ["os"], regions: [] };
+  assert.equal(R.canRead(studio, { kind: "team" }), true, "everyone on the team");
+  assert.equal(R.canRead(null, { kind: "team" }), false);
+  assert.equal(R.canRead(studio, { kind: "kit" }, { kit: { title: "K" } }), true);
+  assert.equal(R.canRead(studio, { kind: "kit" }, { kit: null }), false, "a kit that's gone");
+  assert.equal(R.canRead(os, { kind: "kit" }, { kit: { title: "K" } }), false, "no Studio");
+  assert.equal(R.canRead(studio, { kind: "booking" }, { booking: {} }), false, "bookings: owners only");
+  assert.equal(R.canRead(owner, { kind: "booking" }, { booking: {} }), true);
+  assert.equal(R.canRead(owner, { kind: "booking" }, { booking: null }), false);
+  assert.equal(R.canRead(os, { kind: "os" }, { os: { vertical: "nonprofit" } }), true);
+  assert.equal(R.canRead(os, { kind: "os" }, { os: { vertical: "authority" } }), false, "Authority builds: owners only");
+  assert.equal(R.canRead(owner, { kind: "os" }, { os: { vertical: "authority" } }), true);
+  assert.equal(R.canRead(studio, { kind: "os" }, { os: { vertical: "nonprofit" } }), false, "no Operating Systems");
+  assert.equal(R.pushTitleOf({ kind: "booking" }, { booking: {}, bookingTitle: "Video coverage · Los Angeles, CA" }), "A booking");
+  assert.equal(R.pushTitleOf({ kind: "os" }, { os: { name: "Jordan Example" } }), "An operating system build");
+  assert.equal(R.pushTitleOf({ kind: "kit" }, { kit: { title: "Same Work Milanote Kit" } }), "Same Work Milanote Kit");
+  assert.equal(R.titleOf({ kind: "team" }), "Team");
+  assert.equal(R.slugFor("kit", "same-work"), "kit:same-work");
+  assert.throws(() => R.slugFor("kit", "../x"));
+  assert.match(R.ruleFor({ kind: "booking" }), /^Only owners can read this room\./);
+});
+
 test("direct messages are off unless the server says CHAT_DMS=on: no new ones, and old ones go quiet", async () => {
   const dm = await wes("/api/chat/dm", { method: "POST", body: { person: people.Sam } });
   assert.equal(dm.status, 200);
