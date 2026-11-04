@@ -21,7 +21,7 @@ const { getSupabase } = require("./supabase");
 const ROLE_RANK = Object.freeze({ viewer: 1, member: 2, approver: 3, owner: 4 });
 const MEMBER_ROLES = Object.freeze(["approver", "member", "viewer"]);
 // Tools a member can be given. Others stay owner-only until they move into the app.
-const GRANTABLE_TOOLS = Object.freeze({ studio: "Studio Kits", creators: "Creators", os: "Operating Systems", gfs: "Pylon events (Ground Floor Sports)" });
+const GRANTABLE_TOOLS = Object.freeze({ studio: "Studio Kits", creators: "Creators", os: "Operating Systems", gfs: "Pylon events (Ground Floor Sports)", market: "Marketplace (Subject Medias events)" });
 const REGION_KEYS = Object.freeze(["west", "south_central", "northeast", "southeast", "midwest"]);
 
 // A column the database doesn't have yet (Postgres 42703, or PostgREST's

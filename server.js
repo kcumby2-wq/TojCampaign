@@ -189,6 +189,9 @@ app.use("/c", require("./routes/creators").pageRouter);
 // Subject Medias bookings from subjectmedias.com (the form is public; the list is staff only).
 app.use("/api/sm/bookings", require("./routes/sm-bookings"));
 app.use("/api/sm/fellowship", require("./routes/sm-fellowship"));
+// The Subject Medias marketplace (migration 033): the staff side of events,
+// rosters, consent, uploads and review. Families use /m/ (below).
+app.use("/api/sm/market", require("./routes/sm-market"));
 app.use("/api/os", require("./routes/os"));
 // Ground Floor Sports · Pylon events: events, crews, roster consent flags,
 // the upload log, deliverables, SportsClippers listings, takedowns (024),
@@ -396,4 +399,6 @@ app.listen(PORT, () => {
   
   // Initialize automatic report schedulers
   initializeSchedulers();
+  // Marketplace previews and jersey suggestions (SM_MARKET_WORKER=off to skip).
+  require("./utils/sm-market-worker").start();
 });

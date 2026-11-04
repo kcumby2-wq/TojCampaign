@@ -277,6 +277,15 @@ function parseTagAnswer(answer, teams, roster, { min = 0.5 } = {}) {
 function siteBase(env = process.env) {
   return String(env.SM_SITE_BASE || "https://www.subjectmedias.com").replace(/\/+$/, "");
 }
+// The family-facing addresses, on subjectmedias.com (its /m/ rewrite reaches
+// routes/sm-market-public.js). A token in a link is never stored, only its hash.
+const linkTo = {
+  event: (code) => `${siteBase()}/m/${code}`,
+  consent: (code) => `${siteBase()}/m/${code}/consent`,
+  confirm: (token) => `${siteBase()}/m/confirm/${token}`,
+  family: (token) => `${siteBase()}/m/f/${token}`,
+  order: (token) => `${siteBase()}/m/o/${token}`,
+};
 function consentEmail(event, team, jersey, level, link) {
   const what = {
     out: "keep them out of everything we sell",
@@ -295,6 +304,24 @@ function consentEmail(event, team, jersey, level, link) {
       link,
       "",
       "If it wasn't you, ignore this email and nothing changes. You can change your choice any time from the same form, or by replying to this email.",
+      "",
+      "Subject Medias",
+    ].join("\n"),
+  };
+}
+// The family link, once a choice counts: the athlete's own page.
+function familyEmail(event, team, jersey, level, link) {
+  return {
+    subject: `Your family link for ${team} #${jersey} at ${event.name}`,
+    text: [
+      "Hi,",
+      "",
+      `Your choice for ${team} #${jersey} at ${event.name} is in: ${LEVEL_WORDS[level]}.`,
+      "",
+      "This is your family's own link. It shows the clips and photos of your athlete once our crew has checked them, and it's where you buy:",
+      link,
+      "",
+      "Keep it to your family: anyone with the link sees what it shows. To change your choice, or to have your athlete kept out, reply to this email.",
       "",
       "Subject Medias",
     ].join("\n"),
@@ -350,6 +377,8 @@ module.exports = {
   tagPrompt,
   parseTagAnswer,
   siteBase,
+  linkTo,
   consentEmail,
+  familyEmail,
   orderEmail,
 };
