@@ -41,6 +41,11 @@ const safe = (fn) => (req, res, next) =>
       if (!res.headersSent) res.status(500).json({ error: "server_error" });
     });
 const bodyOf = (req) => (req.body && typeof req.body === "object" && !Array.isArray(req.body) ? req.body : {});
+// Staff changes come only from the app's own fetch calls, which send JSON. A
+// form on another site can't send JSON without the browser asking this server
+// first, and it never says yes, so a signed-in owner can't be made to send a
+// note or change an application from someone else's page.
+const jsonOnly = (req, res, next) => (req.is("application/json") ? next() : res.status(415).json({ error: "json_only" }));
 
 // ── The site's call ──────────────────────────────────────────────────────
 // The same check as routes/sm-bookings.js: both sides hashed first, so the
@@ -54,7 +59,8 @@ function secretOk(req) {
 }
 
 // ── Abuse limits ─────────────────────────────────────────────────────────
-// 5 applications per visitor per 10 minutes, and 60 an hour in all. Staff
+// 5 tries per visitor per 10 minutes, and 60 valid applications an hour in all
+// (a flood of junk from two visitors can't lock everyone else out). Staff
 // alert emails go out at most 30 an hour, and approval notes at most 60, so
 // nothing can use up the Gmail account the app sends from.
 const WINDOW_MS = 10 * 60 * 1000;
@@ -127,6 +133,25 @@ async function alertStaff(sb, row) {
   }
 }
 
+// A repeat from an address that already has an open application isn't stored
+// (one open application per address), so staff get a push in fixed words and,
+// within the hourly budget, an email carrying the repeat to compare. Never
+// throws.
+function alertRepeat(row) {
+  try {
+    const to = [...staffEmails()];
+    push.notifySoon(to, F.repeatPushPayload(row));
+    if (!emailAllowed()) return console.warn("[sm-fellowship] over the hourly email budget: repeat by push only");
+    const mail = F.emailText({ ...row, id: "repeat" }, APP_BASE(), { saved: false, repeat: true });
+    mailer
+      .sendMail({ to, subject: `Repeat ${mail.subject.replace(/^New /, "")}`, text: mail.text })
+      .then((r) => { if (!r.sent) console.warn(`[sm-fellowship] repeat email not sent (${r.reason})`); })
+      .catch((e) => console.warn("[sm-fellowship] repeat email failed:", e && e.message));
+  } catch (e) {
+    console.warn("[sm-fellowship] repeat alert failed:", e && e.message);
+  }
+}
+
 // The application couldn't be stored: email it to staff whole, so it isn't
 // lost. Always sent (it's the only copy), whatever the hourly budget.
 async function emailUnsaved(row) {
@@ -141,10 +166,10 @@ async function emailUnsaved(row) {
   }
 }
 
-// An error the application itself caused (a value Postgres refuses) isn't the
-// database being down; anything else (unreachable, the table not there yet)
-// means it can't be stored right now.
-const inputError = (e) => !!e && /^2[23]/.test(String(e.code || ""));
+// An error the application itself caused (a value Postgres refuses, or a body
+// the database's API refuses) isn't the database being down; anything else
+// (unreachable, the table not there yet) means it can't be stored right now.
+const inputError = (e) => !!e && /^(2[23]|PGRST1)/.test(String(e.code || ""));
 // The table isn't there yet: migration 032 hasn't run.
 const notSetUp = (e) => !!e && (e.code === "42P01" || e.code === "PGRST205" || /does not exist|schema cache/i.test(String(e.message || "")));
 function storageFailed(res, e) {
@@ -158,12 +183,17 @@ function storageFailed(res, e) {
 router.post("/", safe(async (req, res) => {
   if (!secretOk(req)) return res.status(401).json({ error: "unauthorized" });
   const raw = bodyOf(req);
-  // Bots fill every field, including the one people never see.
-  if (raw.company) return res.json({ ok: true });
-  if (limited(visitor(req)) || !formAllowed()) return res.status(429).json({ error: "too_many" });
+  // Bots fill every field, including the one people never see. Its name is one
+  // no browser's autofill knows, so a real applicant never trips it.
+  if (raw.sm_trap) {
+    console.warn("[sm-fellowship] the hidden field was filled: dropped");
+    return res.json({ ok: true });
+  }
+  if (limited(visitor(req))) return res.status(429).json({ error: "too_many" });
 
   const { errors, value } = F.normalize(raw);
   if (errors.length) return res.status(400).json({ error: "invalid", fields: errors });
+  if (!formAllowed()) return res.status(429).json({ error: "too_many" });
   const row = { ...value, status: "new" };
 
   const sb = getSupabase();
@@ -174,9 +204,13 @@ router.post("/", safe(async (req, res) => {
       setImmediate(() => alertStaff(sb, data));
       return;
     }
-    // One open application per address, and this address has one. It's
-    // already with staff, so nothing new to alert them about.
-    if (error && error.code === "23505") return res.json({ ok: true });
+    // One open application per address, and this address has one. The same
+    // answer as a new one; staff hear about the repeat.
+    if (error && error.code === "23505") {
+      res.json({ ok: true });
+      setImmediate(() => alertRepeat(row));
+      return;
+    }
     console.error("[sm-fellowship] insert failed:", error && (error.code || "") + " " + (error.message || ""));
     if (inputError(error)) return res.status(400).json({ error: "invalid", fields: [] });
   }
@@ -235,7 +269,7 @@ router.get("/:id", requireStaff, safe(async (req, res) => {
   res.json(detail(a));
 }));
 
-router.patch("/:id", requireStaff, safe(async (req, res) => {
+router.patch("/:id", requireStaff, jsonOnly, safe(async (req, res) => {
   if (!F.UUID.test(req.params.id)) return res.status(404).json({ error: "not_found" });
   const sb = getSupabase();
   if (!sb) return res.status(503).json({ error: "storage_unavailable" });
@@ -271,7 +305,7 @@ router.patch("/:id", requireStaff, safe(async (req, res) => {
 
 // Email the approval note, as staff edited it, to the people on the
 // application. The recipients come from the application, never the request.
-router.post("/:id/note", requireStaff, safe(async (req, res) => {
+router.post("/:id/note", requireStaff, jsonOnly, safe(async (req, res) => {
   if (!F.UUID.test(req.params.id)) return res.status(404).json({ error: "not_found" });
   const sb = getSupabase();
   if (!sb) return res.status(503).json({ error: "storage_unavailable" });

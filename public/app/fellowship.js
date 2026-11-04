@@ -51,7 +51,9 @@
   function mailto(to, subject, text) {
     return "mailto:" + to.map(addr).join(",") + "?subject=" + encodeURIComponent(subject || "") + "&body=" + encodeURIComponent(String(text || "").replace(/\r?\n/g, "\r\n"));
   }
-  function safeLink(u) { return /^https:\/\/[^\s"'<>]+$/i.test(String(u || "")) ? String(u) : ""; }
+  // https only (the server and the database hold the same rule); h() escapes
+  // the rest, so a link with a quote in its path still shows.
+  function safeLink(u) { return /^https:\/\/\S+$/i.test(String(u || "")) ? String(u) : ""; }
   function hostOf(u) { try { return new URL(u).hostname.replace(/^www\./, ""); } catch (e) { return u; } }
   function errorScreen(back, label, e) {
     return '<div class="screen">' + T().backBtn(back, label) + '<h1 class="title">Fellowship</h1><p class="body err">' + h(denied(e) ? MSG.forbidden : say(e)) + "</p></div>";

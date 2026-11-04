@@ -221,6 +221,7 @@ const staffCookie = () => cookieFor("kyron@toj.test");
 before(async () => {
   const app = express();
   app.use(express.json());
+  app.use(express.urlencoded({ extended: true })); // as server.js does
   app.use(session({ secret: "sm-fellowship-test", resave: false, saveUninitialized: false }));
   app.post("/__test/session", (req, res) => {
     req.session.userEmail = req.body.email;
@@ -269,9 +270,12 @@ test("the form saves an application and alerts staff by push and email", async (
 test("only the site's call gets in; bots get a quiet yes and nothing is saved", async () => {
   assert.equal((await call("POST", "/api/sm/fellowship", adult(), { "X-SM-Visitor": "1.2.3.4" })).status, 401);
   assert.equal((await call("POST", "/api/sm/fellowship", adult(), { "X-SM-Secret": SECRET.slice(0, -1) + "x" })).status, 401);
-  const bot = await apply(adult({ company: "Acme" }));
+  const bot = await apply(adult({ sm_trap: "Acme" }));
   assert.equal(bot.status, 200);
   assert.equal(rows().length, 0);
+  // "company" is a field browsers autofill: it no longer drops an application.
+  assert.equal((await apply(adult({ company: "Acme" }))).status, 200);
+  assert.equal(rows().length, 1);
 });
 
 test("a wrong application comes back with the fields to fix", async () => {
@@ -281,15 +285,24 @@ test("a wrong application comes back with the fields to fix", async () => {
   assert.equal(rows().length, 0);
 });
 
-test("one open application per address: a second one gets the same yes and no second alert", async () => {
-  assert.equal((await apply(adult())).status, 200);
+test("one open application per address: a repeat gets the same yes, and staff hear about it", async () => {
+  assert.equal((await apply(teen())).status, 200);
   await wait();
-  const again = await apply(adult({ links: ["https://other.example/x"] }));
+  mails = [];
+  const again = await apply(teen({ guardian_name: "Sam Park", guardian_email: "sam@example.com", links: ["https://other.example/x"] }));
   assert.equal(again.status, 200);
-  assert.deepEqual(again.data, { ok: true });
+  assert.deepEqual(again.data, { ok: true }, "the same answer as a new one");
   await wait();
-  assert.equal(rows().length, 1);
-  assert.equal(pushes.length, 1);
+  assert.equal(rows().length, 1, "the repeat isn't stored");
+  assert.equal(pushes.length, 2);
+  assert.equal(pushes[1].payload.title, "Repeat fellowship application");
+  assert.equal(pushes[1].payload.body, "Photographer · 16 or 17, guardian on file · TX");
+  assert.ok(!JSON.stringify(pushes[1].payload).includes("Riley"), "the push carries no name");
+  assert.equal(mails.length, 1);
+  assert.match(mails[0].subject, /^Repeat fellowship application/);
+  assert.match(mails[0].text, /already has an open one/);
+  assert.match(mails[0].text, /Sam Park, sam@example.com/, "the email carries the repeat to compare");
+  assert.match(mails[0].text, /https:\/\/other.example\/x/);
 });
 
 test("five a visitor per 10 minutes, then too many", async () => {
@@ -416,4 +429,53 @@ test("before migration 032 the app says it isn't set up yet", async () => {
   const r = await call("GET", "/api/sm/fellowship", undefined, {}, cookie);
   assert.equal(r.status, 503);
   assert.equal(r.data.error, "not_set_up");
+});
+
+// ── Fixes from the independent review ──────────────────────────────────
+test("whole characters only: half an emoji at a cap is dropped, a lone half replaced", () => {
+  const name = "x".repeat(79) + "\u{1F600}";
+  assert.equal(F.normalize(adult({ name })).value.name, "x".repeat(79));
+  const odd = F.normalize(adult({ city: "Hou\uD83Dston", about: "ok \uDE00 fine" })).value;
+  assert.equal(odd.city, "Hou\uFFFDston");
+  assert.equal(odd.about, "ok \uFFFD fine");
+  assert.equal(F.normalize(adult({ city: "Austin \u{1F3C8}" })).value.city, "Austin \u{1F3C8}", "a whole emoji stays");
+});
+
+test("a guardian's email that lands in the applicant's own inbox is refused", () => {
+  const t = (applicant, guardian) => F.normalize(teen({ email: applicant, guardian_email: guardian })).errors.includes("guardian_email");
+  assert.equal(t("riley@gmail.com", "riley+mom@gmail.com"), true);
+  assert.equal(t("riley@gmail.com", "r.i.ley@googlemail.com"), true);
+  assert.equal(t("riley@school.edu", "riley+parent@school.edu"), true);
+  assert.equal(t("riley@school.edu", "ri.ley@school.edu"), false, "dots only count at Gmail");
+  assert.equal(t("riley@gmail.com", "dana@gmail.com"), false);
+});
+
+test("the hourly total counts only valid applications", async () => {
+  for (let i = 0; i < 70; i++) assert.equal((await apply({ name: "junk" }, `198.51.100.${i}`)).status, 400);
+  assert.equal((await apply(adult(), "203.0.113.99")).status, 200, "junk can't lock real applicants out");
+});
+
+test("staff changes must be JSON: a form posted from another site is refused", async () => {
+  await apply(teen());
+  const cookie = await staffCookie();
+  const id = rows()[0].id;
+  await call("PATCH", "/api/sm/fellowship/" + id, { status: "approved" }, {}, cookie);
+  mails = [];
+  const form = async (method, path, body) => {
+    const r = await fetch(base + path, { method, headers: { "Content-Type": "application/x-www-form-urlencoded", Cookie: cookie }, body: new URLSearchParams(body).toString() });
+    return r.status;
+  };
+  assert.equal(await form("POST", `/api/sm/fellowship/${id}/note`, { subject: "No signature needed", text: "Forged." }), 415);
+  assert.equal(await form("POST", `/api/sm/fellowship/${id}/note`, {}), 415, "not even the drafted note");
+  assert.equal(await form("PATCH", "/api/sm/fellowship/" + id, { status: "joined" }), 415);
+  assert.equal(mails.length, 0);
+  assert.equal(rows()[0].status, "approved");
+});
+
+test("a body the database's API refuses is the applicant's to fix, not an outage", async () => {
+  const q = { insert: () => q, select: () => q, single: () => q, then: (res) => Promise.resolve({ data: null, error: { code: "PGRST102", message: "Invalid body" } }).then(res) };
+  setSupabase({ from: () => q });
+  const r = await apply(adult());
+  assert.equal(r.status, 400);
+  assert.equal(mails.length, 0, "no fallback email for a bad body");
 });

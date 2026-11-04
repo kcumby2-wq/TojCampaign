@@ -43,18 +43,37 @@ const MAX_LINKS = 3;
 // Only strings and finite numbers are values. Anything else in the JSON (an
 // object, an array) counts as missing, so no input can make these throw.
 const text = (v) => (typeof v === "string" ? v : typeof v === "number" && Number.isFinite(v) ? String(v) : "");
+// Whole characters only. A cap can cut an emoji in half, and a hand-made
+// request can send half of one; Postgres refuses both, so a lone half is
+// dropped at the end and replaced anywhere else.
+const LONE = /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/g;
+const whole = (s) => String(s).replace(/[\uD800-\uDBFF]$/, "").replace(LONE, "\uFFFD");
 // One line: control and invisible characters out, single spaces, capped.
-const one = (v, max) => line(text(v), max);
+const one = (v, max) => whole(line(whole(text(v)), max));
 // Free text that keeps its line breaks (at most one blank line in a row).
 const many = (v, max) =>
-  text(v)
+  whole(whole(text(v))
     .replace(/\r\n?/g, "\n")
     .replace(/[\u0000-\u0008\u000b-\u001f\u007f\u00ad\u180e\u200b-\u200f\u2028-\u202e\u2060-\u2069\ufeff]/g, "")
     .replace(/[ \t]+\n/g, "\n")
     .replace(/\n{3,}/g, "\n\n")
     .trim()
-    .slice(0, max);
+    .slice(0, max));
 const has = (obj, k) => typeof k === "string" && Object.prototype.hasOwnProperty.call(obj, k);
+
+// The mailbox an address lands in: no +tag, and Gmail ignores dots. A
+// guardian's email has to reach someone other than the applicant.
+function mailbox(e) {
+  const [local, domain] = String(e || "").toLowerCase().split("@");
+  if (!domain) return String(e || "").toLowerCase();
+  let l = local.split("+")[0];
+  let d = domain;
+  if (d === "gmail.com" || d === "googlemail.com") {
+    l = l.replace(/\./g, "");
+    d = "gmail.com";
+  }
+  return l + "@" + d;
+}
 
 function phoneOf(v) {
   const p = one(v, 30).replace(/[^0-9+().\- ]/g, "").trim();
@@ -123,8 +142,8 @@ function normalize(raw) {
   if (v.age_group === "teen") {
     v.guardian_name = one(r.guardian_name, 80) || (errors.push("guardian_name"), null);
     const g = one(r.guardian_email, 200).toLowerCase();
-    // The guardian's own address, not the applicant's.
-    v.guardian_email = isEmail(g) && g !== v.email ? g : (errors.push("guardian_email"), null);
+    // The guardian's own address, not the applicant's (nor a +tag of it).
+    v.guardian_email = isEmail(g) && (!v.email || mailbox(g) !== mailbox(v.email)) ? g : (errors.push("guardian_email"), null);
     if (one(r.guardian_phone, 40)) {
       v.guardian_phone = phoneOf(r.guardian_phone);
       if (!v.guardian_phone) errors.push("guardian_phone");
@@ -185,13 +204,22 @@ function pushPayload(a) {
   };
 }
 
+// A repeat from an address that already has an open application: it isn't
+// stored, so staff hear about it. Fixed words only, like any push.
+function repeatPushPayload(a) {
+  const p = pushPayload({ ...a, id: "repeat" });
+  return { ...p, title: "Repeat fellowship application", url: "/app/#applications", tag: "sm-fellowship-repeat" };
+}
+
 // The staff email. With saved false the database didn't take the application,
 // so the email is the only copy and carries all of it.
-function emailText(a, appBase, { saved = true } = {}) {
+function emailText(a, appBase, { saved = true, repeat = false } = {}) {
   const base = String(appBase || "https://tojcampaign.com").replace(/\/+$/, "");
   const teen = a.age_group === "teen";
   const subject = `New fellowship application: ${seatWords(a)}, ${place(a) || "no place given"}`;
-  const lines = ["A new application to the creator fellowship, from subjectmedias.com/fellowship.", ""];
+  const lines = [repeat
+    ? "A repeat application to the creator fellowship, from an address that already has an open one."
+    : "A new application to the creator fellowship, from subjectmedias.com/fellowship.", ""];
   if (!saved || !teen) lines.push(`From: ${a.name} (${ageWords(a) || "age not given"})`);
   else lines.push("From: a 16- or 17-year-old, with a parent or guardian on the application");
   lines.push(`Where: ${place(a) || "not given"}${a.region ? ` (${REGION_WORDS[a.region]})` : ""}`);
@@ -213,7 +241,9 @@ function emailText(a, appBase, { saved = true } = {}) {
     for (const l of a.links || []) lines.push(`- ${l}`);
     if (a.gear) lines.push(`Gear: ${a.gear}`);
     if (a.about) lines.push("", "What they wrote:", a.about);
-    lines.push("", "This application is NOT in the app: the database didn't take it. Reply to them from here.");
+    lines.push("", repeat
+      ? "This repeat is NOT in the app: the address already has an open application there. Compare the two, and reply from here."
+      : "This application is NOT in the app: the database didn't take it. Reply to them from here.");
   }
   return { subject, text: lines.join("\n") };
 }
@@ -314,7 +344,9 @@ module.exports = {
   planWords,
   ageWords,
   pushPayload,
+  repeatPushPayload,
   emailText,
+  mailbox,
   payLink,
   noteRecipients,
   approvalNote,
