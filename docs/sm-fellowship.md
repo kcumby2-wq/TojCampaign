@@ -37,7 +37,7 @@ Billing stays in Stripe test mode until counsel picks the company, so start with
 
 ## Setting it up
 
-1. **Apply migration 032 in Supabase, with Kyron's OK.** It only adds: the `sm_fellowship_applications` table and one function that checks the links. Until it runs, Fellowship in the app says it isn't set up yet, and the form's applications reach Kyron by email only. Without email set up either, the form asks applicants to write to hello@subjectmedias.com.
+1. **Apply migration 032 in Supabase, with Kyron's OK, before #34 deploys.** It only adds: the `sm_fellowship_applications` table and one function that checks the links. Until it runs, Fellowship in the app says it isn't set up yet, and the form's applications reach Kyron by email only. Without email set up either, the form asks applicants to write to hello@subjectmedias.com.
 2. **Merge, then let Render deploy main.** The site's `/fellowship` page and `/api/apply` function ship with subjectmedias-site.
 3. **Optional:** add the two payment links, and `EMAIL_USER` / `EMAIL_PASS`.
 
@@ -54,9 +54,11 @@ Billing stays in Stripe test mode until counsel picks the company, so start with
 
 ## Rules
 
-- The form takes only the site's call (the shared secret, compared by hash). It allows 5 applications per visitor per 10 minutes and 60 an hour in all, and drops anything that fills the hidden field. Staff alert emails stop at 30 an hour and approval notes at 60; pushes still go and every application is saved.
-- One open application per email address. A second one gets the same answer as the first and no second alert.
-- Applications are owner and staff only (`requireStaff`).
+- The form takes only the site's call (the shared secret, compared by hash). It allows 5 tries per visitor per 10 minutes and 60 valid applications an hour in all, and drops anything that fills the hidden field (`sm_trap`, a name no browser autofills). Staff alert emails stop at 30 an hour and approval notes at 60; pushes still go and every application is saved.
+- One open application per email address (new, talking or approved). A repeat gets the same answer as a new one, so the form never says who has applied. It isn't stored; staff get a push ("Repeat fellowship application", fixed words only) and an email carrying the repeat to compare. To let someone apply again, mark their open one declined or withdrawn.
+- Applications are owner and staff only (`requireStaff`). Staff changes must be JSON, so a form on another site can't make a signed-in owner change an application or send a note.
+- Text is kept to whole characters: a cap never leaves half an emoji.
+- A guardian's email can't be the applicant's, a `+tag` of it, or (at Gmail) a dotted copy of it.
 - Migration 032 enforces the shape: confirmed; a guardian with their own email at 16 or 17, and none on an adult's application; the seats open at 16 or 17; one to three https links with a real host and no sign-in details; approved and joined carry when they were approved. Emails are plain addresses, so an Email button can't be made to copy anyone in. The API roles can't read the table.
 - Removing an application deletes it for good, for an applicant or a parent or guardian who asks.
 
