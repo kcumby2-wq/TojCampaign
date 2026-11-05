@@ -1,0 +1,502 @@
+"use strict";
+// The Subject Medias marketplace, the families' side, on subjectmedias.com/m/
+// (the site's vercel.json rewrites /m/* here). Pages, not an API, and they
+// work without JavaScript. The rules of who sees what are utils/sm-market.js.
+//
+//   GET  /m/confirm/:token          the confirm button (a mail scanner's visit changes nothing)
+//   POST /m/confirm/:token          confirms a choice; shows and emails the family link
+//   GET  /m/f/:token                a family's page: their athlete's clips and photos
+//   POST /m/f/:token/checkout       the ones they picked, to Stripe Checkout
+//   GET  /m/o/:token                an order: downloads once paid (?session_id= asks Stripe straight away)
+//   GET  /m/:code                   the event page; ?team=<id>&jersey=<n> shows that athlete's
+//   POST /m/:code/checkout          the ones picked there, to Stripe Checkout
+//   GET  /m/:code/consent           the QR form: a parent or guardian's choice
+//   POST /m/:code/consent           saves it and emails a link to confirm (a keep-out counts at once)
+//   GET  /m/:code/consent/sent      what happens next
+//
+// paid() and expired() are the Stripe webhook's (routes/creators.js), for
+// checkouts whose metadata.kind is "sm_market". Payments use the Creator Club
+// platform account (utils/creator-stripe.js), in test mode until Kyron picks
+// the account Subject Medias' sales go to.
+
+const crypto = require("crypto");
+const express = require("express");
+const M = require("../utils/sm-market");
+const P = require("../utils/sm-market-page");
+const S = require("../utils/creator-stripe");
+const mailer = require("../utils/mailer");
+const push = require("../utils/push");
+const { isEmail } = require("../utils/sm-bookings");
+const { getSupabase } = require("../utils/supabase");
+
+const router = express.Router();
+const idOk = (id) => M.UUID.test(String(id || ""));
+const now = () => new Date().toISOString();
+const MAX_ITEMS = 50;
+const MAX_ROSTER = 600; // athletes a form can add to one event, so a bot can't fill it
+
+// ── Plumbing ─────────────────────────────────────────────────────────────
+function nonce() {
+  return crypto.randomBytes(16).toString("base64");
+}
+function storageHost() {
+  try {
+    return new URL(String(process.env.SUPABASE_URL || "")).origin;
+  } catch (e) {
+    return "";
+  }
+}
+function headers(res, n) {
+  const store = storageHost();
+  res.setHeader("Content-Type", "text/html; charset=utf-8");
+  res.setHeader("Cache-Control", "no-store");
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  res.setHeader("X-Robots-Tag", "noindex, nofollow");
+  // Links here carry tokens: no address leaves the page in a Referer.
+  res.setHeader("Referrer-Policy", "no-referrer");
+  res.setHeader(
+    "Content-Security-Policy",
+    `default-src 'none'; style-src 'nonce-${n}' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data:${store ? " " + store : ""}; media-src${store ? " " + store : " 'none'"}; script-src 'nonce-${n}'; form-action 'self' https://checkout.stripe.com; base-uri 'none'; frame-ancestors 'none'`
+  );
+}
+function send(res, status, render) {
+  const n = nonce();
+  headers(res, n);
+  res.status(status).send(render(n));
+}
+const message = (res, status, title, text, link, linkText) => send(res, status, (nonce) => P.messagePage({ nonce, title, text, link, linkText }));
+const notFound = (res) => message(res, 404, "Not found", "This link doesn't go anywhere. Check it against the QR code or the email you were sent.");
+
+const page = (fn) => async (req, res) => {
+  const sb = getSupabase();
+  if (!sb) return message(res, 503, "Back soon", "This page can't load right now. Try again in a few minutes.");
+  try {
+    await fn(req, res, sb);
+  } catch (e) {
+    const code = e && e.db && e.db.code;
+    if (code === "42P01" || code === "PGRST205") return message(res, 503, "Not open yet", "Clips and photos from our events aren't open here yet.");
+    console.error("[sm-market-public] failed:", e && e.message);
+    if (!res.headersSent) message(res, 500, "Something went wrong", "Try again in a minute. If it keeps happening, email us.");
+  }
+};
+async function run(q) {
+  const { data, error } = await q;
+  if (error) throw Object.assign(new Error(error.message || "storage_error"), { db: error });
+  return data;
+}
+
+// Tries per visitor, kept in memory for a few minutes. The address is keyed
+// through an HMAC with a key made fresh each start, never stored or logged.
+// Behind Vercel the first X-Forwarded-For entry is the visitor.
+const SALT = crypto.randomBytes(32);
+const buckets = new Map();
+const LIMITS = { view: [240, 10], consent: [12, 10], confirm: [30, 10], checkout: [20, 10] }; // [tries, minutes]
+function allowed(req, kind) {
+  const [max, minutes] = LIMITS[kind];
+  const ip = String(req.headers["x-forwarded-for"] || "").split(",")[0].trim() || req.socket.remoteAddress || "";
+  const key = kind + ":" + crypto.createHmac("sha256", SALT).update(ip).digest("base64").slice(0, 22);
+  const t = Date.now();
+  const b = buckets.get(key);
+  if (!b || t > b.reset) {
+    if (buckets.size > 50000) buckets.clear();
+    buckets.set(key, { n: 1, reset: t + minutes * 60000 });
+    return true;
+  }
+  b.n++;
+  return b.n <= max;
+}
+const slowDown = (res) => message(res, 429, "Too many tries", "Wait a few minutes, then try again.");
+
+const field = (v, max = 200) => (typeof v === "string" ? v.trim().slice(0, max) : "");
+
+// ── What may be shown ────────────────────────────────────────────────────
+async function eventByCode(sb, code) {
+  const c = M.codeOf(code);
+  if (!c) return null;
+  return run(sb.from("sm_market_events").select("*").eq("code", c).maybeSingle());
+}
+
+// Each athlete's level, from their roster row and every consent for them.
+async function levelsOf(sb, ids) {
+  if (!ids.length) return new Map();
+  const [athletes, consents] = await Promise.all([
+    run(sb.from("sm_market_athletes").select("id,keep_out").in("id", ids)),
+    run(sb.from("sm_market_consents").select("athlete_id,level,under_13,confirmed_at").in("athlete_id", ids)),
+  ]);
+  const levels = new Map(ids.map((id) => [id, "none"]));
+  for (const a of athletes || []) levels.set(a.id, M.effectiveLevel(a, consents || []));
+  return levels;
+}
+
+// The approved clips and photos an athlete is confirmed in, that this way in
+// may show: "event" (team and number) or "family" (their own link).
+async function itemsFor(sb, ev, athleteId, access) {
+  const mine = await run(sb.from("sm_market_tags").select("media_id").eq("athlete_id", athleteId).eq("confirmed", true));
+  const ids = [...new Set((mine || []).map((t) => t.media_id))];
+  if (!ids.length) return [];
+  const media = ((await run(sb.from("sm_market_media").select("*").in("id", ids).eq("status", "approved"))) || []).filter((m) => m.event_id === ev.id);
+  if (!media.length) return [];
+  const tags = (await run(sb.from("sm_market_tags").select("media_id,athlete_id,confirmed").in("media_id", media.map((m) => m.id)).eq("confirmed", true))) || [];
+  const levels = await levelsOf(sb, [...new Set(tags.map((t) => t.athlete_id))]);
+  return media
+    .filter((m) => M.itemAllowed(m, { access, forAthlete: athleteId, tags, levels }))
+    .sort((a, b) => String(a.approved_at || a.created_at).localeCompare(String(b.approved_at || b.created_at)));
+}
+
+// Short-lived links to the watermarked previews and posters.
+async function withPreviews(sb, items) {
+  const keys = items.flatMap((m) => [m.preview_key, m.poster_key]).filter(Boolean);
+  const signed = new Map();
+  if (keys.length) {
+    const { data } = await sb.storage.from(M.BUCKET).createSignedUrls(keys, 3600);
+    for (const s of data || []) if (s && s.signedUrl) signed.set(s.path, s.signedUrl);
+  }
+  return items.map((m) => ({ id: m.id, kind: m.kind, duration_ms: m.duration_ms, preview_url: signed.get(m.preview_key) || null, poster_url: signed.get(m.poster_key) || null }));
+}
+
+// ── Checkout ─────────────────────────────────────────────────────────────
+async function checkout(req, res, sb, { ev, athleteId, access, back }) {
+  if (!allowed(req, "checkout")) return slowDown(res);
+  const want = [...new Set([].concat((req.body && req.body.item) || []).map(String))].filter(idOk).slice(0, 200);
+  const pick = (await itemsFor(sb, ev, athleteId, access)).filter((m) => want.includes(m.id)).slice(0, MAX_ITEMS);
+  if (!pick.length) return res.redirect(303, back);
+  let s;
+  try {
+    s = S.stripe();
+  } catch (e) {
+    return message(res, 503, "Checkout isn't open yet", "We're still switching payments on. Try again soon, or email us and we'll sort it out.");
+  }
+  const price = (m) => M.priceOf(ev, m.kind);
+  const amount = pick.reduce((sum, m) => sum + price(m), 0);
+  const tok = M.newToken();
+  const order = await run(sb.from("sm_market_orders").insert({ event_id: ev.id, status: "pending", amount_cents: amount, token_hash: tok.hash, mode: s.mode }).select().single());
+  await run(sb.from("sm_market_order_items").insert(pick.map((m) => ({ order_id: order.id, media_id: m.id, price_cents: price(m) }))));
+  const clips = pick.filter((m) => m.kind === "clip").length;
+  const photos = pick.length - clips;
+  const line = (n, kind) => ({ quantity: n, price_data: { currency: "usd", unit_amount: M.priceOf(ev, kind), product_data: { name: `${kind === "clip" ? "Clip" : "Photo"} from ${ev.name}`.slice(0, 120) } } });
+  let session;
+  try {
+    session = await s.stripe.checkout.sessions.create({
+      mode: "payment",
+      line_items: [clips ? line(clips, "clip") : null, photos ? line(photos, "photo") : null].filter(Boolean),
+      client_reference_id: order.id,
+      // The order link's token rides along so the webhook can email it; only its hash is in our database.
+      metadata: { kind: "sm_market", order_id: order.id, order_token: tok.token },
+      payment_intent_data: { metadata: { kind: "sm_market", order_id: order.id } },
+      success_url: `${M.linkTo.order(tok.token)}?session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: M.siteBase() + back,
+    });
+  } catch (e) {
+    console.error("[sm-market-public] checkout didn't start:", e && (e.code || e.type), e && e.message);
+    await sb.from("sm_market_orders").update({ status: "expired", updated_at: now() }).eq("id", order.id);
+    return message(res, 502, "Checkout didn't start", "Nothing was charged. Try again in a minute.", back, "Back to the clips");
+  }
+  await run(sb.from("sm_market_orders").update({ stripe_session_id: session.id, updated_at: now() }).eq("id", order.id));
+  res.redirect(303, session.url);
+}
+
+// A paid checkout: the order is paid, the buyer gets their link (once), staff
+// get a push. From the webhook, or from the order page asking Stripe.
+async function markPaid(sb, ses, { token = null } = {}) {
+  const md = ses.metadata || {};
+  if (md.kind !== "sm_market" || !idOk(md.order_id) || ses.payment_status !== "paid") return { ok: false, reason: "not_ours" };
+  const order = await run(sb.from("sm_market_orders").select("*").eq("id", md.order_id).maybeSingle());
+  if (!order) return { ok: false, reason: "no_order" };
+  if (order.stripe_session_id && order.stripe_session_id !== ses.id) return { ok: false, reason: "other_session" };
+  if (Number(ses.amount_total) !== order.amount_cents) {
+    console.error(`[sm-market-public] order ${order.id}: Stripe took ${ses.amount_total}, the order says ${order.amount_cents}`);
+    return { ok: false, reason: "amount_mismatch" };
+  }
+  const cd = ses.customer_details || {};
+  const email = cd.email && isEmail(String(cd.email).trim().toLowerCase()) ? String(cd.email).trim().toLowerCase().slice(0, 200) : order.email || null;
+  const at = now();
+  const flipped = await run(
+    sb
+      .from("sm_market_orders")
+      .update({ status: "paid", paid_at: at, stripe_session_id: ses.id, email, mode: ses.livemode ? "live" : "test", updated_at: at })
+      .eq("id", order.id)
+      .eq("status", "pending")
+      .select("id")
+  );
+  const ev = await run(sb.from("sm_market_events").select("id,name,code").eq("id", order.event_id).maybeSingle());
+  // The link, once: whoever claims emailed_at first sends it.
+  const t = token || (M.tokenOk(md.order_token) && M.hashToken(md.order_token) === order.token_hash ? md.order_token : null);
+  if (t && email && ev) {
+    const claimed = await run(sb.from("sm_market_orders").update({ emailed_at: at }).eq("id", order.id).is("emailed_at", null).select("id"));
+    if ((claimed || []).length) {
+      let sent = false;
+      try {
+        sent = !!(await mailer.sendMail({ to: email, ...M.orderEmail(ev, { ...order, email }, M.linkTo.order(t)) })).sent;
+      } catch (e) {
+        console.warn("[sm-market-public] order email failed:", e && e.message);
+      }
+      if (!sent) await sb.from("sm_market_orders").update({ emailed_at: null }).eq("id", order.id);
+    }
+  }
+  if ((flipped || []).length && ev) {
+    const n = (await run(sb.from("sm_market_order_items").select("media_id").eq("order_id", order.id))) || [];
+    push.notifySoon(push.teamEmails("member", "market"), {
+      title: "New marketplace sale",
+      body: `${ev.name}: ${n.length} item${n.length === 1 ? "" : "s"}, ${M.money(order.amount_cents)}${ses.livemode ? "" : " (test)"}`,
+      url: `/app/#market/${ev.id}`,
+      tag: `market-sale-${ev.id}`,
+    });
+  }
+  return { ok: true, flipped: (flipped || []).length > 0 };
+}
+
+async function paid(ses) {
+  const sb = getSupabase();
+  if (!sb) throw new Error("storage_unavailable");
+  return markPaid(sb, ses);
+}
+async function expired(ses) {
+  const sb = getSupabase();
+  const md = (ses && ses.metadata) || {};
+  if (!sb || md.kind !== "sm_market" || !idOk(md.order_id)) return { ok: false };
+  await run(sb.from("sm_market_orders").update({ status: "expired", updated_at: now() }).eq("id", md.order_id).eq("status", "pending"));
+  return { ok: true };
+}
+
+// ── Confirming a choice ──────────────────────────────────────────────────
+async function consentByConfirm(sb, token) {
+  if (!M.tokenOk(token)) return null;
+  const c = await run(sb.from("sm_market_consents").select("*").eq("confirm_hash", M.hashToken(token)).maybeSingle());
+  if (!c) return null;
+  const a = await run(sb.from("sm_market_athletes").select("id,event_id,team_id,jersey").eq("id", c.athlete_id).maybeSingle());
+  if (!a) return null;
+  const [ev, team] = await Promise.all([
+    run(sb.from("sm_market_events").select("*").eq("id", a.event_id).maybeSingle()),
+    run(sb.from("sm_market_teams").select("id,name").eq("id", a.team_id).maybeSingle()),
+  ]);
+  return ev && team ? { c, a, ev, team } : null;
+}
+const usedLink = (res) => message(res, 404, "Link already used", "This confirm link has been used, or a newer choice replaced it. Your family link is in the email we sent when you confirmed.");
+
+router.get("/confirm/:token", page(async (req, res, sb) => {
+  if (!allowed(req, "confirm")) return slowDown(res);
+  const hit = await consentByConfirm(sb, req.params.token);
+  if (!hit) return usedLink(res);
+  send(res, 200, (nonce) => P.confirmPage({ nonce, event: hit.ev, team: hit.team.name, jersey: hit.a.jersey, level: hit.c.level, token: req.params.token }));
+}));
+
+router.post("/confirm/:token", page(async (req, res, sb) => {
+  if (!allowed(req, "confirm")) return slowDown(res);
+  const hit = await consentByConfirm(sb, req.params.token);
+  if (!hit) return usedLink(res);
+  const fam = hit.c.level === "out" ? null : M.newToken();
+  const at = now();
+  const done = await run(
+    sb
+      .from("sm_market_consents")
+      .update({ confirmed_at: at, confirm_hash: null, family_hash: fam ? fam.hash : null, updated_at: at })
+      .eq("id", hit.c.id)
+      .eq("confirm_hash", M.hashToken(req.params.token))
+      .select("id")
+  );
+  if (!(done || []).length) return usedLink(res);
+  let mailed = false;
+  const link = fam ? M.linkTo.family(fam.token) : null;
+  if (link) {
+    try {
+      mailed = !!(await mailer.sendMail({ to: hit.c.email, ...M.familyEmail(hit.ev, hit.team.name, hit.a.jersey, hit.c.level, link) })).sent;
+    } catch (e) {
+      console.warn("[sm-market-public] family link email failed:", e && e.message);
+    }
+  }
+  send(res, 200, (nonce) => P.confirmPage({ nonce, event: hit.ev, team: hit.team.name, jersey: hit.a.jersey, level: hit.c.level, done: true, familyLink: link, mailed }));
+}));
+
+// ── A family's page ──────────────────────────────────────────────────────
+async function family(sb, token) {
+  if (!M.tokenOk(token)) return null;
+  const c = await run(sb.from("sm_market_consents").select("id,athlete_id,level,confirmed_at").eq("family_hash", M.hashToken(token)).maybeSingle());
+  if (!c || !c.confirmed_at) return null;
+  const a = await run(sb.from("sm_market_athletes").select("id,event_id,team_id,jersey,keep_out").eq("id", c.athlete_id).maybeSingle());
+  if (!a) return null;
+  const [ev, team, levels] = await Promise.all([
+    run(sb.from("sm_market_events").select("*").eq("id", a.event_id).maybeSingle()),
+    run(sb.from("sm_market_teams").select("id,name").eq("id", a.team_id).maybeSingle()),
+    levelsOf(sb, [a.id]),
+  ]);
+  return ev && team ? { a, ev, team, level: levels.get(a.id) || "none" } : null;
+}
+
+router.get("/f/:token", page(async (req, res, sb) => {
+  if (!allowed(req, "view")) return slowDown(res);
+  const f = await family(sb, req.params.token);
+  if (!f) return notFound(res);
+  const open = f.ev.status !== "draft" && M.levelAtLeast(f.level, "family");
+  const items = open ? await withPreviews(sb, await itemsFor(sb, f.ev, f.a.id, "family")) : [];
+  send(res, 200, (nonce) => P.familyPage({ nonce, event: f.ev, team: f.team.name, jersey: f.a.jersey, level: f.level, items, token: req.params.token }));
+}));
+
+router.post("/f/:token/checkout", page(async (req, res, sb) => {
+  const f = await family(sb, req.params.token);
+  if (!f || f.ev.status === "draft" || !M.levelAtLeast(f.level, "family")) return notFound(res);
+  await checkout(req, res, sb, { ev: f.ev, athleteId: f.a.id, access: "family", back: `/m/f/${req.params.token}` });
+}));
+
+// ── An order ─────────────────────────────────────────────────────────────
+router.get("/o/:token", page(async (req, res, sb) => {
+  if (!allowed(req, "view")) return slowDown(res);
+  const token = req.params.token;
+  if (!M.tokenOk(token)) return notFound(res);
+  let order = await run(sb.from("sm_market_orders").select("*").eq("token_hash", M.hashToken(token)).maybeSingle());
+  if (!order) return notFound(res);
+  const ev = await run(sb.from("sm_market_events").select("*").eq("id", order.event_id).maybeSingle());
+  if (!ev) return notFound(res);
+  // Back from Stripe before the webhook: ask Stripe ourselves.
+  const sid = typeof req.query.session_id === "string" ? req.query.session_id : "";
+  if (order.status === "pending" && order.stripe_session_id && sid === order.stripe_session_id) {
+    try {
+      const ses = await S.stripe().stripe.checkout.sessions.retrieve(order.stripe_session_id);
+      if (ses && ses.payment_status === "paid") await markPaid(sb, ses, { token });
+      else if (ses && ses.status === "expired") await run(sb.from("sm_market_orders").update({ status: "expired", updated_at: now() }).eq("id", order.id).eq("status", "pending"));
+    } catch (e) {
+      console.warn("[sm-market-public] Stripe check failed:", e && e.message);
+    }
+    order = await run(sb.from("sm_market_orders").select("*").eq("id", order.id).single());
+  }
+  const back = `/m/${ev.code}`;
+  if (order.status === "pending") {
+    const fresh = Date.now() - Date.parse(order.created_at || 0) < 30 * 60 * 1000;
+    if (!fresh) return message(res, 200, "Payment not seen", "We haven't seen a payment for this order. If you were charged, email us and we'll send your downloads.", back, "Back to the clips");
+    return send(res, 200, (nonce) => P.orderPage({ nonce, event: ev, order, state: "pending" }));
+  }
+  if (order.status !== "paid") return send(res, 200, (nonce) => P.orderPage({ nonce, event: ev, order, state: order.status, backTo: back }));
+  const lines = (await run(sb.from("sm_market_order_items").select("media_id,price_cents").eq("order_id", order.id))) || [];
+  const ids = lines.map((l) => l.media_id);
+  const media = ids.length ? (await run(sb.from("sm_market_media").select("*").in("id", ids))) || [] : [];
+  const tags = ids.length ? (await run(sb.from("sm_market_tags").select("media_id,athlete_id,confirmed").in("media_id", ids).eq("confirmed", true))) || [] : [];
+  const levels = await levelsOf(sb, [...new Set(tags.map((t) => t.athlete_id))]);
+  const posters = await withPreviews(sb, media);
+  const items = [];
+  for (const id of ids) {
+    const m = media.find((x) => x.id === id);
+    if (!m) continue;
+    // A family's keep-out beats a sale: that file's download closes.
+    const takenDown = M.itemAthletes(m, tags).some((a) => levels.get(a) === "out");
+    let download_url = null;
+    if (!takenDown) {
+      const { data } = await sb.storage.from(M.BUCKET).createSignedUrl(m.object_key, 3600, { download: M.downloadName(ev, m) });
+      download_url = data && data.signedUrl ? data.signedUrl : null;
+    }
+    const p = posters.find((x) => x.id === id) || {};
+    items.push({ id, kind: m.kind, taken_down: takenDown || !download_url, download_url, poster_url: p.poster_url || null });
+  }
+  send(res, 200, (nonce) => P.orderPage({ nonce, event: ev, order, items, state: "paid" }));
+}));
+
+// ── The event page ───────────────────────────────────────────────────────
+async function teamsOf(sb, ev) {
+  return (await run(sb.from("sm_market_teams").select("id,name").eq("event_id", ev.id).order("name", { ascending: true }))) || [];
+}
+async function athleteAt(sb, ev, teamId, jersey) {
+  const rows = await run(sb.from("sm_market_athletes").select("id,event_id,team_id,jersey").eq("team_id", teamId).eq("jersey", jersey).limit(1));
+  const a = (rows || [])[0];
+  return a && a.event_id === ev.id ? a : null;
+}
+
+router.get("/:code", page(async (req, res, sb) => {
+  if (!allowed(req, "view")) return slowDown(res);
+  const ev = await eventByCode(sb, req.params.code);
+  if (!ev) return notFound(res);
+  const teams = await teamsOf(sb, ev);
+  const q = req.query || {};
+  if (!q.team && !q.jersey) return send(res, 200, (nonce) => P.eventPage({ nonce, event: ev, teams }));
+  const team = teams.find((t) => t.id === q.team) || null;
+  const jersey = M.jerseyOf(q.jersey);
+  if (ev.status === "draft") return send(res, 200, (nonce) => P.eventPage({ nonce, event: ev, teams }));
+  if (!team || !jersey) {
+    const error = !team ? "Pick a team." : "Use the jersey number only, like 7 or 23.";
+    return send(res, 400, (nonce) => P.eventPage({ nonce, event: ev, teams, team, jersey: field(q.jersey, 4), error }));
+  }
+  const a = await athleteAt(sb, ev, team.id, jersey);
+  const items = a ? await withPreviews(sb, await itemsFor(sb, ev, a.id, "event")) : [];
+  send(res, 200, (nonce) => P.eventPage({ nonce, event: ev, teams, team, jersey, items }));
+}));
+
+router.post("/:code/checkout", page(async (req, res, sb) => {
+  const ev = await eventByCode(sb, req.params.code);
+  if (!ev || ev.status === "draft") return notFound(res);
+  const b = req.body || {};
+  const teams = await teamsOf(sb, ev);
+  const team = teams.find((t) => t.id === b.team);
+  const jersey = M.jerseyOf(b.jersey);
+  const a = team && jersey ? await athleteAt(sb, ev, team.id, jersey) : null;
+  if (!a) return res.redirect(303, `/m/${ev.code}`);
+  await checkout(req, res, sb, { ev, athleteId: a.id, access: "event", back: `/m/${ev.code}?team=${encodeURIComponent(team.id)}&jersey=${jersey}` });
+}));
+
+// ── The QR form ──────────────────────────────────────────────────────────
+router.get("/:code/consent", page(async (req, res, sb) => {
+  if (!allowed(req, "view")) return slowDown(res);
+  const ev = await eventByCode(sb, req.params.code);
+  if (!ev) return notFound(res);
+  const teams = await teamsOf(sb, ev);
+  send(res, 200, (nonce) => P.consentPage({ nonce, event: ev, teams }));
+}));
+
+router.get("/:code/consent/sent", page(async (req, res, sb) => {
+  const ev = await eventByCode(sb, req.params.code);
+  if (!ev) return notFound(res);
+  send(res, 200, (nonce) => P.consentSentPage({ nonce, event: ev, kept: req.query.k === "out", mailed: req.query.m === "1" }));
+}));
+
+router.post("/:code/consent", page(async (req, res, sb) => {
+  const ev = await eventByCode(sb, req.params.code);
+  if (!ev) return notFound(res);
+  if (!allowed(req, "consent")) return slowDown(res);
+  const b = req.body && typeof req.body === "object" ? req.body : {};
+  // The field people can't see: a bot filled it. It gets the usual answer.
+  if (field(b.sm_trap)) return res.redirect(303, `/m/${ev.code}/consent/sent?m=1`);
+  const teams = await teamsOf(sb, ev);
+  const values = { team_id: field(b.team_id, 40), jersey: field(b.jersey, 4), email: field(b.email, 200), level: field(b.level, 10), under_13: field(b.under_13, 3), guardian: field(b.guardian, 3) === "yes" };
+  const { errors, value } = M.consentInput({ ...values, guardian: values.guardian ? "yes" : "" });
+  if (value.team_id && !teams.some((t) => t.id === value.team_id)) errors.push("team_id");
+  const form = (status, formError = "") => send(res, status, (nonce) => P.consentPage({ nonce, event: ev, teams, values, errors, formError }));
+  if (errors.length) return form(400, errors.includes("level") && values.level === "public" && values.under_13 === "yes" ? "Showing publicly isn't open for athletes 12 or younger. Pick another choice." : "");
+
+  // The number may not be on the roster yet: the guardian's answer adds it.
+  let a = await athleteAt(sb, ev, value.team_id, value.jersey);
+  if (!a) {
+    const count = (await run(sb.from("sm_market_athletes").select("id").eq("event_id", ev.id).limit(MAX_ROSTER + 1))) || [];
+    if (count.length > MAX_ROSTER) return form(409, "We can't add more numbers to this event online. Ask our crew, or email us.");
+    const { error } = await sb.from("sm_market_athletes").insert({ event_id: ev.id, team_id: value.team_id, jersey: value.jersey });
+    if (error && error.code !== "23505") throw Object.assign(new Error(error.message), { db: error });
+    a = await athleteAt(sb, ev, value.team_id, value.jersey);
+    if (!a) throw new Error("athlete_not_saved");
+  }
+  const out = value.level === "out";
+  const tok = out ? null : M.newToken();
+  const at = now();
+  // One answer per guardian per athlete: a new answer replaces the old one and
+  // waits for confirming again (a keep-out counts at once).
+  await run(
+    sb.from("sm_market_consents").upsert(
+      { athlete_id: a.id, email: value.email, level: value.level, under_13: value.under_13, source: "qr", confirm_hash: tok ? tok.hash : null, confirm_sent_at: tok ? at : null, confirmed_at: null, family_hash: null, recorded_by: null, updated_at: at },
+      { onConflict: "athlete_id,email" }
+    )
+  );
+  const team = teams.find((t) => t.id === value.team_id);
+  let mailed = false;
+  try {
+    const mail = out
+      ? { subject: `Kept out: ${team.name} #${value.jersey} at ${ev.name}`, text: [`Someone using this email asked us to keep ${team.name} #${value.jersey} out of everything from ${ev.name}. Done: nothing of them is shown or sold.`, "", `If that wasn't you, or you want to change it, email ${P.helpEmail()}.`, "", "Subject Medias"].join("\n") }
+      : M.consentEmail(ev, team.name, value.jersey, value.level, M.linkTo.confirm(tok.token));
+    mailed = !!(await mailer.sendMail({ to: value.email, ...mail })).sent;
+  } catch (e) {
+    console.warn("[sm-market-public] consent email failed:", e && e.message);
+  }
+  res.redirect(303, `/m/${ev.code}/consent/sent?${out ? "k=out&" : ""}m=${mailed ? 1 : 0}`);
+}));
+
+router.use((req, res) => notFound(res));
+
+module.exports = router;
+module.exports.paid = paid;
+module.exports.expired = expired;
+module.exports.markPaid = markPaid;
+module.exports.itemsFor = itemsFor;
+module.exports._reset = () => buckets.clear();

@@ -190,8 +190,10 @@ app.use("/c", require("./routes/creators").pageRouter);
 app.use("/api/sm/bookings", require("./routes/sm-bookings"));
 app.use("/api/sm/fellowship", require("./routes/sm-fellowship"));
 // The Subject Medias marketplace (migration 033): the staff side of events,
-// rosters, consent, uploads and review. Families use /m/ (below).
+// rosters, consent, uploads and review. Families use /m/, the pages
+// subjectmedias.com/m/ rewrites here (routes/sm-market-public.js).
 app.use("/api/sm/market", require("./routes/sm-market"));
+app.use("/m", require("./routes/sm-market-public"));
 app.use("/api/os", require("./routes/os"));
 // Ground Floor Sports · Pylon events: events, crews, roster consent flags,
 // the upload log, deliverables, SportsClippers listings, takedowns (024),
