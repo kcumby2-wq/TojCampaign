@@ -158,8 +158,18 @@ async function processOne(row, d) {
     if (!(done || []).length) await d.sb.storage.from(M.BUCKET).remove(keys).catch(() => {});
     return { ok: true, suggestions: found.length };
   } catch (e) {
-    // A file that didn't make it to review leaves no previews behind.
-    if (keys.length) await d.sb.storage.from(M.BUCKET).remove(keys).catch(() => {});
+    // A file that didn't make it to review leaves no previews behind. If the
+    // last save's answer was lost, it may have gone through: look first.
+    if (keys.length) {
+      let reached = false;
+      try {
+        const { data: now } = await d.sb.from("sm_market_media").select("status,preview_key").eq("id", row.id).maybeSingle();
+        reached = !!now && ["review", "approved", "hidden"].includes(now.status) && now.preview_key === keys[0];
+      } catch (_) {
+        reached = true; // can't tell: keep the files rather than break a file in review
+      }
+      if (!reached) await d.sb.storage.from(M.BUCKET).remove(keys).catch(() => {});
+    }
     throw e;
   } finally {
     await fs.promises.rm(dir, { recursive: true, force: true }).catch(() => {});

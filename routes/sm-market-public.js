@@ -94,16 +94,17 @@ async function run(q) {
 const SALT = crypto.randomBytes(32);
 const buckets = new Map(); // per visitor: cleared if it grows huge
 const caps = new Map(); // per address, athlete, and in all: never cleared early
-const CAPS = new Set(["to", "toDay", "athlete", "mail"]);
+const CAPS = new Set(["to", "toDay", "athlete", "mail", "writes"]);
 const LIMITS = {
   view: [240, 10],
   consent: [40, 10],
   confirm: [30, 10],
   checkout: [20, 10],
-  to: [3, 60], // emails from the form to one address, an hour
+  to: [3, 60], // emails from the form to one mailbox, an hour
   toDay: [8, 1440], // and a day
-  athlete: [12, 60], // answers for one athlete, an hour
-  mail: [200, 60], // emails from the form in all, an hour
+  athlete: [12, 60], // emails about one athlete, an hour
+  mail: [200, 60], // emails from one event's form, an hour
+  writes: [3000, 60], // answers saved for one event, an hour: a flood breaker
 };
 const visitor = (req) => String(req.headers["x-forwarded-for"] || "").split(",")[0].trim() || req.socket.remoteAddress || "";
 const allowed = (req, kind) => hit(kind, visitor(req));
@@ -124,6 +125,17 @@ function hit(kind, id) {
   b.n++;
   return b.n <= max;
 }
+// Whether every one of these is under its limit, without counting anything;
+// then count them all (only once it's decided).
+function within(list) {
+  const t = Date.now();
+  return list.every(([kind, id]) => {
+    const map = CAPS.has(kind) ? caps : buckets;
+    const b = map.get(kind + ":" + crypto.createHmac("sha256", SALT).update(String(id)).digest("base64").slice(0, 22));
+    return !b || t > b.reset || b.n < LIMITS[kind][0];
+  });
+}
+const count = (list) => list.forEach(([kind, id]) => hit(kind, id));
 const slowDown = (res) => message(res, 429, "Too many tries", "Wait a few minutes, then try again.");
 
 const field = (v, max = 200) => (typeof v === "string" ? v.trim().slice(0, max) : "");
@@ -343,7 +355,7 @@ router.post("/confirm/:token", page(async (req, res, sb) => {
   const done = await run(
     sb
       .from("sm_market_consents")
-      .update({ level: want.level, under_13: want.under_13, pending_level: null, pending_under_13: null, confirmed_at: at, confirm_hash: null, family_hash: fam ? fam.hash : null, updated_at: at })
+      .update({ level: want.level, under_13: want.under_13, pending_level: null, pending_under_13: null, confirmed_at: at, confirm_hash: null, family_hash: fam ? fam.hash : null, source: "qr", recorded_by: null, updated_at: at })
       .eq("id", found.c.id)
       .eq("confirm_hash", M.hashToken(req.params.token))
       .select("id")
@@ -509,7 +521,6 @@ router.get("/:code/consent/sent", page(async (req, res, sb) => {
 router.post("/:code/consent", page(async (req, res, sb) => {
   const ev = await eventByCode(sb, req.params.code);
   if (!ev) return notFound(res);
-  if (!allowed(req, "consent")) return slowDown(res);
   const b = req.body && typeof req.body === "object" ? req.body : {};
   // The field people can't see: a bot filled it. It gets the usual answer.
   if (field(b.sm_trap)) return res.redirect(303, `/m/${ev.code}/consent/sent?m=1`);
@@ -519,71 +530,75 @@ router.post("/:code/consent", page(async (req, res, sb) => {
   if (value.team_id && !teams.some((t) => t.id === value.team_id)) errors.push("team_id");
   const form = (status, formError = "") => send(res, status, (nonce) => P.consentPage({ nonce, event: ev, teams, values, errors, formError }));
   if (errors.length) return form(400, errors.includes("level") && values.level === "public" && values.under_13 === "yes" ? "Showing publicly isn't open for athletes 12 or younger. Pick another choice." : "");
-
-  // The form emails whoever's address is typed in, so it's capped in all,
-  // per address and per athlete, whatever the visitor's address says.
-  if (!hit("mail", "all") || !hit("to", value.email) || !hit("toDay", value.email) || !hit("athlete", `${ev.id}:${value.team_id}:${value.jersey}`)) {
-    return message(res, 429, "Too many tries", "That's a lot of answers for this athlete or this email. Try again later, or ask our crew to record your choice.");
-  }
+  // Only a flood stops the form outright; a keep-out gets through every other limit.
+  if (!within([["writes", ev.id]])) return message(res, 429, "Too many tries", "The form is very busy right now. Ask our crew to record your choice, or try again later.");
+  if (value.level !== "out" && !allowed(req, "consent")) return slowDown(res);
 
   // The number may not be on the roster yet: the guardian's answer adds it.
   let a = await athleteAt(sb, ev, value.team_id, value.jersey);
   if (!a) {
-    const count = (await run(sb.from("sm_market_athletes").select("id").eq("event_id", ev.id).limit(MAX_ROSTER + 1))) || [];
-    if (count.length > MAX_ROSTER) return form(409, "We can't add more numbers to this event online. Ask our crew, or email us.");
+    const count0 = (await run(sb.from("sm_market_athletes").select("id").eq("event_id", ev.id).limit(MAX_ROSTER + 1))) || [];
+    if (count0.length > MAX_ROSTER) return form(409, "We can't add more numbers to this event online. Ask our crew, or email us.");
     const { error } = await sb.from("sm_market_athletes").insert({ event_id: ev.id, team_id: value.team_id, jersey: value.jersey });
     if (error && error.code !== "23505") throw Object.assign(new Error(error.message), { db: error });
     a = await athleteAt(sb, ev, value.team_id, value.jersey);
     if (!a) throw new Error("athlete_not_saved");
   }
 
-  // One answer per guardian per athlete. What protects counts at once: a
-  // keep-out, a more careful choice, "12 or younger". What loosens waits for
-  // the guardian to confirm from their email, and until then their earlier
-  // answer stands. So nobody can loosen a guardian's answer just by knowing
-  // their email address.
+  // The form emails whatever address is typed in, so its emails are capped
+  // per mailbox, per athlete and per event, whatever the visitor's address
+  // says. An answer that counts now (more careful, or a keep-out) is saved
+  // even past the caps, just without its note. One that needs its email to
+  // count isn't saved when the email can't go.
+  const capList = [["to", M.mailboxOf(value.email)], ["toDay", M.mailboxOf(value.email)], ["athlete", a.id], ["mail", ev.id]];
+  const mayEmail = within(capList);
+
+  // Saved only if their answer is still as it was read, so two answers at
+  // once can't undo each other (a keep-out landing mid-way is never lost).
   const at = now();
-  const was = await run(sb.from("sm_market_consents").select("*").eq("athlete_id", a.id).eq("email", value.email).maybeSingle());
-  const counts = !!was && (!!was.confirmed_at || was.level === "out");
-  let tok = null;
-  let level = value.level;
-  let under13 = value.under_13;
-  if (!counts) {
-    // Nothing of theirs counts yet: this answer replaces any earlier one.
-    tok = value.level === "out" ? null : M.newToken();
-    await run(
-      sb.from("sm_market_consents").upsert(
-        { athlete_id: a.id, email: value.email, level, under_13: under13, source: "qr", confirm_hash: tok ? tok.hash : null, confirm_sent_at: tok ? at : null, confirmed_at: null, family_hash: null, pending_level: null, pending_under_13: null, recorded_by: null, updated_at: at },
-        { onConflict: "athlete_id,email" }
-      )
-    );
-  } else {
-    // What's more careful counts now. A loosening waits for their email, and
-    // so does the same answer again (how a family gets a fresh family link).
-    const same = value.level === was.level && value.under_13 === (was.under_13 !== false);
-    const waits = value.level !== "out" && (same || M.looser(was, value));
-    level = M.RANK[value.level] < M.RANK[was.level] ? value.level : was.level;
-    under13 = was.under_13 !== false || value.under_13;
-    tok = waits ? M.newToken() : null;
-    const patch = waits
-      ? { level, under_13: under13, pending_level: value.level, pending_under_13: value.under_13, confirm_hash: tok.hash, confirm_sent_at: at, updated_at: at }
-      : { level, under_13: under13, pending_level: null, pending_under_13: null, confirm_hash: null, confirm_sent_at: null, updated_at: at };
-    await run(sb.from("sm_market_consents").update(patch).eq("id", was.id));
+  let plan = null;
+  for (let i = 0; i < 4 && !plan; i++) {
+    const was = await run(sb.from("sm_market_consents").select("*").eq("athlete_id", a.id).eq("email", value.email).maybeSingle());
+    const p = M.answerPlan(was, value, at);
+    if (p.tok && !mayEmail) return message(res, 429, "Too many tries", "That's a lot of answers for this athlete or this email. Try again later, or ask our crew to record your choice.");
+    if (!was) {
+      const { error } = await sb.from("sm_market_consents").insert({ athlete_id: a.id, email: value.email, ...p.write, updated_at: at });
+      if (!error) plan = p;
+      else if (error.code !== "23505") throw Object.assign(new Error(error.message), { db: error });
+      continue;
+    }
+    let q = sb.from("sm_market_consents").update({ ...p.write, updated_at: at }).eq("id", was.id).eq("level", was.level).eq("under_13", was.under_13);
+    q = was.confirm_hash ? q.eq("confirm_hash", was.confirm_hash) : q.is("confirm_hash", null);
+    q = was.confirmed_at ? q.eq("confirmed_at", was.confirmed_at) : q.is("confirmed_at", null);
+    if (((await run(q.select("id"))) || []).length) plan = p;
   }
+  if (!plan && value.level === "out") {
+    // Still changing under us: a keep-out lands regardless.
+    const p = M.answerPlan({ level: "out", under_13: value.under_13, confirmed_at: null }, value, at);
+    const { level, pending_level, pending_under_13, confirm_hash, confirm_sent_at } = p.write;
+    await run(sb.from("sm_market_consents").update({ level, pending_level, pending_under_13, confirm_hash, confirm_sent_at, updated_at: at }).eq("athlete_id", a.id).eq("email", value.email));
+    plan = p;
+  }
+  if (!plan) return message(res, 409, "Try again", "Your answer changed while we were saving it. Send the form again.");
+  count([["writes", ev.id]]);
+
   const team = teams.find((t) => t.id === value.team_id);
-  const changedNow = !tok && level !== "out";
+  const level = plan.write.level;
   let mailed = false;
-  try {
-    const mail = tok
-      ? M.consentEmail(ev, team.name, value.jersey, value.level, M.linkTo.confirm(tok.token))
-      : level === "out"
-        ? M.keptOutEmail(ev, team.name, value.jersey)
-        : M.changedEmail(ev, team.name, value.jersey, level, under13);
-    mailed = !!(await mailer.sendMail({ to: value.email, ...mail })).sent;
-  } catch (e) {
-    console.warn("[sm-market-public] consent email failed:", e && e.message);
+  if (mayEmail) {
+    count(capList);
+    try {
+      const mail = plan.tok
+        ? M.consentEmail(ev, team.name, value.jersey, value.level, M.linkTo.confirm(plan.tok.token))
+        : level === "out"
+          ? M.keptOutEmail(ev, team.name, value.jersey)
+          : M.changedEmail(ev, team.name, value.jersey, level, plan.write.under_13);
+      mailed = !!(await mailer.sendMail({ to: value.email, ...mail })).sent;
+    } catch (e) {
+      console.warn("[sm-market-public] consent email failed:", e && e.message);
+    }
   }
-  const k = level === "out" && !tok ? "out" : changedNow ? "now" : "";
+  const k = plan.now ? (level === "out" ? "out" : "now") : "";
   res.redirect(303, `/m/${ev.code}/consent/sent?${k ? "k=" + k + "&" : ""}m=${mailed ? 1 : 0}`);
 }));
 

@@ -511,6 +511,84 @@ test("the form's emails are capped per address and per athlete, whatever the vis
   assert.equal(last.status, 429);
 });
 
+test("a keep-out always gets through: past the email caps and the visitor limit (re-check N1)", async () => {
+  // Junk fills #8's email cap and the guardian's own mailbox cap...
+  for (let i = 0; i < 12; i++) await post("/m/AB2CD3/consent", choice({ jersey: "8", email: `junk${i}@example.com` }), { headers: { "X-Forwarded-For": `198.51.102.${i}` } });
+  for (let i = 0; i < 3; i++) await post("/m/AB2CD3/consent", choice({ jersey: String(60 + i), email: "g.parent+x" + i + "@gmail.com" }), { headers: { "X-Forwarded-For": `198.51.103.${i}` } });
+  // ...and one visitor has used up their tries.
+  for (let i = 0; i < 40; i++) await post("/m/AB2CD3/consent", choice({ jersey: String(200 + i), email: `v${i}@example.com` }), { headers: { "X-Forwarded-For": "203.0.113.50" } });
+  assert.equal((await post("/m/AB2CD3/consent", choice({ jersey: "8", email: "other@example.com" }), { headers: { "X-Forwarded-For": "198.51.104.1" } })).status, 429, "a choice that needs its email waits");
+  const r = await post("/m/AB2CD3/consent", choice({ jersey: "8", level: "out", under_13: "no", email: "G.Parent@gmail.com" }), { headers: { "X-Forwarded-For": "203.0.113.50" } });
+  assert.equal(r.status, 303);
+  assert.equal(r.location, "/m/AB2CD3/consent/sent?k=out&m=0", "saved and counting, just without its note");
+  const eight = db.tables.sm_market_athletes.find((a) => a.team_id === LIGHTNING && a.jersey === "8");
+  const rows = db.tables.sm_market_consents.filter((c) => c.athlete_id === eight.id);
+  assert.equal(M.effectiveLevel(eight, rows), "out");
+  assert.equal(mails.filter((m) => m.to.includes("g.parent@gmail.com")).length, 0, "plus-tags and dots counted as one mailbox");
+});
+
+test("two answers at once can't undo a keep-out (re-check N2)", async () => {
+  // sam@ (family only, confirmed) sends "OK to show publicly"; sam's keep-out lands between its read and its write.
+  const from = db.from;
+  let injected = false;
+  db.from = (name) => {
+    const q = from(name);
+    if (name !== "sm_market_consents") return q;
+    const update = q.update.bind(q);
+    q.update = (patch) => {
+      if (!injected && patch.pending_level === "public") {
+        injected = true;
+        const row = db.tables.sm_market_consents.find((c) => c.athlete_id === A11 && c.email === "sam@example.com");
+        Object.assign(row, { level: "out", updated_at: new Date().toISOString() });
+      }
+      return update(patch);
+    };
+    return q;
+  };
+  try {
+    await post("/m/AB2CD3/consent", choice({ jersey: "11", level: "public", under_13: "no", email: "sam@example.com" }));
+  } finally {
+    db.from = from;
+  }
+  assert.ok(injected);
+  const sam = db.tables.sm_market_consents.find((c) => c.athlete_id === A11 && c.email === "sam@example.com");
+  assert.equal(sam.level, "out", "the keep-out stands");
+  assert.equal(sam.pending_level, "public", "the looser answer waits for sam's email");
+});
+
+test("an unconfirmed '12 or younger' can't be undone without the email (re-check N3)", async () => {
+  // #23: hal@ confirmed public; gil@ said "OK to sell, 12 or younger" and hasn't confirmed.
+  db.tables.sm_market_consents.push(
+    { id: id(45), athlete_id: A23, email: "hal@example.com", level: "public", under_13: false, source: "qr", confirmed_at: "2026-11-21T10:00:00Z" },
+    { id: id(46), athlete_id: A23, email: "gil@example.com", level: "sell", under_13: true, source: "qr", confirmed_at: null, confirm_hash: "a".repeat(64) }
+  );
+  const a23 = db.tables.sm_market_athletes.find((a) => a.id === A23);
+  const level = () => M.effectiveLevel(a23, db.tables.sm_market_consents.filter((c) => c.athlete_id === A23));
+  assert.equal(level(), "sell", "capped below public while anyone says 12 or younger");
+  await post("/m/AB2CD3/consent", choice({ jersey: "23", level: "public", under_13: "no", email: "gil@example.com" }));
+  assert.equal(level(), "sell", "still capped: older waits for gil's email");
+  const gil = db.tables.sm_market_consents.find((c) => c.id === id(46));
+  assert.deepEqual([gil.under_13, gil.pending_under_13], [true, false]);
+  const link = mails.at(-1).text.match(/\/m\/confirm\/([A-Za-z0-9_-]{43})/)[1];
+  await post(`/m/confirm/${link}`, {});
+  assert.equal(level(), "public", "confirmed by gil: now it counts");
+});
+
+test("a QR change confirmed over a staff-recorded answer is the guardian's own (re-check N4)", async () => {
+  db.tables.sm_market_consents.push({ id: id(47), athlete_id: A7, email: "pat@example.com", level: "family", under_13: false, source: "staff", recorded_by: "kyron@toj.test", confirmed_at: "2026-11-21T10:00:00Z" });
+  await post("/m/AB2CD3/consent", choice({ jersey: "7", level: "sell", under_13: "no", email: "pat@example.com" }));
+  const pat = db.tables.sm_market_consents.find((c) => c.id === id(47));
+  assert.equal(pat.source, "staff", "until it's confirmed, the staff-recorded answer is what counts");
+  const link = mails.at(-1).text.match(/\/m\/confirm\/([A-Za-z0-9_-]{43})/)[1];
+  await post(`/m/confirm/${link}`, {});
+  assert.deepEqual([pat.level, pat.source, pat.recorded_by], ["sell", "qr", null]);
+  // A more careful QR answer counts at once, and is theirs too.
+  db.tables.sm_market_consents.push({ id: id(48), athlete_id: A7, email: "lou@example.com", level: "sell", under_13: false, source: "staff", recorded_by: "kyron@toj.test", confirmed_at: "2026-11-21T10:00:00Z" });
+  await post("/m/AB2CD3/consent", choice({ jersey: "7", level: "family", under_13: "no", email: "lou@example.com" }));
+  const lou = db.tables.sm_market_consents.find((c) => c.id === id(48));
+  assert.deepEqual([lou.level, lou.source, lou.recorded_by], ["family", "qr", null]);
+});
+
 test("one visitor: room for a busy check-in, then slow down", async () => {
   let ok = 0, last;
   for (let i = 0; i < 41; i++) {

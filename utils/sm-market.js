@@ -286,6 +286,56 @@ function parseTagAnswer(answer, teams, roster, { min = 0.5 } = {}) {
 }
 
 // ── Emails ───────────────────────────────────────────────────────────────
+// One mailbox, however it's written: no +tag, and Gmail ignores dots. For
+// counting what's sent to someone, never for sending.
+function mailboxOf(e) {
+  const [local, domain] = String(e || "").toLowerCase().split("@");
+  if (!domain) return String(e || "").toLowerCase();
+  let l = local.split("+")[0];
+  let d = domain;
+  if (d === "gmail.com" || d === "googlemail.com") {
+    l = l.replace(/\./g, "");
+    d = "gmail.com";
+  }
+  return l + "@" + d;
+}
+
+// What a guardian's QR answer does to their answer so far (was: their row,
+// or null). It returns the fields to write, a confirm token when the answer
+// needs their email to count, and whether it counts now.
+//   - A keep-out counts at once, over anything.
+//   - Nothing of theirs counts yet: the new answer waits for their email. An
+//     unconfirmed "12 or younger" already counts, so it carries over until a
+//     change to it is confirmed.
+//   - Their answer counts: what's more careful counts now; what loosens (or
+//     the same answer again, for a fresh family link) waits for their email.
+// Whatever counts now is the guardian's QR answer, so a staff-recorded row
+// becomes theirs; a change still waiting leaves it as it was.
+function answerPlan(was, value, at) {
+  const wasU13 = !!was && was.under_13 !== false;
+  if (value.level === "out") {
+    return { tok: null, now: true, write: { level: "out", under_13: wasU13 || value.under_13, pending_level: null, pending_under_13: null, confirm_hash: null, confirm_sent_at: null, source: "qr", recorded_by: null } };
+  }
+  const counts = !!was && (!!was.confirmed_at || was.level === "out");
+  if (!counts) {
+    const tok = newToken();
+    const keepU13 = wasU13 && !value.under_13;
+    return {
+      tok,
+      now: false,
+      write: { level: value.level, under_13: keepU13 || value.under_13, pending_level: keepU13 ? value.level : null, pending_under_13: keepU13 ? false : null, confirm_hash: tok.hash, confirm_sent_at: at, confirmed_at: null, family_hash: null, source: "qr", recorded_by: null },
+    };
+  }
+  const same = value.level === was.level && value.under_13 === wasU13;
+  const level = RANK[value.level] < RANK[was.level] ? value.level : was.level;
+  const under_13 = wasU13 || value.under_13;
+  if (same || looser(was, value)) {
+    const tok = newToken();
+    return { tok, now: false, write: { level, under_13, pending_level: value.level, pending_under_13: value.under_13, confirm_hash: tok.hash, confirm_sent_at: at } };
+  }
+  return { tok: null, now: true, write: { level, under_13, pending_level: null, pending_under_13: null, confirm_hash: null, confirm_sent_at: null, source: "qr", recorded_by: null } };
+}
+
 function helpEmail(env = process.env) {
   const e = String(env.SM_HELP_EMAIL || "").trim().toLowerCase();
   return isEmail(e) ? e : "hello@subjectmedias.com";
@@ -412,6 +462,8 @@ module.exports = {
   effectiveLevel,
   levelAtLeast,
   looser,
+  answerPlan,
+  mailboxOf,
   itemAthletes,
   itemAllowed,
   uploadInput,

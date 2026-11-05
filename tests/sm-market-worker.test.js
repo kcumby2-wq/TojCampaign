@@ -234,6 +234,35 @@ test("a clip over an hour fails plainly, with nothing left in storage; so does a
   }
 });
 
+test("if the last save's answer is lost but the save went through, the previews stay (re-check N5)", async () => {
+  const from = db.from;
+  db.from = (name) => {
+    const q = from(name);
+    if (name !== "sm_market_media") return q;
+    const update = q.update.bind(q);
+    q.update = (patch) => {
+      const r = update(patch);
+      if (patch.status === "review") {
+        const run = r.run.bind(r);
+        r.then = (res, rej) => Promise.resolve().then(() => { run(); return { data: null, error: { message: "TypeError: fetch failed" } }; }).then(res, rej);
+      }
+      return r;
+    };
+    return q;
+  };
+  const err = console.error;
+  console.error = () => {};
+  try {
+    await assert.rejects(W.drain(deps()), /fetch failed/);
+  } finally {
+    db.from = from;
+    console.error = err;
+  }
+  assert.equal(row(CLIP).status, "review", "it did reach review");
+  assert.ok(store.has(M.BUCKET, M.previewKey(EV, CLIP, "clip")), "so its preview stays");
+  assert.ok(store.has(M.BUCKET, M.posterKey(EV, CLIP)));
+});
+
 test("after a restart: files stuck in processing go back in the queue, or fail on their third try", async () => {
   const old = new Date(clock.getTime() - W.STALE_MS - 60000).toISOString();
   const recent = new Date(clock.getTime() - 5 * 60000).toISOString();

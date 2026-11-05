@@ -108,8 +108,13 @@ and Google Pay), so paid means paid at once, and a checkout lasts 31 minutes.
   confirmed (approvers see the addresses) and can remove one; removals are
   logged. A keep-out from anyone counts at once, which only ever protects.
 - The QR form emails whatever address is typed in, so its emails are capped:
-  3 an hour (8 a day) to one address, 12 answers an hour for one athlete,
-  200 an hour in all, and 40 tries per visitor per 10 minutes.
+  3 an hour (8 a day) to one mailbox (a +tag or Gmail dots count as the
+  same mailbox), 12 an hour about one athlete, 200 an hour from one event,
+  and 40 tries per visitor per 10 minutes. A keep-out or a more careful
+  answer is saved past every cap (just without its note); only a flood
+  (3,000 answers an hour at one event) stops the form, and then the crew
+  records choices in person. An answer is saved only if the guardian's
+  answer is still as it was read, so two at once can't undo a keep-out.
 - Previews cover a clip's first 90 seconds, at 480p, silent. Long files take
   longer; cut long game film into clips first.
 - The worker runs one file at a time inside the web server, and downloads
