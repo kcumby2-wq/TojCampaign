@@ -19,7 +19,14 @@ const PHOTO_LONG = 960; // photo previews: 960 on the long side
 const FRAME_LONG = 1280; // the frames the AI reads
 const MS = 1000;
 
-class MediaError extends Error {}
+// final: trying again won't change it (not a video, too long), so the file
+// fails at once instead of on its third pass.
+class MediaError extends Error {
+  constructor(message, { final = false } = {}) {
+    super(message);
+    this.final = final;
+  }
+}
 
 function ffmpegPath(env = process.env) {
   if (env.FFMPEG_PATH) return env.FFMPEG_PATH;
@@ -100,7 +107,7 @@ async function probe(file, opts = {}) {
   // With no output, ffmpeg describes the input and exits 1; that's expected.
   const r = await run(["-i", file], opts);
   const info = parseProbe(r.stderr);
-  if (!info.width || !info.height) throw new MediaError("Not a video or photo ffmpeg can read: " + lastWords(r.stderr, opts.dir));
+  if (!info.width || !info.height) throw new MediaError("Not a video or photo ffmpeg can read: " + lastWords(r.stderr, opts.dir), { final: true });
   return info;
 }
 

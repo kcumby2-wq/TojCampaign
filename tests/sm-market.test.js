@@ -58,12 +58,29 @@ test("prices typed as dollars", () => {
   assert.equal(M.money(1200), "$12.00");
 });
 
-test("jersey numbers: digits only, without the # or leading zeros", () => {
+test("jersey numbers: digits only, without the # or leading zeros; 0 and 00 stay two numbers", () => {
   assert.equal(M.jerseyOf("#07"), "7");
+  assert.equal(M.jerseyOf("070"), "70");
   assert.equal(M.jerseyOf("23"), "23");
-  assert.equal(M.jerseyOf("00"), "0");
+  // On a court, #0 and #00 are two different kids.
+  assert.equal(M.jerseyOf("0"), "0");
+  assert.equal(M.jerseyOf("00"), "00");
+  assert.equal(M.jerseyOf("#00"), "00");
+  assert.equal(M.jerseyOf("000"), null);
   assert.equal(M.jerseyOf("A7"), null);
   assert.equal(M.jerseyOf("1234"), null);
+  const roster = [{ id: "a0", team_id: "t", jersey: "0" }, { id: "a00", team_id: "t", jersey: "00" }];
+  assert.deepEqual(M.parseTagAnswer('{"numbers":[{"jersey":"00","team":null,"confidence":0.9}]}', [{ id: "t", name: "Lightning" }], roster), [{ athlete_id: "a00", confidence: 0.9 }]);
+});
+
+test("what loosens a guardian's answer waits for their email; what tightens doesn't", () => {
+  const was = (level, under_13 = false) => ({ level, under_13 });
+  assert.equal(M.looser(was("out"), was("sell")), true, "out to sell loosens");
+  assert.equal(M.looser(was("family"), was("public")), true);
+  assert.equal(M.looser(was("sell", true), was("sell", false)), true, "12 or younger to older loosens");
+  assert.equal(M.looser(was("sell"), was("family")), false, "more careful");
+  assert.equal(M.looser(was("sell"), was("sell", true)), false);
+  assert.equal(M.looser(was("public", true), was("out", false)), false, "a keep-out never loosens");
 });
 
 // ── Consent ──────────────────────────────────────────────────────────────

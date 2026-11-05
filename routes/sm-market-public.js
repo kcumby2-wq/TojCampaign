@@ -85,21 +85,40 @@ async function run(q) {
   return data;
 }
 
-// Tries per visitor, kept in memory for a few minutes. The address is keyed
-// through an HMAC with a key made fresh each start, never stored or logged.
-// Behind Vercel the first X-Forwarded-For entry is the visitor.
+// Tries, kept in memory for a while: [how many, minutes]. Whatever they're
+// keyed on goes through an HMAC with a key made fresh each start, and is never
+// stored or logged. Behind Vercel the first X-Forwarded-For entry is the
+// visitor, but someone calling the server directly can set it themselves, so
+// the QR form is also capped per address it emails, per athlete, and in all.
+// A venue's shared Wi-Fi stays well under the per-visitor limits.
 const SALT = crypto.randomBytes(32);
-const buckets = new Map();
-const LIMITS = { view: [240, 10], consent: [12, 10], confirm: [30, 10], checkout: [20, 10] }; // [tries, minutes]
-function allowed(req, kind) {
+const buckets = new Map(); // per visitor: cleared if it grows huge
+const caps = new Map(); // per address, athlete, and in all: never cleared early
+const CAPS = new Set(["to", "toDay", "athlete", "mail"]);
+const LIMITS = {
+  view: [240, 10],
+  consent: [40, 10],
+  confirm: [30, 10],
+  checkout: [20, 10],
+  to: [3, 60], // emails from the form to one address, an hour
+  toDay: [8, 1440], // and a day
+  athlete: [12, 60], // answers for one athlete, an hour
+  mail: [200, 60], // emails from the form in all, an hour
+};
+const visitor = (req) => String(req.headers["x-forwarded-for"] || "").split(",")[0].trim() || req.socket.remoteAddress || "";
+const allowed = (req, kind) => hit(kind, visitor(req));
+function hit(kind, id) {
   const [max, minutes] = LIMITS[kind];
-  const ip = String(req.headers["x-forwarded-for"] || "").split(",")[0].trim() || req.socket.remoteAddress || "";
-  const key = kind + ":" + crypto.createHmac("sha256", SALT).update(ip).digest("base64").slice(0, 22);
+  const map = CAPS.has(kind) ? caps : buckets;
+  const key = kind + ":" + crypto.createHmac("sha256", SALT).update(String(id)).digest("base64").slice(0, 22);
   const t = Date.now();
-  const b = buckets.get(key);
+  const b = map.get(key);
   if (!b || t > b.reset) {
-    if (buckets.size > 50000) buckets.clear();
-    buckets.set(key, { n: 1, reset: t + minutes * 60000 });
+    if (map.size > 50000) {
+      for (const [k, v] of map) if (t > v.reset) map.delete(k);
+      if (map === buckets && map.size > 50000) map.clear();
+    }
+    map.set(key, { n: 1, reset: t + minutes * 60000 });
     return true;
   }
   b.n++;
@@ -155,7 +174,9 @@ async function withPreviews(sb, items) {
 }
 
 // ── Checkout ─────────────────────────────────────────────────────────────
-async function checkout(req, res, sb, { ev, athleteId, access, back }) {
+// back: where "Back" goes on our pages. A family's page carries its token, so
+// Stripe's cancel link goes to the order instead: Stripe keeps that address.
+async function checkout(req, res, sb, { ev, athleteId, access, back, cancelToOrder = false }) {
   if (!allowed(req, "checkout")) return slowDown(res);
   const want = [...new Set([].concat((req.body && req.body.item) || []).map(String))].filter(idOk).slice(0, 200);
   const pick = (await itemsFor(sb, ev, athleteId, access)).filter((m) => want.includes(m.id)).slice(0, MAX_ITEMS);
@@ -184,7 +205,11 @@ async function checkout(req, res, sb, { ev, athleteId, access, back }) {
       metadata: { kind: "sm_market", order_id: order.id, order_token: tok.token },
       payment_intent_data: { metadata: { kind: "sm_market", order_id: order.id } },
       success_url: `${M.linkTo.order(tok.token)}?session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url: M.siteBase() + back,
+      cancel_url: cancelToOrder ? `${M.linkTo.order(tok.token)}?cancelled=1` : M.siteBase() + back,
+      // Cards (and the wallets that use them) only, so paid means paid at once.
+      payment_method_types: ["card"],
+      // Short-lived: a checkout left open doesn't hold its clips for a day.
+      expires_at: Math.floor(Date.now() / 1000) + 31 * 60,
     });
   } catch (e) {
     console.error("[sm-market-public] checkout didn't start:", e && (e.code || e.type), e && e.message);
@@ -193,6 +218,24 @@ async function checkout(req, res, sb, { ev, athleteId, access, back }) {
   }
   await run(sb.from("sm_market_orders").update({ stripe_session_id: session.id, updated_at: now() }).eq("id", order.id));
   res.redirect(303, session.url);
+}
+
+// The order link, by email, once: whoever claims emailed_at first sends it.
+// A failed send gives the claim back, so the next try (Stripe's retry, or the
+// buyer opening the order) sends it.
+async function sendOrderLink(sb, order, ev, token) {
+  if (!order.email || !ev || !token) return { sent: false, reason: "no_email" };
+  const claimed = await run(sb.from("sm_market_orders").update({ emailed_at: now() }).eq("id", order.id).is("emailed_at", null).select("id"));
+  if (!(claimed || []).length) return { sent: true, reason: "already" };
+  let r;
+  try {
+    r = await mailer.sendMail({ to: order.email, ...M.orderEmail(ev, order, M.linkTo.order(token)) });
+  } catch (e) {
+    console.warn("[sm-market-public] order email failed:", e && e.message);
+    r = { sent: false, reason: "send_failed" };
+  }
+  if (!r || !r.sent) await sb.from("sm_market_orders").update({ emailed_at: null }).eq("id", order.id);
+  return r || { sent: false, reason: "send_failed" };
 }
 
 // A paid checkout: the order is paid, the buyer gets their link (once), staff
@@ -209,30 +252,19 @@ async function markPaid(sb, ses, { token = null } = {}) {
   }
   const cd = ses.customer_details || {};
   const email = cd.email && isEmail(String(cd.email).trim().toLowerCase()) ? String(cd.email).trim().toLowerCase().slice(0, 200) : order.email || null;
+  const pi = typeof ses.payment_intent === "string" && /^pi_[A-Za-z0-9_]{8,200}$/.test(ses.payment_intent) ? ses.payment_intent : null;
   const at = now();
   const flipped = await run(
     sb
       .from("sm_market_orders")
-      .update({ status: "paid", paid_at: at, stripe_session_id: ses.id, email, mode: ses.livemode ? "live" : "test", updated_at: at })
+      .update({ status: "paid", paid_at: at, stripe_session_id: ses.id, stripe_payment_intent: pi, email, mode: ses.livemode ? "live" : "test", updated_at: at })
       .eq("id", order.id)
       .eq("status", "pending")
       .select("id")
   );
   const ev = await run(sb.from("sm_market_events").select("id,name,code").eq("id", order.event_id).maybeSingle());
-  // The link, once: whoever claims emailed_at first sends it.
   const t = token || (M.tokenOk(md.order_token) && M.hashToken(md.order_token) === order.token_hash ? md.order_token : null);
-  if (t && email && ev) {
-    const claimed = await run(sb.from("sm_market_orders").update({ emailed_at: at }).eq("id", order.id).is("emailed_at", null).select("id"));
-    if ((claimed || []).length) {
-      let sent = false;
-      try {
-        sent = !!(await mailer.sendMail({ to: email, ...M.orderEmail(ev, { ...order, email }, M.linkTo.order(t)) })).sent;
-      } catch (e) {
-        console.warn("[sm-market-public] order email failed:", e && e.message);
-      }
-      if (!sent) await sb.from("sm_market_orders").update({ emailed_at: null }).eq("id", order.id);
-    }
-  }
+  const mail = await sendOrderLink(sb, { ...order, email }, ev, t);
   if ((flipped || []).length && ev) {
     const n = (await run(sb.from("sm_market_order_items").select("media_id").eq("order_id", order.id))) || [];
     push.notifySoon(push.teamEmails("member", "market"), {
@@ -242,13 +274,28 @@ async function markPaid(sb, ses, { token = null } = {}) {
       tag: `market-sale-${ev.id}`,
     });
   }
-  return { ok: true, flipped: (flipped || []).length > 0 };
+  return { ok: true, flipped: (flipped || []).length > 0, mail };
 }
 
+// From the Stripe webhook. If the order email didn't go for a reason a retry
+// can fix, it fails, so Stripe sends the event again (the rest is idempotent).
 async function paid(ses) {
   const sb = getSupabase();
   if (!sb) throw new Error("storage_unavailable");
-  return markPaid(sb, ses);
+  const r = await markPaid(sb, ses);
+  if (r.ok && r.mail && !r.mail.sent && r.mail.reason === "send_failed") throw new Error("order_email_failed");
+  return r;
+}
+
+// A refund in Stripe: once the whole payment is back, the order's downloads close.
+async function refunded(charge) {
+  const sb = getSupabase();
+  if (!sb || !charge) return { ok: false };
+  const pi = typeof charge.payment_intent === "string" ? charge.payment_intent : charge.payment_intent && charge.payment_intent.id;
+  if (!pi || !/^pi_[A-Za-z0-9_]{8,200}$/.test(pi)) return { ok: false, reason: "no_payment" };
+  if (!(charge.refunded === true || Number(charge.amount_refunded) >= Number(charge.amount))) return { ok: false, reason: "partial" };
+  const done = await run(sb.from("sm_market_orders").update({ status: "refunded", updated_at: now() }).eq("stripe_payment_intent", pi).eq("status", "paid").select("id"));
+  return { ok: true, refunded: (done || []).length };
 }
 async function expired(ses) {
   const sb = getSupabase();
@@ -273,24 +320,31 @@ async function consentByConfirm(sb, token) {
 }
 const usedLink = (res) => message(res, 404, "Link already used", "This confirm link has been used, or a newer choice replaced it. Your family link is in the email we sent when you confirmed.");
 
+// What a confirm link confirms: the pending change if there is one, or the answer itself.
+const asked = (c) => (c.pending_level ? { level: c.pending_level, under_13: c.pending_under_13 } : { level: c.level, under_13: c.under_13 });
+
 router.get("/confirm/:token", page(async (req, res, sb) => {
   if (!allowed(req, "confirm")) return slowDown(res);
-  const hit = await consentByConfirm(sb, req.params.token);
-  if (!hit) return usedLink(res);
-  send(res, 200, (nonce) => P.confirmPage({ nonce, event: hit.ev, team: hit.team.name, jersey: hit.a.jersey, level: hit.c.level, token: req.params.token }));
+  const found = await consentByConfirm(sb, req.params.token);
+  if (!found) return usedLink(res);
+  const want = asked(found.c);
+  send(res, 200, (nonce) => P.confirmPage({ nonce, event: found.ev, team: found.team.name, jersey: found.a.jersey, level: want.level, under13: want.under_13, token: req.params.token }));
 }));
 
+// Confirming applies the answer, and gives the family a fresh family link
+// (the old one stops working), by email and on the page.
 router.post("/confirm/:token", page(async (req, res, sb) => {
   if (!allowed(req, "confirm")) return slowDown(res);
-  const hit = await consentByConfirm(sb, req.params.token);
-  if (!hit) return usedLink(res);
-  const fam = hit.c.level === "out" ? null : M.newToken();
+  const found = await consentByConfirm(sb, req.params.token);
+  if (!found) return usedLink(res);
+  const want = asked(found.c);
+  const fam = want.level === "out" ? null : M.newToken();
   const at = now();
   const done = await run(
     sb
       .from("sm_market_consents")
-      .update({ confirmed_at: at, confirm_hash: null, family_hash: fam ? fam.hash : null, updated_at: at })
-      .eq("id", hit.c.id)
+      .update({ level: want.level, under_13: want.under_13, pending_level: null, pending_under_13: null, confirmed_at: at, confirm_hash: null, family_hash: fam ? fam.hash : null, updated_at: at })
+      .eq("id", found.c.id)
       .eq("confirm_hash", M.hashToken(req.params.token))
       .select("id")
   );
@@ -299,12 +353,12 @@ router.post("/confirm/:token", page(async (req, res, sb) => {
   const link = fam ? M.linkTo.family(fam.token) : null;
   if (link) {
     try {
-      mailed = !!(await mailer.sendMail({ to: hit.c.email, ...M.familyEmail(hit.ev, hit.team.name, hit.a.jersey, hit.c.level, link) })).sent;
+      mailed = !!(await mailer.sendMail({ to: found.c.email, ...M.familyEmail(found.ev, found.team.name, found.a.jersey, want.level, link) })).sent;
     } catch (e) {
       console.warn("[sm-market-public] family link email failed:", e && e.message);
     }
   }
-  send(res, 200, (nonce) => P.confirmPage({ nonce, event: hit.ev, team: hit.team.name, jersey: hit.a.jersey, level: hit.c.level, done: true, familyLink: link, mailed }));
+  send(res, 200, (nonce) => P.confirmPage({ nonce, event: found.ev, team: found.team.name, jersey: found.a.jersey, level: want.level, under13: want.under_13, done: true, familyLink: link, mailed }));
 }));
 
 // ── A family's page ──────────────────────────────────────────────────────
@@ -334,7 +388,7 @@ router.get("/f/:token", page(async (req, res, sb) => {
 router.post("/f/:token/checkout", page(async (req, res, sb) => {
   const f = await family(sb, req.params.token);
   if (!f || f.ev.status === "draft" || !M.levelAtLeast(f.level, "family")) return notFound(res);
-  await checkout(req, res, sb, { ev: f.ev, athleteId: f.a.id, access: "family", back: `/m/f/${req.params.token}` });
+  await checkout(req, res, sb, { ev: f.ev, athleteId: f.a.id, access: "family", back: `/m/f/${req.params.token}`, cancelToOrder: true });
 }));
 
 // ── An order ─────────────────────────────────────────────────────────────
@@ -360,11 +414,18 @@ router.get("/o/:token", page(async (req, res, sb) => {
   }
   const back = `/m/${ev.code}`;
   if (order.status === "pending") {
+    // Back from Stripe's "back" link: nothing was paid.
+    if (req.query.cancelled === "1") return send(res, 200, (nonce) => P.orderPage({ nonce, event: ev, order, state: "cancelled", backTo: back }));
     const fresh = Date.now() - Date.parse(order.created_at || 0) < 30 * 60 * 1000;
     if (!fresh) return message(res, 200, "Payment not seen", "We haven't seen a payment for this order. If you were charged, email us and we'll send your downloads.", back, "Back to the clips");
     return send(res, 200, (nonce) => P.orderPage({ nonce, event: ev, order, state: "pending" }));
   }
   if (order.status !== "paid") return send(res, 200, (nonce) => P.orderPage({ nonce, event: ev, order, state: order.status, backTo: back }));
+  // Paid, but the link never reached them (email was down): try again now.
+  if (!order.emailed_at && order.email) {
+    const r = await sendOrderLink(sb, order, ev, token);
+    if (r.sent) order = { ...order, emailed_at: order.emailed_at || now() };
+  }
   const lines = (await run(sb.from("sm_market_order_items").select("media_id,price_cents").eq("order_id", order.id))) || [];
   const ids = lines.map((l) => l.media_id);
   const media = ids.length ? (await run(sb.from("sm_market_media").select("*").in("id", ids))) || [] : [];
@@ -441,7 +502,8 @@ router.get("/:code/consent", page(async (req, res, sb) => {
 router.get("/:code/consent/sent", page(async (req, res, sb) => {
   const ev = await eventByCode(sb, req.params.code);
   if (!ev) return notFound(res);
-  send(res, 200, (nonce) => P.consentSentPage({ nonce, event: ev, kept: req.query.k === "out", mailed: req.query.m === "1" }));
+  const k = req.query.k === "out" || req.query.k === "now" ? req.query.k : "";
+  send(res, 200, (nonce) => P.consentSentPage({ nonce, event: ev, kept: k === "out", now: k === "now", mailed: req.query.m === "1" }));
 }));
 
 router.post("/:code/consent", page(async (req, res, sb) => {
@@ -458,6 +520,12 @@ router.post("/:code/consent", page(async (req, res, sb) => {
   const form = (status, formError = "") => send(res, status, (nonce) => P.consentPage({ nonce, event: ev, teams, values, errors, formError }));
   if (errors.length) return form(400, errors.includes("level") && values.level === "public" && values.under_13 === "yes" ? "Showing publicly isn't open for athletes 12 or younger. Pick another choice." : "");
 
+  // The form emails whoever's address is typed in, so it's capped in all,
+  // per address and per athlete, whatever the visitor's address says.
+  if (!hit("mail", "all") || !hit("to", value.email) || !hit("toDay", value.email) || !hit("athlete", `${ev.id}:${value.team_id}:${value.jersey}`)) {
+    return message(res, 429, "Too many tries", "That's a lot of answers for this athlete or this email. Try again later, or ask our crew to record your choice.");
+  }
+
   // The number may not be on the roster yet: the guardian's answer adds it.
   let a = await athleteAt(sb, ev, value.team_id, value.jersey);
   if (!a) {
@@ -468,28 +536,55 @@ router.post("/:code/consent", page(async (req, res, sb) => {
     a = await athleteAt(sb, ev, value.team_id, value.jersey);
     if (!a) throw new Error("athlete_not_saved");
   }
-  const out = value.level === "out";
-  const tok = out ? null : M.newToken();
+
+  // One answer per guardian per athlete. What protects counts at once: a
+  // keep-out, a more careful choice, "12 or younger". What loosens waits for
+  // the guardian to confirm from their email, and until then their earlier
+  // answer stands. So nobody can loosen a guardian's answer just by knowing
+  // their email address.
   const at = now();
-  // One answer per guardian per athlete: a new answer replaces the old one and
-  // waits for confirming again (a keep-out counts at once).
-  await run(
-    sb.from("sm_market_consents").upsert(
-      { athlete_id: a.id, email: value.email, level: value.level, under_13: value.under_13, source: "qr", confirm_hash: tok ? tok.hash : null, confirm_sent_at: tok ? at : null, confirmed_at: null, family_hash: null, recorded_by: null, updated_at: at },
-      { onConflict: "athlete_id,email" }
-    )
-  );
+  const was = await run(sb.from("sm_market_consents").select("*").eq("athlete_id", a.id).eq("email", value.email).maybeSingle());
+  const counts = !!was && (!!was.confirmed_at || was.level === "out");
+  let tok = null;
+  let level = value.level;
+  let under13 = value.under_13;
+  if (!counts) {
+    // Nothing of theirs counts yet: this answer replaces any earlier one.
+    tok = value.level === "out" ? null : M.newToken();
+    await run(
+      sb.from("sm_market_consents").upsert(
+        { athlete_id: a.id, email: value.email, level, under_13: under13, source: "qr", confirm_hash: tok ? tok.hash : null, confirm_sent_at: tok ? at : null, confirmed_at: null, family_hash: null, pending_level: null, pending_under_13: null, recorded_by: null, updated_at: at },
+        { onConflict: "athlete_id,email" }
+      )
+    );
+  } else {
+    // What's more careful counts now. A loosening waits for their email, and
+    // so does the same answer again (how a family gets a fresh family link).
+    const same = value.level === was.level && value.under_13 === (was.under_13 !== false);
+    const waits = value.level !== "out" && (same || M.looser(was, value));
+    level = M.RANK[value.level] < M.RANK[was.level] ? value.level : was.level;
+    under13 = was.under_13 !== false || value.under_13;
+    tok = waits ? M.newToken() : null;
+    const patch = waits
+      ? { level, under_13: under13, pending_level: value.level, pending_under_13: value.under_13, confirm_hash: tok.hash, confirm_sent_at: at, updated_at: at }
+      : { level, under_13: under13, pending_level: null, pending_under_13: null, confirm_hash: null, confirm_sent_at: null, updated_at: at };
+    await run(sb.from("sm_market_consents").update(patch).eq("id", was.id));
+  }
   const team = teams.find((t) => t.id === value.team_id);
+  const changedNow = !tok && level !== "out";
   let mailed = false;
   try {
-    const mail = out
-      ? { subject: `Kept out: ${team.name} #${value.jersey} at ${ev.name}`, text: [`Someone using this email asked us to keep ${team.name} #${value.jersey} out of everything from ${ev.name}. Done: nothing of them is shown or sold.`, "", `If that wasn't you, or you want to change it, email ${P.helpEmail()}.`, "", "Subject Medias"].join("\n") }
-      : M.consentEmail(ev, team.name, value.jersey, value.level, M.linkTo.confirm(tok.token));
+    const mail = tok
+      ? M.consentEmail(ev, team.name, value.jersey, value.level, M.linkTo.confirm(tok.token))
+      : level === "out"
+        ? M.keptOutEmail(ev, team.name, value.jersey)
+        : M.changedEmail(ev, team.name, value.jersey, level, under13);
     mailed = !!(await mailer.sendMail({ to: value.email, ...mail })).sent;
   } catch (e) {
     console.warn("[sm-market-public] consent email failed:", e && e.message);
   }
-  res.redirect(303, `/m/${ev.code}/consent/sent?${out ? "k=out&" : ""}m=${mailed ? 1 : 0}`);
+  const k = level === "out" && !tok ? "out" : changedNow ? "now" : "";
+  res.redirect(303, `/m/${ev.code}/consent/sent?${k ? "k=" + k + "&" : ""}m=${mailed ? 1 : 0}`);
 }));
 
 router.use((req, res) => notFound(res));
@@ -497,6 +592,10 @@ router.use((req, res) => notFound(res));
 module.exports = router;
 module.exports.paid = paid;
 module.exports.expired = expired;
+module.exports.refunded = refunded;
 module.exports.markPaid = markPaid;
 module.exports.itemsFor = itemsFor;
-module.exports._reset = () => buckets.clear();
+module.exports._reset = () => {
+  buckets.clear();
+  caps.clear();
+};

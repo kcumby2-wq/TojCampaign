@@ -18,7 +18,7 @@
 //   GET    /api/sm/market/events/:id/media         its media, with preview links and tags (viewer)
 //   PATCH  /api/sm/market/media/:id                confirm tags (member); approve or hide (approver)
 //   POST   /api/sm/market/media/:id/retry          process a failed file again (member)
-//   DELETE /api/sm/market/media/:id                remove an unsold file (approver)
+//   DELETE /api/sm/market/media/:id                remove an unsold file and its previews (approver)
 //   GET    /api/sm/market/events/:id/orders        orders (approver)
 //   GET    /api/sm/market/events/:id/qr/:which.svg the QR for the event or consent page (viewer)
 //
@@ -93,7 +93,7 @@ async function rosterOf(sb, eventId, { withEmails = false } = {}) {
   ]);
   const ids = (athletes || []).map((a) => a.id);
   const consents = ids.length
-    ? await run(sb.from("sm_market_consents").select("id,athlete_id,email,level,under_13,source,confirmed_at,created_at").in("athlete_id", ids))
+    ? await run(sb.from("sm_market_consents").select("id,athlete_id,email,level,under_13,source,confirmed_at,pending_level,pending_under_13,created_at,updated_at").in("athlete_id", ids))
     : [];
   const list = (athletes || [])
     .map((a) => {
@@ -107,7 +107,8 @@ async function rosterOf(sb, eventId, { withEmails = false } = {}) {
           under_13: c.under_13,
           source: c.source,
           confirmed: !!c.confirmed_at,
-          at: c.confirmed_at || c.created_at,
+          pending: c.pending_level ? { level: c.pending_level, under_13: !!c.pending_under_13 } : null,
+          at: c.updated_at || c.confirmed_at || c.created_at,
           ...(withEmails ? { email: c.email } : {}),
         })),
       };
@@ -256,6 +257,8 @@ router.post("/athletes/:id/consents", approver, jsonOnly, withDb(async (req, res
     source: "staff",
     confirmed_at: at,
     confirm_hash: null,
+    pending_level: null,
+    pending_under_13: null,
     family_hash: fam ? fam.hash : null,
     recorded_by: actor(req),
     updated_at: at,
@@ -286,11 +289,14 @@ router.post("/athletes/:id/consents", approver, jsonOnly, withDb(async (req, res
   });
 }));
 
+// Removing a family's answer is logged like a keep-out (never with their address).
 router.delete("/consents/:id", approver, withDb(async (req, res, sb) => {
   if (!idOk(req.params.id)) return res.status(404).json({ error: "not_found" });
-  const c = await run(sb.from("sm_market_consents").select("id").eq("id", req.params.id).maybeSingle());
+  const c = await run(sb.from("sm_market_consents").select("id,athlete_id,level,source").eq("id", req.params.id).maybeSingle());
   if (!c) return res.status(404).json({ error: "not_found" });
+  const a = await run(sb.from("sm_market_athletes").select("id,event_id").eq("id", c.athlete_id).maybeSingle());
   await run(sb.from("sm_market_consents").delete().eq("id", c.id));
+  await T.logActivity(actor(req), "market_consent_removed", null, { event_id: a ? a.event_id : null, level: c.level, source: c.source });
   res.json({ ok: true });
 }));
 
@@ -381,6 +387,9 @@ router.get("/events/:id/media", viewer, withDb(async (req, res, sb) => {
 }));
 
 // Confirm who's in it (member); approve it for sale or hide it (approver).
+// Everything is checked before anything is written. A member changing who's
+// in an approved item sends it back to review, so an approver sees the new
+// pairing; so does leaving nobody confirmed in it.
 router.patch("/media/:id", member, jsonOnly, withDb(async (req, res, sb) => {
   if (!idOk(req.params.id)) return res.status(404).json({ error: "not_found" });
   const media = await run(sb.from("sm_market_media").select("*").eq("id", req.params.id).maybeSingle());
@@ -389,38 +398,38 @@ router.patch("/media/:id", member, jsonOnly, withDb(async (req, res, sb) => {
   if (body.tags === undefined && body.status === undefined) return res.status(400).json({ error: "nothing_to_change" });
   if (body.status !== undefined && !atLeast(req, "approver")) return res.status(403).json({ error: "role_too_low", need: "approver" });
   if (!["review", "approved", "hidden"].includes(media.status)) return res.status(409).json({ error: "not_ready" });
+  if (body.status !== undefined && !["approved", "hidden", "review"].includes(body.status)) return res.status(400).json({ error: "invalid", fields: ["status"] });
 
+  const existing = (await run(sb.from("sm_market_tags").select("athlete_id,source,confidence,confirmed").eq("media_id", media.id))) || [];
+  const confirmedNow = existing.filter((t) => t.confirmed).map((t) => t.athlete_id);
+  let want = null;
   if (body.tags !== undefined) {
-    const want = Array.isArray(body.tags) ? [...new Set(body.tags.map(String))] : null;
+    want = Array.isArray(body.tags) ? [...new Set(body.tags.map(String))] : null;
     if (!want || want.length > 40 || !want.every(idOk)) return res.status(400).json({ error: "invalid", fields: ["tags"] });
     const roster = want.length ? await run(sb.from("sm_market_athletes").select("id,event_id").in("id", want)) : [];
     if (roster.length !== want.length || roster.some((a) => a.event_id !== media.event_id)) return res.status(400).json({ error: "invalid", fields: ["tags"] });
-    const existing = await run(sb.from("sm_market_tags").select("athlete_id,source,confidence").eq("media_id", media.id));
+  }
+  const confirmedAfter = want || confirmedNow;
+  if (body.status === "approved" && !confirmedAfter.length) return res.status(409).json({ error: "no_confirmed_tag" });
+  const changed = !!want && (want.length !== confirmedNow.length || want.some((id) => !confirmedNow.includes(id)));
+
+  if (want) {
     // What a person confirms is who's in it; any other suggestion goes.
-    const drop = (existing || []).filter((t) => !want.includes(t.athlete_id)).map((t) => t.athlete_id);
+    const drop = existing.filter((t) => !want.includes(t.athlete_id)).map((t) => t.athlete_id);
     if (drop.length) await run(sb.from("sm_market_tags").delete().eq("media_id", media.id).in("athlete_id", drop));
     const at = now();
     for (const id of want) {
-      const had = (existing || []).find((t) => t.athlete_id === id);
+      const had = existing.find((t) => t.athlete_id === id);
       const row = { media_id: media.id, athlete_id: id, event_id: media.event_id, source: had ? had.source : "staff", confidence: had ? had.confidence : null, confirmed: true, confirmed_by: actor(req), confirmed_at: at };
       await run(sb.from("sm_market_tags").upsert(row, { onConflict: "media_id,athlete_id" }));
     }
   }
 
-  // An approved item nobody is confirmed in any more goes back to review.
-  if (body.tags !== undefined && body.status === undefined && media.status === "approved") {
-    const left = await run(sb.from("sm_market_tags").select("athlete_id").eq("media_id", media.id).eq("confirmed", true));
-    if (!(left || []).length) await run(sb.from("sm_market_media").update({ status: "review", updated_at: now() }).eq("id", media.id));
-  }
-
-  if (body.status !== undefined) {
-    if (!["approved", "hidden", "review"].includes(body.status)) return res.status(400).json({ error: "invalid", fields: ["status"] });
-    if (body.status === "approved") {
-      const confirmed = await run(sb.from("sm_market_tags").select("athlete_id").eq("media_id", media.id).eq("confirmed", true));
-      if (!(confirmed || []).length) return res.status(409).json({ error: "no_confirmed_tag" });
-    }
-    const patch = { status: body.status, updated_at: now() };
-    if (body.status === "approved") Object.assign(patch, { approved_at: now(), approved_by: actor(req) });
+  let status = body.status;
+  if (status === undefined && media.status === "approved" && changed && (!confirmedAfter.length || !atLeast(req, "approver"))) status = "review";
+  if (status !== undefined && status !== media.status) {
+    const patch = { status, updated_at: now() };
+    if (status === "approved") Object.assign(patch, { approved_at: now(), approved_by: actor(req) });
     await run(sb.from("sm_market_media").update(patch).eq("id", media.id));
   }
   const data = await run(sb.from("sm_market_media").select("id,status,approved_at").eq("id", media.id).single());
@@ -438,16 +447,27 @@ router.post("/media/:id/retry", member, jsonOnly, withDb(async (req, res, sb) =>
   res.json({ ok: true });
 }));
 
+// An unsold file, with its original, preview and poster. A paid (or refunded)
+// sale keeps it. A checkout started in the last hour holds it for now; lines
+// from checkouts that ended unpaid are cleared away.
 router.delete("/media/:id", approver, withDb(async (req, res, sb) => {
   if (!idOk(req.params.id)) return res.status(404).json({ error: "not_found" });
   const media = await run(sb.from("sm_market_media").select("*").eq("id", req.params.id).maybeSingle());
   if (!media) return res.status(404).json({ error: "not_found" });
-  const sold = await run(sb.from("sm_market_order_items").select("order_id").eq("media_id", media.id).limit(1));
-  if ((sold || []).length) return res.status(409).json({ error: "sold" });
+  const lines = (await run(sb.from("sm_market_order_items").select("order_id").eq("media_id", media.id))) || [];
+  if (lines.length) {
+    const orders = (await run(sb.from("sm_market_orders").select("id,status,created_at").in("id", lines.map((l) => l.order_id)))) || [];
+    if (orders.some((o) => o.status === "paid" || o.status === "refunded")) return res.status(409).json({ error: "sold" });
+    const hour = Date.now() - 60 * 60 * 1000;
+    if (orders.some((o) => o.status === "pending" && Date.parse(o.created_at) > hour)) return res.status(409).json({ error: "in_checkout" });
+    await run(sb.from("sm_market_order_items").delete().eq("media_id", media.id).in("order_id", orders.map((o) => o.id)));
+  }
   await run(sb.from("sm_market_media").delete().eq("id", media.id));
-  const keys = [media.object_key, media.preview_key, media.poster_key].filter(Boolean);
+  // Every file this one could have made, whether or not the row says so.
+  const keys = [...new Set([media.object_key, media.preview_key, media.poster_key, M.previewKey(media.event_id, media.id, media.kind), M.posterKey(media.event_id, media.id)].filter(Boolean))];
   const { error } = await sb.storage.from(M.BUCKET).remove(keys);
   if (error) console.warn("[sm-market] files left in storage:", keys.join(", "), error.message);
+  await T.logActivity(actor(req), "market_media_removed", null, { event_id: media.event_id, kind: media.kind });
   res.json({ ok: true });
 }));
 

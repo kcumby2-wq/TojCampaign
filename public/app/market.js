@@ -43,6 +43,7 @@
     not_ready: "It's still processing.",
     not_failed: "It hasn't failed.",
     sold: "Someone bought it, so it stays.",
+    in_checkout: "Someone is checking out with it right now. Try again in an hour.",
     json_only: "Update the app and try again.",
   };
   function say(e) {
@@ -72,6 +73,13 @@
     catch (e) { T().toast("Couldn't copy here. Press and hold the link to copy it."); }
   }
   async function load(id) { return T().api(API + "/events/" + enc(id)); }
+  // As the server reads a number: "#07" is 7, but 0 and 00 are two numbers.
+  function jersey(v) {
+    var s = String(v || "").trim().replace(/^#/, "");
+    if (!/^[0-9]{1,3}$/.test(s)) return null;
+    if (/^0+$/.test(s)) return s.length <= 2 ? s : null;
+    return s.replace(/^0+/, "");
+  }
   function label(a, teams) {
     var t = (teams || []).filter(function (x) { return x.id === a.team_id; })[0];
     return (t ? t.name + " " : "") + "#" + a.jersey;
@@ -211,7 +219,8 @@
     var answers = (a.consents || []).map(function (c) {
       var l = LEVEL[c.level] || [c.level];
       var how = c.source === "staff" ? "Recorded in person" : c.confirmed ? "From the QR, confirmed" : c.level === "out" ? "From the QR (a keep-out counts at once)" : "From the QR, waiting for them to confirm";
-      return '<div class="li" style="cursor:default"><div class="grow"><div class="name" style="font-size:15px">' + h(l[0]) + (c.under_13 ? " · 12 or younger" : "") + '</div><div class="sub">' + h([how, t.ago(c.at)].join(" · ")) + "</div>" + (c.email ? '<div class="sub mono" style="font-size:11.5px;word-break:break-all">' + h(c.email) + "</div>" : "") + "</div>" +
+      var pend = c.pending ? '<div class="sub" style="color:var(--warn)">' + h("Waiting for them to confirm a change to " + (LEVEL[c.pending.level] || [c.pending.level])[0] + (c.pending.under_13 ? ", 12 or younger" : "") + ". Until then, this answer counts.") + "</div>" : "";
+      return '<div class="li" style="cursor:default"><div class="grow"><div class="name" style="font-size:15px">' + h(l[0]) + (c.under_13 ? " · 12 or younger" : "") + '</div><div class="sub">' + h([how, t.ago(c.at)].join(" · ")) + "</div>" + pend + (c.email ? '<div class="sub mono" style="font-size:11.5px;word-break:break-all">' + h(c.email) + "</div>" : "") + "</div>" +
         (can.edit ? '<button type="button" class="btn small ghost" data-rmc="' + h(c.id) + '">Remove</button>' : "") + "</div>";
     }).join("");
     t.show("today",
@@ -398,7 +407,7 @@
     bind("[data-addwho]", "click", function (b) {
       var card = b.closest("[data-media]");
       var team = card.querySelector("[data-addteam]").value;
-      var num = String(Number(String(card.querySelector("[data-addnum]").value).replace(/^#/, "")));
+      var num = jersey(card.querySelector("[data-addnum]").value);
       var a = (d.athletes || []).filter(function (x) { return x.team_id === team && x.jersey === num; })[0];
       var msg = card.querySelector("[data-msg]");
       if (!a) { msg.innerHTML = '<span class="err">' + h("That number isn't on the roster. Add it on the event first.") + "</span>"; return; }

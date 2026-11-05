@@ -16,7 +16,8 @@
 --     once), or a staff member records it. The most careful answer among the
 --     guardians wins, and staff keep-out beats everything. Nothing of an
 --     athlete is shown or sold without a confirmed consent. An athlete under
---     13 is never public.
+--     13 is never public. A guardian's new answer that loosens what counts
+--     waits, as pending_*, until it's confirmed; what tightens counts at once.
 --   * Tags: the AI suggests jersey numbers; only a person confirms them, and
 --     only confirmed tags decide whose a clip is.
 --   * Orders: the buyer's email, what they bought, the Stripe checkout. The
@@ -83,6 +84,10 @@ create table if not exists public.sm_market_consents (
   source text not null default 'qr' check (source in ('qr', 'staff')),
   -- The emailed confirmation link's hash, until it's used.
   confirm_hash text check (confirm_hash is null or confirm_hash ~ '^[0-9a-f]{64}$'),
+  -- A change that loosens the answer above, waiting for that link. Until
+  -- it's confirmed, level and under_13 are what count.
+  pending_level text check (pending_level is null or pending_level in ('family', 'sell', 'public')),
+  pending_under_13 boolean,
   confirm_sent_at timestamptz,
   confirmed_at timestamptz,
   -- The family link's hash, set once confirmed.
@@ -95,7 +100,12 @@ create table if not exists public.sm_market_consents (
   constraint sm_market_consents_public_chk check (level <> 'public' or not under_13),
   -- A staff member who records a consent confirms it.
   constraint sm_market_consents_staff_chk check (source = 'qr' or (confirmed_at is not null and recorded_by is not null)),
-  constraint sm_market_consents_family_chk check (family_hash is null or confirmed_at is not null)
+  constraint sm_market_consents_family_chk check (family_hash is null or confirmed_at is not null),
+  -- A pending change is whole, has its link, and is never public under 13.
+  constraint sm_market_consents_pending_chk check (
+    (pending_level is null) = (pending_under_13 is null)
+    and (pending_level is null or confirm_hash is not null)
+    and not (pending_level = 'public' and pending_under_13))
 );
 create index if not exists sm_market_consents_athlete_idx on public.sm_market_consents (athlete_id);
 create unique index if not exists sm_market_consents_confirm_idx on public.sm_market_consents (confirm_hash) where confirm_hash is not null;
@@ -158,6 +168,8 @@ create table if not exists public.sm_market_orders (
   status text not null default 'pending' check (status in ('pending', 'paid', 'refunded', 'expired')),
   amount_cents int not null check (amount_cents between 50 and 10000000),
   stripe_session_id text unique check (stripe_session_id is null or stripe_session_id ~ '^cs_[A-Za-z0-9_]{8,200}$'),
+  -- The payment, so a refund in Stripe finds its order.
+  stripe_payment_intent text check (stripe_payment_intent is null or stripe_payment_intent ~ '^pi_[A-Za-z0-9_]{8,200}$'),
   -- The order link's hash. The link itself is only ever in the buyer's hands.
   token_hash text not null unique check (token_hash ~ '^[0-9a-f]{64}$'),
   mode text check (mode is null or mode in ('test', 'live')),
@@ -168,6 +180,7 @@ create table if not exists public.sm_market_orders (
   constraint sm_market_orders_paid_chk check (status not in ('paid', 'refunded') or (paid_at is not null and stripe_session_id is not null))
 );
 create index if not exists sm_market_orders_event_idx on public.sm_market_orders (event_id, created_at desc);
+create index if not exists sm_market_orders_payment_idx on public.sm_market_orders (stripe_payment_intent) where stripe_payment_intent is not null;
 
 create table if not exists public.sm_market_order_items (
   order_id uuid not null references public.sm_market_orders(id) on delete cascade,

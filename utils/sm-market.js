@@ -137,9 +137,12 @@ function eventInput(raw, { partial = false } = {}) {
 }
 
 const teamName = (v) => one(v, 60) || null;
+// "#07" is 7, but 0 and 00 are two different numbers on a court.
 const jerseyOf = (v) => {
   const s = one(v, 4).replace(/^#/, "");
-  return /^[0-9]{1,3}$/.test(s) ? String(Number(s)) : null;
+  if (!/^[0-9]{1,3}$/.test(s)) return null;
+  if (/^0+$/.test(s)) return s.length <= 2 ? s : null;
+  return s.replace(/^0+/, "");
 };
 
 // ── Consent ──────────────────────────────────────────────────────────────
@@ -178,6 +181,15 @@ function effectiveLevel(athlete, consents) {
   return level;
 }
 const levelAtLeast = (level, want) => (RANK[level] || 0) >= RANK[want] && level !== "none" && level !== "out";
+
+// Would a guardian's new answer loosen the one of theirs that counts now? A
+// keep-out never does. A higher level does, and so does "not 12 or younger"
+// after "12 or younger". What loosens waits for their email; the rest counts
+// at once.
+function looser(current, answer) {
+  if (answer.level === "out") return false;
+  return RANK[answer.level] > RANK[current.level] || (current.under_13 !== false && answer.under_13 === false);
+}
 
 // Who's in an item: the athletes whose tags a person confirmed.
 function itemAthletes(item, tags) {
@@ -274,6 +286,10 @@ function parseTagAnswer(answer, teams, roster, { min = 0.5 } = {}) {
 }
 
 // ── Emails ───────────────────────────────────────────────────────────────
+function helpEmail(env = process.env) {
+  const e = String(env.SM_HELP_EMAIL || "").trim().toLowerCase();
+  return isEmail(e) ? e : "hello@subjectmedias.com";
+}
 function siteBase(env = process.env) {
   return String(env.SM_SITE_BASE || "https://www.subjectmedias.com").replace(/\/+$/, "");
 }
@@ -303,7 +319,7 @@ function consentEmail(event, team, jersey, level, link) {
       "If that was you, confirm it here:",
       link,
       "",
-      "If it wasn't you, ignore this email and nothing changes. You can change your choice any time from the same form, or by replying to this email.",
+      `If it wasn't you, ignore this email and nothing changes. You can change your choice any time from the same form, or by emailing ${helpEmail()}.`,
       "",
       "Subject Medias",
     ].join("\n"),
@@ -321,7 +337,35 @@ function familyEmail(event, team, jersey, level, link) {
       "This is your family's own link. It shows the clips and photos of your athlete once our crew has checked them, and it's where you buy:",
       link,
       "",
-      "Keep it to your family: anyone with the link sees what it shows. To change your choice, or to have your athlete kept out, reply to this email.",
+      `Keep it to your family: anyone with the link sees what it shows. To change your choice, or to have your athlete kept out, email ${helpEmail()}.`,
+      "",
+      "Subject Medias",
+    ].join("\n"),
+  };
+}
+// A keep-out, or a more careful choice: it counts at once, so this only tells
+// the address given what happened.
+function keptOutEmail(event, team, jersey) {
+  return {
+    subject: `Kept out: ${team} #${jersey} at ${event.name}`,
+    text: [
+      `Someone using this email asked us to keep ${team} #${jersey} out of everything from ${event.name}. Done: nothing of them is shown or sold.`,
+      "",
+      `If that wasn't you, or you want to change it, email ${helpEmail()}.`,
+      "",
+      "Subject Medias",
+    ].join("\n"),
+  };
+}
+function changedEmail(event, team, jersey, level, under13) {
+  return {
+    subject: `Changed: ${team} #${jersey} at ${event.name}`,
+    text: [
+      `Someone using this email changed the choice for ${team} #${jersey} at ${event.name} to: ${LEVEL_WORDS[level]}${under13 ? ", 12 or younger" : ""}.`,
+      "",
+      "A more careful choice counts at once, so it's in effect now.",
+      "",
+      `If that wasn't you, or you want to change it back, email ${helpEmail()}.`,
       "",
       "Subject Medias",
     ].join("\n"),
@@ -336,7 +380,7 @@ function orderEmail(event, order, link) {
       `Your downloads from ${event.name} (${money(order.amount_cents)}) are here, in full resolution with no watermark:`,
       link,
       "",
-      "Keep this email: the link is how you get back to them. Questions? Reply to this email.",
+      `Keep this email: the link is how you get back to them. Questions? Email ${helpEmail()}.`,
       "",
       "Subject Medias",
     ].join("\n"),
@@ -349,6 +393,7 @@ module.exports = {
   CODE,
   LEVELS,
   LEVEL_WORDS,
+  RANK,
   STATUSES,
   MEDIA_STATUSES,
   DEFAULT_PRICES,
@@ -366,6 +411,7 @@ module.exports = {
   consentInput,
   effectiveLevel,
   levelAtLeast,
+  looser,
   itemAthletes,
   itemAllowed,
   uploadInput,
@@ -376,9 +422,12 @@ module.exports = {
   downloadName,
   tagPrompt,
   parseTagAnswer,
+  helpEmail,
   siteBase,
   linkTo,
   consentEmail,
   familyEmail,
+  keptOutEmail,
+  changedEmail,
   orderEmail,
 };

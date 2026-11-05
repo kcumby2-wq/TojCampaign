@@ -105,6 +105,9 @@ async function processOne(row, d) {
     await download(d, row.object_key, src);
     const info = await d.media.probe(src, opts);
     const isClip = row.kind === "clip";
+    // What the database can hold, said plainly before any work is done.
+    if (isClip && info.duration_ms > 3600 * 1000) throw new media.MediaError("Longer than an hour. Cut it into clips, then upload those.", { final: true });
+    if (info.width > 20000 || info.height > 20000) throw new media.MediaError("Bigger than 20,000 pixels on a side.", { final: true });
     const out = path.join(dir, isClip ? "preview.mp4" : "preview.jpg");
     const still = path.join(dir, "poster.jpg");
     await d.media.preview(src, row.kind, out, opts);
@@ -130,34 +133,41 @@ async function processOne(row, d) {
     }
 
     const at = d.now().toISOString();
-    const done = await q(
-      d.sb
-        .from("sm_market_media")
-        .update({
-          status: "review",
-          preview_key: previewKey,
-          poster_key: posterKey,
-          duration_ms: isClip ? info.duration_ms : null,
-          width: shown.width,
-          height: shown.height,
-          error: null,
-          processed_at: at,
-          updated_at: at,
-        })
-        .eq("id", row.id)
-        .eq("status", "processing")
-        .select("id")
-    );
+    const { data: done, error } = await d.sb
+      .from("sm_market_media")
+      .update({
+        status: "review",
+        preview_key: previewKey,
+        poster_key: posterKey,
+        duration_ms: isClip ? info.duration_ms : null,
+        width: shown.width,
+        height: shown.height,
+        error: null,
+        processed_at: at,
+        updated_at: at,
+      })
+      .eq("id", row.id)
+      .eq("status", "processing")
+      .select("id");
+    if (error) {
+      // A value the database won't take is this file's problem, not the queue's.
+      if (/^2[23]/.test(String(error.code || ""))) throw new media.MediaError("Its details didn't fit: " + String(error.message || "").slice(0, 160), { final: true });
+      throw new DbError(error);
+    }
     // Deleted (or retried) while it was being worked on: don't leave its files behind.
     if (!(done || []).length) await d.sb.storage.from(M.BUCKET).remove(keys).catch(() => {});
     return { ok: true, suggestions: found.length };
+  } catch (e) {
+    // A file that didn't make it to review leaves no previews behind.
+    if (keys.length) await d.sb.storage.from(M.BUCKET).remove(keys).catch(() => {});
+    throw e;
   } finally {
     await fs.promises.rm(dir, { recursive: true, force: true }).catch(() => {});
   }
 }
 
 async function failOne(row, e, d) {
-  const last = row.attempts >= MAX_ATTEMPTS;
+  const last = row.attempts >= MAX_ATTEMPTS || !!(e && e.final);
   const why = e instanceof media.MediaError ? e.message : "Processing stopped: " + String((e && e.message) || "unknown error");
   const at = d.now().toISOString();
   await d.sb

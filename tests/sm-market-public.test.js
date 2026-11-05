@@ -233,7 +233,7 @@ test("paid: the webhook marks the order, emails the link once, and tells staff",
   await post("/m/AB2CD3/checkout", { team: LIGHTNING, jersey: "7", item: [M1] });
   const ses = pay(created[0].id);
   const r = await router.paid(ses);
-  assert.deepEqual(r, { ok: true, flipped: true });
+  assert.deepEqual([r.ok, r.flipped, r.mail.sent], [true, true, true]);
   const order = db.tables.sm_market_orders[0];
   assert.equal(order.status, "paid");
   assert.equal(order.email, "dana@example.com");
@@ -246,7 +246,8 @@ test("paid: the webhook marks the order, emails the link once, and tells staff",
   assert.equal(pushes[0].payload.title, "New marketplace sale");
   assert.equal(pushes[0].payload.body, "Fall Showcase: 1 item, $12.00 (test)");
   // Stripe sends it again: nothing new happens.
-  assert.deepEqual(await router.paid(ses), { ok: true, flipped: false });
+  const again = await router.paid(ses);
+  assert.deepEqual([again.ok, again.flipped, again.mail.reason], [true, false, "already"]);
   assert.equal(mails.length, 1);
   // A session whose total doesn't match the order isn't taken as paid.
   await post("/m/AB2CD3/checkout", { team: LIGHTNING, jersey: "7", item: [M1] });
@@ -293,6 +294,51 @@ test("the order page: back from Stripe before the webhook, it asks Stripe and op
   assert.equal(mails.length, 1);
   assert.equal((await get("/m/o/" + "x".repeat(43))).status, 404);
   assert.equal((await get("/m/o/short")).status, 404);
+});
+
+test("an order email that fails is sent again: Stripe retries, or the buyer opens the order", async () => {
+  await post("/m/AB2CD3/checkout", { team: LIGHTNING, jersey: "7", item: [M1] });
+  const ses = pay(created[0].id);
+  mailer.setSender(async () => { throw new Error("smtp hiccup"); });
+  try {
+    await assert.rejects(router.paid(ses), /order_email_failed/, "the webhook fails, so Stripe sends it again");
+  } finally {
+    mailer.setSender(async (m) => { mails.push(m); return { sent: true }; });
+  }
+  const order = db.tables.sm_market_orders[0];
+  assert.equal(order.status, "paid", "the payment still counts");
+  assert.equal(order.emailed_at, null);
+  // The buyer opens the order (from Stripe's return): the link goes now.
+  const page = await get(`/m/o/${created[0].params.metadata.order_token}`);
+  assert.equal(mails.length, 1);
+  assert.ok(order.emailed_at);
+  assert.match(text(page.html), /we've emailed you this page's link/);
+  // With email not set up at all there's nothing to retry: the webhook succeeds.
+  await post("/m/AB2CD3/checkout", { team: LIGHTNING, jersey: "7", item: [M1] });
+  mailer.setSender(async () => ({ sent: false, reason: "email_not_configured" }));
+  try {
+    const r = await router.paid(pay(created[1].id));
+    assert.equal(r.mail.reason, "email_not_configured");
+    assert.match(text((await get(`/m/o/${created[1].params.metadata.order_token}`)).html), /bookmark this page/);
+  } finally {
+    mailer.setSender(async (m) => { mails.push(m); return { sent: true }; });
+  }
+});
+
+test("a refund in Stripe closes the order's downloads; a partial refund doesn't", async () => {
+  process.env.CREATOR_STRIPE_WEBHOOK_SECRET = "whsec_test";
+  await post("/m/AB2CD3/checkout", { team: LIGHTNING, jersey: "7", item: [M1] });
+  await router.paid({ ...pay(created[0].id), payment_intent: "pi_test_abcdefgh123" });
+  const order = db.tables.sm_market_orders[0];
+  assert.equal(order.stripe_payment_intent, "pi_test_abcdefgh123");
+  const hook = (event) => fetch(base + "/api/creators/stripe/webhook", { method: "POST", headers: { "Content-Type": "application/json", "stripe-signature": "good" }, body: JSON.stringify(event) });
+  await hook({ id: "evt_r1", type: "charge.refunded", livemode: false, data: { object: { id: "ch_1", payment_intent: "pi_test_abcdefgh123", amount: 1200, amount_refunded: 600, refunded: false } } });
+  assert.equal(order.status, "paid", "half back: still theirs");
+  await hook({ id: "evt_r2", type: "charge.refunded", livemode: false, data: { object: { id: "ch_1", payment_intent: "pi_test_abcdefgh123", amount: 1200, amount_refunded: 1200, refunded: true } } });
+  assert.equal(order.status, "refunded");
+  const r = await get(`/m/o/${created[0].params.metadata.order_token}`);
+  assert.match(text(r.html), /Refunded/);
+  assert.ok(!/\/originals\//.test(r.html));
 });
 
 test("a family's keep-out after a sale closes that file's download", async () => {
@@ -375,15 +421,72 @@ test("the form's rules: every field, never public under 13, the right team, bots
   assert.equal(mails.length, 0);
 });
 
-test("a new answer from the same guardian replaces the old one and needs confirming again", async () => {
-  const before = db.tables.sm_market_consents.find((c) => c.athlete_id === A11);
-  await post("/m/AB2CD3/consent", choice({ jersey: "11", level: "sell", under_13: "yes", email: "sam@example.com" }));
+test("a guardian's answer can't be loosened by someone who only knows their email (the review's high finding)", async () => {
+  // Storm #9 is kept out by lee@ (unconfirmed: a keep-out counts at once).
+  // Someone else sends "OK to sell" with lee's address.
+  db.tables.sm_market_consents.push({ id: id(44), athlete_id: A9, email: "kim@example.com", level: "sell", under_13: false, source: "qr", confirmed_at: "2026-11-21T10:00:00Z" });
+  const r = await post("/m/AB2CD3/consent", choice({ team_id: STORM, jersey: "9", level: "sell", under_13: "no", email: "lee@example.com" }));
+  assert.equal(r.location, "/m/AB2CD3/consent/sent?m=1", "it waits for lee's email");
+  assert.deepEqual(shown((await get(`/m/AB2CD3?team=${STORM}&jersey=9`)).html), [], "still kept out");
+  const lee = db.tables.sm_market_consents.find((c) => c.athlete_id === A9 && c.email === "lee@example.com");
+  assert.equal(lee.level, "out");
+  assert.equal(lee.pending_level, "sell");
+  assert.match(mails.at(-1).text, /ignore this email and nothing changes/, "and that's now true");
+  // Only lee's own confirm makes it count.
+  const link = mails.at(-1).text.match(/\/m\/confirm\/([A-Za-z0-9_-]{43})/)[1];
+  await post(`/m/confirm/${link}`, {});
+  assert.equal(lee.level, "sell");
+  assert.equal(lee.pending_level, null);
+  assert.deepEqual(shown((await get(`/m/AB2CD3?team=${STORM}&jersey=9`)).html), [M7], "now everyone in it said OK to sell");
+});
+
+test("a confirmed family-only answer stands, family link and all, until a looser one is confirmed", async () => {
+  // #11's sam@ is family only, with a family link. "OK to show publicly" arrives with sam's address.
+  await post("/m/AB2CD3/consent", choice({ jersey: "11", level: "public", under_13: "no", email: "sam@example.com" }));
   const c = db.tables.sm_market_consents.find((x) => x.athlete_id === A11);
-  assert.equal(c, before, "one answer per guardian per athlete");
-  assert.equal(c.level, "sell");
-  assert.equal(c.confirmed_at, null);
-  assert.equal(c.family_hash, null, "the old family link stops until they confirm");
-  assert.equal((await get(`/m/f/${familyToken}`)).status, 404);
+  assert.equal(c.level, "family", "what counts hasn't moved");
+  assert.ok(c.confirmed_at && c.family_hash, "still confirmed, link kept");
+  assert.equal((await get(`/m/f/${familyToken}`)).status, 200, "the family link still works");
+  assert.deepEqual(shown((await get(`/m/AB2CD3?team=${LIGHTNING}&jersey=11`)).html), [], "not on the event page");
+  // sam confirms from the email: the change counts, and a fresh family link replaces the old one.
+  const link = mails.at(-1).text.match(/\/m\/confirm\/([A-Za-z0-9_-]{43})/)[1];
+  assert.match(text((await get(`/m/confirm/${link}`)).html), /OK to show publicly/);
+  const done = await post(`/m/confirm/${link}`, {});
+  const fresh = done.html.match(/\/m\/f\/([A-Za-z0-9_-]{43})/)[1];
+  assert.equal(c.level, "public");
+  assert.equal(c.under_13, false);
+  assert.equal((await get(`/m/f/${familyToken}`)).status, 404, "the old family link stops");
+  assert.equal((await get(`/m/f/${fresh}`)).status, 200);
+});
+
+test("a more careful answer counts at once, with a note to the address", async () => {
+  // #7's dana@ said OK to sell; now family only.
+  const r = await post("/m/AB2CD3/consent", choice({ jersey: "7", level: "family", under_13: "no", email: "dana@example.com" }));
+  assert.equal(r.location, "/m/AB2CD3/consent/sent?k=now&m=1");
+  assert.deepEqual(shown((await get(`/m/AB2CD3?team=${LIGHTNING}&jersey=7`)).html), [], "off the event page now");
+  assert.match(mails.at(-1).subject, /^Changed: Lightning #7/);
+  assert.ok(!/\/m\/confirm\//.test(mails.at(-1).text), "nothing to confirm");
+  assert.match(text((await get(r.location)).html), /Changed/);
+  // "12 or younger" also counts at once, and the age can't be undone without the email.
+  await post("/m/AB2CD3/consent", choice({ jersey: "7", level: "family", under_13: "yes", email: "dana@example.com" }));
+  const dana = db.tables.sm_market_consents.find((c) => c.athlete_id === A7 && c.email === "dana@example.com");
+  assert.equal(dana.under_13, true);
+  await post("/m/AB2CD3/consent", choice({ jersey: "7", level: "family", under_13: "no", email: "dana@example.com" }));
+  assert.equal(dana.under_13, true, "older waits for the email");
+  assert.equal(dana.pending_under_13, false);
+});
+
+test("the same answer again sends a confirm link, for a fresh family link", async () => {
+  await post("/m/AB2CD3/consent", choice({ jersey: "11", level: "family", under_13: "yes", email: "sam@example.com" }));
+  assert.match(mails.at(-1).subject, /^Confirm your choice/);
+  assert.equal((await get(`/m/f/${familyToken}`)).status, 200, "the current link works until they confirm");
+});
+
+test("0 and 00 are two athletes", async () => {
+  await post("/m/AB2CD3/consent", choice({ jersey: "0", level: "family", email: "a@example.com" }));
+  await post("/m/AB2CD3/consent", choice({ jersey: "00", level: "family", email: "b@example.com" }));
+  const nums = db.tables.sm_market_athletes.filter((a) => a.team_id === LIGHTNING).map((a) => a.jersey);
+  assert.ok(nums.includes("0") && nums.includes("00"));
 });
 
 test("when email isn't working, the page says what to do instead", async () => {
@@ -397,12 +500,25 @@ test("when email isn't working, the page says what to do instead", async () => {
   }
 });
 
-test("too many tries from one visitor: slow down", async () => {
+test("the form's emails are capped per address and per athlete, whatever the visitor's address says", async () => {
+  // Three emails an hour to one address, even from "different" visitors.
   let last;
-  for (let i = 0; i < 13; i++) last = await post("/m/AB2CD3/consent", choice({ jersey: String(40 + i) }), { headers: { "X-Forwarded-For": "203.0.113.9" } });
+  for (let i = 0; i < 4; i++) last = await post("/m/AB2CD3/consent", choice({ jersey: String(40 + i), email: "target@example.com" }), { headers: { "X-Forwarded-For": `198.51.100.${i}` } });
   assert.equal(last.status, 429);
-  const other = await post("/m/AB2CD3/consent", choice({ jersey: "60" }), { headers: { "X-Forwarded-For": "203.0.113.10" } });
-  assert.equal(other.status, 303);
+  assert.equal(mails.filter((m) => m.to.includes("target@example.com")).length, 3);
+  // Twelve answers an hour for one athlete.
+  for (let i = 0; i < 13; i++) last = await post("/m/AB2CD3/consent", choice({ jersey: "44", email: `p${i}@example.com` }), { headers: { "X-Forwarded-For": `198.51.101.${i}` } });
+  assert.equal(last.status, 429);
+});
+
+test("one visitor: room for a busy check-in, then slow down", async () => {
+  let ok = 0, last;
+  for (let i = 0; i < 41; i++) {
+    last = await post("/m/AB2CD3/consent", choice({ jersey: String(100 + i), email: `fam${i}@example.com` }), { headers: { "X-Forwarded-For": "203.0.113.9" } });
+    if (last.status === 303) ok++;
+  }
+  assert.equal(ok, 40, "forty families on one venue's Wi-Fi");
+  assert.equal(last.status, 429);
 });
 
 // ── A family's page ──────────────────────────────────────────────────────
@@ -416,7 +532,14 @@ test("the family page: their own athlete at family level, with others only where
   const order = db.tables.sm_market_orders[0];
   assert.equal(order.amount_cents, 2000, "a clip and a photo; M1 isn't theirs");
   assert.deepEqual(created[0].params.line_items.map((l) => [l.price_data.product_data.name, l.quantity, l.price_data.unit_amount]), [["Clip from Fall Showcase", 1, 1200], ["Photo from Fall Showcase", 1, 800]]);
-  assert.equal(created[0].params.cancel_url, `https://www.subjectmedias.com/m/f/${familyToken}`);
+  // The family link's token never goes to Stripe: its "back" link is the order.
+  assert.match(created[0].params.cancel_url, /^https:\/\/www\.subjectmedias\.com\/m\/o\/[A-Za-z0-9_-]{43}\?cancelled=1$/);
+  assert.ok(!JSON.stringify(created[0].params).includes(familyToken), "no family token anywhere Stripe keeps");
+  assert.deepEqual(created[0].params.payment_method_types, ["card"]);
+  assert.ok(created[0].params.expires_at - Date.now() / 1000 > 30 * 60, "Stripe needs at least 30 minutes");
+  const cancelled = await get(created[0].params.cancel_url.replace("https://www.subjectmedias.com", ""));
+  assert.match(text(cancelled.html), /Checkout cancelled/);
+  assert.ok(!cancelled.html.includes("refresh"), "no waiting loop for a checkout they left");
   // #7's family keeps them out: the shared photo goes too.
   db.tables.sm_market_athletes.find((a) => a.id === A7).keep_out = true;
   assert.deepEqual(shown((await get(`/m/f/${familyToken}`).then((x) => x)).html), [M5]);

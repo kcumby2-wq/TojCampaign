@@ -205,6 +205,8 @@
     market_keep_out: "kept an athlete out of the marketplace",
     market_keep_out_lifted: "lifted a marketplace keep-out",
     market_consent_recorded: "recorded a family's choice",
+    market_consent_removed: "removed a family's answer",
+    market_media_removed: "removed a marketplace file",
     joined: "joined the team",
     started_run: "started a kit run",
     started_brief: "started a brief",

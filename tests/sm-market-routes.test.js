@@ -291,6 +291,10 @@ test("removing: a consent; a number nobody answered for; a team with no one on i
   assert.equal((await call("DELETE", `/api/sm/market/teams/${team.id}`, undefined, "lead")).data.error, "team_has_athletes");
   assert.equal((await call("DELETE", `/api/sm/market/consents/${c.data.consent.id}`, undefined, "lead")).status, 200);
   assert.equal(athlete(await roster(ev), "7").level, "none");
+  const logged = db.tables.team_activity.find((x) => x.action === "market_consent_removed");
+  assert.ok(logged, "removing a family's answer is logged");
+  assert.equal(logged.detail.level, "out");
+  assert.ok(!JSON.stringify(logged).includes("dana@example.com"), "without their address");
   assert.equal((await call("DELETE", `/api/sm/market/athletes/${seven.id}`, undefined, "lead")).status, 200);
   assert.equal((await call("DELETE", `/api/sm/market/teams/${team.id}`, undefined, "lead")).status, 200);
   assert.equal((await call("DELETE", `/api/sm/market/teams/${team.id}`, undefined, "lead")).status, 404);
@@ -395,6 +399,32 @@ test("confirming who's in it, then approving: a person decides, the AI only sugg
   assert.equal(hidden.data.media.status, "hidden");
 });
 
+test("a review change is checked whole before anything is written", async () => {
+  const ev = await newEvent();
+  const team = await newTeam(ev);
+  await call("POST", `/api/sm/market/events/${ev.id}/athletes`, { team_id: team.id, jerseys: "7 11" }, "crew");
+  const data = await roster(ev);
+  const [seven, eleven] = [athlete(data, "7"), athlete(data, "11")];
+  const item = await readyItem(ev);
+  await call("PATCH", `/api/sm/market/media/${item.id}`, { tags: [seven.id], status: "approved" }, "lead");
+  assert.equal(item.status, "approved");
+  // Emptying who's in it while approving: refused, and nothing changed.
+  assert.equal((await call("PATCH", `/api/sm/market/media/${item.id}`, { tags: [], status: "approved" }, "lead")).data.error, "no_confirmed_tag");
+  assert.deepEqual(db.tables.sm_market_tags.filter((t) => t.confirmed).map((t) => t.athlete_id), [seven.id]);
+  // A status that doesn't exist: refused before the tags change.
+  assert.equal((await call("PATCH", `/api/sm/market/media/${item.id}`, { tags: [eleven.id], status: "sold" }, "lead")).status, 400);
+  assert.deepEqual(db.tables.sm_market_tags.filter((t) => t.confirmed).map((t) => t.athlete_id), [seven.id]);
+  // A member changing who's in an approved item sends it back for an approver to see.
+  await call("PATCH", `/api/sm/market/media/${item.id}`, { tags: [seven.id, eleven.id] }, "crew");
+  assert.equal(item.status, "review");
+  // An approver's change keeps it on sale; the same set again changes nothing.
+  await call("PATCH", `/api/sm/market/media/${item.id}`, { status: "approved" }, "lead");
+  await call("PATCH", `/api/sm/market/media/${item.id}`, { tags: [eleven.id] }, "lead");
+  assert.equal(item.status, "approved");
+  await call("PATCH", `/api/sm/market/media/${item.id}`, { tags: [eleven.id] }, "crew");
+  assert.equal(item.status, "approved", "saving the same numbers isn't a change");
+});
+
 test("a file still processing can't be reviewed; a failed one can be retried", async () => {
   const ev = await newEvent();
   const item = await readyItem(ev);
@@ -409,17 +439,37 @@ test("a file still processing can't be reviewed; a failed one can be retried", a
   assert.equal(item.error, null);
 });
 
-test("an unsold file can be removed, with its files; a sold one can't", async () => {
+test("an unsold file can be removed, with its files; a sold one can't; an abandoned checkout doesn't hold it", async () => {
   const ev = await newEvent();
   const item = await readyItem(ev);
   const sold = await readyItem(ev);
-  db.tables.sm_market_order_items = [{ order_id: "o1", media_id: sold.id, price_cents: 1200 }];
+  const abandoned = await readyItem(ev);
+  const recent = await readyItem(ev);
+  const ago = (min) => new Date(Date.now() - min * 60000).toISOString();
+  db.tables.sm_market_orders = [
+    { id: "o1", event_id: ev.id, status: "paid", amount_cents: 1200, created_at: ago(300) },
+    { id: "o2", event_id: ev.id, status: "expired", amount_cents: 1200, created_at: ago(300) },
+    { id: "o3", event_id: ev.id, status: "pending", amount_cents: 1200, created_at: ago(200) },
+    { id: "o4", event_id: ev.id, status: "pending", amount_cents: 1200, created_at: ago(5) },
+  ];
+  db.tables.sm_market_order_items = [
+    { order_id: "o1", media_id: sold.id, price_cents: 1200 },
+    { order_id: "o2", media_id: abandoned.id, price_cents: 1200 },
+    { order_id: "o3", media_id: abandoned.id, price_cents: 1200 },
+    { order_id: "o4", media_id: recent.id, price_cents: 1200 },
+  ];
   assert.equal((await call("DELETE", `/api/sm/market/media/${sold.id}`, undefined, "lead")).data.error, "sold");
+  assert.equal((await call("DELETE", `/api/sm/market/media/${recent.id}`, undefined, "lead")).data.error, "in_checkout", "someone is checking out with it right now");
+  assert.equal((await call("DELETE", `/api/sm/market/media/${abandoned.id}`, undefined, "lead")).status, 200, "checkouts that ended unpaid don't count as sales");
+  assert.ok(!db.tables.sm_market_order_items.some((l) => l.media_id === abandoned.id), "their lines are cleared away");
+  // A file whose row never got its preview keys still loses the previews the worker made.
+  Object.assign(item, { preview_key: null, poster_key: null, status: "failed" });
   assert.equal((await call("DELETE", `/api/sm/market/media/${item.id}`, undefined, "crew")).status, 403);
   assert.equal((await call("DELETE", `/api/sm/market/media/${item.id}`, undefined, "lead")).status, 200);
   assert.ok(!db.tables.sm_market_media.some((m) => m.id === item.id));
-  for (const k of [item.object_key, item.preview_key, item.poster_key]) assert.ok(!store.has(M.BUCKET, k), k);
+  for (const k of [item.object_key, M.previewKey(ev.id, item.id, "clip"), M.posterKey(ev.id, item.id)]) assert.ok(!store.has(M.BUCKET, k), k);
   assert.ok(store.has(M.BUCKET, sold.object_key));
+  assert.ok(db.tables.team_activity.some((a) => a.action === "market_media_removed"));
 });
 
 // ── Orders and QR codes ──────────────────────────────────────────────────

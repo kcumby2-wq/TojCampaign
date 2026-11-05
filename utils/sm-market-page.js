@@ -17,10 +17,7 @@ const esc = (v) =>
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#39;");
 
-function helpEmail(env = process.env) {
-  const e = String(env.SM_HELP_EMAIL || "").trim().toLowerCase();
-  return /^[a-z0-9._+-]+@[a-z0-9-]+(\.[a-z0-9-]+)*\.[a-z]{2,}$/.test(e) ? e : "hello@subjectmedias.com";
-}
+const helpEmail = M.helpEmail;
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 function dateRange(starts, ends) {
@@ -265,31 +262,35 @@ ${formError ? `<p class="msg" role="alert">${esc(formError)}</p>` : errors.lengt
   return shell({ nonce, title: `Your choice | ${event.name}`, body });
 }
 
-function consentSentPage({ nonce, event, kept, mailed }) {
+function consentSentPage({ nonce, event, kept, now = false, mailed }) {
   let body = evHead(event);
+  const ask = `<a href="mailto:${esc(helpEmail())}">${esc(helpEmail())}</a>`;
   if (kept) {
-    body += `<div class="card"><h2>Kept out</h2><p>Done: nothing of your athlete is shown or sold from this event. ${mailed ? "We've emailed you a note of it." : ""}</p><p>If you change your mind, email <a href="mailto:${esc(helpEmail())}">${esc(helpEmail())}</a>.</p></div>`;
+    body += `<div class="card"><h2>Kept out</h2><p>Done: nothing of your athlete is shown or sold from this event. ${mailed ? "We've emailed you a note of it." : ""}</p><p>If you change your mind, email ${ask}.</p></div>`;
+  } else if (now) {
+    body += `<div class="card"><h2>Changed</h2><p>A more careful choice counts straight away, so it's in effect now. ${mailed ? "We've emailed you a note of it." : ""}</p><p>To change it back, send the form again: a less careful choice waits for you to confirm it from your email.</p></div>`;
   } else if (mailed) {
-    body += `<div class="card"><h2>Check your email</h2><p>We've sent you a link to confirm your choice. It counts once you confirm, and then you get your family link.</p><p class="note">Nothing there? Check spam, or send the form again.</p></div>`;
+    body += `<div class="card"><h2>Check your email</h2><p>We've sent you a link to confirm your choice. It counts once you confirm, and then you get your family link. Until then, any earlier choice of yours stands.</p><p class="note">Nothing there? Check spam, or send the form again.</p></div>`;
   } else {
-    body += `<div class="card"><h2>We couldn't email you just now</h2><p>Your choice is saved, but it needs confirming from your email before it counts. Show this screen to our crew and they'll record it for you, or email <a href="mailto:${esc(helpEmail())}">${esc(helpEmail())}</a>.</p></div>`;
+    body += `<div class="card"><h2>We couldn't email you just now</h2><p>Your choice is saved, but it needs confirming from your email before it counts. Show this screen to our crew and they'll record it for you, or email ${ask}.</p></div>`;
   }
   return shell({ nonce, title: `Your choice | ${event.name}`, body });
 }
 
-function confirmPage({ nonce, event, team, jersey, level, token = "", done = false, familyLink = null, mailed = false }) {
+function confirmPage({ nonce, event, team, jersey, level, under13 = false, token = "", done = false, familyLink = null, mailed = false }) {
   let body = evHead(event);
+  const age = under13 ? ", 12 or younger" : "";
   if (!done) {
     body += `<form class="card" method="post" action="/m/confirm/${esc(token)}">
 <h2>Confirm your choice</h2>
-<p>${esc(team)} #${esc(jersey)}: <b>${esc(M.LEVEL_WORDS[level] || level)}</b>.</p>
+<p>${esc(team)} #${esc(jersey)}: <b>${esc(M.LEVEL_WORDS[level] || level)}</b>${esc(age)}.</p>
 <div class="row"><button class="pill pill-green" type="submit">Confirm</button></div>
 <p class="note">Didn't ask for this? Close this page and nothing changes.</p>
 </form>`;
   } else {
-    body += `<div class="card"><h2>Confirmed</h2><p>${esc(team)} #${esc(jersey)}: <b>${esc(M.LEVEL_WORDS[level] || level)}</b>.</p>`;
+    body += `<div class="card"><h2>Confirmed</h2><p>${esc(team)} #${esc(jersey)}: <b>${esc(M.LEVEL_WORDS[level] || level)}</b>${esc(age)}.</p>`;
     if (familyLink) {
-      body += `<p>This is your family link. It shows your athlete's clips and photos once our crew has checked them, and it's where you buy. ${mailed ? "We've emailed it to you too." : "Save it: it's how you get back here."}</p><div class="link-box">${esc(familyLink)}</div><div class="row"><a class="pill pill-green" href="${esc(familyLink)}">Open my family link</a></div>`;
+      body += `<p>This is your family link. It shows your athlete's clips and photos once our crew has checked them, and it's where you buy. ${mailed ? "We've emailed it to you too." : "Save it: it's how you get back here."} Any family link we sent you before has stopped working.</p><div class="link-box">${esc(familyLink)}</div><div class="row"><a class="pill pill-green" href="${esc(familyLink)}">Open my family link</a></div>`;
     }
     body += `</div>`;
   }
@@ -319,9 +320,13 @@ function orderPage({ nonce, event, order, items = [], state, backTo = null }) {
     body += `<div class="card"><h2>Confirming your payment</h2><p>This takes a few seconds. The page updates itself; your downloads appear here, and we email you this link.</p></div>`;
     return shell({ nonce, title: `Your order | ${event.name}`, body, refresh: 5 });
   }
-  if (state === "expired" || state === "refunded") {
-    const text = state === "expired" ? "This checkout ran out of time and nothing was charged." : "This order was refunded, so its downloads are closed.";
-    body += `<div class="card"><h2>${state === "expired" ? "Checkout expired" : "Refunded"}</h2><p>${text}</p>${backTo ? `<div class="row"><a class="pill pill-line" href="${esc(backTo)}">Back to the clips</a></div>` : ""}</div>`;
+  if (state === "expired" || state === "refunded" || state === "cancelled") {
+    const words = {
+      expired: ["Checkout expired", "This checkout ran out of time and nothing was charged."],
+      refunded: ["Refunded", "This order was refunded, so its downloads are closed."],
+      cancelled: ["Checkout cancelled", "Nothing was charged. To pick again, go back to the event page, or open your family link from its email."],
+    }[state];
+    body += `<div class="card"><h2>${words[0]}</h2><p>${words[1]}</p>${backTo ? `<div class="row"><a class="pill pill-line" href="${esc(backTo)}">Back to the event page</a></div>` : ""}</div>`;
     return shell({ nonce, title: `Your order | ${event.name}`, body });
   }
   const rows = items
@@ -331,7 +336,8 @@ function orderPage({ nonce, event, order, items = [], state, backTo = null }) {
       return `<li class="item">${it.poster_url ? `<div class="frame"><img src="${esc(it.poster_url)}" alt="${esc(name)}" loading="lazy"></div>` : ""}<div class="dl"><span>${esc(name)}</span><a class="pill pill-green" href="${esc(it.download_url)}">Download</a></div></li>`;
     })
     .join("");
-  body += `<div class="card"><h2>Your downloads</h2><p>Paid ${esc(dollars(order.amount_cents))}${order.mode === "test" ? " (test mode: no real charge)" : ""}. Full quality, no watermark. Download links refresh each time you open this page, and we've emailed you the page's link so you can come back.</p></div>
+  const keep = order.emailed_at ? "we've emailed you this page's link so you can come back" : "bookmark this page: it's how you come back";
+  body += `<div class="card"><h2>Your downloads</h2><p>Paid ${esc(dollars(order.amount_cents))}${order.mode === "test" ? " (test mode: no real charge)" : ""}. Full quality, no watermark. Download links refresh each time you open this page, and ${keep}.</p></div>
 <ul class="items">${rows}</ul>`;
   return shell({ nonce, title: `Your order | ${event.name}`, body });
 }

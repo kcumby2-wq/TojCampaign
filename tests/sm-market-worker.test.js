@@ -200,6 +200,40 @@ test("a file that won't process: tried on three passes, then failed with a reaso
   }
 });
 
+test("a clip over an hour fails plainly, with nothing left in storage; so does a value the database won't take", async () => {
+  const long = stubMedia({ async probe() { return { duration_ms: 3601 * 1000, width: 1920, height: 1080 }; } });
+  const warn = console.warn;
+  console.warn = () => {};
+  try {
+    await W.drain(deps({ media: long }));
+    assert.equal(row(CLIP).status, "failed", "at once: trying again won't make it shorter");
+    assert.equal(row(CLIP).attempts, 1);
+    assert.equal(row(CLIP).error, "Longer than an hour. Cut it into clips, then upload those.");
+    assert.ok(!store.has(M.BUCKET, M.previewKey(EV, CLIP, "clip")), "no work was done for it");
+    // The database refusing the details (a check) is this file's failure, not the queue's.
+    db.tables.sm_market_media = [mediaRow(CLIP, "clip")];
+    const from = db.from;
+    db.from = (name) => {
+      const q = from(name);
+      if (name !== "sm_market_media") return q;
+      const update = q.update.bind(q);
+      q.update = (patch) => {
+        if (patch.status === "review") q.then = (res) => Promise.resolve({ data: null, error: { code: "23514", message: "new row violates check constraint" } }).then(res);
+        return update(patch);
+      };
+      return q;
+    };
+    const r = await W.drain(deps());
+    db.from = from;
+    assert.equal(r.processed, 1);
+    assert.equal(row(CLIP).status, "failed", "failed plainly, not stuck in processing");
+    assert.match(row(CLIP).error, /^Its details didn't fit/);
+    assert.ok(!store.has(M.BUCKET, M.previewKey(EV, CLIP, "clip")), "its previews were taken back out");
+  } finally {
+    console.warn = warn;
+  }
+});
+
 test("after a restart: files stuck in processing go back in the queue, or fail on their third try", async () => {
   const old = new Date(clock.getTime() - W.STALE_MS - 60000).toISOString();
   const recent = new Date(clock.getTime() - 5 * 60000).toISOString();

@@ -15,11 +15,16 @@ the edited products, the browse store and revenue reporting.
    dates, teams, the jersey numbers they know. It starts as a draft.
 2. **Families choose** from the "Their choice" QR at check-in
    (subjectmedias.com/m/CODE/consent): family only, OK to sell, OK to show
-   publicly, or keep out, and whether the athlete is 12 or younger. A choice
-   counts once the guardian confirms it from their email; a keep-out counts
-   the moment it's sent. Confirming gives the family their own link. Staff
-   can record a choice given in person; it counts at once and emails the
-   family link. A number not on the roster yet is added by the form.
+   publicly, or keep out, and whether the athlete is 12 or younger. A first
+   choice counts once the guardian confirms it from their email; a keep-out
+   counts the moment it's sent. After that, anything more careful (a lower
+   level, "12 or younger") counts at once, and anything that loosens waits
+   for the email while their earlier answer stands, so nobody can loosen a
+   guardian's answer just by knowing their address. Confirming gives the
+   family a fresh family link (the same answer again is how a family that
+   lost theirs gets a new one). Staff can record a choice given in person;
+   it counts at once and emails the family link. A number not on the roster
+   yet is added by the form; 0 and 00 are two numbers.
 3. **Crews upload** from the app. Files go from the device straight to
    storage on a signed link (up to 2 GB each: MP4, MOV, M4V, JPG, PNG).
 4. **The worker** (inside the web server) makes a watermarked preview and a
@@ -46,7 +51,7 @@ only where everyone confirmed in it allows it:
 
 Nothing with no confirmed number is shown anywhere. Under 13 is never public.
 A keep-out after a sale closes that file's download (the buyer is told to ask
-for a refund).
+for a refund). A full refund in Stripe closes the order's downloads.
 
 ## Where things are
 
@@ -84,8 +89,10 @@ What the server needs, on Render:
 | `FFMPEG_PATH` | A specific ffmpeg | Optional: `ffmpeg-static` installs one with `npm ci` |
 
 The Stripe webhook already sends `checkout.session.completed` to
-`/api/creators/stripe/webhook`; add `checkout.session.expired` to the same
-endpoint so abandoned checkouts are marked.
+`/api/creators/stripe/webhook`. Add `checkout.session.expired` (marks
+abandoned checkouts) and `charge.refunded` (a full refund closes the order's
+downloads) to the same endpoint. Checkout takes cards only (with Apple Pay
+and Google Pay), so paid means paid at once, and a checkout lasts 31 minutes.
 
 ## Decisions still open
 
@@ -96,13 +103,21 @@ endpoint so abandoned checkouts are marked.
 
 ## Limits to know
 
-- Self-asserted guardianship: anyone with a guardian's email can answer for a
-  number. Staff see every answer (approvers see the addresses) and can remove
-  one; a keep-out from anyone counts at once, which only ever protects.
+- Self-asserted guardianship: whoever controls an email address can answer
+  for a number with it. Staff see every answer and any change waiting to be
+  confirmed (approvers see the addresses) and can remove one; removals are
+  logged. A keep-out from anyone counts at once, which only ever protects.
+- The QR form emails whatever address is typed in, so its emails are capped:
+  3 an hour (8 a day) to one address, 12 answers an hour for one athlete,
+  200 an hour in all, and 40 tries per visitor per 10 minutes.
 - Previews cover a clip's first 90 seconds, at 480p, silent. Long files take
   longer; cut long game film into clips first.
 - The worker runs one file at a time inside the web server, and downloads
   each original to the server's temp disk. A failed file is retried on the
-  next pass, three tries in all, then waits for staff (Review → Failed).
+  next pass, three tries in all, then waits for staff (Review → Failed). A
+  file that can't work (not a video or photo, over an hour, over 20,000
+  pixels) fails at once with the reason.
+- A file someone has bought can't be removed. A checkout started in the last
+  hour holds it for now; checkouts that ended unpaid don't count.
 - Order links don't expire; downloads are signed for an hour each time the
   order page opens.

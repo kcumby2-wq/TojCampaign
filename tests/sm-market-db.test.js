@@ -91,6 +91,12 @@ test("consent: a plain email, a real choice, never public under 13, staff record
   await refused(`insert into sm_market_consents (athlete_id, email, level, under_13, confirm_hash) values ($1, 'other@example.com', 'sell', false, $2)`, [athlete.id, H("a")], "sm_market_consents_confirm_idx|duplicate");
   const staff = await one(`insert into sm_market_consents (athlete_id, email, level, under_13, source, confirmed_at, recorded_by) values ($1, 'pat@example.com', 'family', false, 'staff', now(), 'kyron@toj.test') returning *`, [athlete.id]);
   assert.ok(staff.confirmed_at);
+  // A pending change: whole, with its link, never public under 13, never a keep-out (that counts at once).
+  await refused(`update sm_market_consents set pending_level = 'sell', pending_under_13 = false where id = $1`, [staff.id], "sm_market_consents_pending_chk");
+  await refused(`update sm_market_consents set pending_level = 'sell', confirm_hash = $2 where id = $1`, [staff.id, H("e")], "sm_market_consents_pending_chk");
+  await refused(`update sm_market_consents set pending_level = 'public', pending_under_13 = true, confirm_hash = $2 where id = $1`, [staff.id, H("e")], "sm_market_consents_pending_chk");
+  await refused(`update sm_market_consents set pending_level = 'out', pending_under_13 = false, confirm_hash = $2 where id = $1`, [staff.id, H("e")]);
+  await q(`update sm_market_consents set pending_level = 'public', pending_under_13 = false, confirm_hash = $2 where id = $1`, [staff.id, H("e")]);
 });
 
 test("media: a key in the event's folder, ready only with a preview, approved by someone", async () => {
@@ -120,6 +126,9 @@ test("orders: paid means a checkout and a time; a sold item can't be deleted", a
   const o = await one(`insert into sm_market_orders (event_id, amount_cents, token_hash) values ($1, 1200, $2) returning *`, [ev.id, H("c")]);
   await refused(`update sm_market_orders set status = 'paid' where id = $1`, [o.id], "sm_market_orders_paid_chk");
   await q(`update sm_market_orders set status = 'paid', paid_at = now(), stripe_session_id = 'cs_test_abcdefgh123' where id = $1`, [o.id]);
+  await refused(`update sm_market_orders set stripe_payment_intent = 'ch_123456789' where id = $1`, [o.id]);
+  await q(`update sm_market_orders set stripe_payment_intent = 'pi_test_abcdefgh123', status = 'refunded' where id = $1`, [o.id]);
+  await q(`update sm_market_orders set status = 'paid' where id = $1`, [o.id]);
   await refused(`insert into sm_market_orders (event_id, amount_cents, token_hash) values ($1, 1200, $2)`, [ev.id, H("c")], "unique|duplicate");
   await refused(`insert into sm_market_orders (event_id, amount_cents, token_hash) values ($1, 10, $2)`, [ev.id, H("d")]);
   await q(`insert into sm_market_order_items (order_id, media_id, price_cents) values ($1, $2, 1200)`, [o.id, media.id]);
