@@ -21,7 +21,8 @@ const { fakeSupabase } = require("./helpers/fake-supabase");
 const { fakeStorage } = require("./helpers/fake-storage");
 const mailer = require("../utils/mailer");
 const push = require("../utils/push");
-const S = require("../utils/creator-stripe");
+const S = require("../utils/sm-stripe");
+const CS = require("../utils/creator-stripe");
 const M = require("../utils/sm-market");
 const router = require("../routes/sm-market-public");
 
@@ -52,17 +53,22 @@ const text = (html) => html.replace(/<[^>]+>/g, " ").replace(/&#39;/g, "'").repl
 
 before(async () => {
   const app = express();
-  // As server.js does: the webhook's raw body is kept for its signature.
-  app.use(express.json({ verify: (req, _res, buf) => { if (req.originalUrl.startsWith("/api/creators/stripe/webhook")) req.rawBody = Buffer.from(buf); } }));
+  // As server.js does: the webhooks' raw bodies are kept for their signatures.
+  const hooks = ["/api/creators/stripe/webhook", "/api/sm/stripe/webhook"];
+  app.use(express.json({ verify: (req, _res, buf) => { if (hooks.some((p) => req.originalUrl.startsWith(p))) req.rawBody = Buffer.from(buf); } }));
   app.use(express.urlencoded({ extended: true }));
   app.use("/m", router);
+  app.use("/api/sm/stripe", router.stripeWebhook);
   app.use("/api/creators", require("../routes/creators"));
   await new Promise((r) => { server = app.listen(0, r); });
   base = `http://127.0.0.1:${server.address().port}`;
   mailer.setSender(async (m) => { mails.push(m); return { sent: true }; });
   push.setSender(async (sub, payload) => { pushes.push({ to: sub.email, payload }); return {}; });
 });
-after(() => { server && server.close(); mailer.setSender(null); push.setSender(null); S._set(null); setSupabase(null); });
+after(() => { server && server.close(); mailer.setSender(null); push.setSender(null); S._set(null); CS._set(null); setSupabase(null); });
+
+// Subject Medias' webhook, as Stripe calls it ("good" is the stand-in's valid signature).
+const smHook = (event, sig = "good") => fetch(base + "/api/sm/stripe/webhook", { method: "POST", headers: { "Content-Type": "application/json", "stripe-signature": sig }, body: JSON.stringify(event) });
 
 function fakeStripe() {
   sessions = new Map();
@@ -215,17 +221,21 @@ test("checkout takes only what may be sold, prices it from the event, and goes t
   assert.equal(db.tables.sm_market_orders.length, 1);
 });
 
-test("checkout before Stripe is set up says so, and charges nothing", async () => {
+test("checkout before Subject Medias' Stripe is set up says so, charges nothing, and never uses the Creator Club's", async () => {
   S._set(null);
-  const before = process.env.CREATOR_STRIPE_SECRET_KEY;
-  delete process.env.CREATOR_STRIPE_SECRET_KEY;
+  const before = { sm: process.env.SM_STRIPE_SECRET_KEY, creator: process.env.CREATOR_STRIPE_SECRET_KEY };
+  delete process.env.SM_STRIPE_SECRET_KEY;
+  process.env.CREATOR_STRIPE_SECRET_KEY = "sk_test_creatorclub";
   try {
     const r = await post("/m/AB2CD3/checkout", { team: LIGHTNING, jersey: "7", item: [M1] });
     assert.equal(r.status, 503);
     assert.match(text(r.html), /Checkout isn't open yet/);
     assert.equal((db.tables.sm_market_orders || []).length, 0);
   } finally {
-    if (before !== undefined) process.env.CREATOR_STRIPE_SECRET_KEY = before;
+    for (const [k, v] of [["SM_STRIPE_SECRET_KEY", before.sm], ["CREATOR_STRIPE_SECRET_KEY", before.creator]]) {
+      if (v === undefined) delete process.env[k];
+      else process.env[k] = v;
+    }
   }
 });
 
@@ -256,20 +266,64 @@ test("paid: the webhook marks the order, emails the link once, and tells staff",
   assert.equal(db.tables.sm_market_orders[1].status, "pending");
 });
 
-test("the Stripe webhook the Creator Club already uses hands marketplace checkouts here", async () => {
-  process.env.CREATOR_STRIPE_WEBHOOK_SECRET = "whsec_test";
-  const hook = (event) => fetch(base + "/api/creators/stripe/webhook", { method: "POST", headers: { "Content-Type": "application/json", "stripe-signature": "good" }, body: JSON.stringify(event) });
+test("Subject Medias' own webhook marks checkouts paid or expired, once", async () => {
+  process.env.SM_STRIPE_WEBHOOK_SECRET = "whsec_sm_test";
   await post("/m/AB2CD3/checkout", { team: LIGHTNING, jersey: "7", item: [M1] });
   await post("/m/AB2CD3/checkout", { team: LIGHTNING, jersey: "7", item: [M1] });
-  const r = await hook({ id: "evt_m1", type: "checkout.session.completed", livemode: false, data: { object: pay(created[0].id) } });
+  const r = await smHook({ id: "evt_m1", type: "checkout.session.completed", livemode: false, data: { object: pay(created[0].id) } });
   assert.equal(r.status, 200);
   assert.equal(db.tables.sm_market_orders[0].status, "paid");
   assert.equal((db.tables.creator_orders || []).length, 0, "not a Creator Club sale");
   assert.equal(mails.length, 1);
-  assert.equal((await (await hook({ id: "evt_m1", type: "checkout.session.completed", livemode: false, data: { object: sessions.get(created[0].id) } })).json()).duplicate, true);
+  // Stripe sends it again: still paid, no second email.
+  assert.equal((await smHook({ id: "evt_m1", type: "checkout.session.completed", livemode: false, data: { object: sessions.get(created[0].id) } })).status, 200);
   assert.equal(mails.length, 1);
-  await hook({ id: "evt_m2", type: "checkout.session.expired", livemode: false, data: { object: sessions.get(created[1].id) } });
+  await smHook({ id: "evt_m2", type: "checkout.session.expired", livemode: false, data: { object: sessions.get(created[1].id) } });
   assert.equal(db.tables.sm_market_orders[1].status, "expired");
+  // A checkout that isn't the marketplace's changes nothing.
+  await post("/m/AB2CD3/checkout", { team: LIGHTNING, jersey: "7", item: [M1] });
+  const other = { ...pay(created[2].id), metadata: { kind: "creator_lane", order_id: db.tables.sm_market_orders[2].id } };
+  assert.equal((await smHook({ id: "evt_m3", type: "checkout.session.completed", livemode: false, data: { object: other } })).status, 200);
+  assert.equal(db.tables.sm_market_orders[2].status, "pending");
+});
+
+test("Subject Medias' webhook refuses a bad signature and waits for its settings", async () => {
+  process.env.SM_STRIPE_WEBHOOK_SECRET = "whsec_sm_test";
+  await post("/m/AB2CD3/checkout", { team: LIGHTNING, jersey: "7", item: [M1] });
+  const event = { id: "evt_b1", type: "checkout.session.completed", livemode: false, data: { object: pay(created[0].id) } };
+  const bad = await smHook(event, "forged");
+  assert.equal(bad.status, 400);
+  assert.equal((await bad.json()).error, "bad_signature");
+  assert.equal(db.tables.sm_market_orders[0].status, "pending");
+  delete process.env.SM_STRIPE_WEBHOOK_SECRET;
+  const unset = await smHook(event);
+  assert.equal(unset.status, 503);
+  assert.equal((await unset.json()).error, "webhook_not_configured");
+  // The signing secret without the account's key: still waiting, nothing changes.
+  process.env.SM_STRIPE_WEBHOOK_SECRET = "whsec_sm_test";
+  S._set(null);
+  const before = process.env.SM_STRIPE_SECRET_KEY;
+  delete process.env.SM_STRIPE_SECRET_KEY;
+  try {
+    const nokey = await smHook(event);
+    assert.equal(nokey.status, 503);
+    assert.equal((await nokey.json()).error, "stripe_not_configured");
+  } finally {
+    if (before !== undefined) process.env.SM_STRIPE_SECRET_KEY = before;
+  }
+  assert.equal(db.tables.sm_market_orders[0].status, "pending");
+});
+
+test("the Creator Club's webhook no longer touches marketplace orders", async () => {
+  process.env.CREATOR_STRIPE_WEBHOOK_SECRET = "whsec_creator_test";
+  CS._set(fakeStripe());
+  await post("/m/AB2CD3/checkout", { team: LIGHTNING, jersey: "7", item: [M1] });
+  const ses = pay(created[0].id);
+  const hook = (event) => fetch(base + "/api/creators/stripe/webhook", { method: "POST", headers: { "Content-Type": "application/json", "stripe-signature": "good" }, body: JSON.stringify(event) });
+  assert.equal((await hook({ id: "evt_c1", type: "checkout.session.completed", livemode: false, data: { object: ses } })).status, 200);
+  assert.equal(db.tables.sm_market_orders[0].status, "pending");
+  assert.equal(mails.length, 0);
+  CS._set(null);
 });
 
 test("the order page: back from Stripe before the webhook, it asks Stripe and opens the downloads", async () => {
@@ -326,15 +380,14 @@ test("an order email that fails is sent again: Stripe retries, or the buyer open
 });
 
 test("a refund in Stripe closes the order's downloads; a partial refund doesn't", async () => {
-  process.env.CREATOR_STRIPE_WEBHOOK_SECRET = "whsec_test";
+  process.env.SM_STRIPE_WEBHOOK_SECRET = "whsec_sm_test";
   await post("/m/AB2CD3/checkout", { team: LIGHTNING, jersey: "7", item: [M1] });
   await router.paid({ ...pay(created[0].id), payment_intent: "pi_test_abcdefgh123" });
   const order = db.tables.sm_market_orders[0];
   assert.equal(order.stripe_payment_intent, "pi_test_abcdefgh123");
-  const hook = (event) => fetch(base + "/api/creators/stripe/webhook", { method: "POST", headers: { "Content-Type": "application/json", "stripe-signature": "good" }, body: JSON.stringify(event) });
-  await hook({ id: "evt_r1", type: "charge.refunded", livemode: false, data: { object: { id: "ch_1", payment_intent: "pi_test_abcdefgh123", amount: 1200, amount_refunded: 600, refunded: false } } });
+  await smHook({ id: "evt_r1", type: "charge.refunded", livemode: false, data: { object: { id: "ch_1", payment_intent: "pi_test_abcdefgh123", amount: 1200, amount_refunded: 600, refunded: false } } });
   assert.equal(order.status, "paid", "half back: still theirs");
-  await hook({ id: "evt_r2", type: "charge.refunded", livemode: false, data: { object: { id: "ch_1", payment_intent: "pi_test_abcdefgh123", amount: 1200, amount_refunded: 1200, refunded: true } } });
+  await smHook({ id: "evt_r2", type: "charge.refunded", livemode: false, data: { object: { id: "ch_1", payment_intent: "pi_test_abcdefgh123", amount: 1200, amount_refunded: 1200, refunded: true } } });
   assert.equal(order.status, "refunded");
   const r = await get(`/m/o/${created[0].params.metadata.order_token}`);
   assert.match(text(r.html), /Refunded/);

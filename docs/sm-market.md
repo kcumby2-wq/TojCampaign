@@ -73,14 +73,18 @@ for a refund). A full refund in Stripe closes the order's downloads.
    On the free plan a file over 50 MB won't upload.
 3. Apply migration 033. It also creates the `sm-market` bucket.
 4. Merge this PR, then the site's `/m/` rewrite (subjectmedias-site).
-5. In the app, give the crew the Marketplace tool (Team → a person → Tools).
+5. In Subject Medias' Stripe account (test mode), add the webhook below and
+   put its keys on Render (the table below).
+6. In the app, give the crew the Marketplace tool (Team → a person → Tools).
 
 What the server needs, on Render:
 
 | Setting | What it does | Needed? |
 | --- | --- | --- |
 | `EMAIL_USER`, `EMAIL_PASS` | Confirm emails, family links, order links | Yes: without them a QR choice can't be confirmed |
-| `CREATOR_STRIPE_SECRET_KEY`, `CREATOR_STRIPE_WEBHOOK_SECRET` | Checkout, on the Creator Club platform account (test mode) | Yes, to sell |
+| `SM_STRIPE_SECRET_KEY` | Checkout, on Subject Medias' own Stripe account (a test key until it goes live) | Yes, to sell |
+| `SM_STRIPE_WEBHOOK_SECRET` | The signing secret of that account's webhook | Yes, to sell |
+| `SM_STRIPE_LIVE=yes` | Lets a live key take real payments | Only when going live |
 | `ANTHROPIC_API_KEY` | Jersey-number suggestions | Without it, files reach review with no suggestions |
 | `MARKET_TAG_MODEL` | The model that reads numbers | Optional (default `claude-haiku-5-5`) |
 | `SM_MARKET_WORKER=off` | Turns the worker off on this server | Optional |
@@ -88,18 +92,22 @@ What the server needs, on Render:
 | `SM_HELP_EMAIL` | The address on the family pages | Optional (default `hello@subjectmedias.com`) |
 | `FFMPEG_PATH` | A specific ffmpeg | Optional: `ffmpeg-static` installs one with `npm ci` |
 
-The Stripe webhook already sends `checkout.session.completed` to
-`/api/creators/stripe/webhook`. Add `checkout.session.expired` (marks
-abandoned checkouts) and `charge.refunded` (a full refund closes the order's
-downloads) to the same endpoint. Checkout takes cards only (with Apple Pay
-and Google Pay), so paid means paid at once, and a checkout lasts 31 minutes.
+Sales go to Subject Medias' own Stripe account, never the Creator Club's.
+In that account (test mode first), add a webhook endpoint at
+`https://tojcampaign.com/api/sm/stripe/webhook` with these events:
+`checkout.session.completed`, `checkout.session.async_payment_succeeded`,
+`checkout.session.expired` (marks abandoned checkouts) and `charge.refunded`
+(a full refund closes the order's downloads). Its signing secret is
+`SM_STRIPE_WEBHOOK_SECRET`. Checkout takes cards only (with Apple Pay and
+Google Pay), so paid means paid at once, and a checkout lasts 31 minutes.
 
-## Decisions still open
+## Decided (Nov 5, 2026)
 
-- Which Stripe account takes Subject Medias' event sales. Today it's the
-  Creator Club platform account, in test mode until counsel picks the company.
-- The consent wording, above all "OK to show publicly" (it names our store
-  and our social pages). Worth a read by counsel before the first live event.
+- **Stripe:** Subject Medias' own account takes the event sales. Test mode
+  until `SM_STRIPE_LIVE=yes`.
+- **Consent wording:** Subject Medias has its counsel read the family pages,
+  above all "OK to show publicly" (it names our store and our social pages),
+  before the first live event.
 
 ## Limits to know
 

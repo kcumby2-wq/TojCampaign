@@ -709,14 +709,6 @@ router.post("/stripe/webhook", async (req, res) => {
       if (/duplicate|unique/i.test(dup.message)) return res.json({ received: true, duplicate: true });
       throw new Error(dup.message);
     }
-    // Subject Medias marketplace orders share this account and endpoint (routes/sm-market-public.js).
-    const smKind = ((event.data.object || {}).metadata || {}).kind === "sm_market";
-    if ((event.type === "checkout.session.completed" || event.type === "checkout.session.async_payment_succeeded") && smKind) {
-      await require("./sm-market-public").paid(event.data.object);
-    }
-    if (event.type === "checkout.session.expired" && smKind) await require("./sm-market-public").expired(event.data.object);
-    // A refund finds its marketplace order by the payment; a Creator Club charge matches none.
-    if (event.type === "charge.refunded") await require("./sm-market-public").refunded(event.data.object);
     if (event.type === "checkout.session.completed") {
       const ses = event.data.object;
       const md = ses.metadata || {};

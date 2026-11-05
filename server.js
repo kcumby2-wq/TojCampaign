@@ -33,12 +33,14 @@ const { sessionCookie, TRUST_PROXY_HOPS } = require("./utils/session-cookie");
 app.set("trust proxy", TRUST_PROXY_HOPS);
 const PORT = process.env.PORT || 3000;
 
-// The Creator Club's Stripe webhook needs the exact bytes Stripe signed.
+// The Stripe webhooks (the Creator Club's and Subject Medias') need the exact
+// bytes Stripe signed.
+const STRIPE_HOOKS = ["/api/creators/stripe/webhook", "/api/sm/stripe/webhook"];
 app.use(
   express.json({
     limit: "5mb",
     verify: (req, _res, buf) => {
-      if (req.originalUrl && req.originalUrl.startsWith("/api/creators/stripe/webhook")) req.rawBody = Buffer.from(buf);
+      if (req.originalUrl && STRIPE_HOOKS.some((p) => req.originalUrl.startsWith(p))) req.rawBody = Buffer.from(buf);
     },
   })
 );
@@ -194,6 +196,8 @@ app.use("/api/sm/fellowship", require("./routes/sm-fellowship"));
 // subjectmedias.com/m/ rewrites here (routes/sm-market-public.js).
 app.use("/api/sm/market", require("./routes/sm-market"));
 app.use("/m", require("./routes/sm-market-public"));
+// Subject Medias' own Stripe account sends its checkouts and refunds here.
+app.use("/api/sm/stripe", require("./routes/sm-market-public").stripeWebhook);
 app.use("/api/os", require("./routes/os"));
 // Ground Floor Sports · Pylon events: events, crews, roster consent flags,
 // the upload log, deliverables, SportsClippers listings, takedowns (024),

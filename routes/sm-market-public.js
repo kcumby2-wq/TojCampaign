@@ -13,17 +13,18 @@
 //   GET  /m/:code/consent           the QR form: a parent or guardian's choice
 //   POST /m/:code/consent           saves it and emails a link to confirm (a keep-out counts at once)
 //   GET  /m/:code/consent/sent      what happens next
+//   POST /api/sm/stripe/webhook     Subject Medias' Stripe → orders (stripeWebhook, below)
 //
-// paid() and expired() are the Stripe webhook's (routes/creators.js), for
-// checkouts whose metadata.kind is "sm_market". Payments use the Creator Club
-// platform account (utils/creator-stripe.js), in test mode until Kyron picks
-// the account Subject Medias' sales go to.
+// Payments go to Subject Medias' own Stripe account (utils/sm-stripe.js), in
+// test mode until SM_STRIPE_LIVE=yes. Its webhook hands checkouts whose
+// metadata.kind is "sm_market" to paid() and expired(), and refunds to
+// refunded().
 
 const crypto = require("crypto");
 const express = require("express");
 const M = require("../utils/sm-market");
 const P = require("../utils/sm-market-page");
-const S = require("../utils/creator-stripe");
+const S = require("../utils/sm-stripe");
 const mailer = require("../utils/mailer");
 const push = require("../utils/push");
 const { isEmail } = require("../utils/sm-bookings");
@@ -604,7 +605,44 @@ router.post("/:code/consent", page(async (req, res, sb) => {
 
 router.use((req, res) => notFound(res));
 
+// ── Subject Medias' Stripe webhook ───────────────────────────────────────
+// POST /api/sm/stripe/webhook, from Subject Medias' own Stripe account
+// (server.js keeps the raw body for the signature). paid(), expired() and
+// refunded() change nothing on a resent event; a failure answers 500 so
+// Stripe sends it again.
+const stripeWebhook = express.Router();
+stripeWebhook.post("/webhook", async (req, res) => {
+  const secret = process.env.SM_STRIPE_WEBHOOK_SECRET;
+  if (!secret) return res.status(503).json({ error: "webhook_not_configured" });
+  let s;
+  try {
+    s = S.stripe();
+  } catch (e) {
+    return res.status(503).json({ error: e.code || "stripe_not_configured" });
+  }
+  let event;
+  try {
+    event = s.stripe.webhooks.constructEvent(req.rawBody || Buffer.from(""), req.headers["stripe-signature"], secret);
+  } catch (e) {
+    return res.status(400).json({ error: "bad_signature" });
+  }
+  if (!getSupabase()) return res.status(503).json({ error: "storage_unavailable" });
+  const obj = (event.data && event.data.object) || {};
+  const ours = (obj.metadata || {}).kind === "sm_market";
+  try {
+    if ((event.type === "checkout.session.completed" || event.type === "checkout.session.async_payment_succeeded") && ours) await paid(obj);
+    else if (event.type === "checkout.session.expired" && ours) await expired(obj);
+    // A refund finds its order by the payment; any other charge on the account matches none.
+    else if (event.type === "charge.refunded") await refunded(obj);
+    res.json({ received: true });
+  } catch (e) {
+    console.error("[sm-market-public] webhook failed:", event.type, e && e.message);
+    res.status(500).json({ error: "webhook_failed" });
+  }
+});
+
 module.exports = router;
+module.exports.stripeWebhook = stripeWebhook;
 module.exports.paid = paid;
 module.exports.expired = expired;
 module.exports.refunded = refunded;
