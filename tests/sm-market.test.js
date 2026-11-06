@@ -282,6 +282,7 @@ test("the confirmation email says what was chosen and that ignoring it changes n
   assert.match(m.subject, /Lightning #7 at Fall Showcase/);
   assert.match(m.text, /Family only \(only your family sees and buys their footage\)/);
   assert.match(m.text, /ignore this email and nothing changes/);
+  assert.match(M.consentEmail({ name: "Fall Showcase" }, "Lightning", "7", "public", "x").text, /our social pages, such as our Instagram \(@subjectmedias\)/, "the email names our Instagram like the form");
   assert.match(m.text, /said they're the parent or guardian of Lightning #7/);
   const self = M.consentEmail({ name: "Fall Showcase" }, "Lightning", "7", "sell", "https://www.subjectmedias.com/m/confirm/x", "self");
   assert.match(self.text, /said they're Lightning #7 at Fall Showcase, answering as an adult athlete/);

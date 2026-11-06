@@ -148,7 +148,8 @@ Google Pay), so paid means paid at once, and a checkout lasts 31 minutes.
 - **Stripe:** Subject Medias' own account takes the event sales. Test mode
   until `SM_STRIPE_LIVE=yes`.
 - **Consent wording:** Subject Medias has its counsel read the family pages,
-  above all "OK to show publicly" (it names our store and our social pages),
+  above all "OK to show publicly" (it names our store and our social pages,
+  such as our Instagram, @subjectmedias),
   before the first live event.
 
 ## Decided (Nov 6, 2026): before the next event
