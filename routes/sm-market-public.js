@@ -97,11 +97,14 @@ const SALT = crypto.randomBytes(32);
 const buckets = new Map(); // per visitor: cleared if it grows huge
 const caps = new Map(); // per address, athlete, and in all: never cleared early
 const CAPS = new Set(["to", "toDay", "athlete", "mail", "writes"]);
+// Per visitor, per 10 minutes. Families on one venue's Wi-Fi count as one
+// visitor, so these leave room for a busy check-in or a crowd after the
+// game; the caps per mailbox, athlete and event are what bound abuse.
 const LIMITS = {
-  view: [240, 10],
-  consent: [40, 10],
-  confirm: [30, 10],
-  checkout: [20, 10],
+  view: [2000, 10],
+  consent: [200, 10],
+  confirm: [300, 10],
+  checkout: [100, 10],
   to: [3, 60], // emails from the form to one mailbox, an hour
   toDay: [8, 1440], // and a day
   athlete: [12, 60], // emails about one athlete, an hour
@@ -531,6 +534,7 @@ router.get("/:code", page(async (req, res, sb) => {
 }));
 
 router.post("/:code/checkout", page(async (req, res, sb) => {
+  if (!allowed(req, "view")) return slowDown(res);
   const ev = await eventByCode(sb, req.params.code);
   if (!ev || ev.status === "draft") return notFound(res);
   const b = req.body || {};

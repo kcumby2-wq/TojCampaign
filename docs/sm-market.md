@@ -33,7 +33,10 @@ the edited products, the browse store and revenue reporting.
    it counts at once and emails the family link. If it's less careful than
    what that same email already said (an older paper form after a newer QR
    keep-out, say), the app shows what's saved and records it only when an
-   approver taps "Record it anyway". A number not on the roster
+   approver taps "Record it anyway". If their answer changes while it's
+   typed in (a QR keep-out landing), nothing is written over: the app says
+   so. A keep-out recorded in person keeps the youngest age already given.
+   A number not on the roster
    yet is added by the form; 0 and 00 are two numbers.
 3. **Crews upload** from the app. Files go from the device straight to
    storage on a signed link (up to 2 GB each: MP4, MOV, M4V, JPG, PNG).
@@ -43,9 +46,11 @@ the edited products, the browse store and revenue reporting.
 5. **Staff review**: switch on the numbers that are really in it (the AI's
    guesses start switched off). An approver then ticks "Everyone who stands
    out in it is tagged" and approves it for sale. Nothing with a kept-out
-   athlete in it can be approved. A change to who's in an approved item
-   sends it back to review unless an approver ticks the box again; tagging
-   someone kept out always sends it back.
+   athlete in it can be approved. A save of who's in an approved item sends
+   it back to review unless an approver ticks the box again (a member's save
+   always does); tagging someone kept out always sends it back. An approval
+   re-reads who's in it after it's written, so a change landing at the same
+   moment sends it back too.
 6. **Families find and buy**: on the event's clips page by team and number
    (it needs the event's access code), or on their family link. Checkout is
    Stripe; the order page has the downloads (full quality, no watermark),
@@ -160,27 +165,40 @@ Google Pay), so paid means paid at once, and a checkout lasts 31 minutes.
   for a number with their own email gets that number's family link. Options:
   check answers against registration's guardian emails, or hold a second
   family's link for staff until the first is told.
+- For counsel: whether selling one child's clip to another family is a
+  "sale" under state privacy laws; whether a parent may answer for an
+  athlete who's 18 or older (the form allows it, for states where 18 isn't
+  yet a legal adult); and whether clips with two family-only athletes may be
+  sold to either family.
 
 ## Limits to know
 
 - Self-asserted guardianship and age: whoever controls an email address can
   answer for a number with it, and the age band is what they say. Once
   confirmed, that answer's family link shows the number's clips, family only
-  ones included. Staff see every answer and its address, and can remove one.
+  ones included. Staff see every answer and any change waiting to be
+  confirmed (approvers see the addresses) and can remove one; removals are
+  logged. A keep-out from anyone counts at once, which only ever protects.
   Closing this needs a way to know who the family is (see "Still open").
 - A clip with two or more family-only athletes in it isn't sold to anyone,
   and 12 or younger is always family only. At a 12U event, most clips with
   two tagged players can't be sold.
-- The form's per-visitor limits count a visitor by their whole
-  X-Forwarded-For chain, so a caller can't fill someone else's (Render adds
-  the address that reached it). Changing the chain dodges them, which is why
-  emails are capped per mailbox, per athlete and per event. Staff see every answer and any change waiting to be
-  confirmed (approvers see the addresses) and can remove one; removals are
-  logged. A keep-out from anyone counts at once, which only ever protects.
+- Per-visitor limits count a visitor by their whole X-Forwarded-For chain,
+  so a caller can't fill someone else's (Render adds the address that
+  reached it). Families on one venue's Wi-Fi count as one visitor, so the
+  limits leave room for a crowd: 2,000 page views, 200 answers, 300 confirms
+  and 100 checkouts per 10 minutes. Changing the chain dodges them, which is
+  why emails are capped per mailbox, per athlete and per event.
+- Email goes through the Gmail account in `EMAIL_USER`. Gmail sends about
+  500 a day (about 2,000 on Google Workspace), and the form sends at most
+  200 an hour from one event. A big event's check-in can need more: a
+  sending service (Postmark or Amazon SES, say) would lift both.
+- The clips page's Stripe "back" link carries the access code, so it's kept
+  in Subject Medias' Stripe account with the checkout.
 - The QR form emails whatever address is typed in, so its emails are capped:
   3 an hour (8 a day) to one mailbox (a +tag or Gmail dots count as the
   same mailbox), 12 an hour about one athlete, 200 an hour from one event,
-  and 40 tries per visitor per 10 minutes. A keep-out or a more careful
+  and 200 answers per visitor per 10 minutes. A keep-out or a more careful
   answer is saved past every cap (just without its note); only a flood
   (3,000 answers an hour at one event) stops the form, and then the crew
   records choices in person. An answer is saved only if the guardian's

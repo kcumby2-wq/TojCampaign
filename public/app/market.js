@@ -43,6 +43,7 @@
     no_confirmed_tag: "Confirm who's in it first.",
     check_everyone_tagged: "Check that everyone who stands out in it is tagged, then tick the box.",
     kept_out: "Someone tagged in it is kept out, so it can't go on sale. Hide it instead.",
+    changed_meanwhile: "Their answer changed while you were typing (maybe from the QR). Look at their answers again, then record it if it's still right.",
     not_ready: "It's still processing.",
     not_failed: "It hasn't failed.",
     sold: "Someone bought it, so it stays.",
@@ -272,11 +273,11 @@
       var p = sv.pending ? "; a change to " + (LEVEL[sv.pending.level] || [sv.pending.level])[0] + (AGE[sv.pending.age_band] ? ", " + AGE[sv.pending.age_band] : "") + " is waiting for their email" : "";
       return l[0] + (AGE[sv.age_band] ? ", " + AGE[sv.age_band] : "") + " (" + (sv.source === "staff" ? "recorded in person" : "from the QR") + (sv.at ? ", " + t.ago(sv.at) : "") + p + ")";
     }
-    async function record(b, replace) {
+    async function record(b, warned) {
       b.disabled = true;
+      // "Record it anyway" resends exactly what was warned about.
+      var body = warned ? Object.assign({}, warned, { replace: true }) : { email: $("mkEmail").value, level: $("mkLevel").value, age: age };
       try {
-        var body = { email: $("mkEmail").value, level: $("mkLevel").value, age: age };
-        if (replace) body.replace = true;
         var r = await t.post(API + "/athletes/" + enc(a.id) + "/consents", body);
         if (r.family_link) {
           $("mkLink").innerHTML = '<p class="sub">' + (r.emailed ? "Emailed to them. " : "Email isn't working, so share it yourself. ") + 'Their family link:</p><div class="sub mono" style="font-size:11.5px;word-break:break-all;margin:6px 0">' + h(r.family_link) + '</div><button type="button" class="btn small soft" id="mkCopyFam">Copy it</button>';
@@ -288,14 +289,21 @@
         b.disabled = false;
         if (e.data && e.data.error === "looser_than_saved") {
           // A paper form can be older than their QR answer: an approver decides.
-          $("mkRecMsg").innerHTML = '<span class="err">' + h("They already answered " + savedWords(e.data.saved || {}) + ". This answer is less careful. Record it only if it's newer than theirs.") + '</span><br><button type="button" class="btn small danger" id="mkReplace" style="margin-top:8px">Record it anyway</button>';
-          $("mkReplace").addEventListener("click", function () { record(this, true); });
+          $("mkRecMsg").innerHTML = '<span class="err">' + h(body.email + " already answered " + savedWords(e.data.saved || {}) + ". This answer is less careful. Record it only if it's newer than theirs.") + '</span><br><button type="button" class="btn small danger" id="mkReplace" style="margin-top:8px">Record it anyway</button>';
+          $("mkReplace").addEventListener("click", function () { record(this, body); });
           return;
         }
         note("mkRecMsg", e.data && e.data.error === "invalid" && (e.data.fields || []).indexOf("level") >= 0 && age === "u13" ? "12 or younger is family only or keep out." : say(e));
       }
     }
-    if ($("mkRecord")) $("mkRecord").addEventListener("click", function () { record(this, false); });
+    if ($("mkRecord")) {
+      $("mkRecord").addEventListener("click", function () { record(this, null); });
+      // A warning is about the answer as it was typed: any change clears it.
+      var clear = function () { if ($("mkReplace")) $("mkRecMsg").textContent = ""; };
+      $("mkEmail").addEventListener("input", clear);
+      $("mkLevel").addEventListener("change", clear);
+      app().querySelectorAll("[data-age]").forEach(function (x) { x.addEventListener("click", clear); });
+    }
     if ($("mkKeep")) $("mkKeep").addEventListener("click", async function () {
       var b = this;
       b.disabled = true;
@@ -445,7 +453,9 @@
       if (ready && can.edit && x.status !== "approved") actions += '<button type="button" class="btn small" data-approve>Approve for sale</button>';
       if (ready && can.edit && x.status !== "hidden") actions += '<button type="button" class="btn small ghost" data-hide>Hide</button>';
       if (x.status === "failed" && can.upload) actions += '<button type="button" class="btn small" data-retry>Try again</button>';
-      return '<article class="card" data-media="' + h(x.id) + '">' + view +
+      var had = (x.tags || []).filter(function (g) { return g.confirmed; }).map(function (g) { return g.athlete_id; }).sort().join(",");
+      var hints = (x.tags || []).some(function (g) { return !g.confirmed; }) ? "1" : "";
+      return '<article class="card" data-media="' + h(x.id) + '" data-had="' + h(had) + '" data-hints="' + hints + '" data-status="' + h(x.status) + '">' + view +
         '<div class="row"><div class="grow"><div class="name" style="font-size:15px;overflow-wrap:anywhere">' + h(x.filename || (x.kind === "clip" ? "Clip" : "Photo")) + '</div><div class="sub">' + h([x.kind === "clip" ? "Clip" + (x.duration_ms ? " " + length(x.duration_ms) : "") : "Photo", t.ago(x.created_at)].join(" · ")) + "</div></div>" + badge(MEDIA[x.status] || x.status, x.status === "approved" ? "ok" : x.status === "failed" ? "bad" : x.status === "review" ? "gold" : "") + "</div>" +
         (x.error ? '<p class="sub err" style="margin:0">' + h(x.error) + "</p>" : "") +
         (ready ? '<div class="field"><span class="label">Who\'s in it</span><div style="display:flex;flex-wrap:wrap;gap:8px" data-chips>' + (tagged || '<span class="sub" data-none>No numbers yet. Add who you can see.</span>') + "</div>" + picker + '<p class="sub" data-where style="margin:0">' + whereHtml(on) + "</p></div>" : "") +
@@ -485,13 +495,27 @@
     async function patch(b, body, done) {
       var card = b.closest("[data-media]");
       b.disabled = true;
-      try { await t.post(API + "/media/" + enc(card.dataset.media), body, "PATCH"); t.toast(done); review(arg); }
+      try {
+        var r = await t.post(API + "/media/" + enc(card.dataset.media), body, "PATCH");
+        var st = r && r.media ? r.media.status : "";
+        // Say what really happened: someone else may have changed it meanwhile.
+        if (body.status === "approved" && st !== "approved") t.toast("Who's in it changed meanwhile, so it's back in review. Check it again.");
+        else if (!body.status && card.dataset.status === "approved" && st === "review") t.toast("Saved. It's back in review until an approver checks it.");
+        else t.toast(done);
+        review(arg);
+      }
       catch (e) { b.disabled = false; card.querySelector("[data-msg]").innerHTML = '<span class="err">' + h(say(e)) + "</span>"; }
     }
     // An approver's check rides along when they change who's in something on sale.
     bind("[data-save]", "click", function (b) {
       var card = b.closest("[data-media]"), body = { tags: who(card) };
       if (everyone(card)) body.everyone_tagged = true;
+      // A save that changes nothing isn't sent: on something for sale it
+      // would send it back to review for nothing.
+      if (!body.everyone_tagged && !card.dataset.hints && body.tags.slice().sort().join(",") === card.dataset.had) {
+        card.querySelector("[data-msg]").textContent = "Nothing changed.";
+        return;
+      }
       patch(b, body, "Saved.");
     });
     bind("[data-approve]", "click", function (b) {

@@ -537,6 +537,7 @@ module.exports = {
   levelAtLeast,
   bandOf,
   looser,
+  youngerBand,
   answerPlan,
   mailboxOf,
   itemAthletes,

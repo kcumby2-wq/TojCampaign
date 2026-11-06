@@ -335,6 +335,56 @@ test("a keep-out recorded in person sends nothing; 12 or younger is family only;
   assert.equal(athlete(await roster(ev), "7").level, "out");
 });
 
+test("an answer from the QR that lands while one is typed in isn't written over (re-check 1)", async () => {
+  const ev = await newEvent();
+  const team = await newTeam(ev);
+  await call("POST", `/api/sm/market/events/${ev.id}/athletes`, { team_id: team.id, jerseys: "7" }, "crew");
+  const seven = athlete(await roster(ev), "7");
+  (db.tables.sm_market_consents ||= []).push({ id: "c1", athlete_id: seven.id, email: "pat@example.com", level: "sell", under_13: false, age_band: "16_17", source: "qr", confirmed_at: "2026-11-21T10:00:00Z", confirm_hash: null, updated_at: "2026-11-21T10:00:00Z" });
+  // pat@'s keep-out from the QR lands between the staff save's read and its write.
+  const from = db.from;
+  let landed = false;
+  db.from = (name) => {
+    const q = from(name);
+    if (name === "sm_market_consents" && !landed) {
+      const update = q.update.bind(q);
+      q.update = (patch) => { landed = true; Object.assign(db.tables.sm_market_consents[0], { level: "out" }); return update(patch); };
+    }
+    return q;
+  };
+  let r;
+  try {
+    r = await call("POST", `/api/sm/market/athletes/${seven.id}/consents`, { email: "pat@example.com", level: "sell", age: "16_17" }, "lead");
+  } finally {
+    db.from = from;
+  }
+  assert.ok(landed);
+  assert.equal(r.status, 409);
+  assert.equal(r.data.error, "changed_meanwhile");
+  assert.equal(db.tables.sm_market_consents[0].level, "out", "the keep-out stands");
+  assert.equal(mails.length, 0, "and no family link went out");
+});
+
+test("a keep-out recorded in person keeps the younger age already saved (re-check 3)", async () => {
+  const ev = await newEvent();
+  const team = await newTeam(ev);
+  await call("POST", `/api/sm/market/events/${ev.id}/athletes`, { team_id: team.id, jerseys: "7" }, "crew");
+  const seven = athlete(await roster(ev), "7");
+  (db.tables.sm_market_consents ||= []).push({ id: "c1", athlete_id: seven.id, email: "pat@example.com", level: "family", under_13: true, age_band: "u13", source: "qr", confirmed_at: "2026-11-21T10:00:00Z", confirm_hash: null, updated_at: "2026-11-21T10:00:00Z" });
+  assert.equal((await call("POST", `/api/sm/market/athletes/${seven.id}/consents`, { email: "pat@example.com", level: "out", age: "18_plus" }, "lead")).status, 200);
+  const row = db.tables.sm_market_consents[0];
+  assert.deepEqual([row.level, row.age_band, row.under_13], ["out", "u13", true], "kept out, still 12 or younger");
+  // So a later, looser paper form shows what really was said.
+  const r = await call("POST", `/api/sm/market/athletes/${seven.id}/consents`, { email: "pat@example.com", level: "sell", age: "18_plus" }, "lead");
+  assert.equal(r.status, 409);
+  assert.equal(r.data.saved.age_band, "u13");
+  // Said so: replaced, and the log says what it replaced.
+  assert.equal((await call("POST", `/api/sm/market/athletes/${seven.id}/consents`, { email: "pat@example.com", level: "sell", age: "18_plus", replace: true }, "lead")).status, 200);
+  assert.deepEqual([row.level, row.age_band], ["sell", "18_plus"]);
+  const logged = db.tables.team_activity.filter((a) => a.action === "market_consent_recorded").at(-1);
+  assert.deepEqual([logged.detail.replaced_more_careful, logged.detail.replaced_age_band], ["out", "u13"]);
+});
+
 test("removing: a consent; a number nobody answered for; a team with no one on it", async () => {
   const ev = await newEvent();
   const team = await newTeam(ev);
@@ -492,9 +542,10 @@ test("a review change is checked whole before anything is written", async () => 
   await call("PATCH", `/api/sm/market/media/${item.id}`, { tags: [seven.id, eleven.id], everyone_tagged: true }, "lead");
   assert.equal(item.status, "approved");
   assert.ok(item.everyone_tagged_at > at, "the new check is the one on record");
-  // The same set again changes nothing.
+  // A member's save of something on sale always goes back to an approver,
+  // the same numbers too (the app doesn't send a save that changes nothing).
   await call("PATCH", `/api/sm/market/media/${item.id}`, { tags: [eleven.id, seven.id] }, "crew");
-  assert.equal(item.status, "approved", "saving the same numbers isn't a change");
+  assert.equal(item.status, "review", "a member's save asks an approver again");
 });
 
 test("nobody kept out goes on sale: approving is refused, and tagging them takes it off sale", async () => {
@@ -572,6 +623,44 @@ test("an approval and a change to who's in it at the same moment: what's on sale
   } finally {
     db.from = from;
   }
+});
+
+test("a save from a screen that's out of date can't put back a tag the approver just took off (re-check 2)", async () => {
+  const ev = await newEvent();
+  const team = await newTeam(ev);
+  await call("POST", `/api/sm/market/events/${ev.id}/athletes`, { team_id: team.id, jerseys: "1 2" }, "crew");
+  const data = await roster(ev);
+  const [one, two] = [athlete(data, "1"), athlete(data, "2")];
+  for (const a of [one, two]) await call("POST", `/api/sm/market/athletes/${a.id}/consents`, { email: `g${a.jersey}@example.com`, level: "sell", age: "16_17" }, "lead");
+  const item = await readyItem(ev);
+  db.tables.sm_market_tags = [one, two].map((a) => ({ media_id: item.id, athlete_id: a.id, event_id: ev.id, source: "staff", confirmed: true }));
+  // The member's screen shows #1 and #2; before their save is written, the approver approves #1 alone.
+  const from = db.from;
+  let landed = false;
+  db.from = (name) => {
+    const q = from(name);
+    if (name === "sm_market_tags" && !landed) {
+      const upsert = q.upsert.bind(q);
+      q.upsert = (row, opts) => {
+        if (!landed) {
+          landed = true;
+          db.tables.sm_market_tags = db.tables.sm_market_tags.filter((t) => !(t.media_id === item.id && t.athlete_id === two.id));
+          Object.assign(item, { status: "approved", approved_by: as.lead, approved_at: new Date().toISOString(), everyone_tagged_by: as.lead, everyone_tagged_at: new Date().toISOString() });
+        }
+        return upsert(row, opts);
+      };
+    }
+    return q;
+  };
+  try {
+    assert.equal((await call("PATCH", `/api/sm/market/media/${item.id}`, { tags: [one.id, two.id] }, "crew")).status, 200);
+  } finally {
+    db.from = from;
+  }
+  assert.ok(landed);
+  const on = db.tables.sm_market_tags.filter((t) => t.media_id === item.id && t.confirmed).map((t) => t.athlete_id).sort();
+  assert.deepEqual(on, [one.id, two.id].sort(), "#2 is back in it");
+  assert.equal(item.status, "review", "so it waits for an approver");
 });
 
 test("a file still processing can't be reviewed; a failed one can be retried", async () => {

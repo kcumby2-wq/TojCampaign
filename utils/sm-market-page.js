@@ -357,7 +357,7 @@ function orderPage({ nonce, event, order, items = [], state, backTo = null }) {
       refunded: ["Refunded", "This order was refunded, so its downloads are closed."],
       cancelled: ["Checkout cancelled", "Nothing was charged. To pick again, go back to the event page, or open your family link from its email."],
     }[state];
-    body += `<div class="card"><h2>${words[0]}</h2><p>${words[1]}</p>${backTo ? `<div class="row"><a class="pill pill-line" href="${esc(backTo)}">Back to the event page</a></div>` : ""}</div>`;
+    body += `<div class="card"><h2>${words[0]}</h2><p>${words[1]}</p>${backTo ? `<div class="row"><a class="pill pill-line" href="${esc(backTo)}">Back to the clips page</a><span class="note">It asks for the event's access code, from check-in.</span></div>` : ""}</div>`;
     return shell({ nonce, title: `Your order | ${event.name}`, body });
   }
   const rows = items

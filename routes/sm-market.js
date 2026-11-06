@@ -276,7 +276,7 @@ router.post("/athletes/:id/consents", approver, jsonOnly, withDb(async (req, res
   // A paper form typed in after the same person's newer, more careful answer
   // (a keep-out, 12 or younger) would undo it. Say what's saved; a less
   // careful answer goes in only when the approver says so (replace: true).
-  const saved = await run(sb.from("sm_market_consents").select("level,under_13,age_band,source,confirmed_at,updated_at,pending_level,pending_under_13,pending_age_band").eq("athlete_id", a.id).eq("email", value.email).maybeSingle());
+  const saved = await run(sb.from("sm_market_consents").select("id,level,under_13,age_band,source,confirmed_at,confirm_hash,updated_at,pending_level,pending_under_13,pending_age_band").eq("athlete_id", a.id).eq("email", value.email).maybeSingle());
   const replacing = !!saved && M.looser(saved, value);
   if (replacing && body.replace !== true) {
     return res.status(409).json({
@@ -291,14 +291,17 @@ router.post("/athletes/:id/consents", approver, jsonOnly, withDb(async (req, res
       },
     });
   }
+  // A more careful answer (a keep-out, say) keeps the younger age already
+  // saved, unless the approver is replacing that answer.
+  const band = saved && body.replace !== true ? M.youngerBand(M.bandOf(saved), value.age_band) : value.age_band;
   const fam = value.level === "out" ? null : M.newToken();
   const at = now();
   const row = {
     athlete_id: a.id,
     email: value.email,
     level: value.level,
-    under_13: value.under_13,
-    age_band: value.age_band,
+    under_13: band === "u13",
+    age_band: band,
     source: "staff",
     confirmed_at: at,
     confirm_hash: null,
@@ -309,8 +312,24 @@ router.post("/athletes/:id/consents", approver, jsonOnly, withDb(async (req, res
     recorded_by: actor(req),
     updated_at: at,
   };
-  const { data, error } = await sb.from("sm_market_consents").upsert(row, { onConflict: "athlete_id,email" }).select().single();
-  if (error) return failed(res, error);
+  // Saved only if their answer is still as it was read: a QR answer (a
+  // keep-out) that lands while this is typed in is never written over unseen.
+  let data;
+  if (!saved) {
+    const r = await sb.from("sm_market_consents").insert(row).select().single();
+    if (r.error && r.error.code === "23505") return res.status(409).json({ error: "changed_meanwhile" });
+    if (r.error) return failed(res, r.error);
+    data = r.data;
+  } else {
+    let q = sb.from("sm_market_consents").update(row).eq("id", saved.id).eq("level", saved.level).eq("under_13", saved.under_13);
+    q = saved.age_band ? q.eq("age_band", saved.age_band) : q.is("age_band", null);
+    q = saved.confirm_hash ? q.eq("confirm_hash", saved.confirm_hash) : q.is("confirm_hash", null);
+    q = saved.confirmed_at ? q.eq("confirmed_at", saved.confirmed_at) : q.is("confirmed_at", null);
+    const r = await q.select();
+    if (r.error) return failed(res, r.error);
+    if (!r.data || !r.data.length) return res.status(409).json({ error: "changed_meanwhile" });
+    data = r.data[0];
+  }
   let emailed = false;
   const link = fam ? M.linkTo.family(fam.token) : null;
   if (link) {
@@ -327,7 +346,7 @@ router.post("/athletes/:id/consents", approver, jsonOnly, withDb(async (req, res
       }
     }
   }
-  await T.logActivity(actor(req), "market_consent_recorded", null, { event_id: a.event_id, level: value.level, ...(replacing ? { replaced_more_careful: saved.level } : {}) });
+  await T.logActivity(actor(req), "market_consent_recorded", null, { event_id: a.event_id, level: value.level, ...(replacing ? { replaced_more_careful: saved.level, replaced_age_band: M.bandOf(saved) } : {}) });
   res.json({
     consent: { id: data.id, level: data.level, under_13: data.under_13, age_band: data.age_band, source: data.source, confirmed: true, email: data.email },
     family_link: link,
@@ -432,18 +451,18 @@ router.get("/events/:id/media", viewer, withDb(async (req, res, sb) => {
   });
 }));
 
-// Confirm who's in it (member); approve it for sale or hide it (approver).
-// Everything is checked before anything is written. Approving takes the
-// approver's check that everyone who stands out in it is tagged
-// (everyone_tagged), and never goes through with a kept-out athlete in it.
-// A change to who's in an approved item sends it back to review, unless an
-// approver checks everyone again; so does leaving nobody confirmed in it, or
-// tagging someone kept out.
 // Back to review if it's on sale now (as it stands, not as it was read).
 async function offSale(sb, id) {
   await run(sb.from("sm_market_media").update({ status: "review", updated_at: now() }).eq("id", id).eq("status", "approved"));
 }
 
+// Confirm who's in it (member); approve it for sale or hide it (approver).
+// Everything is checked before anything is written. Approving takes the
+// approver's check that everyone who stands out in it is tagged
+// (everyone_tagged), and never goes through with a kept-out athlete in it.
+// A save of who's in an approved item sends it back to review, unless an
+// approver checks everyone again; so does leaving nobody confirmed in it, or
+// tagging someone kept out.
 router.patch("/media/:id", member, jsonOnly, withDb(async (req, res, sb) => {
   if (!idOk(req.params.id)) return res.status(404).json({ error: "not_found" });
   const media = await run(sb.from("sm_market_media").select("*").eq("id", req.params.id).maybeSingle());
@@ -487,13 +506,15 @@ router.patch("/media/:id", member, jsonOnly, withDb(async (req, res, sb) => {
       const row = { media_id: media.id, athlete_id: id, event_id: media.event_id, source: had ? had.source : "staff", confidence: had ? had.confidence : null, confirmed: true, confirmed_by: actor(req), confirmed_at: at };
       await run(sb.from("sm_market_tags").upsert(row, { onConflict: "media_id,athlete_id" }));
     }
-    // A change nobody checked takes it off sale, whatever its status was when
-    // this save read it: an approval may have landed in between.
-    if (changed && !vouched) await offSale(sb, media.id);
+    // A save nobody checked takes it off sale, whatever its status was when
+    // this save read it: an approval may have landed in between, and a save
+    // from a screen that's out of date can put back a tag the approver took
+    // off. (The app doesn't send a save that changes nothing.)
+    if (!vouched) await offSale(sb, media.id);
   }
 
   let status = body.status;
-  if (status === undefined && media.status === "approved" && changed && (!confirmedAfter.length || !vouched || keptOut.length)) status = "review";
+  if (status === undefined && media.status === "approved" && (want && !vouched || changed && (!confirmedAfter.length || keptOut.length))) status = "review";
   const at = now();
   if (status !== undefined && status !== media.status) {
     const patch = { status, updated_at: at };

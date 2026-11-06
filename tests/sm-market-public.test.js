@@ -231,10 +231,10 @@ test("a caller can't use up someone else's tries by writing their address (re-re
   const family = { "X-Forwarded-For": "203.0.113.9, 76.76.21.21" };
   // Straight to Render, claiming the same: Render still adds the caller's own address.
   const caller = { "X-Forwarded-For": "203.0.113.9, 76.76.21.21, 198.51.100.66" };
-  let last;
-  for (let i = 0; i < 41; i++) last = await post("/m/AB2CD3/consent", choice({ jersey: String(300 + i), email: `s${i}@example.com` }), { headers: caller });
-  assert.equal(last.status, 429, "the caller is slowed down");
-  assert.equal((await post("/m/AB2CD3/consent", choice({ jersey: "350", email: "fam@example.com" }), { headers: family })).status, 303, "the family isn't");
+  // One mailbox, so the event's email cap isn't what runs out.
+  for (let i = 0; i < 200; i++) await post("/m/AB2CD3/consent", choice({ jersey: String(300 + i), email: "same@example.com" }), { headers: caller });
+  assert.equal((await post("/m/AB2CD3/consent", choice({ jersey: "520", email: "new@example.com" }), { headers: caller })).status, 429, "the caller is slowed down, a new address too");
+  assert.equal((await post("/m/AB2CD3/consent", choice({ jersey: "521", email: "fam@example.com" }), { headers: family })).status, 303, "the family isn't");
 });
 
 test("12 or younger, from any guardian, keeps an athlete's clips to their own family", async () => {
@@ -673,7 +673,7 @@ test("a keep-out always gets through: past the email caps and the visitor limit 
   for (let i = 0; i < 12; i++) await post("/m/AB2CD3/consent", choice({ jersey: "8", email: `junk${i}@example.com` }), { headers: { "X-Forwarded-For": `198.51.102.${i}` } });
   for (let i = 0; i < 3; i++) await post("/m/AB2CD3/consent", choice({ jersey: String(60 + i), email: "g.parent+x" + i + "@gmail.com" }), { headers: { "X-Forwarded-For": `198.51.103.${i}` } });
   // ...and one visitor has used up their tries.
-  for (let i = 0; i < 40; i++) await post("/m/AB2CD3/consent", choice({ jersey: String(200 + i), email: `v${i}@example.com` }), { headers: { "X-Forwarded-For": "203.0.113.50" } });
+  for (let i = 0; i < 200; i++) await post("/m/AB2CD3/consent", choice({ jersey: String(200 + i), email: `v${i}@example.com` }), { headers: { "X-Forwarded-For": "203.0.113.50" } });
   assert.equal((await post("/m/AB2CD3/consent", choice({ jersey: "8", email: "other@example.com" }), { headers: { "X-Forwarded-For": "198.51.104.1" } })).status, 429, "a choice that needs its email waits");
   const r = await post("/m/AB2CD3/consent", choice({ jersey: "8", level: "out", age: "16_17", email: "G.Parent@gmail.com" }), { headers: { "X-Forwarded-For": "203.0.113.50" } });
   assert.equal(r.status, 303);
@@ -748,11 +748,11 @@ test("a QR change confirmed over a staff-recorded answer is the guardian's own (
 
 test("one visitor: room for a busy check-in, then slow down", async () => {
   let ok = 0, last;
-  for (let i = 0; i < 41; i++) {
+  for (let i = 0; i < 201; i++) {
     last = await post("/m/AB2CD3/consent", choice({ jersey: String(100 + i), email: `fam${i}@example.com` }), { headers: { "X-Forwarded-For": "203.0.113.9" } });
     if (last.status === 303) ok++;
   }
-  assert.equal(ok, 40, "forty families on one venue's Wi-Fi");
+  assert.equal(ok, 200, "two hundred families on one venue's Wi-Fi");
   assert.equal(last.status, 429);
 });
 
