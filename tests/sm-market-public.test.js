@@ -216,20 +216,25 @@ test("the clips page needs the event's access code: without it, only the way in"
   assert.match(seven.html, /<input type="hidden" name="k" value="ABCD2345">/, "and so does checkout");
 });
 
-test("guessing access codes: a visitor gets 20 wrong ones in ten minutes, then nothing either way", async () => {
+test("a right code always opens the page: no try limit that a venue's families could be locked out by (re-review 3)", async () => {
+  // Fifty wrong codes from one venue's Wi-Fi: old QR handouts after a new code, or someone else entirely.
+  const venue = { "X-Forwarded-For": "203.0.113.77" };
+  for (let i = 0; i < 50; i++) assert.equal((await get(`/m/AB2CD3?k=QQQQ${String(2000 + i).replace(/[01]/g, "2")}`, { headers: venue })).status, 403);
+  // The right code still opens the page, and checks out.
+  assert.equal((await get("/m/AB2CD3?k=ABCD2345", { headers: venue })).status, 200);
+  const buy = await post("/m/AB2CD3/checkout", { k: "ABCD2345", team: LIGHTNING, jersey: "7", item: [M1] }, { headers: venue });
+  assert.match(buy.location, /^https:\/\/checkout\.stripe\.com\//);
+});
+
+test("a caller can't use up someone else's tries by writing their address (re-review 3)", async () => {
+  // Through the site's rewrite: the visitor's address, then the hop Render saw.
+  const family = { "X-Forwarded-For": "203.0.113.9, 76.76.21.21" };
+  // Straight to Render, claiming the same: Render still adds the caller's own address.
+  const caller = { "X-Forwarded-For": "203.0.113.9, 76.76.21.21, 198.51.100.66" };
   let last;
-  for (let i = 0; i < 21; i++) last = await get(`/m/AB2CD3?k=QQQQ${String(2000 + i).replace(/[01]/g, "2")}`, { headers: { "X-Forwarded-For": "203.0.113.77" } });
-  assert.equal(last.status, 429);
-  // Over the limit, the right code waits too: the limit can't say which guess was right.
-  assert.equal((await get("/m/AB2CD3?k=ABCD2345", { headers: { "X-Forwarded-For": "203.0.113.77" } })).status, 429);
-  const viaCheckout = await post("/m/AB2CD3/checkout", { k: "ABCD2345", team: LIGHTNING, jersey: "7", item: [M1] }, { headers: { "X-Forwarded-For": "203.0.113.77" } });
-  assert.equal(viaCheckout.status, 429, "nor can checkout");
-  // Someone else is unaffected.
-  assert.equal((await get("/m/AB2CD3?k=ZZZZ2345", { headers: { "X-Forwarded-For": "203.0.113.78" } })).status, 403);
-  assert.equal((await get("/m/AB2CD3?k=ABCD2345", { headers: { "X-Forwarded-For": "203.0.113.79" } })).status, 200);
-  // Wrong codes sent to checkout count the same way.
-  for (let i = 0; i < 20; i++) await post("/m/AB2CD3/checkout", { k: "ZZZZ2345", team: LIGHTNING, jersey: "7", item: [M1] }, { headers: { "X-Forwarded-For": "203.0.113.80" } });
-  assert.equal((await get("/m/AB2CD3?k=ABCD2345", { headers: { "X-Forwarded-For": "203.0.113.80" } })).status, 429);
+  for (let i = 0; i < 41; i++) last = await post("/m/AB2CD3/consent", choice({ jersey: String(300 + i), email: `s${i}@example.com` }), { headers: caller });
+  assert.equal(last.status, 429, "the caller is slowed down");
+  assert.equal((await post("/m/AB2CD3/consent", choice({ jersey: "350", email: "fam@example.com" }), { headers: family })).status, 303, "the family isn't");
 });
 
 test("12 or younger, from any guardian, keeps an athlete's clips to their own family", async () => {
@@ -241,10 +246,27 @@ test("12 or younger, from any guardian, keeps an athlete's clips to their own fa
   assert.deepEqual(shown((await get(`/m/f/${familyToken}`)).html), [M5]);
 });
 
-test("the family page links the event's clips page, code and all", async () => {
-  const r = await get(`/m/f/${familyToken}`);
-  assert.equal(r.status, 200);
-  assert.match(r.html, /href="\/m\/AB2CD3\?k=ABCD2345"/);
+test("family and order pages never hand out the access code (re-review 1)", async () => {
+  // Anyone can get a family link: answer the form for a made-up number with your own email, then confirm.
+  await post("/m/AB2CD3/consent", choice({ jersey: "998", level: "family", age: "16_17", email: "stranger@example.com" }));
+  const link = mails.at(-1).text.match(/\/m\/confirm\/([A-Za-z0-9_-]{43})/)[1];
+  const fam = (await post(`/m/confirm/${link}`, {})).html.match(/\/m\/f\/([A-Za-z0-9_-]{43})/)[1];
+  const page = await get(`/m/f/${fam}`);
+  assert.equal(page.status, 200);
+  assert.ok(!page.html.includes("ABCD2345"), "no code on the family page");
+  assert.match(page.html, /href="\/m\/AB2CD3"/, "its clips link is the way in, which asks for the code");
+  // Nor on an order page started from a family link, whatever became of the order.
+  const buy = await post(`/m/f/${familyToken}/checkout`, { item: [M5] });
+  assert.equal(buy.status, 303);
+  const tok = created.at(-1).params.cancel_url.match(/\/m\/o\/([A-Za-z0-9_-]{43})/)[1];
+  const cancelled = await get(`/m/o/${tok}?cancelled=1`);
+  assert.ok(!cancelled.html.includes("ABCD2345"), "no code on the order page");
+  assert.match(cancelled.html, /href="\/m\/AB2CD3"/);
+  // After a new code: still nothing, on either page.
+  db.tables.sm_market_events[0].view_key = "NEWK2345";
+  assert.ok(!(await get(`/m/f/${fam}`)).html.includes("NEWK2345"));
+  db.tables.sm_market_orders.at(-1).status = "expired";
+  assert.ok(!(await get(`/m/o/${tok}`)).html.includes("NEWK2345"));
 });
 
 // ── Checkout and paying ──────────────────────────────────────────────────
@@ -472,7 +494,7 @@ test("an expired checkout says so", async () => {
 });
 
 // ── The QR form ──────────────────────────────────────────────────────────
-const choice = (over = {}) => ({ team_id: LIGHTNING, jersey: "#4", level: "family", age: "u13", email: "Jo@Example.com", guardian: "yes", ...over });
+const choice = (over = {}) => ({ team_id: LIGHTNING, jersey: "#4", level: "family", age: "u13", email: "Jo@Example.com", who: "guardian", ...over });
 
 test("the QR form: a choice waits for the email link; a scanner's visit confirms nothing; the button does", async () => {
   const form = await get("/m/AB2CD3/consent");
@@ -523,7 +545,7 @@ test("the form's rules: every field, 12 or younger family only, the right team, 
   const bad = await post("/m/AB2CD3/consent", { team_id: STORM.replace(/1$/, "9"), jersey: "A", level: "public", age: "maybe", email: "nope" });
   assert.equal(bad.status, 400);
   for (const f of ["team_id", "jersey", "age", "email"]) assert.match(bad.html, new RegExp(`class="f[^"]* bad"[^>]*>(<span>|<legend>)`), f);
-  assert.match(bad.html, /class="check bad"/);
+  assert.match(bad.html, /<fieldset class="f bad"><legend>Who's answering\?<\/legend>/);
   for (const level of ["public", "sell"]) {
     const kid = await post("/m/AB2CD3/consent", choice({ level, age: "u13" }));
     assert.equal(kid.status, 400, `never ${level} for an athlete 12 or younger`);
@@ -531,20 +553,29 @@ test("the form's rules: every field, 12 or younger family only, the right team, 
     assert.match(kid.html, new RegExp(`value="${level}" checked`), "what they entered stays");
     assert.match(kid.html, /value="u13" checked/);
   }
-  // The guardian's word is needed for a choice, but not to keep someone out.
-  const noWord = await post("/m/AB2CD3/consent", choice({ level: "family", guardian: "" }));
+  // Who's answering is needed for a choice, but not to keep someone out.
+  const noWord = await post("/m/AB2CD3/consent", choice({ level: "family", who: "" }));
   assert.equal(noWord.status, 400);
-  assert.match(text(noWord.html), /Tick the box to say you're their parent or legal guardian/);
+  assert.match(text(noWord.html), /Say who's answering: a parent or legal guardian, or the athlete as an adult/);
+  // An athlete answers for themselves only as an adult (re-review 7).
+  const teen = await post("/m/AB2CD3/consent", choice({ level: "sell", age: "16_17", who: "self" }));
+  assert.equal(teen.status, 400);
+  assert.match(text(teen.html), /An athlete under 18 can't answer for themselves/);
+  assert.match(teen.html, /value="self" checked/, "what they entered stays");
   assert.equal(db.tables.sm_market_consents.length, 3, "nothing saved yet");
   const bot = await post("/m/AB2CD3/consent", choice({ sm_trap: "x" }));
   assert.equal(bot.status, 303);
   assert.equal(db.tables.sm_market_consents.length, 3, "nothing saved");
   assert.equal(mails.length, 0);
   // Anyone can ask for a keep-out, without the guardian's box or an age, and it counts at once.
-  const out = await post("/m/AB2CD3/consent", choice({ jersey: "23", level: "out", guardian: "", age: "", email: "coach@example.com" }));
+  const out = await post("/m/AB2CD3/consent", choice({ jersey: "23", level: "out", who: "", age: "", email: "coach@example.com" }));
   assert.equal(out.location, "/m/AB2CD3/consent/sent?k=out&m=1");
   assert.equal(M.effectiveLevel({ id: A23 }, db.tables.sm_market_consents), "out");
   assert.equal(db.tables.sm_market_consents.find((c) => c.email === "coach@example.com").age_band, "u13", "no age given: the youngest band");
+  // An adult athlete answers for themselves.
+  const adult = await post("/m/AB2CD3/consent", choice({ jersey: "24", level: "sell", age: "18_plus", who: "self", email: "ath@example.com" }));
+  assert.equal(adult.location, "/m/AB2CD3/consent/sent?m=1");
+  assert.match(mails.at(-1).text, /answering as an adult athlete/);
 });
 
 test("a guardian's answer can't be loosened by someone who only knows their email (the review's high finding)", async () => {

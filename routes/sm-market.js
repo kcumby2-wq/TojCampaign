@@ -270,8 +270,27 @@ router.post("/athletes/:id/consents", approver, jsonOnly, withDb(async (req, res
   if (!idOk(req.params.id)) return res.status(404).json({ error: "not_found" });
   const a = await run(sb.from("sm_market_athletes").select("id,event_id,team_id,jersey").eq("id", req.params.id).maybeSingle());
   if (!a) return res.status(404).json({ error: "not_found" });
-  const { errors, value } = M.consentInput({ ...bodyOf(req), team_id: a.team_id, jersey: a.jersey, guardian: true });
+  const body = bodyOf(req);
+  const { errors, value } = M.consentInput({ ...body, team_id: a.team_id, jersey: a.jersey, who: "guardian" });
   if (errors.length) return res.status(400).json({ error: "invalid", fields: errors });
+  // A paper form typed in after the same person's newer, more careful answer
+  // (a keep-out, 12 or younger) would undo it. Say what's saved; a less
+  // careful answer goes in only when the approver says so (replace: true).
+  const saved = await run(sb.from("sm_market_consents").select("level,under_13,age_band,source,confirmed_at,updated_at,pending_level,pending_under_13,pending_age_band").eq("athlete_id", a.id).eq("email", value.email).maybeSingle());
+  const replacing = !!saved && M.looser(saved, value);
+  if (replacing && body.replace !== true) {
+    return res.status(409).json({
+      error: "looser_than_saved",
+      saved: {
+        level: saved.level,
+        age_band: M.bandOf(saved),
+        source: saved.source,
+        confirmed: !!saved.confirmed_at,
+        at: saved.updated_at || saved.confirmed_at || null,
+        pending: saved.pending_level ? { level: saved.pending_level, age_band: saved.pending_age_band || (saved.pending_under_13 === false ? "13_15" : "u13") } : null,
+      },
+    });
+  }
   const fam = value.level === "out" ? null : M.newToken();
   const at = now();
   const row = {
@@ -308,7 +327,7 @@ router.post("/athletes/:id/consents", approver, jsonOnly, withDb(async (req, res
       }
     }
   }
-  await T.logActivity(actor(req), "market_consent_recorded", null, { event_id: a.event_id, level: value.level });
+  await T.logActivity(actor(req), "market_consent_recorded", null, { event_id: a.event_id, level: value.level, ...(replacing ? { replaced_more_careful: saved.level } : {}) });
   res.json({
     consent: { id: data.id, level: data.level, under_13: data.under_13, age_band: data.age_band, source: data.source, confirmed: true, email: data.email },
     family_link: link,
@@ -420,6 +439,11 @@ router.get("/events/:id/media", viewer, withDb(async (req, res, sb) => {
 // A change to who's in an approved item sends it back to review, unless an
 // approver checks everyone again; so does leaving nobody confirmed in it, or
 // tagging someone kept out.
+// Back to review if it's on sale now (as it stands, not as it was read).
+async function offSale(sb, id) {
+  await run(sb.from("sm_market_media").update({ status: "review", updated_at: now() }).eq("id", id).eq("status", "approved"));
+}
+
 router.patch("/media/:id", member, jsonOnly, withDb(async (req, res, sb) => {
   if (!idOk(req.params.id)) return res.status(404).json({ error: "not_found" });
   const media = await run(sb.from("sm_market_media").select("*").eq("id", req.params.id).maybeSingle());
@@ -452,6 +476,7 @@ router.patch("/media/:id", member, jsonOnly, withDb(async (req, res, sb) => {
   const keptOut = confirmedAfter.filter((id) => levels.get(id) === "out");
   if (body.status === "approved" && keptOut.length) return res.status(409).json({ error: "kept_out", athletes: keptOut });
 
+  const vouched = checked && atLeast(req, "approver");
   if (want) {
     // What a person confirms is who's in it; any other suggestion goes.
     const drop = existing.filter((t) => !want.includes(t.athlete_id)).map((t) => t.athlete_id);
@@ -462,10 +487,13 @@ router.patch("/media/:id", member, jsonOnly, withDb(async (req, res, sb) => {
       const row = { media_id: media.id, athlete_id: id, event_id: media.event_id, source: had ? had.source : "staff", confidence: had ? had.confidence : null, confirmed: true, confirmed_by: actor(req), confirmed_at: at };
       await run(sb.from("sm_market_tags").upsert(row, { onConflict: "media_id,athlete_id" }));
     }
+    // A change nobody checked takes it off sale, whatever its status was when
+    // this save read it: an approval may have landed in between.
+    if (changed && !vouched) await offSale(sb, media.id);
   }
 
   let status = body.status;
-  if (status === undefined && media.status === "approved" && changed && (!confirmedAfter.length || !atLeast(req, "approver") || !checked || keptOut.length)) status = "review";
+  if (status === undefined && media.status === "approved" && changed && (!confirmedAfter.length || !vouched || keptOut.length)) status = "review";
   const at = now();
   if (status !== undefined && status !== media.status) {
     const patch = { status, updated_at: at };
@@ -474,6 +502,12 @@ router.patch("/media/:id", member, jsonOnly, withDb(async (req, res, sb) => {
   } else if (media.status === "approved" && checked && (changed || status === "approved")) {
     // Still on sale, checked again by an approver.
     await run(sb.from("sm_market_media").update({ everyone_tagged_at: at, everyone_tagged_by: actor(req), updated_at: at }).eq("id", media.id));
+  }
+  // On sale with what this approver checked: if someone changed who's in it
+  // meanwhile, it goes back to review.
+  if (status === "approved" || (status === undefined && media.status === "approved" && vouched && changed)) {
+    const tagsNow = ((await run(sb.from("sm_market_tags").select("athlete_id").eq("media_id", media.id).eq("confirmed", true))) || []).map((t) => t.athlete_id);
+    if (tagsNow.length !== confirmedAfter.length || tagsNow.some((id) => !confirmedAfter.includes(id))) await offSale(sb, media.id);
   }
   const data = await run(sb.from("sm_market_media").select("id,status,approved_at").eq("id", media.id).single());
   const tags = await run(sb.from("sm_market_tags").select("athlete_id,source,confidence,confirmed").eq("media_id", media.id));

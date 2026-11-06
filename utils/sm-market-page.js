@@ -94,9 +94,6 @@ fieldset.f{border:0;margin:0;padding:0}
 .seg span{display:flex;align-items:center;justify-content:center;min-height:48px;padding:8px 10px;border:1.5px solid var(--line-2);border-radius:14px;font-weight:750;text-align:center}
 .seg input:checked + span{border-color:var(--green);background:rgba(98,211,68,.12)}
 .seg input:focus-visible + span{outline:3px solid var(--green);outline-offset:2px}
-.check{display:flex;gap:12px;align-items:flex-start;grid-column:span 6;padding:12px 14px;border:1.5px solid var(--line-2);border-radius:14px;cursor:pointer;font-size:.95rem;color:var(--chalk-2)}
-.check input{width:20px;height:20px;margin:2px 0 0;flex:none;accent-color:var(--green)}
-.check.bad{border-color:var(--err)}
 .hp{position:absolute;left:-10000px;width:1px;height:1px;overflow:hidden}
 .pill{display:inline-flex;align-items:center;justify-content:center;gap:.55em;min-height:52px;padding:.8em 1.5em;border:2px solid transparent;border-radius:999px;font-weight:750;font-stretch:104%;font-size:1rem;line-height:1;text-decoration:none;cursor:pointer}
 .pill-green{background:var(--green);color:#000}
@@ -246,9 +243,14 @@ const TOTAL_SCRIPT = `(function(){var f=document.querySelector("[data-total]");i
 // ── Consent ──────────────────────────────────────────────────────────────
 const CHOICES = [
   ["family", "Family only", "Only your family sees and buys their clips and photos, on your own family link."],
-  ["sell", "OK to sell", "Families at this event can find and buy them by team and jersey number, on the event's clips page. Not for athletes 12 or younger."],
+  ["sell", "OK to sell", "People with this event's access code can find and buy them by team and jersey number, on the event's clips page. We give the code to families at check-in and to the teams. Not for athletes 12 or younger."],
   ["public", "OK to show publicly", "Also shown where anyone can see them, like our online store and our social pages. Not for athletes 12 or younger."],
   ["out", "Keep them out", "Nothing of your athlete is shown or sold. Anyone can ask for this, and it counts the moment it's sent. For a safety or custody concern, choose this and tell our crew."],
+];
+// Who's answering: a parent or legal guardian, or the athlete as an adult.
+const WHO = [
+  ["guardian", "A parent or legal guardian", "I'm this athlete's parent or legal guardian, and I'm 18 or older."],
+  ["self", "The athlete, as an adult", "I'm the athlete, I'm 18 or older, and I'm a legal adult where I live."],
 ];
 const AGES = [
   ["u13", "12 or younger"],
@@ -277,9 +279,11 @@ function consentPage({ nonce, event, teams, values = {}, errors = [], formError 
 <fieldset class="f${bad("level")}"><legend>How may we use their clips and photos?</legend><div class="choices">${choice}</div></fieldset>
 <fieldset class="f${bad("age")}"><legend>How old is the athlete?</legend><div class="seg">${AGES.map(
     ([val, words]) => `<label><input type="radio" name="age" value="${val}"${values.age === val ? " checked" : ""}><span>${esc(words)}</span></label>`
-  ).join("")}</div><small>12 or younger: family only, or keep out. We never sell their clips to other families or show them publicly. Not needed to keep an athlete out.</small></fieldset>
+  ).join("")}</div><small>12 or younger: family only, or keep out. We never sell their clips to other families or show them publicly. To keep an athlete out, you can skip this.</small></fieldset>
 <label class="f${bad("email")}"><span>Your email</span><input class="input" type="email" name="email" value="${v("email")}" autocomplete="email" required><small>We email you a link to confirm. Your choice counts once you do (a keep-out counts straight away).</small></label>
-<label class="check${errors.includes("guardian") ? " bad" : ""}"><input type="checkbox" name="guardian" value="yes"${values.guardian ? " checked" : ""}><span>I'm this athlete's parent or legal guardian and I'm 18 or older, or I'm the athlete and a legal adult where I live. (Not needed to keep an athlete out.)</span></label>
+<fieldset class="f${bad("who")}"><legend>Who's answering?</legend><div class="choices">${WHO.map(
+    ([val, title, text]) => `<label class="choice"><input type="radio" name="who" value="${val}"${values.who === val ? " checked" : ""}><b>${esc(title)}</b><small>${esc(text)}</small></label>`
+  ).join("")}</div><small>To keep an athlete out, you can skip this.</small></fieldset>
 </div>
 <div class="hp" aria-hidden="true"><label>Leave this empty <input name="sm_trap" tabindex="-1" autocomplete="off"></label></div>
 ${formError ? `<p class="msg" role="alert">${esc(formError)}</p>` : errors.length ? `<p class="msg" role="alert">Check the fields marked in red.</p>` : ""}
@@ -336,7 +340,7 @@ function familyPage({ nonce, event, team, jersey, level, items, token, eventLink
     return shell({ nonce, title: `${team} #${jersey} | ${event.name}`, body });
   }
   body += results({ action: `/m/f/${esc(token)}/checkout`, hidden: {}, label: `${team} #${jersey}`, items, event });
-  if (eventLink) body += `<p class="note">Clips with teammates in them, from families who've said yes: <a href="${esc(eventLink)}">this event's clips page</a>.</p>`;
+  if (eventLink) body += `<p class="note">Clips with teammates in them, from families who've said yes, are on <a href="${esc(eventLink)}">this event's clips page</a>, with the access code from check-in.</p>`;
   return shell({ nonce, title: `${team} #${jersey} | ${event.name}`, body, script: items.length ? TOTAL_SCRIPT : "" });
 }
 
@@ -374,4 +378,4 @@ function messagePage({ nonce, title, text, link = null, linkText = "" }) {
   return shell({ nonce, title: `${title} | Subject Medias`, body });
 }
 
-module.exports = { esc, helpEmail, dateRange, dollars, length, CHOICES, AGES, eventGatePage, eventPage, consentPage, consentSentPage, confirmPage, familyPage, orderPage, messagePage, TOTAL_SCRIPT };
+module.exports = { esc, helpEmail, dateRange, dollars, length, CHOICES, AGES, WHO, eventGatePage, eventPage, consentPage, consentSentPage, confirmPage, familyPage, orderPage, messagePage, TOTAL_SCRIPT };

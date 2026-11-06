@@ -31,6 +31,7 @@ test("the clips page's access code: eight readable characters, typed any way, co
   assert.equal(M.viewKeyMatches("ABCD2346", ev), false);
   assert.equal(M.viewKeyMatches("ABCD234", ev), false);
   assert.equal(M.viewKeyMatches(["ABCD2345"], ev), false, "a repeated ?k= is no code");
+  assert.equal(M.viewKeyMatches(23456789, { view_key: "23456789" }), false, "only a string is a code (re-review 5)");
   assert.equal(M.viewKeyMatches("ABCD2345", {}), false, "an event without a code opens nothing");
   assert.equal(M.linkTo.event("AB2CD3", "ABCD2345"), "https://www.subjectmedias.com/m/AB2CD3?k=ABCD2345");
   assert.equal(M.linkTo.event("AB2CD3"), "https://www.subjectmedias.com/m/AB2CD3");
@@ -103,34 +104,40 @@ test("what loosens a guardian's answer waits for their email; what tightens does
 });
 
 // ── Consent ──────────────────────────────────────────────────────────────
-test("the QR form: team, jersey, email, the choice, the age band, and that they're the guardian", () => {
-  const ok = M.consentInput({ team_id: T1, jersey: "#7", email: "Dana@Example.com", level: "sell", age: "16_17", guardian: "on" });
+test("the QR form: team, jersey, email, the choice, the age band, and who's answering", () => {
+  const ok = M.consentInput({ team_id: T1, jersey: "#7", email: "Dana@Example.com", level: "sell", age: "16_17", who: "guardian" });
   assert.deepEqual(ok.errors, []);
   assert.deepEqual(ok.value, { team_id: T1, jersey: "7", email: "dana@example.com", level: "sell", age_band: "16_17", under_13: false });
-  assert.equal(M.consentInput({ team_id: T1, jersey: "7", email: "a@b.co", level: "family", age: "u13", guardian: true }).value.under_13, true);
-  const bad = M.consentInput({ team_id: "x", jersey: "?", email: "nope", level: "everything", age: "12" });
-  for (const f of ["team_id", "jersey", "email", "level", "age", "guardian"]) assert.ok(bad.errors.includes(f), f);
+  assert.equal(M.consentInput({ team_id: T1, jersey: "7", email: "a@b.co", level: "family", age: "u13", who: "guardian" }).value.under_13, true);
+  const bad = M.consentInput({ team_id: "x", jersey: "?", email: "nope", level: "everything", age: "12", who: "yes" });
+  for (const f of ["team_id", "jersey", "email", "level", "age", "who"]) assert.ok(bad.errors.includes(f), f);
 });
 
 test("12 or younger: family only or keep out, never sold to other families or public", () => {
-  const u13 = (level) => M.consentInput({ team_id: T1, jersey: "7", email: "a@b.co", level, age: "u13", guardian: true }).errors;
+  const u13 = (level) => M.consentInput({ team_id: T1, jersey: "7", email: "a@b.co", level, age: "u13", who: "guardian" }).errors;
   assert.ok(u13("sell").includes("level"));
   assert.ok(u13("public").includes("level"));
   assert.deepEqual(u13("family"), []);
   assert.deepEqual(u13("out"), []);
 });
 
-test("the guardian's word: needed for any choice but keep-out, which anyone may ask for", () => {
+test("who's answering: a parent or guardian, or the athlete as an adult; anyone may ask for a keep-out", () => {
   const without = (level) => M.consentInput({ team_id: T1, jersey: "7", email: "a@b.co", level, age: "13_15" }).errors;
-  assert.deepEqual(without("family"), ["guardian"]);
-  assert.deepEqual(without("sell"), ["guardian"]);
+  assert.deepEqual(without("family"), ["who"]);
+  assert.deepEqual(without("sell"), ["who"]);
   assert.deepEqual(without("out"), []);
+  // The athlete answers for themselves only at 18 or older (re-review 7).
+  const self = (age) => M.consentInput({ team_id: T1, jersey: "7", email: "a@b.co", level: "sell", age, who: "self" }).errors;
+  assert.deepEqual(self("16_17"), ["who"]);
+  assert.deepEqual(self("13_15"), ["who"]);
+  assert.deepEqual(self("18_plus"), []);
+  assert.deepEqual(M.consentInput({ team_id: T1, jersey: "7", email: "a@b.co", level: "out", age: "16_17", who: "self" }).errors, [], "a keep-out from anyone");
   // Nor is an age: a keep-out without one is taken as 12 or younger.
   const out = M.consentInput({ team_id: T1, jersey: "7", email: "a@b.co", level: "out" });
   assert.deepEqual(out.errors, []);
   assert.equal(out.value.age_band, "u13");
   assert.equal(out.value.under_13, true);
-  assert.deepEqual(M.consentInput({ team_id: T1, jersey: "7", email: "a@b.co", level: "family", guardian: true }).errors, ["age"], "every other choice needs the age");
+  assert.deepEqual(M.consentInput({ team_id: T1, jersey: "7", email: "a@b.co", level: "family", who: "guardian" }).errors, ["age"], "every other choice needs the age");
 });
 
 test("no confirmed consent means nothing is shown", () => {
@@ -275,4 +282,8 @@ test("the confirmation email says what was chosen and that ignoring it changes n
   assert.match(m.subject, /Lightning #7 at Fall Showcase/);
   assert.match(m.text, /Family only \(only your family sees and buys their footage\)/);
   assert.match(m.text, /ignore this email and nothing changes/);
+  assert.match(m.text, /said they're the parent or guardian of Lightning #7/);
+  const self = M.consentEmail({ name: "Fall Showcase" }, "Lightning", "7", "sell", "https://www.subjectmedias.com/m/confirm/x", "self");
+  assert.match(self.text, /said they're Lightning #7 at Fall Showcase, answering as an adult athlete/);
+  assert.match(self.text, /people with the event's access code can find and buy/, "says who can buy, as it is");
 });

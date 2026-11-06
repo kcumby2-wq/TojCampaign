@@ -266,19 +266,36 @@
       try { await t.post(API + "/consents/" + enc(b.dataset.rmc), {}, "DELETE"); t.toast("Answer removed."); athlete(arg); }
       catch (e) { b.disabled = false; t.toast(say(e)); }
     });
-    if ($("mkRecord")) $("mkRecord").addEventListener("click", async function () {
-      var b = this;
+    // What they already said, in words: "Family only, 12 or younger (from the QR, 2h ago)".
+    function savedWords(sv) {
+      var l = LEVEL[sv.level] || [sv.level];
+      var p = sv.pending ? "; a change to " + (LEVEL[sv.pending.level] || [sv.pending.level])[0] + (AGE[sv.pending.age_band] ? ", " + AGE[sv.pending.age_band] : "") + " is waiting for their email" : "";
+      return l[0] + (AGE[sv.age_band] ? ", " + AGE[sv.age_band] : "") + " (" + (sv.source === "staff" ? "recorded in person" : "from the QR") + (sv.at ? ", " + t.ago(sv.at) : "") + p + ")";
+    }
+    async function record(b, replace) {
       b.disabled = true;
       try {
-        var r = await t.post(API + "/athletes/" + enc(a.id) + "/consents", { email: $("mkEmail").value, level: $("mkLevel").value, age: age });
+        var body = { email: $("mkEmail").value, level: $("mkLevel").value, age: age };
+        if (replace) body.replace = true;
+        var r = await t.post(API + "/athletes/" + enc(a.id) + "/consents", body);
         if (r.family_link) {
           $("mkLink").innerHTML = '<p class="sub">' + (r.emailed ? "Emailed to them. " : "Email isn't working, so share it yourself. ") + 'Their family link:</p><div class="sub mono" style="font-size:11.5px;word-break:break-all;margin:6px 0">' + h(r.family_link) + '</div><button type="button" class="btn small soft" id="mkCopyFam">Copy it</button>';
           $("mkCopyFam").addEventListener("click", function () { copyLink(r.family_link); });
           note("mkRecMsg", "Recorded.", true);
           b.disabled = false;
         } else { t.toast("Recorded."); athlete(arg); }
-      } catch (e) { b.disabled = false; note("mkRecMsg", e.data && e.data.error === "invalid" && (e.data.fields || []).indexOf("level") >= 0 && age === "u13" ? "12 or younger is family only or keep out." : say(e)); }
-    });
+      } catch (e) {
+        b.disabled = false;
+        if (e.data && e.data.error === "looser_than_saved") {
+          // A paper form can be older than their QR answer: an approver decides.
+          $("mkRecMsg").innerHTML = '<span class="err">' + h("They already answered " + savedWords(e.data.saved || {}) + ". This answer is less careful. Record it only if it's newer than theirs.") + '</span><br><button type="button" class="btn small danger" id="mkReplace" style="margin-top:8px">Record it anyway</button>';
+          $("mkReplace").addEventListener("click", function () { record(this, true); });
+          return;
+        }
+        note("mkRecMsg", e.data && e.data.error === "invalid" && (e.data.fields || []).indexOf("level") >= 0 && age === "u13" ? "12 or younger is family only or keep out." : say(e));
+      }
+    }
+    if ($("mkRecord")) $("mkRecord").addEventListener("click", function () { record(this, false); });
     if ($("mkKeep")) $("mkKeep").addEventListener("click", async function () {
       var b = this;
       b.disabled = true;

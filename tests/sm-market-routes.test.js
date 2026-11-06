@@ -275,12 +275,45 @@ test("a consent recorded in person counts at once and emails the guardian their 
   assert.match(mails[0].subject, /Lightning #7 at Fall Showcase/);
   assert.ok(mails[0].text.includes(r.data.family_link));
   // The same guardian again: one consent, a new link (the old one stops working).
-  const again = await call("POST", `/api/sm/market/athletes/${seven.id}/consents`, { email: "dana@example.com", level: "sell", age: "13_15" }, "lead");
+  const same = await call("POST", `/api/sm/market/athletes/${seven.id}/consents`, { email: "dana@example.com", level: "family", age: "u13" }, "lead");
+  assert.equal(same.status, 200);
   assert.equal(db.tables.sm_market_consents.length, 1);
-  assert.notEqual(again.data.family_link, r.data.family_link);
+  assert.notEqual(same.data.family_link, r.data.family_link);
+  // Less careful than what's saved (older, and OK to sell): only when the approver says so.
+  const looser = await call("POST", `/api/sm/market/athletes/${seven.id}/consents`, { email: "dana@example.com", level: "sell", age: "13_15" }, "lead");
+  assert.equal(looser.status, 409);
+  assert.equal(looser.data.error, "looser_than_saved");
+  assert.equal((await call("POST", `/api/sm/market/athletes/${seven.id}/consents`, { email: "dana@example.com", level: "sell", age: "13_15", replace: true }, "lead")).status, 200);
   const now = athlete(await roster(ev), "7");
   assert.equal(now.level, "sell");
   assert.equal(now.consents[0].age_band, "13_15");
+});
+
+test("a paper form typed in after a newer, more careful answer doesn't undo it unasked (re-review 2)", async () => {
+  const ev = await newEvent();
+  const team = await newTeam(ev);
+  await call("POST", `/api/sm/market/events/${ev.id}/athletes`, { team_id: team.id, jerseys: "7" }, "crew");
+  const seven = athlete(await roster(ev), "7");
+  // pat@ said "family only, 12 or younger" from the QR.
+  (db.tables.sm_market_consents ||= []).push({ id: "c1", athlete_id: seven.id, email: "pat@example.com", level: "family", under_13: true, age_band: "u13", source: "qr", confirmed_at: "2026-11-21T10:00:00Z", updated_at: "2026-11-21T10:00:00Z" });
+  // Their older paper form says "OK to sell, 16 or 17".
+  const r = await call("POST", `/api/sm/market/athletes/${seven.id}/consents`, { email: "pat@example.com", level: "sell", age: "16_17" }, "lead");
+  assert.equal(r.status, 409);
+  assert.deepEqual(r.data.saved, { level: "family", age_band: "u13", source: "qr", confirmed: true, at: "2026-11-21T10:00:00Z", pending: null });
+  assert.equal(athlete(await roster(ev), "7").level, "family", "nothing changed");
+  assert.equal((await call("POST", `/api/sm/market/athletes/${seven.id}/consents`, { email: "pat@example.com", level: "sell", age: "16_17", replace: "yes" }, "lead")).status, 409, "only replace: true says so");
+  // A keep-out is never undone by a paper form unasked either.
+  db.tables.sm_market_consents[0].level = "out";
+  assert.equal((await call("POST", `/api/sm/market/athletes/${seven.id}/consents`, { email: "pat@example.com", level: "family", age: "u13" }, "lead")).data.error, "looser_than_saved");
+  // More careful, or the same, goes straight in.
+  db.tables.sm_market_consents[0].level = "family";
+  assert.equal((await call("POST", `/api/sm/market/athletes/${seven.id}/consents`, { email: "pat@example.com", level: "out" }, "lead")).status, 200);
+  // Said so: it goes in, and the log says what it replaced.
+  const ok = await call("POST", `/api/sm/market/athletes/${seven.id}/consents`, { email: "pat@example.com", level: "sell", age: "16_17", replace: true }, "lead");
+  assert.equal(ok.status, 200);
+  assert.equal(athlete(await roster(ev), "7").level, "sell");
+  const logged = db.tables.team_activity.filter((a) => a.action === "market_consent_recorded").at(-1);
+  assert.equal(logged.detail.replaced_more_careful, "out");
 });
 
 test("a keep-out recorded in person sends nothing; 12 or younger is family only; members can't record", async () => {
@@ -488,6 +521,57 @@ test("nobody kept out goes on sale: approving is refused, and tagging them takes
   assert.equal(item.status, "review", "tagging someone kept out takes it off sale");
   // Hiding it is always allowed, kept-out athlete or not.
   assert.equal((await call("PATCH", `/api/sm/market/media/${item.id}`, { status: "hidden" }, "lead")).data.media.status, "hidden");
+});
+
+test("an approval and a change to who's in it at the same moment: what's on sale is what was checked (re-review 4)", async () => {
+  const ev = await newEvent();
+  const team = await newTeam(ev);
+  await call("POST", `/api/sm/market/events/${ev.id}/athletes`, { team_id: team.id, jerseys: "7 11" }, "crew");
+  const data = await roster(ev);
+  const [seven, eleven] = [athlete(data, "7"), athlete(data, "11")];
+  for (const a of [seven, eleven]) await call("POST", `/api/sm/market/athletes/${a.id}/consents`, { email: `g${a.jersey}@example.com`, level: "sell", age: "16_17" }, "lead");
+  const from = db.from;
+  try {
+    // A member saves #7 alone; an approval of #7 and #11 lands between their read and their write.
+    const item = await readyItem(ev);
+    db.tables.sm_market_tags = [7, 11].map((n) => ({ media_id: item.id, athlete_id: (n === 7 ? seven : eleven).id, event_id: ev.id, source: "staff", confirmed: true }));
+    let landed = false;
+    db.from = (name) => {
+      const q = from(name);
+      if (name === "sm_market_tags" && !landed) {
+        const del = q.delete.bind(q);
+        q.delete = () => { landed = true; Object.assign(item, { status: "approved", approved_by: as.lead, approved_at: new Date().toISOString(), everyone_tagged_by: as.lead, everyone_tagged_at: new Date().toISOString() }); return del(); };
+      }
+      return q;
+    };
+    const r = await call("PATCH", `/api/sm/market/media/${item.id}`, { tags: [seven.id] }, "crew");
+    db.from = from;
+    assert.equal(r.status, 200);
+    assert.ok(landed);
+    assert.equal(item.status, "review", "the member's change takes it off sale, though they read it as in review");
+    // An approver approves #7; a member's change to #7 and #11 lands before the approval is re-read.
+    let added = false;
+    db.from = (name) => {
+      const q = from(name);
+      if (name === "sm_market_media" && !added) {
+        const update = q.update.bind(q);
+        q.update = (patch) => {
+          if (patch.status === "approved") { added = true; db.tables.sm_market_tags.push({ media_id: item.id, athlete_id: eleven.id, event_id: ev.id, source: "staff", confirmed: true }); }
+          return update(patch);
+        };
+      }
+      return q;
+    };
+    const a = await call("PATCH", `/api/sm/market/media/${item.id}`, { status: "approved", everyone_tagged: true }, "lead");
+    db.from = from;
+    assert.equal(a.status, 200);
+    assert.ok(added);
+    assert.equal(item.status, "review", "who's in it changed while it was approved: back to review");
+    // Nobody else in the way: it goes on sale.
+    assert.equal((await call("PATCH", `/api/sm/market/media/${item.id}`, { status: "approved", everyone_tagged: true }, "lead")).data.media.status, "approved");
+  } finally {
+    db.from = from;
+  }
 });
 
 test("a file still processing can't be reviewed; a failed one can be retried", async () => {

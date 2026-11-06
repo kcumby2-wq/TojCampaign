@@ -102,14 +102,20 @@ const LIMITS = {
   consent: [40, 10],
   confirm: [30, 10],
   checkout: [20, 10],
-  wrongKey: [20, 10], // wrong access codes on an event page
   to: [3, 60], // emails from the form to one mailbox, an hour
   toDay: [8, 1440], // and a day
   athlete: [12, 60], // emails about one athlete, an hour
   mail: [200, 60], // emails from one event's form, an hour
   writes: [3000, 60], // answers saved for one event, an hour: a flood breaker
 };
-const visitor = (req) => String(req.headers["x-forwarded-for"] || "").split(",")[0].trim() || req.socket.remoteAddress || "";
+// A visitor is their whole X-Forwarded-For chain. Through the site's rewrite
+// it holds the visitor's own address and the hop to Render; Render adds the
+// address that reached it. A caller who goes to Render directly can write
+// anything in the header, but Render still adds their real address, so they
+// can't pass for someone else and use up that person's tries (a venue's
+// Wi-Fi, say). They can dodge these limits by changing it, which is why the
+// form's emails are also capped per mailbox, per athlete and per event.
+const visitor = (req) => String(req.headers["x-forwarded-for"] || "").replace(/\s+/g, "").toLowerCase().slice(0, 512) || req.socket.remoteAddress || "";
 const allowed = (req, kind) => hit(kind, visitor(req));
 function hit(kind, id) {
   const [max, minutes] = LIMITS[kind];
@@ -400,8 +406,9 @@ router.get("/f/:token", page(async (req, res, sb) => {
   if (!f) return notFound(res);
   const open = f.ev.status !== "draft" && M.levelAtLeast(f.level, "family");
   const items = open ? await withPreviews(sb, await itemsFor(sb, f.ev, f.a.id, "family")) : [];
-  // A confirmed family is a family at the event: they get the clips page too.
-  const eventLink = open ? eventPath(f.ev) : "";
+  // The clips page's way in, without its access code: anyone can get a family
+  // link (by answering the form for a number), so it mustn't hand the code out.
+  const eventLink = open ? gatePath(f.ev) : "";
   send(res, 200, (nonce) => P.familyPage({ nonce, event: f.ev, team: f.team.name, jersey: f.a.jersey, level: f.level, items, token: req.params.token, eventLink }));
 }));
 
@@ -432,9 +439,9 @@ router.get("/o/:token", page(async (req, res, sb) => {
     }
     order = await run(sb.from("sm_market_orders").select("*").eq("id", order.id).single());
   }
-  // The buyer came from the event page or their family link, so the way back
-  // carries the event's access code.
-  const back = eventPath(ev);
+  // Back to the clips page's way in. Never with the access code: an order can
+  // start from a family link, and anyone can get one of those.
+  const back = gatePath(ev);
   if (order.status === "pending") {
     // Back from Stripe's "back" link: nothing was paid.
     if (req.query.cancelled === "1") return send(res, 200, (nonce) => P.orderPage({ nonce, event: ev, order, state: "cancelled", backTo: back }));
@@ -472,20 +479,21 @@ router.get("/o/:token", page(async (req, res, sb) => {
 }));
 
 // ── The event page ───────────────────────────────────────────────────────
-// An access code tried on the clips page or its checkout: "ok", "wrong",
-// "none" (no code given) or "slow". A visitor over the limit for wrong codes
-// is told to slow down whatever they send, so the limit can't be used to
-// tell a right guess from a wrong one.
-function keyCheck(req, given, ev) {
-  const tried = typeof given === "string" && given.trim() !== "";
-  if (tried && !within([["wrongKey", visitor(req)]])) return "slow";
+// An access code tried on the clips page or its checkout: "ok", "wrong" or
+// "none" (no code given). A code is 8 characters from 32, about a trillion
+// codes, so it can't be guessed in practice, and a right code always opens the
+// page. There's no limit on wrong ones: a limit tied to an address could be
+// filled by someone else, or by families scanning an old QR after the code
+// changed, and then lock a venue's families out, right code and all.
+function keyCheck(given, ev) {
   if (M.viewKeyMatches(given, ev)) return "ok";
-  if (tried) count([["wrongKey", visitor(req)]]);
-  return tried ? "wrong" : "none";
+  return typeof given === "string" && given.trim() !== "" ? "wrong" : "none";
 }
 
-// The clips page with its access code, for those already let in.
-const eventPath = (ev, extra = "") => `/m/${ev.code}${M.VIEW_KEY.test(String(ev.view_key || "")) ? `?k=${ev.view_key}${extra ? "&" + extra : ""}` : extra ? "?" + extra : ""}`;
+// The clips page with its access code: only for someone who just used it.
+const clipsPath = (ev, extra = "") => `/m/${ev.code}${M.VIEW_KEY.test(String(ev.view_key || "")) ? `?k=${ev.view_key}${extra ? "&" + extra : ""}` : extra ? "?" + extra : ""}`;
+// The clips page's way in, where it asks for the code.
+const gatePath = (ev) => `/m/${ev.code}`;
 
 async function teamsOf(sb, ev) {
   return (await run(sb.from("sm_market_teams").select("id,name").eq("event_id", ev.id).order("name", { ascending: true }))) || [];
@@ -503,8 +511,7 @@ router.get("/:code", page(async (req, res, sb) => {
   const q = req.query || {};
   // The clips are for the families who were there: the access code from
   // check-in (in the clips link, or typed in) opens the page.
-  const k = keyCheck(req, q.k, ev);
-  if (k === "slow") return slowDown(res);
+  const k = keyCheck(q.k, ev);
   if (k !== "ok") {
     return send(res, k === "wrong" ? 403 : 200, (nonce) => P.eventGatePage({ nonce, event: ev, error: k === "wrong" ? "That code doesn't match this event. Check it and try again." : "" }));
   }
@@ -528,15 +535,13 @@ router.post("/:code/checkout", page(async (req, res, sb) => {
   if (!ev || ev.status === "draft") return notFound(res);
   const b = req.body || {};
   // The same code as the page it came from, or back to the way in.
-  const k = keyCheck(req, b.k, ev);
-  if (k === "slow") return slowDown(res);
-  if (k !== "ok") return res.redirect(303, `/m/${ev.code}`);
+  if (keyCheck(b.k, ev) !== "ok") return res.redirect(303, gatePath(ev));
   const teams = await teamsOf(sb, ev);
   const team = teams.find((t) => t.id === b.team);
   const jersey = M.jerseyOf(b.jersey);
   const a = team && jersey ? await athleteAt(sb, ev, team.id, jersey) : null;
-  if (!a) return res.redirect(303, eventPath(ev));
-  await checkout(req, res, sb, { ev, athleteId: a.id, access: "event", back: eventPath(ev, `team=${encodeURIComponent(team.id)}&jersey=${jersey}`) });
+  if (!a) return res.redirect(303, clipsPath(ev));
+  await checkout(req, res, sb, { ev, athleteId: a.id, access: "event", back: clipsPath(ev, `team=${encodeURIComponent(team.id)}&jersey=${jersey}`) });
 }));
 
 // ── The QR form ──────────────────────────────────────────────────────────
@@ -562,17 +567,20 @@ router.post("/:code/consent", page(async (req, res, sb) => {
   // The field people can't see: a bot filled it. It gets the usual answer.
   if (field(b.sm_trap)) return res.redirect(303, `/m/${ev.code}/consent/sent?m=1`);
   const teams = await teamsOf(sb, ev);
-  const values = { team_id: field(b.team_id, 40), jersey: field(b.jersey, 4), email: field(b.email, 200), level: field(b.level, 10), age: field(b.age, 8), guardian: field(b.guardian, 3) === "yes" };
-  const { errors, value } = M.consentInput({ ...values, guardian: values.guardian ? "yes" : "" });
+  const values = { team_id: field(b.team_id, 40), jersey: field(b.jersey, 4), email: field(b.email, 200), level: field(b.level, 10), age: field(b.age, 8), who: field(b.who, 10) };
+  const { errors, value } = M.consentInput(values);
   if (value.team_id && !teams.some((t) => t.id === value.team_id)) errors.push("team_id");
   const form = (status, formError = "") => send(res, status, (nonce) => P.consentPage({ nonce, event: ev, teams, values, errors, formError }));
   if (errors.length) {
     const u13Level = errors.includes("level") && values.age === "u13" && (values.level === "sell" || values.level === "public");
+    const minorSelf = errors.includes("who") && values.who === "self";
     const formError = u13Level
       ? "For an athlete 12 or younger, choose Family only or Keep them out."
-      : errors.length === 1 && errors[0] === "guardian"
-        ? "Tick the box to say you're their parent or legal guardian, or the athlete as an adult."
-        : "";
+      : minorSelf
+        ? "An athlete under 18 can't answer for themselves. Ask a parent or guardian to fill this in, or choose Keep them out."
+        : errors.length === 1 && errors[0] === "who"
+          ? "Say who's answering: a parent or legal guardian, or the athlete as an adult."
+          : "";
     return form(400, formError);
   }
   // Only a flood stops the form outright; a keep-out gets through every other limit.
@@ -635,7 +643,7 @@ router.post("/:code/consent", page(async (req, res, sb) => {
     count(capList);
     try {
       const mail = plan.tok
-        ? M.consentEmail(ev, team.name, value.jersey, value.level, M.linkTo.confirm(plan.tok.token))
+        ? M.consentEmail(ev, team.name, value.jersey, value.level, M.linkTo.confirm(plan.tok.token), values.who)
         : level === "out"
           ? M.keptOutEmail(ev, team.name, value.jersey)
           : M.changedEmail(ev, team.name, value.jersey, level, plan.write.age_band);

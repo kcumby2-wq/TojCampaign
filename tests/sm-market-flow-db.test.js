@@ -108,7 +108,7 @@ test("event, QR answer, upload, review, sale, download: every step within the da
   await api("PATCH", `/events/${ev.id}`, { status: "live" });
 
   // A guardian at the event: the QR form, then the confirm link from the email.
-  const sent = await form(`/m/${ev.code}/consent`, { team_id: team.id, jersey: "7", level: "sell", age: "16_17", email: "Dana@Example.com", guardian: "yes" });
+  const sent = await form(`/m/${ev.code}/consent`, { team_id: team.id, jersey: "7", level: "sell", age: "16_17", email: "Dana@Example.com", who: "guardian" });
   assert.equal(sent.status, 303, sent.html.slice(0, 300));
   const confirm = mails.at(-1).text.match(/\/m\/confirm\/([A-Za-z0-9_-]{43})/)[1];
   const done = await form(`/m/confirm/${confirm}`, {});
@@ -117,7 +117,7 @@ test("event, QR answer, upload, review, sale, download: every step within the da
   // Another guardian, for #11, keeps them out: it counts at once.
   await form(`/m/${ev.code}/consent`, { team_id: team.id, jersey: "11", level: "out", age: "u13", email: "sam@example.com" });
   // A number the crew hadn't entered, from the form.
-  await form(`/m/${ev.code}/consent`, { team_id: team.id, jersey: "4", level: "family", age: "u13", email: "jo@example.com", guardian: "yes" });
+  await form(`/m/${ev.code}/consent`, { team_id: team.id, jersey: "4", level: "family", age: "u13", email: "jo@example.com", who: "guardian" });
   const levels = Object.fromEntries((await api("GET", `/events/${ev.id}`)).athletes.map((a) => [a.jersey, a.level]));
   assert.deepEqual(levels, { 4: "none", 7: "sell", 11: "out" });
 

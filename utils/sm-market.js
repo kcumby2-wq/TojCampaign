@@ -76,8 +76,10 @@ const viewKeyOf = (v) => {
   return VIEW_KEY.test(s) ? s : null;
 };
 const viewKeyShown = (k) => (VIEW_KEY.test(String(k || "")) ? `${k.slice(0, 4)}-${k.slice(4)}` : "");
-// Compared in constant time, so it can't be found a letter at a time.
+// Compared in constant time, so it can't be found a letter at a time. Only
+// a string is a code (a form field or a link's ?k=).
 function viewKeyMatches(given, ev) {
+  if (typeof given !== "string") return false;
   const k = viewKeyOf(given);
   const want = ev && String(ev.view_key || "");
   if (!k || !VIEW_KEY.test(want)) return false;
@@ -191,10 +193,14 @@ function consentInput(raw) {
   // 12 or younger is family only (or kept out): the form says so, and
   // selling to other families or showing publicly isn't taken.
   if (v.under_13 && (v.level === "sell" || v.level === "public")) errors.push("level");
-  // A parent or legal guardian (18 or older), or the athlete as a legal
-  // adult. A keep-out is taken from anyone: it only ever protects.
-  const guardian = r.guardian === true || r.guardian === "yes" || r.guardian === "on";
-  if (!guardian && v.level !== "out") errors.push("guardian");
+  // Who's answering: a parent or legal guardian (18 or older), or the
+  // athlete as a legal adult, and then only at 18 or older. A keep-out is
+  // taken from anyone: it only ever protects.
+  if (v.level !== "out") {
+    if (r.who === "self") {
+      if (v.age_band && v.age_band !== "18_plus") errors.push("who");
+    } else if (r.who !== "guardian") errors.push("who");
+  }
   return { errors, value: v };
 }
 
@@ -410,19 +416,22 @@ const linkTo = {
   family: (token) => `${siteBase()}/m/f/${token}`,
   order: (token) => `${siteBase()}/m/o/${token}`,
 };
-function consentEmail(event, team, jersey, level, link) {
+// who: "guardian" (a parent or legal guardian) or "self" (the athlete, as an adult).
+function consentEmail(event, team, jersey, level, link, who = "guardian") {
   const what = {
     out: "keep them out of everything we sell",
     family: "only your family sees and buys their footage",
-    sell: "families at the event can find and buy their footage by team and jersey number",
-    public: "their footage can also be shown publicly in our store",
+    sell: "people with the event's access code can find and buy their footage by team and jersey number",
+    public: "their footage can also be shown where anyone can see it, like our online store and our social pages",
   }[level];
   return {
     subject: `Confirm your choice for ${team} #${jersey} at ${event.name}`,
     text: [
       "Hi,",
       "",
-      `Someone using this email said they're the parent or guardian of ${team} #${jersey} at ${event.name}, and chose: ${LEVEL_WORDS[level]} (${what}).`,
+      who === "self"
+        ? `Someone using this email said they're ${team} #${jersey} at ${event.name}, answering as an adult athlete, and chose: ${LEVEL_WORDS[level]} (${what}).`
+        : `Someone using this email said they're the parent or guardian of ${team} #${jersey} at ${event.name}, and chose: ${LEVEL_WORDS[level]} (${what}).`,
       "",
       "If that was you, confirm it here:",
       link,
