@@ -420,6 +420,8 @@ test("the order page: back from Stripe before the webhook, it asks Stripe and op
   assert.equal(r.status, 200);
   assert.match(text(r.html), /Your downloads/);
   assert.match(text(r.html), /test mode: no real charge/);
+  assert.match(text(r.html), /Something wrong with a clip, or the wrong athlete in it\? Email hello@subjectmedias\.com or DM @subjectmedias on Instagram/);
+  assert.ok(r.html.includes('rel="noopener noreferrer">@subjectmedias</a>'), "linked without a referrer: this page's address is the order link");
   const dl = r.html.match(/href="(https:\/\/store\.test\/object\/sign\/sm-market\/events\/[^"]+\/originals\/[^"]+)"/);
   assert.ok(dl, "a signed link to the original");
   assert.match(dl[1], /download=Fall-Showcase-clip-00000000\.mp4/);
@@ -500,6 +502,10 @@ test("the QR form: a choice waits for the email link; a scanner's visit confirms
   const form = await get("/m/AB2CD3/consent");
   assert.match(text(form.html), /Your choice/);
   assert.match(form.html, /name="sm_trap"/);
+  // "OK to show publicly" names our Instagram, and the form says how to ask first.
+  const ig = '<a href="https://www.instagram.com/subjectmedias/" target="_blank" rel="noopener noreferrer">@subjectmedias</a>';
+  assert.ok(form.html.includes(`our social pages, such as our Instagram, ${ig}.`), "the choice names @subjectmedias");
+  assert.match(text(form.html), /Questions first\? Email hello@subjectmedias\.com or DM @subjectmedias on Instagram/);
   const r = await post("/m/AB2CD3/consent", choice());
   assert.equal(r.status, 303);
   assert.equal(r.location, "/m/AB2CD3/consent/sent?m=1");

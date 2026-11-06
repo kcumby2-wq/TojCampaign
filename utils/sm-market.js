@@ -422,7 +422,7 @@ function consentEmail(event, team, jersey, level, link, who = "guardian") {
     out: "keep them out of everything we sell",
     family: "only your family sees and buys their footage",
     sell: "people with the event's access code can find and buy their footage by team and jersey number",
-    public: "their footage can also be shown where anyone can see it, like our online store and our social pages",
+    public: "their footage can also be shown where anyone can see it, like our online store and our social pages, such as our Instagram (@subjectmedias)",
   }[level];
   return {
     subject: `Confirm your choice for ${team} #${jersey} at ${event.name}`,

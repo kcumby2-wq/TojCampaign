@@ -150,7 +150,7 @@ ${refresh ? `<meta http-equiv="refresh" content="${Number(refresh)}">\n` : ""}<t
 <main class="wrap">
 ${body}
 </main>
-<footer class="foot"><div class="wrap"><p>Questions, a change of mind, or a clip you want taken down: <a href="mailto:${esc(helpEmail())}">${esc(helpEmail())}</a>. We never post names, and we check every clip before it goes up.</p></div></footer>
+<footer class="foot"><div class="wrap"><p>Questions, a change of mind, or a clip you want taken down: <a href="mailto:${esc(helpEmail())}">${esc(helpEmail())}</a>, or DM ${igLink()} on Instagram. We never post names, and we check every clip before it goes up.</p></div></footer>
 ${script ? `<script nonce="${esc(nonce)}">${script}</script>` : ""}
 </body>
 </html>`;
@@ -241,10 +241,14 @@ function results({ action, hidden, label, items, event }) {
 const TOTAL_SCRIPT = `(function(){var f=document.querySelector("[data-total]");if(!f)return;var s=f.querySelector("[data-sum]"),b=f.querySelector("button[type=submit]");function u(){var c=0,p=0,t=0;f.querySelectorAll("input[name=item]:checked").forEach(function(i){t+=+i.getAttribute("data-cents");i.getAttribute("data-kind")==="clip"?c++:p++});var w=[];if(c)w.push(c+(c===1?" clip":" clips"));if(p)w.push(p+(p===1?" photo":" photos"));s.textContent=w.length?w.join(", ")+": $"+(t%100?(t/100).toFixed(2):t/100):"Tick the ones you want.";b.disabled=!w.length}f.addEventListener("change",u);u()})();`;
 
 // ── Consent ──────────────────────────────────────────────────────────────
+// Subject Medias on Instagram. Linked with no referrer: a family page's
+// address carries its link.
+const IG_URL = "https://www.instagram.com/subjectmedias/";
+const igLink = () => `<a href="${IG_URL}" target="_blank" rel="noopener noreferrer">@subjectmedias</a>`;
 const CHOICES = [
   ["family", "Family only", "Only your family sees and buys their clips and photos, on your own family link."],
   ["sell", "OK to sell", "People with this event's access code can find and buy them by team and jersey number, on the event's clips page. We give the code to families at check-in and to the teams. Not for athletes 12 or younger."],
-  ["public", "OK to show publicly", "Also shown where anyone can see them, like our online store and our social pages. Not for athletes 12 or younger."],
+  ["public", "OK to show publicly", "Also shown where anyone can see them, like our online store and our social pages, such as our Instagram, @subjectmedias. Not for athletes 12 or younger."],
   ["out", "Keep them out", "Nothing of your athlete is shown or sold. Anyone can ask for this, and it counts the moment it's sent. For a safety or custody concern, choose this and tell our crew."],
 ];
 // Who's answering: a parent or legal guardian, or the athlete as an adult.
@@ -269,7 +273,7 @@ function consentPage({ nonce, event, teams, values = {}, errors = [], formError 
   }
   const choice = CHOICES.map(
     ([val, title, text]) =>
-      `<label class="choice"><input type="radio" name="level" value="${val}"${values.level === val ? " checked" : ""} required><b>${esc(title)}</b><small>${esc(text)}</small></label>`
+      `<label class="choice"><input type="radio" name="level" value="${val}"${values.level === val ? " checked" : ""} required><b>${esc(title)}</b><small>${esc(text).replace("@subjectmedias", igLink())}</small></label>`
   ).join("");
   body += `<form class="card" method="post" action="/m/${esc(event.code)}/consent" novalidate>
 <h2>Your choice</h2>
@@ -287,7 +291,7 @@ function consentPage({ nonce, event, teams, values = {}, errors = [], formError 
 </div>
 <div class="hp" aria-hidden="true"><label>Leave this empty <input name="sm_trap" tabindex="-1" autocomplete="off"></label></div>
 ${formError ? `<p class="msg" role="alert">${esc(formError)}</p>` : errors.length ? `<p class="msg" role="alert">Check the fields marked in red.</p>` : ""}
-<div class="row"><button class="pill pill-green" type="submit">Send my choice</button></div>
+<div class="row"><button class="pill pill-green" type="submit">Send my choice</button><span class="note">Questions first? Email <a href="mailto:${esc(helpEmail())}">${esc(helpEmail())}</a> or DM ${igLink()} on Instagram.</span></div>
 </form>`;
   return shell({ nonce, title: `Your choice | ${event.name}`, body });
 }
@@ -368,7 +372,7 @@ function orderPage({ nonce, event, order, items = [], state, backTo = null }) {
     })
     .join("");
   const keep = order.emailed_at ? "we've emailed you this page's link so you can come back" : "bookmark this page: it's how you come back";
-  body += `<div class="card"><h2>Your downloads</h2><p>Paid ${esc(dollars(order.amount_cents))}${order.mode === "test" ? " (test mode: no real charge)" : ""}. Full quality, no watermark. Download links refresh each time you open this page, and ${keep}.</p></div>
+  body += `<div class="card"><h2>Your downloads</h2><p>Paid ${esc(dollars(order.amount_cents))}${order.mode === "test" ? " (test mode: no real charge)" : ""}. Full quality, no watermark. Download links refresh each time you open this page, and ${keep}.</p><p class="note">Something wrong with a clip, or the wrong athlete in it? Email <a href="mailto:${esc(helpEmail())}">${esc(helpEmail())}</a> or DM ${igLink()} on Instagram, with the email you paid with, and we'll make it right.</p></div>
 <ul class="items">${rows}</ul>`;
   return shell({ nonce, title: `Your order | ${event.name}`, body });
 }
