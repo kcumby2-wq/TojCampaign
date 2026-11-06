@@ -201,6 +201,13 @@
   // ── Today ────────────────────────────────────────────────────────────
   var ACT = {
     invited: "invited someone",
+    market_event_added: "added a marketplace event",
+    market_keep_out: "kept an athlete out of the marketplace",
+    market_keep_out_lifted: "lifted a marketplace keep-out",
+    market_consent_recorded: "recorded a family's choice",
+    market_consent_removed: "removed a family's answer",
+    market_media_removed: "removed a marketplace file",
+    market_access_code_changed: "changed an event's clips access code",
     joined: "joined the team",
     started_run: "started a kit run",
     started_brief: "started a brief",
@@ -307,6 +314,7 @@
     var tiles =
       (isOwner() ? '<a class="tile" href="#bookings">' + I.cal + "Bookings</a>" : "") +
       (isOwner() ? '<a class="tile" href="#applications">' + I.camera + "Fellowship</a>" : "") +
+      (hasTool("market") ? '<a class="tile" href="#market">' + I.photo + "Marketplace</a>" : "") +
       (hasTool("gfs") ? '<a class="tile" href="#events">' + I.cal + "Events</a>" + '<a class="tile" href="#gfs-desk">' + I.desk + "Distribution desk</a>" : "") +
       (atLeast("member") && studioTool ? '<a class="tile" href="#new">' + I.plus + "New idea</a>" : "") +
       (atLeast("member") && approved ? '<a class="tile" href="#new/gear">' + I.refresh + "Re-check gear</a>" : "") +
@@ -887,6 +895,7 @@
     show("chat", '<div class="screen"><h1 class="title">Team</h1><div class="spin"></div></div>');
     var res = await settled([api("/api/team"), isOwner() ? api("/api/team/invites") : Promise.resolve({ invites: [] })]);
     var people = res[0].status === "fulfilled" ? res[0].value.people : [];
+    var toolNames = (res[0].status === "fulfilled" && res[0].value.tools) || {};
     var invites = res[1].status === "fulfilled" ? res[1].value.invites : [];
     var me = state.me;
     var rows = people.map(function (p) {
@@ -895,7 +904,8 @@
       var pylon = (p.tools || []).indexOf("gfs") >= 0 ? GFS_ROLE[p.role][0] + (p.role === "member" || p.role === "viewer" ? " · " + (regionText(p.regions) || "no region yet") : "") : "";
       var sub = [p.name && p.email ? p.email : null, pylon || null].filter(Boolean).join(" · ");
       var regionBtn = editable && (p.tools || []).indexOf("gfs") >= 0 && (p.role === "member" || p.role === "viewer") ? '<button type="button" class="back" data-regions="' + h(p.email) + '" data-current="' + h((p.regions || []).join(",")) + '" style="min-height:32px;font-size:14px" aria-label="Change regions for ' + h(who) + '">Change regions</button>' : "";
-      return '<div class="li" style="cursor:default;flex-wrap:wrap"><span class="avatar" style="width:38px;height:38px;border-width:' + (p.you ? "1.5px" : "0") + ';background:#22364F;font-size:13px">' + h(initials(p)) + '</span><div class="grow"><div class="name" style="font-size:15.5px">' + h(who) + (p.you ? ' <span class="sub">(you)</span>' : "") + "</div>" + (sub ? '<div class="sub">' + h(sub) + "</div>" : "") + regionBtn + "</div>" +
+      var toolsBtn = editable ? '<button type="button" class="back" data-tools="' + h(p.email) + '" data-current="' + h((p.tools || []).join(",")) + '" style="min-height:32px;font-size:14px;text-align:left" aria-label="Change tools for ' + h(who) + '">Tools: ' + h((p.tools || []).map(function (x) { return String(toolNames[x] || x).replace(/ \(.*\)$/, ""); }).join(", ") || "none") + "</button>" : "";
+      return '<div class="li" style="cursor:default;flex-wrap:wrap"><span class="avatar" style="width:38px;height:38px;border-width:' + (p.you ? "1.5px" : "0") + ';background:#22364F;font-size:13px">' + h(initials(p)) + '</span><div class="grow"><div class="name" style="font-size:15.5px">' + h(who) + (p.you ? ' <span class="sub">(you)</span>' : "") + "</div>" + (sub ? '<div class="sub">' + h(sub) + "</div>" : "") + toolsBtn + regionBtn + "</div>" +
         (editable ? '<select class="input" data-role="' + h(p.email) + '" aria-label="Role for ' + h(who) + '" style="width:auto;min-height:38px;padding:4px 8px;font-size:14px">' + ["approver", "member", "viewer"].map(function (r) { return '<option value="' + r + '"' + (p.role === r ? " selected" : "") + ">" + r[0].toUpperCase() + r.slice(1) + "</option>"; }).join("") + '</select><button type="button" class="x" data-remove="' + h(p.email) + '" aria-label="Remove ' + h(who) + '">×</button>' :
           '<span class="badge' + (p.role === "owner" ? " gold" : "") + '">' + h(p.role[0].toUpperCase() + p.role.slice(1)) + "</span>") + "</div>";
     }).join("");
@@ -954,6 +964,22 @@
     app.querySelectorAll("[data-cancel]").forEach(function (b) {
       b.addEventListener("click", async function () { try { await api("/api/team/invites/" + encodeURIComponent(b.dataset.cancel), { method: "DELETE" }); toast("Invite cancelled."); team(); } catch (e) { toast(e.message); } });
     });
+    app.querySelectorAll("[data-tools]").forEach(function (b) {
+      b.addEventListener("click", function () {
+        var li = b.closest(".li");
+        if (li.querySelector("[data-t]")) return;
+        var picked = (b.dataset.current || "").split(",").filter(Boolean);
+        li.insertAdjacentHTML("beforeend", '<div class="chips" style="margin:6px 0 0;padding:0;width:100%;flex-wrap:wrap">' + Object.keys(toolNames).map(function (k) { return '<button type="button" class="chip" data-t="' + h(k) + '" aria-pressed="' + (picked.indexOf(k) >= 0) + '">' + h(String(toolNames[k]).replace(/ \(.*\)$/, "")) + "</button>"; }).join("") + "</div>");
+        li.querySelectorAll("[data-t]").forEach(function (c) {
+          c.addEventListener("click", async function () {
+            var on = c.getAttribute("aria-pressed") !== "true";
+            var next = picked.filter(function (x) { return x !== c.dataset.t; }).concat(on ? [c.dataset.t] : []);
+            if (!next.length) return toast("Keep at least one tool.");
+            try { await post("/api/team/members/" + encodeURIComponent(b.dataset.tools), { tools: next }, "PATCH"); toast("Tools saved."); team(); } catch (e) { toast(e.message); }
+          });
+        });
+      });
+    });
     app.querySelectorAll("[data-regions]").forEach(function (b) {
       b.addEventListener("click", function () {
         var li = b.closest(".li");
@@ -978,7 +1004,7 @@
 
   async function invite() {
     if (!isOwner()) return go("#team");
-    var role = "member", toolsPicked = { studio: true, creators: false, os: false, gfs: false }, regions = {};
+    var role = "member", toolsPicked = { studio: true, creators: false, os: false, gfs: false, market: false }, regions = {};
     function draw() {
       show(null,
         '<div class="screen"><div class="head"><a class="back" href="#team">' + I.back + 'Cancel</a></div><h1 class="title sm">Invite someone</h1>' +
@@ -987,7 +1013,7 @@
         '<div class="field"><span class="label">Role</span><div role="radiogroup" aria-label="Role" style="display:flex;flex-direction:column;gap:8px">' +
         ["approver", "member", "viewer"].map(function (r) { return '<button type="button" role="radio" class="radio" data-r="' + r + '" aria-checked="' + (role === r) + '"><span class="r"></span><span><b style="display:block;font-size:15.5px">' + (toolsPicked.gfs ? GFS_ROLE[r][0] : r[0].toUpperCase() + r.slice(1)) + '</b><span class="sub">' + h(toolsPicked.gfs ? GFS_ROLE[r][1] : ROLE_DESC[r]) + "</span></span></button>"; }).join("") + "</div></div>" +
         '<div class="field"><span class="label">Can open</span>' +
-        [["gfs", "Pylon events", "Ground Floor Sports: events, crews, the roster's consent flags, clips, deliverables, takedowns"], ["studio", "Studio Kits", "Kits, briefs, refreshes"], ["creators", "Creators", "Creator pages, QR codes, event sales (members see buyers' contact details)"], ["os", "Operating Systems", "Client operating systems: scores, transcripts, systems (Authority stays with you)"]].map(function (x) { return '<label class="li" style="cursor:pointer;border-radius:14px;border:1px solid var(--line)"><input type="checkbox" class="switch" data-tool="' + x[0] + '"' + (toolsPicked[x[0]] ? " checked" : "") + '><div class="grow"><div class="name" style="font-size:15px">' + h(x[1]) + '</div><div class="sub">' + h(x[2]) + "</div></div></label>"; }).join("") +
+        [["gfs", "Pylon events", "Ground Floor Sports: events, crews, the roster's consent flags, clips, deliverables, takedowns"], ["studio", "Studio Kits", "Kits, briefs, refreshes"], ["creators", "Creators", "Creator pages, QR codes, event sales (members see buyers' contact details)"], ["os", "Operating Systems", "Client operating systems: scores, transcripts, systems (Authority stays with you)"], ["market", "Marketplace", "Subject Medias events: rosters and families' choices, uploads, review, sales"]].map(function (x) { return '<label class="li" style="cursor:pointer;border-radius:14px;border:1px solid var(--line)"><input type="checkbox" class="switch" data-tool="' + x[0] + '"' + (toolsPicked[x[0]] ? " checked" : "") + '><div class="grow"><div class="name" style="font-size:15px">' + h(x[1]) + '</div><div class="sub">' + h(x[2]) + "</div></div></label>"; }).join("") +
         '<p class="sub" style="margin:0;display:flex;gap:6px;align-items:center"><span style="width:16px;height:16px;display:inline-flex;color:var(--faint)">' + I.lock + "</span>The CRMs and anything holding minors' data stay owner-only.</p></div>" +
         (toolsPicked.gfs && role !== "approver" ? '<div class="field"><span class="label">Region</span><div class="chips" role="group" aria-label="Region" style="flex-wrap:wrap;margin:0;padding:0">' + Object.keys(REGION_NAMES).map(function (r) { return '<button type="button" class="chip" data-ireg="' + r + '" aria-pressed="' + !!regions[r] + '">' + REGION_NAMES[r] + "</button>"; }).join("") + '</div><span class="sub">' + (role === "member" ? "A Regional Director sees and runs only the events in these regions." : "They see only these regions.") + "</span></div>" : toolsPicked.gfs ? '<p class="sub" style="margin:0">Approvers see every region.</p>' : "") +
         '<p id="invMsg" class="body" role="status"></p></div>' +
