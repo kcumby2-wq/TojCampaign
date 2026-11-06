@@ -83,7 +83,19 @@ async function eventById(sb, id) {
   if (!idOk(id)) return null;
   return run(sb.from("sm_market_events").select("*").eq("id", id).maybeSingle());
 }
-const links = (ev) => ({ event: M.linkTo.event(ev.code), consent: M.linkTo.consent(ev.code) });
+// The clips link carries the event's access code; the consent link doesn't
+// (it goes on the public poster at check-in).
+const links = (ev) => ({ event: M.linkTo.event(ev.code, ev.view_key), consent: M.linkTo.consent(ev.code), access_code: M.viewKeyShown(ev.view_key) });
+
+// Each athlete's level, from their roster row and every consent for them.
+async function levelsFor(sb, ids) {
+  if (!ids.length) return new Map();
+  const [athletes, consents] = await Promise.all([
+    run(sb.from("sm_market_athletes").select("id,keep_out").in("id", ids)),
+    run(sb.from("sm_market_consents").select("athlete_id,level,under_13,confirmed_at").in("athlete_id", ids)),
+  ]);
+  return new Map((athletes || []).map((a) => [a.id, M.effectiveLevel(a, consents || [])]));
+}
 
 // The roster with each athlete's level, from every consent for the event.
 async function rosterOf(sb, eventId, { withEmails = false } = {}) {
@@ -93,7 +105,7 @@ async function rosterOf(sb, eventId, { withEmails = false } = {}) {
   ]);
   const ids = (athletes || []).map((a) => a.id);
   const consents = ids.length
-    ? await run(sb.from("sm_market_consents").select("id,athlete_id,email,level,under_13,source,confirmed_at,pending_level,pending_under_13,created_at,updated_at").in("athlete_id", ids))
+    ? await run(sb.from("sm_market_consents").select("id,athlete_id,email,level,under_13,age_band,source,confirmed_at,pending_level,pending_under_13,pending_age_band,created_at,updated_at").in("athlete_id", ids))
     : [];
   const list = (athletes || [])
     .map((a) => {
@@ -105,9 +117,10 @@ async function rosterOf(sb, eventId, { withEmails = false } = {}) {
           id: c.id,
           level: c.level,
           under_13: c.under_13,
+          age_band: M.bandOf(c),
           source: c.source,
           confirmed: !!c.confirmed_at,
-          pending: c.pending_level ? { level: c.pending_level, under_13: !!c.pending_under_13 } : null,
+          pending: c.pending_level ? { level: c.pending_level, under_13: !!c.pending_under_13, age_band: c.pending_age_band || null } : null,
           at: c.updated_at || c.confirmed_at || c.created_at,
           ...(withEmails ? { email: c.email } : {}),
         })),
@@ -128,7 +141,7 @@ router.post("/events", approver, jsonOnly, withDb(async (req, res, sb) => {
   if (errors.length) return res.status(400).json({ error: "invalid", fields: errors });
   // A fresh code, retried if it happens to be taken.
   for (let i = 0; i < 5; i++) {
-    const { data, error } = await sb.from("sm_market_events").insert({ status: "draft", ...value, code: M.newCode(), created_by: actor(req) }).select().single();
+    const { data, error } = await sb.from("sm_market_events").insert({ status: "draft", ...value, code: M.newCode(), view_key: M.newViewKey(), created_by: actor(req) }).select().single();
     if (!error) {
       await T.logActivity(actor(req), "market_event_added", data.code);
       return res.json({ event: { ...data, links: links(data) } });
@@ -168,6 +181,18 @@ router.patch("/events/:id", approver, jsonOnly, withDb(async (req, res, sb) => {
   if (!Object.keys(value).length) return res.status(400).json({ error: "nothing_to_change" });
   value.updated_at = now();
   const data = await run(sb.from("sm_market_events").update(value).eq("id", ev.id).select().single());
+  res.json({ event: { ...data, links: links(data) } });
+}));
+
+// A new access code for the clips page, when the old one has got around.
+// The old clips QR and handouts stop working; family links and orders don't.
+router.post("/events/:id/access-code", approver, jsonOnly, withDb(async (req, res, sb) => {
+  const ev = await eventById(sb, req.params.id);
+  if (!ev) return res.status(404).json({ error: "not_found" });
+  let key = M.newViewKey();
+  while (key === ev.view_key) key = M.newViewKey();
+  const data = await run(sb.from("sm_market_events").update({ view_key: key, updated_at: now() }).eq("id", ev.id).select().single());
+  await T.logActivity(actor(req), "market_access_code_changed", data.code);
   res.json({ event: { ...data, links: links(data) } });
 }));
 
@@ -254,11 +279,13 @@ router.post("/athletes/:id/consents", approver, jsonOnly, withDb(async (req, res
     email: value.email,
     level: value.level,
     under_13: value.under_13,
+    age_band: value.age_band,
     source: "staff",
     confirmed_at: at,
     confirm_hash: null,
     pending_level: null,
     pending_under_13: null,
+    pending_age_band: null,
     family_hash: fam ? fam.hash : null,
     recorded_by: actor(req),
     updated_at: at,
@@ -283,7 +310,7 @@ router.post("/athletes/:id/consents", approver, jsonOnly, withDb(async (req, res
   }
   await T.logActivity(actor(req), "market_consent_recorded", null, { event_id: a.event_id, level: value.level });
   res.json({
-    consent: { id: data.id, level: data.level, under_13: data.under_13, source: data.source, confirmed: true, email: data.email },
+    consent: { id: data.id, level: data.level, under_13: data.under_13, age_band: data.age_band, source: data.source, confirmed: true, email: data.email },
     family_link: link,
     emailed,
   });
@@ -387,9 +414,12 @@ router.get("/events/:id/media", viewer, withDb(async (req, res, sb) => {
 }));
 
 // Confirm who's in it (member); approve it for sale or hide it (approver).
-// Everything is checked before anything is written. A member changing who's
-// in an approved item sends it back to review, so an approver sees the new
-// pairing; so does leaving nobody confirmed in it.
+// Everything is checked before anything is written. Approving takes the
+// approver's check that everyone who stands out in it is tagged
+// (everyone_tagged), and never goes through with a kept-out athlete in it.
+// A change to who's in an approved item sends it back to review, unless an
+// approver checks everyone again; so does leaving nobody confirmed in it, or
+// tagging someone kept out.
 router.patch("/media/:id", member, jsonOnly, withDb(async (req, res, sb) => {
   if (!idOk(req.params.id)) return res.status(404).json({ error: "not_found" });
   const media = await run(sb.from("sm_market_media").select("*").eq("id", req.params.id).maybeSingle());
@@ -397,6 +427,8 @@ router.patch("/media/:id", member, jsonOnly, withDb(async (req, res, sb) => {
   const body = bodyOf(req);
   if (body.tags === undefined && body.status === undefined) return res.status(400).json({ error: "nothing_to_change" });
   if (body.status !== undefined && !atLeast(req, "approver")) return res.status(403).json({ error: "role_too_low", need: "approver" });
+  if (body.everyone_tagged !== undefined && typeof body.everyone_tagged !== "boolean") return res.status(400).json({ error: "invalid", fields: ["everyone_tagged"] });
+  if (body.everyone_tagged === true && !atLeast(req, "approver")) return res.status(403).json({ error: "role_too_low", need: "approver" });
   if (!["review", "approved", "hidden"].includes(media.status)) return res.status(409).json({ error: "not_ready" });
   if (body.status !== undefined && !["approved", "hidden", "review"].includes(body.status)) return res.status(400).json({ error: "invalid", fields: ["status"] });
 
@@ -410,8 +442,15 @@ router.patch("/media/:id", member, jsonOnly, withDb(async (req, res, sb) => {
     if (roster.length !== want.length || roster.some((a) => a.event_id !== media.event_id)) return res.status(400).json({ error: "invalid", fields: ["tags"] });
   }
   const confirmedAfter = want || confirmedNow;
+  const checked = body.everyone_tagged === true;
   if (body.status === "approved" && !confirmedAfter.length) return res.status(409).json({ error: "no_confirmed_tag" });
+  if (body.status === "approved" && !checked) return res.status(409).json({ error: "check_everyone_tagged" });
   const changed = !!want && (want.length !== confirmedNow.length || want.some((id) => !confirmedNow.includes(id)));
+  // Nobody kept out goes on sale, whatever else their family has said.
+  const onSale = body.status === "approved" || (body.status === undefined && media.status === "approved" && changed);
+  const levels = onSale ? await levelsFor(sb, confirmedAfter) : new Map();
+  const keptOut = confirmedAfter.filter((id) => levels.get(id) === "out");
+  if (body.status === "approved" && keptOut.length) return res.status(409).json({ error: "kept_out", athletes: keptOut });
 
   if (want) {
     // What a person confirms is who's in it; any other suggestion goes.
@@ -426,11 +465,15 @@ router.patch("/media/:id", member, jsonOnly, withDb(async (req, res, sb) => {
   }
 
   let status = body.status;
-  if (status === undefined && media.status === "approved" && changed && (!confirmedAfter.length || !atLeast(req, "approver"))) status = "review";
+  if (status === undefined && media.status === "approved" && changed && (!confirmedAfter.length || !atLeast(req, "approver") || !checked || keptOut.length)) status = "review";
+  const at = now();
   if (status !== undefined && status !== media.status) {
-    const patch = { status, updated_at: now() };
-    if (status === "approved") Object.assign(patch, { approved_at: now(), approved_by: actor(req) });
+    const patch = { status, updated_at: at };
+    if (status === "approved") Object.assign(patch, { approved_at: at, approved_by: actor(req), everyone_tagged_at: at, everyone_tagged_by: actor(req) });
     await run(sb.from("sm_market_media").update(patch).eq("id", media.id));
+  } else if (media.status === "approved" && checked && (changed || status === "approved")) {
+    // Still on sale, checked again by an approver.
+    await run(sb.from("sm_market_media").update({ everyone_tagged_at: at, everyone_tagged_by: actor(req), updated_at: at }).eq("id", media.id));
   }
   const data = await run(sb.from("sm_market_media").select("id,status,approved_at").eq("id", media.id).single());
   const tags = await run(sb.from("sm_market_tags").select("athlete_id,source,confidence,confirmed").eq("media_id", media.id));

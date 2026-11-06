@@ -45,8 +45,8 @@ before(async () => {
   const sql = fs.readFileSync(path.join(__dirname, "..", "db", "migrations", "033_sm_market.sql"), "utf8").replace(/public\./g, `${S}.`);
   await q(sql);
   await q(sql); // safe to run twice
-  ev = await one(`insert into sm_market_events (code, name, starts_on, ends_on, created_by) values ('AB2CD3', 'Fall Showcase', '2026-11-21', '2026-11-22', 'kyron@toj.test') returning *`);
-  ev2 = await one(`insert into sm_market_events (code, name, starts_on, ends_on, created_by) values ('XY4ZW5', 'Winter Classic', '2026-12-05', '2026-12-05', 'kyron@toj.test') returning *`);
+  ev = await one(`insert into sm_market_events (code, name, starts_on, ends_on, view_key, created_by) values ('AB2CD3', 'Fall Showcase', '2026-11-21', '2026-11-22', 'ABCD2345', 'kyron@toj.test') returning *`);
+  ev2 = await one(`insert into sm_market_events (code, name, starts_on, ends_on, view_key, created_by) values ('XY4ZW5', 'Winter Classic', '2026-12-05', '2026-12-05', 'WXYZ6789', 'kyron@toj.test') returning *`);
   team = await one(`insert into sm_market_teams (event_id, name) values ($1, 'Lightning') returning *`, [ev.id]);
   team2 = await one(`insert into sm_market_teams (event_id, name) values ($1, 'Storm') returning *`, [ev2.id]);
   athlete = await one(`insert into sm_market_athletes (event_id, team_id, jersey) values ($1, $2, '7') returning *`, [ev.id, team.id]);
@@ -60,12 +60,16 @@ test("events: a readable code, real dates, sensible prices", async () => {
   assert.equal(ev.clip_cents, 1200);
   assert.equal(ev.photo_cents, 800);
   assert.equal(ev.status, "draft");
-  await refused(`insert into sm_market_events (code, name, starts_on, ends_on, created_by) values ('AB0CD1', 'x', '2026-11-21', '2026-11-21', 'k@t.co')`);
-  await refused(`insert into sm_market_events (code, name, starts_on, ends_on, created_by) values ('AB2CD3', 'x', '2026-11-21', '2026-11-21', 'k@t.co')`, null, "unique|duplicate");
-  await refused(`insert into sm_market_events (code, name, starts_on, ends_on, created_by) values ('QQ2CD3', 'x', '2026-11-21', '2026-11-20', 'k@t.co')`, null, "sm_market_events_days_chk");
-  await refused(`insert into sm_market_events (code, name, starts_on, ends_on, created_by) values ('QQ3CD3', 'x', '2026-11-01', '2026-11-30', 'k@t.co')`, null, "sm_market_events_days_chk");
+  await refused(`insert into sm_market_events (code, name, starts_on, ends_on, view_key, created_by) values ('AB0CD1', 'x', '2026-11-21', '2026-11-21', 'QRST2345', 'k@t.co')`);
+  await refused(`insert into sm_market_events (code, name, starts_on, ends_on, view_key, created_by) values ('AB2CD3', 'x', '2026-11-21', '2026-11-21', 'QRST2345', 'k@t.co')`, null, "unique|duplicate");
+  await refused(`insert into sm_market_events (code, name, starts_on, ends_on, view_key, created_by) values ('QQ2CD3', 'x', '2026-11-21', '2026-11-20', 'QRST2345', 'k@t.co')`, null, "sm_market_events_days_chk");
+  await refused(`insert into sm_market_events (code, name, starts_on, ends_on, view_key, created_by) values ('QQ3CD3', 'x', '2026-11-01', '2026-11-30', 'QRST2345', 'k@t.co')`, null, "sm_market_events_days_chk");
   await refused(`update sm_market_events set clip_cents = 10 where id = $1`, [ev.id]);
   await refused(`update sm_market_events set status = 'open' where id = $1`, [ev.id]);
+  // The clips page's access code: always there, eight readable characters.
+  await refused(`insert into sm_market_events (code, name, starts_on, ends_on, created_by) values ('QQ4CD4', 'x', '2026-11-21', '2026-11-21', 'k@t.co')`, null, "view_key|null");
+  await refused(`update sm_market_events set view_key = 'ABCD0123' where id = $1`, [ev.id]);
+  await refused(`update sm_market_events set view_key = 'ABC' where id = $1`, [ev.id]);
 });
 
 test("the roster: a team at the same event, a jersey number, no names", async () => {
@@ -80,23 +84,34 @@ test("the roster: a team at the same event, a jersey number, no names", async ()
 });
 
 test("consent: a plain email, a real choice, never public under 13, staff records confirmed", async () => {
-  const c = await one(`insert into sm_market_consents (athlete_id, email, level, under_13, confirm_hash) values ($1, 'dana@example.com', 'sell', false, $2) returning *`, [athlete.id, H("a")]);
+  const c = await one(`insert into sm_market_consents (athlete_id, email, level, under_13, age_band, confirm_hash) values ($1, 'dana@example.com', 'sell', false, '16_17', $2) returning *`, [athlete.id, H("a")]);
   assert.equal(c.source, "qr");
-  await refused(`insert into sm_market_consents (athlete_id, email, level, under_13) values ($1, 'dana@example.com', 'family', false)`, [athlete.id], "unique|duplicate");
-  await refused(`insert into sm_market_consents (athlete_id, email, level, under_13) values ($1, 'Pat@Example.com', 'family', false)`, [athlete.id]);
-  await refused(`insert into sm_market_consents (athlete_id, email, level, under_13) values ($1, 'pat@example.com', 'everything', false)`, [athlete.id]);
-  await refused(`insert into sm_market_consents (athlete_id, email, level, under_13) values ($1, 'pat@example.com', 'public', true)`, [athlete.id], "sm_market_consents_public_chk");
-  await refused(`insert into sm_market_consents (athlete_id, email, level, under_13, source) values ($1, 'pat@example.com', 'sell', false, 'staff')`, [athlete.id], "sm_market_consents_staff_chk");
+  await refused(`insert into sm_market_consents (athlete_id, email, level, under_13, age_band) values ($1, 'dana@example.com', 'family', false, '16_17')`, [athlete.id], "unique|duplicate");
+  await refused(`insert into sm_market_consents (athlete_id, email, level, under_13, age_band) values ($1, 'Pat@Example.com', 'family', false, '16_17')`, [athlete.id]);
+  await refused(`insert into sm_market_consents (athlete_id, email, level, under_13, age_band) values ($1, 'pat@example.com', 'everything', false, '16_17')`, [athlete.id]);
+  // 12 or younger: family only or kept out.
+  await refused(`insert into sm_market_consents (athlete_id, email, level, under_13, age_band) values ($1, 'pat@example.com', 'public', true, 'u13')`, [athlete.id], "sm_market_consents_u13_chk");
+  await refused(`insert into sm_market_consents (athlete_id, email, level, under_13, age_band) values ($1, 'pat@example.com', 'sell', true, 'u13')`, [athlete.id], "sm_market_consents_u13_chk");
+  // The age band and the flag agree, and a band is always given.
+  await refused(`insert into sm_market_consents (athlete_id, email, level, under_13, age_band) values ($1, 'pat@example.com', 'family', false, 'u13')`, [athlete.id], "sm_market_consents_age_chk");
+  await refused(`insert into sm_market_consents (athlete_id, email, level, under_13, age_band) values ($1, 'pat@example.com', 'family', false, '12')`, [athlete.id]);
+  await refused(`insert into sm_market_consents (athlete_id, email, level, under_13) values ($1, 'pat@example.com', 'family', false)`, [athlete.id], "age_band|null");
+  await refused(`insert into sm_market_consents (athlete_id, email, level, under_13, age_band, source) values ($1, 'pat@example.com', 'sell', false, '16_17', 'staff')`, [athlete.id], "sm_market_consents_staff_chk");
   await refused(`update sm_market_consents set family_hash = $2 where id = $1`, [c.id, H("b")], "sm_market_consents_family_chk");
-  await refused(`insert into sm_market_consents (athlete_id, email, level, under_13, confirm_hash) values ($1, 'other@example.com', 'sell', false, $2)`, [athlete.id, H("a")], "sm_market_consents_confirm_idx|duplicate");
-  const staff = await one(`insert into sm_market_consents (athlete_id, email, level, under_13, source, confirmed_at, recorded_by) values ($1, 'pat@example.com', 'family', false, 'staff', now(), 'kyron@toj.test') returning *`, [athlete.id]);
+  await refused(`insert into sm_market_consents (athlete_id, email, level, under_13, age_band, confirm_hash) values ($1, 'other@example.com', 'sell', false, '16_17', $2)`, [athlete.id, H("a")], "sm_market_consents_confirm_idx|duplicate");
+  const staff = await one(`insert into sm_market_consents (athlete_id, email, level, under_13, age_band, source, confirmed_at, recorded_by) values ($1, 'pat@example.com', 'family', false, '16_17', 'staff', now(), 'kyron@toj.test') returning *`, [athlete.id]);
   assert.ok(staff.confirmed_at);
-  // A pending change: whole, with its link, never public under 13, never a keep-out (that counts at once).
-  await refused(`update sm_market_consents set pending_level = 'sell', pending_under_13 = false where id = $1`, [staff.id], "sm_market_consents_pending_chk");
+  // A pending change: whole, with its link, keeping the 12-or-younger rule, never a keep-out (that counts at once).
+  await refused(`update sm_market_consents set pending_level = 'sell', pending_under_13 = false, pending_age_band = '16_17' where id = $1`, [staff.id], "sm_market_consents_pending_chk");
   await refused(`update sm_market_consents set pending_level = 'sell', confirm_hash = $2 where id = $1`, [staff.id, H("e")], "sm_market_consents_pending_chk");
-  await refused(`update sm_market_consents set pending_level = 'public', pending_under_13 = true, confirm_hash = $2 where id = $1`, [staff.id, H("e")], "sm_market_consents_pending_chk");
-  await refused(`update sm_market_consents set pending_level = 'out', pending_under_13 = false, confirm_hash = $2 where id = $1`, [staff.id, H("e")]);
-  await q(`update sm_market_consents set pending_level = 'public', pending_under_13 = false, confirm_hash = $2 where id = $1`, [staff.id, H("e")]);
+  await refused(`update sm_market_consents set pending_level = 'sell', pending_under_13 = false, confirm_hash = $2 where id = $1`, [staff.id, H("e")], "sm_market_consents_pending_chk");
+  await refused(`update sm_market_consents set pending_level = 'public', pending_under_13 = true, pending_age_band = 'u13', confirm_hash = $2 where id = $1`, [staff.id, H("e")], "sm_market_consents_pending_chk");
+  await refused(`update sm_market_consents set pending_level = 'sell', pending_under_13 = true, pending_age_band = 'u13', confirm_hash = $2 where id = $1`, [staff.id, H("e")], "sm_market_consents_pending_chk");
+  await refused(`update sm_market_consents set pending_level = 'sell', pending_under_13 = false, pending_age_band = 'u13', confirm_hash = $2 where id = $1`, [staff.id, H("e")], "sm_market_consents_pending_chk");
+  await refused(`update sm_market_consents set pending_level = 'out', pending_under_13 = false, pending_age_band = '16_17', confirm_hash = $2 where id = $1`, [staff.id, H("e")]);
+  await q(`update sm_market_consents set pending_level = 'public', pending_under_13 = false, pending_age_band = '18_plus', confirm_hash = $2 where id = $1`, [staff.id, H("e")]);
+  // A row saying 12 or younger can wait on an older answer, holding family only meanwhile.
+  await q(`insert into sm_market_consents (athlete_id, email, level, under_13, age_band, pending_level, pending_under_13, pending_age_band, confirm_hash) values ($1, 'kim@example.com', 'family', true, 'u13', 'public', false, '18_plus', $2)`, [athlete.id, H("f")]);
 });
 
 test("media: a key in the event's folder, ready only with a preview, approved by someone", async () => {
@@ -107,7 +122,8 @@ test("media: a key in the event's folder, ready only with a preview, approved by
   const id = media.id;
   await q(`update sm_market_media set status = 'review', preview_key = $2, poster_key = $3 where id = $1`, [id, `events/${ev.id}/previews/${id}.mp4`, `events/${ev.id}/previews/${id}-poster.jpg`]);
   await refused(`update sm_market_media set status = 'approved' where id = $1`, [id], "sm_market_media_approved_chk");
-  await q(`update sm_market_media set status = 'approved', approved_at = now(), approved_by = 'kyron@toj.test' where id = $1`, [id]);
+  await refused(`update sm_market_media set status = 'approved', approved_at = now(), approved_by = 'kyron@toj.test' where id = $1`, [id], "sm_market_media_approved_chk");
+  await q(`update sm_market_media set status = 'approved', approved_at = now(), approved_by = 'kyron@toj.test', everyone_tagged_at = now(), everyone_tagged_by = 'kyron@toj.test' where id = $1`, [id]);
   await refused(`update sm_market_media set status = 'sold' where id = $1`, [id]);
 });
 

@@ -207,6 +207,7 @@
     market_consent_recorded: "recorded a family's choice",
     market_consent_removed: "removed a family's answer",
     market_media_removed: "removed a marketplace file",
+    market_access_code_changed: "changed an event's clips access code",
     joined: "joined the team",
     started_run: "started a kit run",
     started_brief: "started a brief",

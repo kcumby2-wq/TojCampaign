@@ -12,7 +12,7 @@ const C = "33333333-3333-4333-8333-333333333333";
 const T1 = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 const T2 = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
 const ath = (id, over = {}) => ({ id, keep_out: false, ...over });
-const consent = (athlete_id, level, over = {}) => ({ athlete_id, level, under_13: false, confirmed_at: "2026-11-04T20:00:00Z", ...over });
+const consent = (athlete_id, level, over = {}) => ({ athlete_id, level, under_13: false, age_band: "16_17", confirmed_at: "2026-11-04T20:00:00Z", ...over });
 
 // ── Codes and tokens ─────────────────────────────────────────────────────
 test("event codes: six characters people can read aloud (no 0/O, no 1/I)", () => {
@@ -20,6 +20,20 @@ test("event codes: six characters people can read aloud (no 0/O, no 1/I)", () =>
   assert.equal(M.codeOf(" ab2cd3 "), "AB2CD3");
   assert.equal(M.codeOf("AB0CD1"), null);
   assert.equal(M.codeOf("ABC"), null);
+});
+
+test("the clips page's access code: eight readable characters, typed any way, compared exactly", () => {
+  for (let i = 0; i < 200; i++) assert.match(M.newViewKey(), /^[A-HJ-NP-Z2-9]{8}$/);
+  const ev = { view_key: "ABCD2345" };
+  assert.equal(M.viewKeyShown("ABCD2345"), "ABCD-2345");
+  assert.equal(M.viewKeyOf(" abcd-2345 "), "ABCD2345");
+  assert.equal(M.viewKeyMatches("abcd 2345", ev), true);
+  assert.equal(M.viewKeyMatches("ABCD2346", ev), false);
+  assert.equal(M.viewKeyMatches("ABCD234", ev), false);
+  assert.equal(M.viewKeyMatches(["ABCD2345"], ev), false, "a repeated ?k= is no code");
+  assert.equal(M.viewKeyMatches("ABCD2345", {}), false, "an event without a code opens nothing");
+  assert.equal(M.linkTo.event("AB2CD3", "ABCD2345"), "https://www.subjectmedias.com/m/AB2CD3?k=ABCD2345");
+  assert.equal(M.linkTo.event("AB2CD3"), "https://www.subjectmedias.com/m/AB2CD3");
 });
 
 test("link tokens: random, and the database keeps only the hash", () => {
@@ -74,23 +88,49 @@ test("jersey numbers: digits only, without the # or leading zeros; 0 and 00 stay
 });
 
 test("what loosens a guardian's answer waits for their email; what tightens doesn't", () => {
-  const was = (level, under_13 = false) => ({ level, under_13 });
+  const was = (level, age_band = "16_17") => ({ level, age_band, under_13: age_band === "u13" });
   assert.equal(M.looser(was("out"), was("sell")), true, "out to sell loosens");
   assert.equal(M.looser(was("family"), was("public")), true);
-  assert.equal(M.looser(was("sell", true), was("sell", false)), true, "12 or younger to older loosens");
+  assert.equal(M.looser(was("family", "u13"), was("family", "13_15")), true, "12 or younger to older loosens");
+  assert.equal(M.looser(was("sell", "16_17"), was("sell", "18_plus")), true, "any older band loosens");
   assert.equal(M.looser(was("sell"), was("family")), false, "more careful");
-  assert.equal(M.looser(was("sell"), was("sell", true)), false);
-  assert.equal(M.looser(was("public", true), was("out", false)), false, "a keep-out never loosens");
+  assert.equal(M.looser(was("sell", "16_17"), was("sell", "13_15")), false, "a younger band is more careful");
+  assert.equal(M.looser(was("family", "u13"), was("out", "18_plus")), false, "a keep-out never loosens");
+  // A row from before age bands reads carefully.
+  assert.equal(M.bandOf({ under_13: true }), "u13");
+  assert.equal(M.bandOf({ under_13: null }), "u13");
+  assert.equal(M.bandOf({ under_13: false }), "13_15");
 });
 
 // ── Consent ──────────────────────────────────────────────────────────────
-test("the QR form: team, jersey, email, the choice, the age, and that they're the guardian", () => {
-  const ok = M.consentInput({ team_id: T1, jersey: "#7", email: "Dana@Example.com", level: "sell", under_13: "no", guardian: "on" });
+test("the QR form: team, jersey, email, the choice, the age band, and that they're the guardian", () => {
+  const ok = M.consentInput({ team_id: T1, jersey: "#7", email: "Dana@Example.com", level: "sell", age: "16_17", guardian: "on" });
   assert.deepEqual(ok.errors, []);
-  assert.deepEqual(ok.value, { team_id: T1, jersey: "7", email: "dana@example.com", level: "sell", under_13: false });
-  const bad = M.consentInput({ team_id: "x", jersey: "?", email: "nope", level: "everything" });
-  for (const f of ["team_id", "jersey", "email", "level", "under_13", "guardian"]) assert.ok(bad.errors.includes(f), f);
-  assert.ok(M.consentInput({ team_id: T1, jersey: "7", email: "a@b.co", level: "public", under_13: "yes", guardian: true }).errors.includes("level"), "never public under 13");
+  assert.deepEqual(ok.value, { team_id: T1, jersey: "7", email: "dana@example.com", level: "sell", age_band: "16_17", under_13: false });
+  assert.equal(M.consentInput({ team_id: T1, jersey: "7", email: "a@b.co", level: "family", age: "u13", guardian: true }).value.under_13, true);
+  const bad = M.consentInput({ team_id: "x", jersey: "?", email: "nope", level: "everything", age: "12" });
+  for (const f of ["team_id", "jersey", "email", "level", "age", "guardian"]) assert.ok(bad.errors.includes(f), f);
+});
+
+test("12 or younger: family only or keep out, never sold to other families or public", () => {
+  const u13 = (level) => M.consentInput({ team_id: T1, jersey: "7", email: "a@b.co", level, age: "u13", guardian: true }).errors;
+  assert.ok(u13("sell").includes("level"));
+  assert.ok(u13("public").includes("level"));
+  assert.deepEqual(u13("family"), []);
+  assert.deepEqual(u13("out"), []);
+});
+
+test("the guardian's word: needed for any choice but keep-out, which anyone may ask for", () => {
+  const without = (level) => M.consentInput({ team_id: T1, jersey: "7", email: "a@b.co", level, age: "13_15" }).errors;
+  assert.deepEqual(without("family"), ["guardian"]);
+  assert.deepEqual(without("sell"), ["guardian"]);
+  assert.deepEqual(without("out"), []);
+  // Nor is an age: a keep-out without one is taken as 12 or younger.
+  const out = M.consentInput({ team_id: T1, jersey: "7", email: "a@b.co", level: "out" });
+  assert.deepEqual(out.errors, []);
+  assert.equal(out.value.age_band, "u13");
+  assert.equal(out.value.under_13, true);
+  assert.deepEqual(M.consentInput({ team_id: T1, jersey: "7", email: "a@b.co", level: "family", guardian: true }).errors, ["age"], "every other choice needs the age");
 });
 
 test("no confirmed consent means nothing is shown", () => {
@@ -110,9 +150,52 @@ test("a keep-out counts at once, confirmed or not; staff keep-out beats everythi
   assert.equal(M.effectiveLevel(null, [consent(A, "public")]), "out");
 });
 
-test("under 13, from any guardian, is never public", () => {
-  assert.equal(M.effectiveLevel(ath(A), [consent(A, "public"), consent(A, "sell", { under_13: true })]), "sell");
-  assert.equal(M.effectiveLevel(ath(A), [consent(A, "public"), consent(A, "family", { under_13: true, confirmed_at: null })]), "sell", "even an unconfirmed answer about age counts");
+test("12 or younger, from any guardian, is family only", () => {
+  assert.equal(M.effectiveLevel(ath(A), [consent(A, "public"), consent(A, "family", { under_13: true, age_band: "u13" })]), "family");
+  assert.equal(M.effectiveLevel(ath(A), [consent(A, "public"), consent(A, "family", { under_13: true, age_band: "u13", confirmed_at: null })]), "family", "even an unconfirmed answer about age counts");
+  assert.equal(M.effectiveLevel(ath(A), [consent(A, "sell", { under_13: null })]), "family", "an age nobody gave reads as 12 or younger");
+  assert.equal(M.effectiveLevel(ath(A), [consent(A, "public", { age_band: "13_15" })]), "public", "13 and up can be public");
+});
+
+// ── What a guardian's QR answer does ─────────────────────────────────────
+const NOW = "2026-11-06T12:00:00Z";
+const row = (level, age_band, over = {}) => ({ level, age_band, under_13: age_band === "u13", confirmed_at: "2026-11-04T20:00:00Z", confirm_hash: null, ...over });
+const ans = (level, age_band) => ({ level, age_band, under_13: age_band === "u13" });
+
+test("answer plan: a first answer waits for its email; a keep-out counts at once and keeps the youngest age", () => {
+  const first = M.answerPlan(null, ans("sell", "16_17"), NOW);
+  assert.equal(first.now, false);
+  assert.ok(first.tok);
+  assert.equal(first.write.level, "sell");
+  assert.equal(first.write.age_band, "16_17");
+  const out = M.answerPlan(row("family", "u13"), ans("out", "18_plus"), NOW);
+  assert.equal(out.now, true);
+  assert.deepEqual([out.write.level, out.write.age_band, out.write.under_13], ["out", "u13", true]);
+});
+
+test("answer plan: an unconfirmed 12 or younger carries over, and the row never holds more than family only", () => {
+  // Nothing of theirs counts yet, but "12 or younger" does: a looser answer
+  // waits for the email, with the row capped meanwhile.
+  const p = M.answerPlan(row("family", "u13", { confirmed_at: null }), ans("public", "18_plus"), NOW);
+  assert.equal(p.now, false);
+  assert.deepEqual([p.write.level, p.write.age_band, p.write.under_13], ["family", "u13", true]);
+  assert.deepEqual([p.write.pending_level, p.write.pending_age_band, p.write.pending_under_13], ["public", "18_plus", false]);
+});
+
+test("answer plan: once theirs counts, a younger band or a lower level counts now; an older band waits", () => {
+  const younger = M.answerPlan(row("sell", "16_17"), ans("sell", "13_15"), NOW);
+  assert.equal(younger.now, true);
+  assert.equal(younger.write.age_band, "13_15");
+  const u13 = M.answerPlan(row("sell", "16_17"), ans("family", "u13"), NOW);
+  assert.equal(u13.now, true);
+  assert.deepEqual([u13.write.level, u13.write.age_band], ["family", "u13"]);
+  const older = M.answerPlan(row("sell", "13_15"), ans("sell", "18_plus"), NOW);
+  assert.equal(older.now, false);
+  assert.deepEqual([older.write.age_band, older.write.pending_age_band], ["13_15", "18_plus"]);
+  // Looser on both counts: the careful parts stand until the email.
+  const both = M.answerPlan(row("family", "u13"), ans("sell", "16_17"), NOW);
+  assert.equal(both.now, false);
+  assert.deepEqual([both.write.level, both.write.age_band, both.write.pending_level, both.write.pending_age_band], ["family", "u13", "sell", "16_17"]);
 });
 
 test("consents for another athlete don't count", () => {

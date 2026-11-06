@@ -157,10 +157,27 @@ test("a new event: a readable code, its links, $12 a clip and $8 a photo", async
   assert.equal(ev.photo_cents, 800);
   assert.equal(ev.status, "draft");
   assert.equal(ev.created_by, as.lead);
-  assert.deepEqual(ev.links, { event: `https://www.subjectmedias.com/m/${ev.code}`, consent: `https://www.subjectmedias.com/m/${ev.code}/consent` });
+  assert.match(ev.view_key, M.VIEW_KEY, "the clips page's access code");
+  assert.deepEqual(ev.links, {
+    event: `https://www.subjectmedias.com/m/${ev.code}?k=${ev.view_key}`,
+    consent: `https://www.subjectmedias.com/m/${ev.code}/consent`,
+    access_code: `${ev.view_key.slice(0, 4)}-${ev.view_key.slice(4)}`,
+  });
   const bad = await call("POST", "/api/sm/market/events", goodEvent({ name: "", starts_on: "2026-02-30", state: "ZZ" }), "lead");
   assert.equal(bad.status, 400);
   for (const f of ["name", "starts_on", "state"]) assert.ok(bad.data.fields.includes(f), f);
+});
+
+test("a new access code for the clips page: approvers only, logged, and the links follow it", async () => {
+  const ev = await newEvent();
+  assert.equal((await call("POST", `/api/sm/market/events/${ev.id}/access-code`, {}, "crew")).status, 403);
+  const r = await call("POST", `/api/sm/market/events/${ev.id}/access-code`, {}, "lead");
+  assert.equal(r.status, 200);
+  assert.match(r.data.event.view_key, M.VIEW_KEY);
+  assert.notEqual(r.data.event.view_key, ev.view_key);
+  assert.equal(r.data.event.links.event, `https://www.subjectmedias.com/m/${ev.code}?k=${r.data.event.view_key}`);
+  assert.ok(db.tables.team_activity.some((a) => a.action === "market_access_code_changed"));
+  assert.equal((await call("POST", "/api/sm/market/events/not-an-id/access-code", {}, "lead")).status, 404);
 });
 
 test("a code that's taken is drawn again", async () => {
@@ -218,7 +235,7 @@ test("each athlete's level: none until a consent counts, keep-out beats everythi
   let data = await roster(ev);
   assert.equal(athlete(data, "7").level, "none");
   const seven = athlete(data, "7");
-  const r = await call("POST", `/api/sm/market/athletes/${seven.id}/consents`, { email: "Dana@Example.com", level: "sell", under_13: "no" }, "lead");
+  const r = await call("POST", `/api/sm/market/athletes/${seven.id}/consents`, { email: "Dana@Example.com", level: "sell", age: "16_17" }, "lead");
   assert.equal(r.status, 200, JSON.stringify(r.data));
   data = await roster(ev);
   assert.equal(athlete(data, "7").level, "sell");
@@ -241,9 +258,11 @@ test("a consent recorded in person counts at once and emails the guardian their 
   const team = await newTeam(ev);
   await call("POST", `/api/sm/market/events/${ev.id}/athletes`, { team_id: team.id, jerseys: "7" }, "crew");
   const seven = athlete(await roster(ev), "7");
-  const r = await call("POST", `/api/sm/market/athletes/${seven.id}/consents`, { email: "dana@example.com", level: "family", under_13: "yes" }, "lead");
+  const r = await call("POST", `/api/sm/market/athletes/${seven.id}/consents`, { email: "dana@example.com", level: "family", age: "u13" }, "lead");
   assert.equal(r.status, 200);
   assert.equal(r.data.emailed, true);
+  assert.equal(r.data.consent.age_band, "u13");
+  assert.equal(athlete(await roster(ev), "7").consents[0].age_band, "u13", "approvers see the age band");
   const m = /^https:\/\/www\.subjectmedias\.com\/m\/f\/([A-Za-z0-9_-]{43})$/.exec(r.data.family_link);
   assert.ok(m, r.data.family_link);
   const row = db.tables.sm_market_consents[0];
@@ -256,23 +275,28 @@ test("a consent recorded in person counts at once and emails the guardian their 
   assert.match(mails[0].subject, /Lightning #7 at Fall Showcase/);
   assert.ok(mails[0].text.includes(r.data.family_link));
   // The same guardian again: one consent, a new link (the old one stops working).
-  const again = await call("POST", `/api/sm/market/athletes/${seven.id}/consents`, { email: "dana@example.com", level: "sell", under_13: "yes" }, "lead");
+  const again = await call("POST", `/api/sm/market/athletes/${seven.id}/consents`, { email: "dana@example.com", level: "sell", age: "13_15" }, "lead");
   assert.equal(db.tables.sm_market_consents.length, 1);
   assert.notEqual(again.data.family_link, r.data.family_link);
-  assert.equal(athlete(await roster(ev), "7").level, "sell");
+  const now = athlete(await roster(ev), "7");
+  assert.equal(now.level, "sell");
+  assert.equal(now.consents[0].age_band, "13_15");
 });
 
-test("a keep-out recorded in person sends nothing; under 13 is never public; members can't record", async () => {
+test("a keep-out recorded in person sends nothing; 12 or younger is family only; members can't record", async () => {
   const ev = await newEvent();
   const team = await newTeam(ev);
   await call("POST", `/api/sm/market/events/${ev.id}/athletes`, { team_id: team.id, jerseys: "7" }, "crew");
   const seven = athlete(await roster(ev), "7");
-  assert.equal((await call("POST", `/api/sm/market/athletes/${seven.id}/consents`, { email: "dana@example.com", level: "out", under_13: "no" }, "crew")).status, 403);
-  const kid = await call("POST", `/api/sm/market/athletes/${seven.id}/consents`, { email: "dana@example.com", level: "public", under_13: "yes" }, "lead");
-  assert.equal(kid.status, 400);
-  assert.deepEqual(kid.data.fields, ["level"]);
-  const out = await call("POST", `/api/sm/market/athletes/${seven.id}/consents`, { email: "dana@example.com", level: "out", under_13: "no" }, "lead");
-  assert.equal(out.status, 200);
+  assert.equal((await call("POST", `/api/sm/market/athletes/${seven.id}/consents`, { email: "dana@example.com", level: "out", age: "16_17" }, "crew")).status, 403);
+  for (const level of ["public", "sell"]) {
+    const kid = await call("POST", `/api/sm/market/athletes/${seven.id}/consents`, { email: "dana@example.com", level, age: "u13" }, "lead");
+    assert.equal(kid.status, 400, `12 or younger is never ${level}`);
+    assert.deepEqual(kid.data.fields, ["level"]);
+  }
+  assert.deepEqual((await call("POST", `/api/sm/market/athletes/${seven.id}/consents`, { email: "dana@example.com", level: "family" }, "lead")).data.fields, ["age"], "the age band is asked in person too");
+  const out = await call("POST", `/api/sm/market/athletes/${seven.id}/consents`, { email: "dana@example.com", level: "out" }, "lead");
+  assert.equal(out.status, 200, "a keep-out doesn't need the age");
   assert.equal(out.data.family_link, null);
   assert.equal(mails.length, 0);
   assert.equal(athlete(await roster(ev), "7").level, "out");
@@ -284,7 +308,7 @@ test("removing: a consent; a number nobody answered for; a team with no one on i
   await call("POST", `/api/sm/market/events/${ev.id}/athletes`, { team_id: team.id, jerseys: "7 70" }, "crew");
   const data = await roster(ev);
   const seven = athlete(data, "7");
-  const c = await call("POST", `/api/sm/market/athletes/${seven.id}/consents`, { email: "dana@example.com", level: "out", under_13: "no" }, "lead");
+  const c = await call("POST", `/api/sm/market/athletes/${seven.id}/consents`, { email: "dana@example.com", level: "out", age: "16_17" }, "lead");
   assert.equal((await call("DELETE", `/api/sm/market/athletes/${seven.id}`, undefined, "lead")).data.error, "has_consent", "a guardian's answer never goes with a typo fix");
   assert.equal((await call("DELETE", `/api/sm/market/athletes/${athlete(data, "70").id}`, undefined, "crew")).status, 403);
   assert.equal((await call("DELETE", `/api/sm/market/athletes/${athlete(data, "70").id}`, undefined, "lead")).status, 200);
@@ -380,11 +404,19 @@ test("confirming who's in it, then approving: a person decides, the AI only sugg
   assert.deepEqual(tagged.data.media.tags.map((t) => [t.athlete_id, t.source, t.confirmed]), [[seven.id, "ai", true]], "the AI's wrong guess goes; the right one is confirmed");
   const tag = db.tables.sm_market_tags[0];
   assert.equal(tag.confirmed_by, as.crew);
-  const approved = await call("PATCH", `/api/sm/market/media/${item.id}`, { status: "approved" }, "lead");
+  // Approving takes the approver's check that everyone who stands out in it is tagged.
+  assert.equal((await call("PATCH", `/api/sm/market/media/${item.id}`, { status: "approved" }, "lead")).data.error, "check_everyone_tagged");
+  assert.equal((await call("PATCH", `/api/sm/market/media/${item.id}`, { status: "approved", everyone_tagged: false }, "lead")).data.error, "check_everyone_tagged");
+  assert.equal((await call("PATCH", `/api/sm/market/media/${item.id}`, { status: "approved", everyone_tagged: "yes" }, "lead")).status, 400);
+  assert.equal((await call("PATCH", `/api/sm/market/media/${item.id}`, { tags: [seven.id], everyone_tagged: true }, "crew")).status, 403, "the check is an approver's");
+  const row = db.tables.sm_market_media.find((m) => m.id === item.id);
+  assert.equal(row.status, "review");
+  const approved = await call("PATCH", `/api/sm/market/media/${item.id}`, { status: "approved", everyone_tagged: true }, "lead");
   assert.equal(approved.status, 200);
   assert.equal(approved.data.media.status, "approved");
-  const row = db.tables.sm_market_media.find((m) => m.id === item.id);
   assert.equal(row.approved_by, as.lead);
+  assert.equal(row.everyone_tagged_by, as.lead);
+  assert.ok(row.everyone_tagged_at);
   // Nobody confirmed in it any more: back to review.
   await call("PATCH", `/api/sm/market/media/${item.id}`, { tags: [] }, "crew");
   assert.equal(row.status, "review");
@@ -406,7 +438,7 @@ test("a review change is checked whole before anything is written", async () => 
   const data = await roster(ev);
   const [seven, eleven] = [athlete(data, "7"), athlete(data, "11")];
   const item = await readyItem(ev);
-  await call("PATCH", `/api/sm/market/media/${item.id}`, { tags: [seven.id], status: "approved" }, "lead");
+  await call("PATCH", `/api/sm/market/media/${item.id}`, { tags: [seven.id], status: "approved", everyone_tagged: true }, "lead");
   assert.equal(item.status, "approved");
   // Emptying who's in it while approving: refused, and nothing changed.
   assert.equal((await call("PATCH", `/api/sm/market/media/${item.id}`, { tags: [], status: "approved" }, "lead")).data.error, "no_confirmed_tag");
@@ -417,12 +449,45 @@ test("a review change is checked whole before anything is written", async () => 
   // A member changing who's in an approved item sends it back for an approver to see.
   await call("PATCH", `/api/sm/market/media/${item.id}`, { tags: [seven.id, eleven.id] }, "crew");
   assert.equal(item.status, "review");
-  // An approver's change keeps it on sale; the same set again changes nothing.
-  await call("PATCH", `/api/sm/market/media/${item.id}`, { status: "approved" }, "lead");
+  // An approver's change keeps it on sale only with their check again.
+  await call("PATCH", `/api/sm/market/media/${item.id}`, { status: "approved", everyone_tagged: true }, "lead");
   await call("PATCH", `/api/sm/market/media/${item.id}`, { tags: [eleven.id] }, "lead");
+  assert.equal(item.status, "review", "a change without the check goes back to review");
+  await call("PATCH", `/api/sm/market/media/${item.id}`, { status: "approved", everyone_tagged: true }, "lead");
+  const at = item.everyone_tagged_at;
+  await new Promise((r) => setTimeout(r, 5));
+  await call("PATCH", `/api/sm/market/media/${item.id}`, { tags: [seven.id, eleven.id], everyone_tagged: true }, "lead");
   assert.equal(item.status, "approved");
-  await call("PATCH", `/api/sm/market/media/${item.id}`, { tags: [eleven.id] }, "crew");
+  assert.ok(item.everyone_tagged_at > at, "the new check is the one on record");
+  // The same set again changes nothing.
+  await call("PATCH", `/api/sm/market/media/${item.id}`, { tags: [eleven.id, seven.id] }, "crew");
   assert.equal(item.status, "approved", "saving the same numbers isn't a change");
+});
+
+test("nobody kept out goes on sale: approving is refused, and tagging them takes it off sale", async () => {
+  const ev = await newEvent();
+  const team = await newTeam(ev);
+  await call("POST", `/api/sm/market/events/${ev.id}/athletes`, { team_id: team.id, jerseys: "7 11 22" }, "crew");
+  const data = await roster(ev);
+  const [seven, eleven, twentyTwo] = [athlete(data, "7"), athlete(data, "11"), athlete(data, "22")];
+  // 11's family keeps them out; staff keep 22 out.
+  assert.equal((await call("POST", `/api/sm/market/athletes/${eleven.id}/consents`, { email: "kim@example.com", level: "out" }, "lead")).status, 200);
+  assert.equal((await call("PATCH", `/api/sm/market/athletes/${twentyTwo.id}`, { keep_out: true }, "lead")).status, 200);
+  const item = await readyItem(ev);
+  const r = await call("PATCH", `/api/sm/market/media/${item.id}`, { tags: [seven.id, eleven.id, twentyTwo.id], status: "approved", everyone_tagged: true }, "lead");
+  assert.equal(r.status, 409);
+  assert.equal(r.data.error, "kept_out");
+  assert.deepEqual(r.data.athletes.sort(), [eleven.id, twentyTwo.id].sort());
+  assert.equal(item.status, "review");
+  assert.ok(!(db.tables.sm_market_tags || []).some((t) => t.media_id === item.id), "nothing was written");
+  // On sale with 7 alone; tagging 11 later, even by an approver with the check, takes it off sale.
+  assert.equal((await call("PATCH", `/api/sm/market/media/${item.id}`, { tags: [seven.id], status: "approved", everyone_tagged: true }, "lead")).status, 200);
+  assert.equal(item.status, "approved");
+  const back = await call("PATCH", `/api/sm/market/media/${item.id}`, { tags: [seven.id, eleven.id], everyone_tagged: true }, "lead");
+  assert.equal(back.status, 200);
+  assert.equal(item.status, "review", "tagging someone kept out takes it off sale");
+  // Hiding it is always allowed, kept-out athlete or not.
+  assert.equal((await call("PATCH", `/api/sm/market/media/${item.id}`, { status: "hidden" }, "lead")).data.media.status, "hidden");
 });
 
 test("a file still processing can't be reviewed; a failed one can be retried", async () => {

@@ -27,6 +27,7 @@
     sell: ["OK to sell", "ok"],
     "public": ["OK to show publicly", "ok"],
   };
+  var AGE = { u13: "12 or younger", "13_15": "13 to 15", "16_17": "16 or 17", "18_plus": "18 or older" };
   var STATUS = { draft: ["Draft", ""], live: ["Live", "ok"], closed: ["Closed", "warn"] };
   var MEDIA = { uploaded: "Waiting", processing: "Processing", review: "To review", approved: "On sale", hidden: "Hidden", failed: "Failed" };
   var MSG = {
@@ -40,6 +41,8 @@
     not_uploaded: "That file didn't reach storage. Try it again.",
     already_added: "That file is already added.",
     no_confirmed_tag: "Confirm who's in it first.",
+    check_everyone_tagged: "Check that everyone who stands out in it is tagged, then tick the box.",
+    kept_out: "Someone tagged in it is kept out, so it can't go on sale. Hide it instead.",
     not_ready: "It's still processing.",
     not_failed: "It hasn't failed.",
     sold: "Someone bought it, so it stays.",
@@ -158,7 +161,9 @@
       seg +
       '<section class="sec"><h2 class="sec-h">For families</h2>' +
       qrCard("consent", "Their choice", "Print it for check-in and the team tents. A parent or guardian picks: family only, OK to sell, OK to show publicly, or keep out.", ev.links.consent) +
-      qrCard("event", "Clips and photos", "Where they find their athlete by team and number, and buy. Share it after the event.", ev.links.event) +
+      qrCard("event", "Clips and photos", "Where families find their athlete by team and number, and buy. It carries the access code: hand it out at check-in and share it with teams, never on a public poster.", ev.links.event) +
+      '<article class="card tight"><div class="row"><div class="grow"><div class="name" style="font-size:15px">Access code: <span class="mono">' + h(ev.links.access_code || "") + '</span></div><div class="sub">Families can type it on the clips page too. Family links open without it.</div></div>' +
+      (can.edit ? '<button type="button" class="btn small ghost" id="mkNewCode">New code</button>' : "") + '</div><p class="body" id="mkCodeMsg" role="status"></p></article>' +
       "</section>" +
       '<section class="sec"><h2 class="sec-h">Footage</h2>' +
       '<div class="stats"><div class="stat' + (c.review ? " warnb" : "") + '"><b>' + (c.review || 0) + '</b><span>To review</span></div><div class="stat"><b>' + (c.approved || 0) + '</b><span>On sale</span></div><div class="stat"><b>' + waiting + '</b><span>Processing</span></div><div class="stat' + (c.failed ? " alert" : "") + '"><b>' + (c.failed || 0) + "</b><span>Failed</span></div></div>" +
@@ -196,6 +201,20 @@
       try { await t.post(API + "/events/" + enc(ev.id) + "/teams", { name: $("mkTeam").value }); event(id); }
       catch (e) { b.disabled = false; note("mkTeamMsg", say(e)); }
     });
+    // Two taps: the old clips link and QR stop working.
+    var armed = 0;
+    if ($("mkNewCode")) $("mkNewCode").addEventListener("click", async function () {
+      var b = this;
+      if (Date.now() - armed > 5000) {
+        armed = Date.now();
+        b.textContent = "Tap again to change it";
+        note("mkCodeMsg", "The old clips link, QR and handouts will stop working. Family links keep working.");
+        return;
+      }
+      b.disabled = true;
+      try { await t.post(API + "/events/" + enc(ev.id) + "/access-code", {}); t.toast("New access code. Print the new clips QR."); event(id); }
+      catch (e) { b.disabled = false; note("mkCodeMsg", say(e)); }
+    });
     if ($("mkPrices")) $("mkPrices").addEventListener("click", async function () {
       var cents = function (v) { return Math.round(parseFloat(String(v).replace(/^\$/, "")) * 100); };
       try {
@@ -219,28 +238,29 @@
     var answers = (a.consents || []).map(function (c) {
       var l = LEVEL[c.level] || [c.level];
       var how = c.source === "staff" ? "Recorded in person" : c.confirmed ? "From the QR, confirmed" : c.level === "out" ? "From the QR (a keep-out counts at once)" : "From the QR, waiting for them to confirm";
-      var pend = c.pending ? '<div class="sub" style="color:var(--warn)">' + h("Waiting for them to confirm a change to " + (LEVEL[c.pending.level] || [c.pending.level])[0] + (c.pending.under_13 ? ", 12 or younger" : "") + ". Until then, this answer counts.") + "</div>" : "";
-      return '<div class="li" style="cursor:default"><div class="grow"><div class="name" style="font-size:15px">' + h(l[0]) + (c.under_13 ? " · 12 or younger" : "") + '</div><div class="sub">' + h([how, t.ago(c.at)].join(" · ")) + "</div>" + pend + (c.email ? '<div class="sub mono" style="font-size:11.5px;word-break:break-all">' + h(c.email) + "</div>" : "") + "</div>" +
+      var pendAge = c.pending && (AGE[c.pending.age_band] || (c.pending.under_13 ? AGE.u13 : ""));
+      var pend = c.pending ? '<div class="sub" style="color:var(--warn)">' + h("Waiting for them to confirm a change to " + (LEVEL[c.pending.level] || [c.pending.level])[0] + (pendAge ? ", " + pendAge : "") + ". Until then, this answer counts.") + "</div>" : "";
+      return '<div class="li" style="cursor:default"><div class="grow"><div class="name" style="font-size:15px">' + h(l[0]) + h(AGE[c.age_band] ? " · " + AGE[c.age_band] : c.under_13 ? " · 12 or younger" : "") + '</div><div class="sub">' + h([how, t.ago(c.at)].join(" · ")) + "</div>" + pend + (c.email ? '<div class="sub mono" style="font-size:11.5px;word-break:break-all">' + h(c.email) + "</div>" : "") + "</div>" +
         (can.edit ? '<button type="button" class="btn small ghost" data-rmc="' + h(c.id) + '">Remove</button>' : "") + "</div>";
     }).join("");
     t.show("today",
       '<div class="screen">' + back +
       '<div class="head"><div class="grow"><p class="kicker">' + h(d.event.name) + '</p><h1 class="title">' + h(label(a, d.teams)) + "</h1></div>" + levelBadge(a.level) + "</div>" +
-      '<p class="body">' + h(a.keep_out ? "Kept out by staff: nothing of them is shown or sold, whatever a family answers." : a.level === "none" ? "No answer counts yet, so nothing of them is shown or sold." : "The most careful answer is the one that counts. " + (a.level === "family" ? "Only their family's own link shows their footage." : a.level === "sell" ? "Anyone with their team and number can see and buy." : "Also allowed in public places, like the store.")) + "</p>" +
+      '<p class="body">' + h(a.keep_out ? "Kept out by staff: nothing of them is shown or sold, whatever a family answers." : a.level === "none" ? "No answer counts yet, so nothing of them is shown or sold." : "The most careful answer is the one that counts, and 12 or younger is family only. " + (a.level === "family" ? "Only their family's own link shows their footage." : a.level === "sell" ? "Families with the clips link can find them by team and number, and buy." : "Also allowed in public places, like the store.")) + "</p>" +
       '<section class="sec"><h2 class="sec-h">Answers</h2>' + (answers ? '<div class="list">' + answers + "</div>" : '<p class="empty">No family has answered for this number.</p>') + "</section>" +
       (can.edit
-        ? '<section class="card"><h2 class="sec-h">A choice given in person</h2><p class="sub" style="margin:0">From a paper form, or a parent at check-in. You vouch for it, so it counts now, and they get their family link by email.</p>' +
+        ? '<section class="card"><h2 class="sec-h">A choice given in person</h2><p class="sub" style="margin:0">From a paper form, or a parent at check-in. You check they\'re the parent or legal guardian (or the athlete as an adult) and vouch for it, so it counts now, and they get their family link by email.</p>' +
           '<label class="field"><span class="label">Their email</span><input class="input" id="mkEmail" type="email" autocomplete="off"></label>' +
           '<label class="field"><span class="label">Their choice</span><select class="input" id="mkLevel"><option value="">Pick one</option><option value="family">Family only</option><option value="sell">OK to sell</option><option value="public">OK to show publicly</option><option value="out">Keep out</option></select></label>' +
-          '<div class="field"><span class="label">12 or younger?</span><div class="seg" role="radiogroup" aria-label="12 or younger"><button type="button" data-u13="yes" aria-pressed="false">Yes</button><button type="button" data-u13="no" aria-pressed="false">No</button></div></div>' +
+          '<div class="field"><span class="label">The athlete\'s age</span><div class="seg" role="radiogroup" aria-label="The athlete\'s age" style="flex-wrap:wrap">' + ["u13", "13_15", "16_17", "18_plus"].map(function (k) { return '<button type="button" data-age="' + k + '" aria-pressed="false">' + h(AGE[k]) + "</button>"; }).join("") + '</div><span class="sub">12 or younger is family only or keep out. Not needed for a keep-out.</span></div>' +
           '<button type="button" class="btn" id="mkRecord">Record it</button><p class="body" id="mkRecMsg" role="status"></p><div id="mkLink"></div></section>' +
           '<section class="card"><h2 class="sec-h">Keep out</h2><p class="sub" style="margin:0">For a takedown, or a family who asks in person. It beats every answer, at once.</p>' +
           '<button type="button" class="btn ' + (a.keep_out ? "soft" : "danger") + '" id="mkKeep">' + (a.keep_out ? "Lift the keep-out" : "Keep them out of everything") + "</button></section>" +
           (a.consents && a.consents.length ? "" : '<section class="card"><h2 class="sec-h">Entered by mistake?</h2><button type="button" class="btn danger" id="mkRmNum">Remove #' + h(a.jersey) + "</button></section>")
         : "") +
       "</div>");
-    var u13 = null;
-    bind("[data-u13]", "click", function (b) { u13 = b.dataset.u13; app().querySelectorAll("[data-u13]").forEach(function (x) { x.setAttribute("aria-pressed", String(x === b)); }); });
+    var age = null;
+    bind("[data-age]", "click", function (b) { age = b.dataset.age; app().querySelectorAll("[data-age]").forEach(function (x) { x.setAttribute("aria-pressed", String(x === b)); }); });
     bind("[data-rmc]", "click", async function (b) {
       b.disabled = true;
       try { await t.post(API + "/consents/" + enc(b.dataset.rmc), {}, "DELETE"); t.toast("Answer removed."); athlete(arg); }
@@ -250,14 +270,14 @@
       var b = this;
       b.disabled = true;
       try {
-        var r = await t.post(API + "/athletes/" + enc(a.id) + "/consents", { email: $("mkEmail").value, level: $("mkLevel").value, under_13: u13 });
+        var r = await t.post(API + "/athletes/" + enc(a.id) + "/consents", { email: $("mkEmail").value, level: $("mkLevel").value, age: age });
         if (r.family_link) {
           $("mkLink").innerHTML = '<p class="sub">' + (r.emailed ? "Emailed to them. " : "Email isn't working, so share it yourself. ") + 'Their family link:</p><div class="sub mono" style="font-size:11.5px;word-break:break-all;margin:6px 0">' + h(r.family_link) + '</div><button type="button" class="btn small soft" id="mkCopyFam">Copy it</button>';
           $("mkCopyFam").addEventListener("click", function () { copyLink(r.family_link); });
           note("mkRecMsg", "Recorded.", true);
           b.disabled = false;
         } else { t.toast("Recorded."); athlete(arg); }
-      } catch (e) { b.disabled = false; note("mkRecMsg", e.data && e.data.error === "invalid" && (e.data.fields || []).indexOf("level") >= 0 && u13 === "yes" ? "Showing publicly isn't open at 12 or younger." : say(e)); }
+      } catch (e) { b.disabled = false; note("mkRecMsg", e.data && e.data.error === "invalid" && (e.data.fields || []).indexOf("level") >= 0 && age === "u13" ? "12 or younger is family only or keep out." : say(e)); }
     });
     if ($("mkKeep")) $("mkKeep").addEventListener("click", async function () {
       var b = this;
@@ -376,6 +396,20 @@
       var l = LEVEL[a.level] || [a.level, ""];
       return '<button type="button" class="chip" data-who="' + h(aid) + '" aria-pressed="' + on + '" title="' + h(l[0]) + '">' + h(label(a, d.teams)) + (extra ? ' <span class="sub">' + h(extra) + "</span>" : "") + '<span class="badge ' + h(l[1]) + '" style="padding:3px 6px;font-size:10.5px">' + h(l[0]) + "</span></button>";
     }
+    // Where an item can be sold, from the choices of everyone confirmed in it:
+    // the event page needs all of them at OK to sell; a family link needs that
+    // athlete at family only or more and everyone else at OK to sell.
+    function where(ids) {
+      if (!ids.length) return ["Nobody confirmed in it yet, so it can't be sold.", "warn"];
+      var ls = ids.map(function (i) { return byId[i] ? byId[i].level : "none"; });
+      if (ls.indexOf("out") >= 0) return ["Someone in it is kept out, so it can't be sold.", "err"];
+      if (ls.indexOf("none") >= 0) return ["Someone in it has no family answer yet, so it can't be sold until they answer.", "warn"];
+      var fam = ids.filter(function (i) { return byId[i].level === "family"; });
+      if (!fam.length) return ["Sells on the event's clips page and on each of their family links.", "okc"];
+      if (fam.length === 1) return ["Sells only on " + label(byId[fam[0]], d.teams) + "'s family link (family only).", "okc"];
+      return ["Two or more in it are family only, so it can't be sold.", "warn"];
+    }
+    function whereHtml(ids) { var w = where(ids); return w[1] === "warn" ? '<span style="color:var(--warn)">' + h(w[0]) + "</span>" : '<span class="' + w[1] + '">' + h(w[0]) + "</span>"; }
     var cards = (m.media || []).map(function (x) {
       var view = x.kind === "clip"
         ? (x.preview_url ? '<video controls playsinline preload="none" src="' + h(x.preview_url) + '"' + (x.poster_url ? ' poster="' + h(x.poster_url) + '"' : "") + ' style="width:100%;border-radius:12px;background:#000;aspect-ratio:16/9"></video>' : "")
@@ -385,6 +419,10 @@
       var picker = ready && can.upload
         ? '<div class="row" style="flex-wrap:wrap"><select class="input" data-addteam style="flex:1 1 140px;min-height:40px">' + (d.teams || []).map(function (tm) { return '<option value="' + h(tm.id) + '">' + h(tm.name) + "</option>"; }).join("") + '</select><input class="input" data-addnum inputmode="numeric" placeholder="#" style="flex:0 1 80px;min-height:40px"><button type="button" class="btn small soft" data-addwho>Add</button></div>'
         : "";
+      var on = (x.tags || []).filter(function (g) { return g.confirmed; }).map(function (g) { return g.athlete_id; });
+      var check = ready && can.edit
+        ? '<label class="sub" style="display:flex;gap:10px;align-items:flex-start;cursor:pointer"><input type="checkbox" data-everyone style="width:18px;height:18px;margin-top:1px;flex:none"><span>Everyone who stands out in it is tagged. Anyone who isn\'t is only in the background.</span></label>'
+        : "";
       var actions = "";
       if (ready && can.upload) actions += '<button type="button" class="btn small soft" data-save>Save who\'s in it</button>';
       if (ready && can.edit && x.status !== "approved") actions += '<button type="button" class="btn small" data-approve>Approve for sale</button>';
@@ -393,7 +431,8 @@
       return '<article class="card" data-media="' + h(x.id) + '">' + view +
         '<div class="row"><div class="grow"><div class="name" style="font-size:15px;overflow-wrap:anywhere">' + h(x.filename || (x.kind === "clip" ? "Clip" : "Photo")) + '</div><div class="sub">' + h([x.kind === "clip" ? "Clip" + (x.duration_ms ? " " + length(x.duration_ms) : "") : "Photo", t.ago(x.created_at)].join(" · ")) + "</div></div>" + badge(MEDIA[x.status] || x.status, x.status === "approved" ? "ok" : x.status === "failed" ? "bad" : x.status === "review" ? "gold" : "") + "</div>" +
         (x.error ? '<p class="sub err" style="margin:0">' + h(x.error) + "</p>" : "") +
-        (ready ? '<div class="field"><span class="label">Who\'s in it</span><div style="display:flex;flex-wrap:wrap;gap:8px" data-chips>' + (tagged || '<span class="sub" data-none>No numbers yet. Add who you can see.</span>') + "</div>" + picker + "</div>" : "") +
+        (ready ? '<div class="field"><span class="label">Who\'s in it</span><div style="display:flex;flex-wrap:wrap;gap:8px" data-chips>' + (tagged || '<span class="sub" data-none>No numbers yet. Add who you can see.</span>') + "</div>" + picker + '<p class="sub" data-where style="margin:0">' + whereHtml(on) + "</p></div>" : "") +
+        check +
         (actions ? '<div class="btn-row">' + actions + "</div>" : "") + '<p class="body" data-msg role="status"></p></article>';
     }).join("");
     var empty = { review: "Nothing waiting. New uploads land here once their previews are made.", approved: "Nothing on sale yet.", hidden: "Nothing hidden.", waiting: "Nothing processing.", failed: "Nothing failed." }[status] || "Nothing here.";
@@ -403,7 +442,8 @@
       seg + (cards || '<p class="empty">' + h(empty) + "</p>") + "</div>");
 
     bind("[data-tab]", "click", function (b) { t.go("#market-review/" + id + (b.dataset.tab === "review" ? "" : "/" + b.dataset.tab)); });
-    bind("[data-who]", "click", function (b) { b.setAttribute("aria-pressed", String(b.getAttribute("aria-pressed") !== "true")); });
+    function rewhere(card) { var w = card.querySelector("[data-where]"); if (w) w.innerHTML = whereHtml(who(card)); }
+    bind("[data-who]", "click", function (b) { b.setAttribute("aria-pressed", String(b.getAttribute("aria-pressed") !== "true")); rewhere(b.closest("[data-media]")); });
     bind("[data-addwho]", "click", function (b) {
       var card = b.closest("[data-media]");
       var team = card.querySelector("[data-addteam]").value;
@@ -419,18 +459,29 @@
       if (have) { have.setAttribute("aria-pressed", "true"); return; }
       box.insertAdjacentHTML("beforeend", chip(a.id, true, ""));
       var added = box.lastElementChild;
-      added.addEventListener("click", function () { added.setAttribute("aria-pressed", String(added.getAttribute("aria-pressed") !== "true")); });
+      added.addEventListener("click", function () { added.setAttribute("aria-pressed", String(added.getAttribute("aria-pressed") !== "true")); rewhere(card); });
       card.querySelector("[data-addnum]").value = "";
+      rewhere(card);
     });
     function who(card) { return Array.prototype.slice.call(card.querySelectorAll('[data-who][aria-pressed="true"]')).map(function (b) { return b.dataset.who; }); }
+    function everyone(card) { var c = card.querySelector("[data-everyone]"); return !!(c && c.checked); }
     async function patch(b, body, done) {
       var card = b.closest("[data-media]");
       b.disabled = true;
       try { await t.post(API + "/media/" + enc(card.dataset.media), body, "PATCH"); t.toast(done); review(arg); }
       catch (e) { b.disabled = false; card.querySelector("[data-msg]").innerHTML = '<span class="err">' + h(say(e)) + "</span>"; }
     }
-    bind("[data-save]", "click", function (b) { patch(b, { tags: who(b.closest("[data-media]")) }, "Saved."); });
-    bind("[data-approve]", "click", function (b) { patch(b, { tags: who(b.closest("[data-media]")), status: "approved" }, "On sale."); });
+    // An approver's check rides along when they change who's in something on sale.
+    bind("[data-save]", "click", function (b) {
+      var card = b.closest("[data-media]"), body = { tags: who(card) };
+      if (everyone(card)) body.everyone_tagged = true;
+      patch(b, body, "Saved.");
+    });
+    bind("[data-approve]", "click", function (b) {
+      var card = b.closest("[data-media]");
+      if (!everyone(card)) { card.querySelector("[data-msg]").innerHTML = '<span class="err">' + h(MSG.check_everyone_tagged) + "</span>"; return; }
+      patch(b, { tags: who(card), status: "approved", everyone_tagged: true }, "On sale.");
+    });
     bind("[data-hide]", "click", function (b) { patch(b, { status: "hidden" }, "Hidden."); });
     bind("[data-retry]", "click", async function (b) {
       var card = b.closest("[data-media]");

@@ -108,16 +108,16 @@ test("event, QR answer, upload, review, sale, download: every step within the da
   await api("PATCH", `/events/${ev.id}`, { status: "live" });
 
   // A guardian at the event: the QR form, then the confirm link from the email.
-  const sent = await form(`/m/${ev.code}/consent`, { team_id: team.id, jersey: "7", level: "sell", under_13: "no", email: "Dana@Example.com", guardian: "yes" });
+  const sent = await form(`/m/${ev.code}/consent`, { team_id: team.id, jersey: "7", level: "sell", age: "16_17", email: "Dana@Example.com", guardian: "yes" });
   assert.equal(sent.status, 303, sent.html.slice(0, 300));
   const confirm = mails.at(-1).text.match(/\/m\/confirm\/([A-Za-z0-9_-]{43})/)[1];
   const done = await form(`/m/confirm/${confirm}`, {});
   assert.equal(done.status, 200);
   assert.match(done.html, /\/m\/f\/[A-Za-z0-9_-]{43}/);
   // Another guardian, for #11, keeps them out: it counts at once.
-  await form(`/m/${ev.code}/consent`, { team_id: team.id, jersey: "11", level: "out", under_13: "yes", email: "sam@example.com", guardian: "yes" });
+  await form(`/m/${ev.code}/consent`, { team_id: team.id, jersey: "11", level: "out", age: "u13", email: "sam@example.com" });
   // A number the crew hadn't entered, from the form.
-  await form(`/m/${ev.code}/consent`, { team_id: team.id, jersey: "4", level: "family", under_13: "yes", email: "jo@example.com", guardian: "yes" });
+  await form(`/m/${ev.code}/consent`, { team_id: team.id, jersey: "4", level: "family", age: "u13", email: "jo@example.com", guardian: "yes" });
   const levels = Object.fromEntries((await api("GET", `/events/${ev.id}`)).athletes.map((a) => [a.jersey, a.level]));
   assert.deepEqual(levels, { 4: "none", 7: "sell", 11: "out" });
 
@@ -140,14 +140,23 @@ test("event, QR answer, upload, review, sale, download: every step within the da
   assert.equal(list.length, 1);
   assert.equal(list[0].tags.length, 2, "two suggestions");
 
-  // Staff: only #7 is really in it; approve.
+  // Staff: with #11 (kept out) still in it, it can't go on sale.
+  const eleven = roster.find((a) => a.jersey === "11");
+  const blocked = await fetch(base + `/api/sm/market/media/${m.id}`, { method: "PATCH", headers: { Cookie: cookie, "Content-Type": "application/json" }, body: JSON.stringify({ tags: [seven.id, eleven.id], status: "approved", everyone_tagged: true }) });
+  assert.equal(blocked.status, 409);
+  assert.equal((await blocked.json()).error, "kept_out");
+  // Only #7 is really in it; approve, having checked everyone who stands out is tagged.
   await api("PATCH", `/media/${m.id}`, { tags: [seven.id] });
-  await api("PATCH", `/media/${m.id}`, { status: "approved" });
+  await api("PATCH", `/media/${m.id}`, { status: "approved", everyone_tagged: true });
 
-  // The family finds it by team and number, and buys it.
-  const found = await page(`/m/${ev.code}?team=${team.id}&jersey=7`);
+  // Without the event's access code, the clips page shows only the way in.
+  const gate = await page(`/m/${ev.code}?team=${team.id}&jersey=7`);
+  assert.ok(!gate.includes(m.id), "no clip without the code");
+  assert.match(gate, /Enter the access code/);
+  // The family finds it by team and number, with the code, and buys it.
+  const found = await page(`/m/${ev.code}?k=${ev.view_key}&team=${team.id}&jersey=7`);
   assert.ok(found.includes(`value="${m.id}"`));
-  const out = await form(`/m/${ev.code}/checkout`, { team: team.id, jersey: "7", item: m.id });
+  const out = await form(`/m/${ev.code}/checkout`, { k: ev.view_key, team: team.id, jersey: "7", item: m.id });
   assert.equal(out.status, 303);
   const sid = out.location.split("/").pop();
   const ses = sessions.get(sid);
@@ -162,8 +171,8 @@ test("event, QR answer, upload, review, sale, download: every step within the da
   // Sold: it can't be removed, and the database agrees.
   const del = await fetch(base + `/api/sm/market/media/${m.id}`, { method: "DELETE", headers: { Cookie: cookie } });
   assert.equal(del.status, 409);
-  const row = (await pool.query(`select status, preview_key, approved_by from ${SCHEMA}.sm_market_media where id = $1`, [m.id])).rows[0];
-  assert.deepEqual(row, { status: "approved", preview_key: M.previewKey(ev.id, m.id, "clip"), approved_by: "kyron@toj.test" });
+  const row = (await pool.query(`select status, preview_key, approved_by, everyone_tagged_by from ${SCHEMA}.sm_market_media where id = $1`, [m.id])).rows[0];
+  assert.deepEqual(row, { status: "approved", preview_key: M.previewKey(ev.id, m.id, "clip"), approved_by: "kyron@toj.test", everyone_tagged_by: "kyron@toj.test" });
   const tok = (await pool.query(`select count(*)::int as n from ${SCHEMA}.sm_market_orders where token_hash = $1`, [M.hashToken(token)])).rows[0].n;
   assert.equal(tok, 1, "the order is found by its link's hash");
 });

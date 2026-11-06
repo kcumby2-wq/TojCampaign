@@ -169,9 +169,26 @@ const teamOptions = (teams, chosen) =>
   `<option value="">Pick a team</option>` + teams.map((t) => `<option value="${esc(t.id)}"${t.id === chosen ? " selected" : ""}>${esc(t.name)}</option>`).join("");
 
 // ── The event page ───────────────────────────────────────────────────────
-// What families see from the event QR: find an athlete by team and number,
-// then the clips and photos everyone in them has said may be sold.
-function eventPage({ nonce, event, teams, team = null, jersey = "", items = null, error = "" }) {
+// Without the event's access code: how to get in. The code is on the clips
+// QR and the check-in handout, never on the public consent poster.
+function eventGatePage({ nonce, event, error = "" }) {
+  let body = evHead(event, "Clips and photos from this event are for the families who were there.");
+  body += `<form class="card" method="get" action="/m/${esc(event.code)}">
+<h2>Enter the access code</h2>
+<p>It's on the card from check-in, and in the clips link your team or coach shared. Made your choice as a parent or guardian? Your family link, in its email, opens your athlete's clips without a code.</p>
+<div class="fgrid">
+<label class="f half${error ? " bad" : ""}"><span>Access code</span><input class="input" name="k" placeholder="ABCD-EFGH" autocapitalize="characters" autocomplete="off" spellcheck="false" maxlength="12" required></label>
+</div>
+${error ? `<p class="msg" role="alert">${esc(error)}</p>` : ""}
+<div class="row"><button class="pill pill-green" type="submit">Open the clips</button><a class="note" href="/m/${esc(event.code)}/consent">Parent or guardian? Choose how your athlete's footage is used.</a></div>
+</form>`;
+  return shell({ nonce, title: `${event.name} | Subject Medias`, body });
+}
+
+// With the code: find an athlete by team and number, then the clips and
+// photos everyone in them has said may be sold. key: the access code, carried
+// in the forms so they keep working.
+function eventPage({ nonce, event, teams, key = "", team = null, jersey = "", items = null, error = "" }) {
   const sub = "Find your athlete by team and jersey number. You see watermarked previews here; what you buy comes in full quality, with no watermark.";
   let body = evHead(event, esc(sub));
   if (event.status === "draft") {
@@ -179,6 +196,7 @@ function eventPage({ nonce, event, teams, team = null, jersey = "", items = null
     return shell({ nonce, title: `${event.name} | Subject Medias`, body });
   }
   body += `<form class="card" method="get" action="/m/${esc(event.code)}">
+<input type="hidden" name="k" value="${esc(key)}">
 <h2>Find your athlete</h2>
 <div class="fgrid">
 <label class="f half"><span>Team</span><select class="select" name="team" required>${teamOptions(teams, team && team.id)}</select></label>
@@ -188,7 +206,7 @@ ${error ? `<p class="msg" role="alert">${esc(error)}</p>` : ""}
 <div class="row"><button class="pill pill-green" type="submit">Show clips and photos</button><a class="note" href="/m/${esc(event.code)}/consent">Parent or guardian? Choose how your athlete's footage is used.</a></div>
 </form>`;
   if (items && team) {
-    body += results({ action: `/m/${esc(event.code)}/checkout`, hidden: { team: team.id, jersey }, label: `${team.name} #${jersey}`, items, event });
+    body += results({ action: `/m/${esc(event.code)}/checkout`, hidden: { k: key, team: team.id, jersey }, label: `${team.name} #${jersey}`, items, event });
   }
   return shell({ nonce, title: `${event.name} | Subject Medias`, body, script: items && items.length ? TOTAL_SCRIPT : "" });
 }
@@ -228,9 +246,15 @@ const TOTAL_SCRIPT = `(function(){var f=document.querySelector("[data-total]");i
 // ── Consent ──────────────────────────────────────────────────────────────
 const CHOICES = [
   ["family", "Family only", "Only your family sees and buys their clips and photos, on your own family link."],
-  ["sell", "OK to sell", "Anyone with their team and jersey number can see and buy them, on this event's page."],
-  ["public", "OK to show publicly", "Also shown where anyone can see them, like our online store and our social pages. Never for athletes 12 or younger."],
-  ["out", "Keep them out", "Nothing of your athlete is shown or sold. This counts the moment you send it."],
+  ["sell", "OK to sell", "Families at this event can find and buy them by team and jersey number, on the event's clips page. Not for athletes 12 or younger."],
+  ["public", "OK to show publicly", "Also shown where anyone can see them, like our online store and our social pages. Not for athletes 12 or younger."],
+  ["out", "Keep them out", "Nothing of your athlete is shown or sold. Anyone can ask for this, and it counts the moment it's sent. For a safety or custody concern, choose this and tell our crew."],
+];
+const AGES = [
+  ["u13", "12 or younger"],
+  ["13_15", "13 to 15"],
+  ["16_17", "16 or 17"],
+  ["18_plus", "18 or older"],
 ];
 
 function consentPage({ nonce, event, teams, values = {}, errors = [], formError = "" }) {
@@ -251,9 +275,11 @@ function consentPage({ nonce, event, teams, values = {}, errors = [], formError 
 <label class="f half${bad("team_id")}"><span>Team</span><select class="select" name="team_id" required>${teamOptions(teams, values.team_id)}</select></label>
 <label class="f half${bad("jersey")}"><span>Jersey number</span><input class="input" name="jersey" value="${v("jersey")}" inputmode="numeric" pattern="#?[0-9]{1,3}" maxlength="4" autocomplete="off" required></label>
 <fieldset class="f${bad("level")}"><legend>How may we use their clips and photos?</legend><div class="choices">${choice}</div></fieldset>
-<fieldset class="f${bad("under_13")}"><legend>Is the athlete 12 or younger?</legend><div class="seg"><label><input type="radio" name="under_13" value="yes"${values.under_13 === "yes" ? " checked" : ""} required><span>Yes</span></label><label><input type="radio" name="under_13" value="no"${values.under_13 === "no" ? " checked" : ""}><span>No</span></label></div></fieldset>
+<fieldset class="f${bad("age")}"><legend>How old is the athlete?</legend><div class="seg">${AGES.map(
+    ([val, words]) => `<label><input type="radio" name="age" value="${val}"${values.age === val ? " checked" : ""}><span>${esc(words)}</span></label>`
+  ).join("")}</div><small>12 or younger: family only, or keep out. We never sell their clips to other families or show them publicly. Not needed to keep an athlete out.</small></fieldset>
 <label class="f${bad("email")}"><span>Your email</span><input class="input" type="email" name="email" value="${v("email")}" autocomplete="email" required><small>We email you a link to confirm. Your choice counts once you do (a keep-out counts straight away).</small></label>
-<label class="check${errors.includes("guardian") ? " bad" : ""}"><input type="checkbox" name="guardian" value="yes"${values.guardian ? " checked" : ""} required><span>I'm this athlete's parent or legal guardian, or I'm the athlete and I'm 18 or older.</span></label>
+<label class="check${errors.includes("guardian") ? " bad" : ""}"><input type="checkbox" name="guardian" value="yes"${values.guardian ? " checked" : ""}><span>I'm this athlete's parent or legal guardian and I'm 18 or older, or I'm the athlete and a legal adult where I live. (Not needed to keep an athlete out.)</span></label>
 </div>
 <div class="hp" aria-hidden="true"><label>Leave this empty <input name="sm_trap" tabindex="-1" autocomplete="off"></label></div>
 ${formError ? `<p class="msg" role="alert">${esc(formError)}</p>` : errors.length ? `<p class="msg" role="alert">Check the fields marked in red.</p>` : ""}
@@ -277,9 +303,9 @@ function consentSentPage({ nonce, event, kept, now = false, mailed }) {
   return shell({ nonce, title: `Your choice | ${event.name}`, body });
 }
 
-function confirmPage({ nonce, event, team, jersey, level, under13 = false, token = "", done = false, familyLink = null, mailed = false }) {
+function confirmPage({ nonce, event, team, jersey, level, ageBand = "", token = "", done = false, familyLink = null, mailed = false }) {
   let body = evHead(event);
-  const age = under13 ? ", 12 or younger" : "";
+  const age = M.AGE_WORDS[ageBand] ? `, ${M.AGE_WORDS[ageBand]}` : "";
   if (!done) {
     body += `<form class="card" method="post" action="/m/confirm/${esc(token)}">
 <h2>Confirm your choice</h2>
@@ -298,7 +324,7 @@ function confirmPage({ nonce, event, team, jersey, level, under13 = false, token
 }
 
 // ── The family page ──────────────────────────────────────────────────────
-function familyPage({ nonce, event, team, jersey, level, items, token }) {
+function familyPage({ nonce, event, team, jersey, level, items, token, eventLink = "" }) {
   let body = evHead(event, `Your family link for ${esc(team)} #${esc(jersey)}. Keep it to your family: anyone with it sees what it shows.`);
   if (level === "out" || level === "none") {
     const why = level === "out" ? "Your athlete is kept out, so nothing is shown or sold." : "There's no confirmed choice for your athlete right now, so nothing is shown.";
@@ -310,6 +336,7 @@ function familyPage({ nonce, event, team, jersey, level, items, token }) {
     return shell({ nonce, title: `${team} #${jersey} | ${event.name}`, body });
   }
   body += results({ action: `/m/f/${esc(token)}/checkout`, hidden: {}, label: `${team} #${jersey}`, items, event });
+  if (eventLink) body += `<p class="note">Clips with teammates in them, from families who've said yes: <a href="${esc(eventLink)}">this event's clips page</a>.</p>`;
   return shell({ nonce, title: `${team} #${jersey} | ${event.name}`, body, script: items.length ? TOTAL_SCRIPT : "" });
 }
 
@@ -347,4 +374,4 @@ function messagePage({ nonce, title, text, link = null, linkText = "" }) {
   return shell({ nonce, title: `${title} | Subject Medias`, body });
 }
 
-module.exports = { esc, helpEmail, dateRange, dollars, length, CHOICES, eventPage, consentPage, consentSentPage, confirmPage, familyPage, orderPage, messagePage, TOTAL_SCRIPT };
+module.exports = { esc, helpEmail, dateRange, dollars, length, CHOICES, AGES, eventGatePage, eventPage, consentPage, consentSentPage, confirmPage, familyPage, orderPage, messagePage, TOTAL_SCRIPT };

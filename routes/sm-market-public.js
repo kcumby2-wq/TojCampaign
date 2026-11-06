@@ -8,8 +8,9 @@
 //   GET  /m/f/:token                a family's page: their athlete's clips and photos
 //   POST /m/f/:token/checkout       the ones they picked, to Stripe Checkout
 //   GET  /m/o/:token                an order: downloads once paid (?session_id= asks Stripe straight away)
-//   GET  /m/:code                   the event page; ?team=<id>&jersey=<n> shows that athlete's
-//   POST /m/:code/checkout          the ones picked there, to Stripe Checkout
+//   GET  /m/:code                   the event page, with ?k=<access code> (otherwise how to get
+//                                   in); &team=<id>&jersey=<n> shows that athlete's
+//   POST /m/:code/checkout          the ones picked there (with the code), to Stripe Checkout
 //   GET  /m/:code/consent           the QR form: a parent or guardian's choice
 //   POST /m/:code/consent           saves it and emails a link to confirm (a keep-out counts at once)
 //   GET  /m/:code/consent/sent      what happens next
@@ -101,6 +102,7 @@ const LIMITS = {
   consent: [40, 10],
   confirm: [30, 10],
   checkout: [20, 10],
+  wrongKey: [20, 10], // wrong access codes on an event page
   to: [3, 60], // emails from the form to one mailbox, an hour
   toDay: [8, 1440], // and a day
   athlete: [12, 60], // emails about one athlete, an hour
@@ -334,14 +336,17 @@ async function consentByConfirm(sb, token) {
 const usedLink = (res) => message(res, 404, "Link already used", "This confirm link has been used, or a newer choice replaced it. Your family link is in the email we sent when you confirmed.");
 
 // What a confirm link confirms: the pending change if there is one, or the answer itself.
-const asked = (c) => (c.pending_level ? { level: c.pending_level, under_13: c.pending_under_13 } : { level: c.level, under_13: c.under_13 });
+const asked = (c) =>
+  c.pending_level
+    ? { level: c.pending_level, age_band: M.AGE_BANDS.includes(c.pending_age_band) ? c.pending_age_band : c.pending_under_13 === false ? "13_15" : "u13" }
+    : { level: c.level, age_band: M.bandOf(c) };
 
 router.get("/confirm/:token", page(async (req, res, sb) => {
   if (!allowed(req, "confirm")) return slowDown(res);
   const found = await consentByConfirm(sb, req.params.token);
   if (!found) return usedLink(res);
   const want = asked(found.c);
-  send(res, 200, (nonce) => P.confirmPage({ nonce, event: found.ev, team: found.team.name, jersey: found.a.jersey, level: want.level, under13: want.under_13, token: req.params.token }));
+  send(res, 200, (nonce) => P.confirmPage({ nonce, event: found.ev, team: found.team.name, jersey: found.a.jersey, level: want.level, ageBand: want.age_band, token: req.params.token }));
 }));
 
 // Confirming applies the answer, and gives the family a fresh family link
@@ -356,7 +361,7 @@ router.post("/confirm/:token", page(async (req, res, sb) => {
   const done = await run(
     sb
       .from("sm_market_consents")
-      .update({ level: want.level, under_13: want.under_13, pending_level: null, pending_under_13: null, confirmed_at: at, confirm_hash: null, family_hash: fam ? fam.hash : null, source: "qr", recorded_by: null, updated_at: at })
+      .update({ level: want.level, under_13: want.age_band === "u13", age_band: want.age_band, pending_level: null, pending_under_13: null, pending_age_band: null, confirmed_at: at, confirm_hash: null, family_hash: fam ? fam.hash : null, source: "qr", recorded_by: null, updated_at: at })
       .eq("id", found.c.id)
       .eq("confirm_hash", M.hashToken(req.params.token))
       .select("id")
@@ -371,7 +376,7 @@ router.post("/confirm/:token", page(async (req, res, sb) => {
       console.warn("[sm-market-public] family link email failed:", e && e.message);
     }
   }
-  send(res, 200, (nonce) => P.confirmPage({ nonce, event: found.ev, team: found.team.name, jersey: found.a.jersey, level: want.level, under13: want.under_13, done: true, familyLink: link, mailed }));
+  send(res, 200, (nonce) => P.confirmPage({ nonce, event: found.ev, team: found.team.name, jersey: found.a.jersey, level: want.level, ageBand: want.age_band, done: true, familyLink: link, mailed }));
 }));
 
 // ── A family's page ──────────────────────────────────────────────────────
@@ -395,7 +400,9 @@ router.get("/f/:token", page(async (req, res, sb) => {
   if (!f) return notFound(res);
   const open = f.ev.status !== "draft" && M.levelAtLeast(f.level, "family");
   const items = open ? await withPreviews(sb, await itemsFor(sb, f.ev, f.a.id, "family")) : [];
-  send(res, 200, (nonce) => P.familyPage({ nonce, event: f.ev, team: f.team.name, jersey: f.a.jersey, level: f.level, items, token: req.params.token }));
+  // A confirmed family is a family at the event: they get the clips page too.
+  const eventLink = open ? eventPath(f.ev) : "";
+  send(res, 200, (nonce) => P.familyPage({ nonce, event: f.ev, team: f.team.name, jersey: f.a.jersey, level: f.level, items, token: req.params.token, eventLink }));
 }));
 
 router.post("/f/:token/checkout", page(async (req, res, sb) => {
@@ -425,7 +432,9 @@ router.get("/o/:token", page(async (req, res, sb) => {
     }
     order = await run(sb.from("sm_market_orders").select("*").eq("id", order.id).single());
   }
-  const back = `/m/${ev.code}`;
+  // The buyer came from the event page or their family link, so the way back
+  // carries the event's access code.
+  const back = eventPath(ev);
   if (order.status === "pending") {
     // Back from Stripe's "back" link: nothing was paid.
     if (req.query.cancelled === "1") return send(res, 200, (nonce) => P.orderPage({ nonce, event: ev, order, state: "cancelled", backTo: back }));
@@ -463,6 +472,21 @@ router.get("/o/:token", page(async (req, res, sb) => {
 }));
 
 // ── The event page ───────────────────────────────────────────────────────
+// An access code tried on the clips page or its checkout: "ok", "wrong",
+// "none" (no code given) or "slow". A visitor over the limit for wrong codes
+// is told to slow down whatever they send, so the limit can't be used to
+// tell a right guess from a wrong one.
+function keyCheck(req, given, ev) {
+  const tried = typeof given === "string" && given.trim() !== "";
+  if (tried && !within([["wrongKey", visitor(req)]])) return "slow";
+  if (M.viewKeyMatches(given, ev)) return "ok";
+  if (tried) count([["wrongKey", visitor(req)]]);
+  return tried ? "wrong" : "none";
+}
+
+// The clips page with its access code, for those already let in.
+const eventPath = (ev, extra = "") => `/m/${ev.code}${M.VIEW_KEY.test(String(ev.view_key || "")) ? `?k=${ev.view_key}${extra ? "&" + extra : ""}` : extra ? "?" + extra : ""}`;
+
 async function teamsOf(sb, ev) {
   return (await run(sb.from("sm_market_teams").select("id,name").eq("event_id", ev.id).order("name", { ascending: true }))) || [];
 }
@@ -476,31 +500,43 @@ router.get("/:code", page(async (req, res, sb) => {
   if (!allowed(req, "view")) return slowDown(res);
   const ev = await eventByCode(sb, req.params.code);
   if (!ev) return notFound(res);
-  const teams = await teamsOf(sb, ev);
   const q = req.query || {};
-  if (!q.team && !q.jersey) return send(res, 200, (nonce) => P.eventPage({ nonce, event: ev, teams }));
+  // The clips are for the families who were there: the access code from
+  // check-in (in the clips link, or typed in) opens the page.
+  const k = keyCheck(req, q.k, ev);
+  if (k === "slow") return slowDown(res);
+  if (k !== "ok") {
+    return send(res, k === "wrong" ? 403 : 200, (nonce) => P.eventGatePage({ nonce, event: ev, error: k === "wrong" ? "That code doesn't match this event. Check it and try again." : "" }));
+  }
+  const key = ev.view_key;
+  const teams = await teamsOf(sb, ev);
+  if (!q.team && !q.jersey) return send(res, 200, (nonce) => P.eventPage({ nonce, event: ev, teams, key }));
   const team = teams.find((t) => t.id === q.team) || null;
   const jersey = M.jerseyOf(q.jersey);
-  if (ev.status === "draft") return send(res, 200, (nonce) => P.eventPage({ nonce, event: ev, teams }));
+  if (ev.status === "draft") return send(res, 200, (nonce) => P.eventPage({ nonce, event: ev, teams, key }));
   if (!team || !jersey) {
     const error = !team ? "Pick a team." : "Use the jersey number only, like 7 or 23.";
-    return send(res, 400, (nonce) => P.eventPage({ nonce, event: ev, teams, team, jersey: field(q.jersey, 4), error }));
+    return send(res, 400, (nonce) => P.eventPage({ nonce, event: ev, teams, key, team, jersey: field(q.jersey, 4), error }));
   }
   const a = await athleteAt(sb, ev, team.id, jersey);
   const items = a ? await withPreviews(sb, await itemsFor(sb, ev, a.id, "event")) : [];
-  send(res, 200, (nonce) => P.eventPage({ nonce, event: ev, teams, team, jersey, items }));
+  send(res, 200, (nonce) => P.eventPage({ nonce, event: ev, teams, key, team, jersey, items }));
 }));
 
 router.post("/:code/checkout", page(async (req, res, sb) => {
   const ev = await eventByCode(sb, req.params.code);
   if (!ev || ev.status === "draft") return notFound(res);
   const b = req.body || {};
+  // The same code as the page it came from, or back to the way in.
+  const k = keyCheck(req, b.k, ev);
+  if (k === "slow") return slowDown(res);
+  if (k !== "ok") return res.redirect(303, `/m/${ev.code}`);
   const teams = await teamsOf(sb, ev);
   const team = teams.find((t) => t.id === b.team);
   const jersey = M.jerseyOf(b.jersey);
   const a = team && jersey ? await athleteAt(sb, ev, team.id, jersey) : null;
-  if (!a) return res.redirect(303, `/m/${ev.code}`);
-  await checkout(req, res, sb, { ev, athleteId: a.id, access: "event", back: `/m/${ev.code}?team=${encodeURIComponent(team.id)}&jersey=${jersey}` });
+  if (!a) return res.redirect(303, eventPath(ev));
+  await checkout(req, res, sb, { ev, athleteId: a.id, access: "event", back: eventPath(ev, `team=${encodeURIComponent(team.id)}&jersey=${jersey}`) });
 }));
 
 // ── The QR form ──────────────────────────────────────────────────────────
@@ -526,11 +562,19 @@ router.post("/:code/consent", page(async (req, res, sb) => {
   // The field people can't see: a bot filled it. It gets the usual answer.
   if (field(b.sm_trap)) return res.redirect(303, `/m/${ev.code}/consent/sent?m=1`);
   const teams = await teamsOf(sb, ev);
-  const values = { team_id: field(b.team_id, 40), jersey: field(b.jersey, 4), email: field(b.email, 200), level: field(b.level, 10), under_13: field(b.under_13, 3), guardian: field(b.guardian, 3) === "yes" };
+  const values = { team_id: field(b.team_id, 40), jersey: field(b.jersey, 4), email: field(b.email, 200), level: field(b.level, 10), age: field(b.age, 8), guardian: field(b.guardian, 3) === "yes" };
   const { errors, value } = M.consentInput({ ...values, guardian: values.guardian ? "yes" : "" });
   if (value.team_id && !teams.some((t) => t.id === value.team_id)) errors.push("team_id");
   const form = (status, formError = "") => send(res, status, (nonce) => P.consentPage({ nonce, event: ev, teams, values, errors, formError }));
-  if (errors.length) return form(400, errors.includes("level") && values.level === "public" && values.under_13 === "yes" ? "Showing publicly isn't open for athletes 12 or younger. Pick another choice." : "");
+  if (errors.length) {
+    const u13Level = errors.includes("level") && values.age === "u13" && (values.level === "sell" || values.level === "public");
+    const formError = u13Level
+      ? "For an athlete 12 or younger, choose Family only or Keep them out."
+      : errors.length === 1 && errors[0] === "guardian"
+        ? "Tick the box to say you're their parent or legal guardian, or the athlete as an adult."
+        : "";
+    return form(400, formError);
+  }
   // Only a flood stops the form outright; a keep-out gets through every other limit.
   if (!within([["writes", ev.id]])) return message(res, 429, "Too many tries", "The form is very busy right now. Ask our crew to record your choice, or try again later.");
   if (value.level !== "out" && !allowed(req, "consent")) return slowDown(res);
@@ -569,15 +613,16 @@ router.post("/:code/consent", page(async (req, res, sb) => {
       continue;
     }
     let q = sb.from("sm_market_consents").update({ ...p.write, updated_at: at }).eq("id", was.id).eq("level", was.level).eq("under_13", was.under_13);
+    q = was.age_band ? q.eq("age_band", was.age_band) : q.is("age_band", null);
     q = was.confirm_hash ? q.eq("confirm_hash", was.confirm_hash) : q.is("confirm_hash", null);
     q = was.confirmed_at ? q.eq("confirmed_at", was.confirmed_at) : q.is("confirmed_at", null);
     if (((await run(q.select("id"))) || []).length) plan = p;
   }
   if (!plan && value.level === "out") {
     // Still changing under us: a keep-out lands regardless.
-    const p = M.answerPlan({ level: "out", under_13: value.under_13, confirmed_at: null }, value, at);
-    const { level, pending_level, pending_under_13, confirm_hash, confirm_sent_at } = p.write;
-    await run(sb.from("sm_market_consents").update({ level, pending_level, pending_under_13, confirm_hash, confirm_sent_at, updated_at: at }).eq("athlete_id", a.id).eq("email", value.email));
+    const p = M.answerPlan({ level: "out", under_13: value.under_13, age_band: value.age_band, confirmed_at: null }, value, at);
+    const { level, pending_level, pending_under_13, pending_age_band, confirm_hash, confirm_sent_at } = p.write;
+    await run(sb.from("sm_market_consents").update({ level, pending_level, pending_under_13, pending_age_band, confirm_hash, confirm_sent_at, updated_at: at }).eq("athlete_id", a.id).eq("email", value.email));
     plan = p;
   }
   if (!plan) return message(res, 409, "Try again", "Your answer changed while we were saving it. Send the form again.");
@@ -593,7 +638,7 @@ router.post("/:code/consent", page(async (req, res, sb) => {
         ? M.consentEmail(ev, team.name, value.jersey, value.level, M.linkTo.confirm(plan.tok.token))
         : level === "out"
           ? M.keptOutEmail(ev, team.name, value.jersey)
-          : M.changedEmail(ev, team.name, value.jersey, level, plan.write.under_13);
+          : M.changedEmail(ev, team.name, value.jersey, level, plan.write.age_band);
       mailed = !!(await mailer.sendMail({ to: value.email, ...mail })).sent;
     } catch (e) {
       console.warn("[sm-market-public] consent email failed:", e && e.message);

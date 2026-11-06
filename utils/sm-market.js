@@ -10,11 +10,14 @@
 //   counts the moment it's asked for, the rest once confirmed from the
 //   guardian's email (or recorded by staff). Staff keep-out beats everything.
 //   No confirmed consent means nothing is shown or sold.
-// - Under 13 (any guardian saying so) is never public.
+// - 12 or younger (any guardian saying so, confirmed or not) is family only:
+//   never sold to other families, never public. Guardians also give an age
+//   band (12 or younger, 13 to 15, 16 or 17, 18 or older).
 // - A clip or photo belongs to the athletes whose tags a person confirmed. It
 //   is shown, and sold, only where every one of them allows it:
 //     the store (anyone browsing)        every athlete in it: public
-//     the event link (team and jersey)   every athlete in it: OK to sell or public
+//     the event link (team and jersey,   every athlete in it: OK to sell or public
+//       with the event's access code)
 //     a family's own link                that family's athlete: family or more;
 //                                        everyone else in it: OK to sell or more
 //   An item with no confirmed tag is shown nowhere.
@@ -36,6 +39,11 @@ const LEVEL_WORDS = Object.freeze({
   sell: "OK to sell",
   public: "OK to show publicly",
 });
+const AGE_BANDS = Object.freeze(["u13", "13_15", "16_17", "18_plus"]);
+const AGE_RANK = Object.freeze({ u13: 0, "13_15": 1, "16_17": 2, "18_plus": 3 });
+const AGE_WORDS = Object.freeze({ u13: "12 or younger", "13_15": "13 to 15", "16_17": "16 or 17", "18_plus": "18 or older" });
+// The event clips page's access code: 8 letters and digits, no 0/O or 1/I.
+const VIEW_KEY = /^[A-HJ-NP-Z2-9]{8}$/;
 const STATUSES = Object.freeze(["draft", "live", "closed"]);
 const MEDIA_STATUSES = Object.freeze(["uploaded", "processing", "review", "approved", "hidden", "failed"]);
 const DEFAULT_PRICES = Object.freeze({ clip: 1200, photo: 800 });
@@ -57,6 +65,24 @@ const codeOf = (v) => {
   const s = one(v, 12).toUpperCase();
   return CODE.test(s) ? s : null;
 };
+// The clips page's access code. Families type it as they see it, "ABCD-EFGH".
+function newViewKey() {
+  let s = "";
+  for (let i = 0; i < 8; i++) s += CODE_ALPHABET[crypto.randomInt(CODE_ALPHABET.length)];
+  return s;
+}
+const viewKeyOf = (v) => {
+  const s = one(v, 24).toUpperCase().replace(/[\s-]/g, "");
+  return VIEW_KEY.test(s) ? s : null;
+};
+const viewKeyShown = (k) => (VIEW_KEY.test(String(k || "")) ? `${k.slice(0, 4)}-${k.slice(4)}` : "");
+// Compared in constant time, so it can't be found a letter at a time.
+function viewKeyMatches(given, ev) {
+  const k = viewKeyOf(given);
+  const want = ev && String(ev.view_key || "");
+  if (!k || !VIEW_KEY.test(want)) return false;
+  return crypto.timingSafeEqual(Buffer.from(k), Buffer.from(want));
+}
 // A link token: 32 random bytes. The database keeps only its hash.
 function newToken() {
   const token = crypto.randomBytes(32).toString("base64url");
@@ -156,13 +182,19 @@ function consentInput(raw) {
   const email = one(r.email, 200).toLowerCase();
   v.email = isEmail(email) ? email : (errors.push("email"), null);
   v.level = LEVELS.includes(r.level) ? r.level : (errors.push("level"), null);
-  if (r.under_13 === true || r.under_13 === "yes") v.under_13 = true;
-  else if (r.under_13 === false || r.under_13 === "no") v.under_13 = false;
-  else errors.push("under_13");
-  // Never public under 13: the form shouldn't offer it, and it isn't taken.
-  if (v.level === "public" && v.under_13 === true) errors.push("level");
+  if (AGE_BANDS.includes(r.age)) v.age_band = r.age;
+  // A keep-out doesn't wait on an age: without one, it's taken as the
+  // youngest band, the most careful reading.
+  else if (v.level === "out") v.age_band = "u13";
+  else errors.push("age");
+  if (v.age_band) v.under_13 = v.age_band === "u13";
+  // 12 or younger is family only (or kept out): the form says so, and
+  // selling to other families or showing publicly isn't taken.
+  if (v.under_13 && (v.level === "sell" || v.level === "public")) errors.push("level");
+  // A parent or legal guardian (18 or older), or the athlete as a legal
+  // adult. A keep-out is taken from anyone: it only ever protects.
   const guardian = r.guardian === true || r.guardian === "yes" || r.guardian === "on";
-  if (!guardian) errors.push("guardian");
+  if (!guardian && v.level !== "out") errors.push("guardian");
   return { errors, value: v };
 }
 
@@ -176,19 +208,27 @@ function effectiveLevel(athlete, consents) {
   const confirmed = list.filter((c) => c.confirmed_at && LEVELS.includes(c.level));
   if (!confirmed.length) return "none";
   let level = confirmed.reduce((lo, c) => (RANK[c.level] < RANK[lo] ? c.level : lo), "public");
-  // Any guardian saying under 13 makes the athlete under 13.
-  if (level === "public" && list.some((c) => c.under_13 !== false)) level = "sell";
+  // Any guardian saying 12 or younger (confirmed or not) makes it family only.
+  if (RANK[level] > RANK.family && list.some((c) => c.under_13 !== false)) level = "family";
   return level;
 }
 const levelAtLeast = (level, want) => (RANK[level] || 0) >= RANK[want] && level !== "none" && level !== "out";
 
+// The age band an answer stands for. A row without one reads carefully: 12
+// or younger unless it says otherwise, and then the youngest band above that.
+const bandOf = (row) => (row && AGE_BANDS.includes(row.age_band) ? row.age_band : row && row.under_13 === false ? "13_15" : "u13");
+const youngerBand = (a, b) => (AGE_RANK[a] <= AGE_RANK[b] ? a : b);
+const withBand = (b) => ({ age_band: b, under_13: b === "u13" });
+// 12 or younger is family only, so a row saying so never holds more.
+const capU13 = (level, band) => (band === "u13" && RANK[level] > RANK.family ? "family" : level);
+
 // Would a guardian's new answer loosen the one of theirs that counts now? A
-// keep-out never does. A higher level does, and so does "not 12 or younger"
-// after "12 or younger". What loosens waits for their email; the rest counts
-// at once.
+// keep-out never does. A higher level does, and so does an older age band
+// ("16 or 17" after "12 or younger"). What loosens waits for their email;
+// the rest counts at once.
 function looser(current, answer) {
   if (answer.level === "out") return false;
-  return RANK[answer.level] > RANK[current.level] || (current.under_13 !== false && answer.under_13 === false);
+  return RANK[answer.level] > RANK[current.level] || AGE_RANK[answer.age_band] > AGE_RANK[bandOf(current)];
 }
 
 // Who's in an item: the athletes whose tags a person confirmed.
@@ -303,37 +343,54 @@ function mailboxOf(e) {
 // What a guardian's QR answer does to their answer so far (was: their row,
 // or null). It returns the fields to write, a confirm token when the answer
 // needs their email to count, and whether it counts now.
-//   - A keep-out counts at once, over anything.
+//   - A keep-out counts at once, over anything. The youngest age band said so
+//     far stays.
 //   - Nothing of theirs counts yet: the new answer waits for their email. An
 //     unconfirmed "12 or younger" already counts, so it carries over until a
 //     change to it is confirmed.
-//   - Their answer counts: what's more careful counts now; what loosens (or
-//     the same answer again, for a fresh family link) waits for their email.
-// Whatever counts now is the guardian's QR answer, so a staff-recorded row
-// becomes theirs; a change still waiting leaves it as it was.
+//   - Their answer counts: what's more careful (a lower level, a younger
+//     band) counts now; what loosens (or the same answer again, for a fresh
+//     family link) waits for their email.
+// A row saying 12 or younger never holds more than family only. Whatever
+// counts now is the guardian's QR answer, so a staff-recorded row becomes
+// theirs; a change still waiting leaves it as it was.
 function answerPlan(was, value, at) {
-  const wasU13 = !!was && was.under_13 !== false;
+  const wasBand = was ? bandOf(was) : null;
   if (value.level === "out") {
-    return { tok: null, now: true, write: { level: "out", under_13: wasU13 || value.under_13, pending_level: null, pending_under_13: null, confirm_hash: null, confirm_sent_at: null, source: "qr", recorded_by: null } };
+    const b = wasBand ? youngerBand(wasBand, value.age_band) : value.age_band;
+    return { tok: null, now: true, write: { level: "out", ...withBand(b), pending_level: null, pending_under_13: null, pending_age_band: null, confirm_hash: null, confirm_sent_at: null, source: "qr", recorded_by: null } };
   }
   const counts = !!was && (!!was.confirmed_at || was.level === "out");
   if (!counts) {
     const tok = newToken();
-    const keepU13 = wasU13 && !value.under_13;
+    const keepU13 = wasBand === "u13" && value.age_band !== "u13";
+    const b = keepU13 ? "u13" : value.age_band;
     return {
       tok,
       now: false,
-      write: { level: value.level, under_13: keepU13 || value.under_13, pending_level: keepU13 ? value.level : null, pending_under_13: keepU13 ? false : null, confirm_hash: tok.hash, confirm_sent_at: at, confirmed_at: null, family_hash: null, source: "qr", recorded_by: null },
+      write: {
+        level: capU13(value.level, b),
+        ...withBand(b),
+        pending_level: keepU13 ? value.level : null,
+        pending_under_13: keepU13 ? false : null,
+        pending_age_band: keepU13 ? value.age_band : null,
+        confirm_hash: tok.hash,
+        confirm_sent_at: at,
+        confirmed_at: null,
+        family_hash: null,
+        source: "qr",
+        recorded_by: null,
+      },
     };
   }
-  const same = value.level === was.level && value.under_13 === wasU13;
-  const level = RANK[value.level] < RANK[was.level] ? value.level : was.level;
-  const under_13 = wasU13 || value.under_13;
+  const same = value.level === was.level && value.age_band === wasBand;
+  const b = youngerBand(wasBand, value.age_band);
+  const level = capU13(RANK[value.level] < RANK[was.level] ? value.level : was.level, b);
   if (same || looser(was, value)) {
     const tok = newToken();
-    return { tok, now: false, write: { level, under_13, pending_level: value.level, pending_under_13: value.under_13, confirm_hash: tok.hash, confirm_sent_at: at } };
+    return { tok, now: false, write: { level, ...withBand(b), pending_level: value.level, pending_under_13: value.age_band === "u13", pending_age_band: value.age_band, confirm_hash: tok.hash, confirm_sent_at: at } };
   }
-  return { tok: null, now: true, write: { level, under_13, pending_level: null, pending_under_13: null, confirm_hash: null, confirm_sent_at: null, source: "qr", recorded_by: null } };
+  return { tok: null, now: true, write: { level, ...withBand(b), pending_level: null, pending_under_13: null, pending_age_band: null, confirm_hash: null, confirm_sent_at: null, source: "qr", recorded_by: null } };
 }
 
 function helpEmail(env = process.env) {
@@ -346,7 +403,8 @@ function siteBase(env = process.env) {
 // The family-facing addresses, on subjectmedias.com (its /m/ rewrite reaches
 // routes/sm-market-public.js). A token in a link is never stored, only its hash.
 const linkTo = {
-  event: (code) => `${siteBase()}/m/${code}`,
+  // With the access code: the link on the clips QR and the check-in handout.
+  event: (code, key) => `${siteBase()}/m/${code}${VIEW_KEY.test(String(key || "")) ? `?k=${key}` : ""}`,
   consent: (code) => `${siteBase()}/m/${code}/consent`,
   confirm: (token) => `${siteBase()}/m/confirm/${token}`,
   family: (token) => `${siteBase()}/m/f/${token}`,
@@ -356,7 +414,7 @@ function consentEmail(event, team, jersey, level, link) {
   const what = {
     out: "keep them out of everything we sell",
     family: "only your family sees and buys their footage",
-    sell: "anyone with their team and jersey number can see and buy their footage",
+    sell: "families at the event can find and buy their footage by team and jersey number",
     public: "their footage can also be shown publicly in our store",
   }[level];
   return {
@@ -407,11 +465,11 @@ function keptOutEmail(event, team, jersey) {
     ].join("\n"),
   };
 }
-function changedEmail(event, team, jersey, level, under13) {
+function changedEmail(event, team, jersey, level, band) {
   return {
     subject: `Changed: ${team} #${jersey} at ${event.name}`,
     text: [
-      `Someone using this email changed the choice for ${team} #${jersey} at ${event.name} to: ${LEVEL_WORDS[level]}${under13 ? ", 12 or younger" : ""}.`,
+      `Someone using this email changed the choice for ${team} #${jersey} at ${event.name} to: ${LEVEL_WORDS[level]}${AGE_WORDS[band] ? `, ${AGE_WORDS[band]}` : ""}.`,
       "",
       "A more careful choice counts at once, so it's in effect now.",
       "",
@@ -444,12 +502,19 @@ module.exports = {
   LEVELS,
   LEVEL_WORDS,
   RANK,
+  AGE_BANDS,
+  AGE_WORDS,
+  VIEW_KEY,
   STATUSES,
   MEDIA_STATUSES,
   DEFAULT_PRICES,
   MAX_UPLOAD_BYTES,
   newCode,
   codeOf,
+  newViewKey,
+  viewKeyOf,
+  viewKeyShown,
+  viewKeyMatches,
   newToken,
   hashToken,
   tokenOk,
@@ -461,6 +526,7 @@ module.exports = {
   consentInput,
   effectiveLevel,
   levelAtLeast,
+  bandOf,
   looser,
   answerPlan,
   mailboxOf,

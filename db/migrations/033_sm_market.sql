@@ -15,9 +15,16 @@
 --     counts once confirmed from the guardian's email (keep out counts at
 --     once), or a staff member records it. The most careful answer among the
 --     guardians wins, and staff keep-out beats everything. Nothing of an
---     athlete is shown or sold without a confirmed consent. An athlete under
---     13 is never public. A guardian's new answer that loosens what counts
---     waits, as pending_*, until it's confirmed; what tightens counts at once.
+--     athlete is shown or sold without a confirmed consent. An athlete 12 or
+--     younger is family only: never sold to other families, never public.
+--     The guardian also gives an age band (12 or younger, 13 to 15, 16 or
+--     17, 18 or older), so rules that turn on 16 or 18 can be applied. A
+--     guardian's new answer that loosens what counts waits, as pending_*,
+--     until it's confirmed; what tightens counts at once.
+--   * The event's clips page needs its access code (view_key), handed out
+--     at check-in, never on the public consent poster.
+--   * A clip goes on sale only once an approver checks that everyone who
+--     stands out in it is tagged, and never with a kept-out athlete in it.
 --   * Tags: the AI suggests jersey numbers; only a person confirms them, and
 --     only confirmed tags decide whose a clip is.
 --   * Orders: the buyer's email, what they bought, the Stripe checkout. The
@@ -40,6 +47,11 @@ create table if not exists public.sm_market_events (
   status text not null default 'draft' check (status in ('draft', 'live', 'closed')),
   clip_cents int not null default 1200 check (clip_cents between 100 and 100000),
   photo_cents int not null default 800 check (photo_cents between 100 and 100000),
+  -- The clips page's access code: subjectmedias.com/m/<code>?k=<view_key>,
+  -- on the clips QR and the check-in handout. One code shared by the event's
+  -- families (not a person's link), kept as is so staff can show it again,
+  -- and changed if it leaks.
+  view_key text not null check (view_key ~ '^[A-HJ-NP-Z2-9]{8}$'),
   created_by text not null check (char_length(created_by) between 3 and 254),
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
@@ -81,13 +93,17 @@ create table if not exists public.sm_market_consents (
     and email ~ '^[a-z0-9._+''-]+@[a-z0-9-]+(\.[a-z0-9-]+)*\.[a-z]{2,}$'),
   level text not null check (level in ('out', 'family', 'sell', 'public')),
   under_13 boolean not null,
+  -- The age band given: 12 or younger, 13 to 15, 16 or 17, 18 or older.
+  -- under_13 is the first of them.
+  age_band text not null check (age_band in ('u13', '13_15', '16_17', '18_plus')),
   source text not null default 'qr' check (source in ('qr', 'staff')),
   -- The emailed confirmation link's hash, until it's used.
   confirm_hash text check (confirm_hash is null or confirm_hash ~ '^[0-9a-f]{64}$'),
   -- A change that loosens the answer above, waiting for that link. Until
-  -- it's confirmed, level and under_13 are what count.
+  -- it's confirmed, level, under_13 and age_band are what count.
   pending_level text check (pending_level is null or pending_level in ('family', 'sell', 'public')),
   pending_under_13 boolean,
+  pending_age_band text check (pending_age_band is null or pending_age_band in ('u13', '13_15', '16_17', '18_plus')),
   confirm_sent_at timestamptz,
   confirmed_at timestamptz,
   -- The family link's hash, set once confirmed.
@@ -96,16 +112,20 @@ create table if not exists public.sm_market_consents (
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   unique (athlete_id, email),
-  -- Never public under 13.
-  constraint sm_market_consents_public_chk check (level <> 'public' or not under_13),
+  -- 12 or younger: family only or kept out. Never sold to other families,
+  -- never public.
+  constraint sm_market_consents_u13_chk check (not under_13 or level in ('out', 'family')),
+  constraint sm_market_consents_age_chk check (under_13 = (age_band = 'u13')),
   -- A staff member who records a consent confirms it.
   constraint sm_market_consents_staff_chk check (source = 'qr' or (confirmed_at is not null and recorded_by is not null)),
   constraint sm_market_consents_family_chk check (family_hash is null or confirmed_at is not null),
-  -- A pending change is whole, has its link, and is never public under 13.
+  -- A pending change is whole, has its link, and keeps the 12-or-younger rule.
   constraint sm_market_consents_pending_chk check (
     (pending_level is null) = (pending_under_13 is null)
+    and (pending_level is null) = (pending_age_band is null)
     and (pending_level is null or confirm_hash is not null)
-    and not (pending_level = 'public' and pending_under_13))
+    and (pending_age_band is null or pending_under_13 = (pending_age_band = 'u13'))
+    and not (pending_under_13 and pending_level in ('sell', 'public')))
 );
 create index if not exists sm_market_consents_athlete_idx on public.sm_market_consents (athlete_id);
 create unique index if not exists sm_market_consents_confirm_idx on public.sm_market_consents (confirm_hash) where confirm_hash is not null;
@@ -133,11 +153,16 @@ create table if not exists public.sm_market_media (
   processed_at timestamptz,
   approved_at timestamptz,
   approved_by text check (approved_by is null or char_length(approved_by) <= 254),
+  -- An approver's check that everyone who stands out in it is tagged, so no
+  -- untagged child is sold by accident.
+  everyone_tagged_at timestamptz,
+  everyone_tagged_by text check (everyone_tagged_by is null or char_length(everyone_tagged_by) <= 254),
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   unique (id, event_id),
   constraint sm_market_media_ready_chk check (status not in ('review', 'approved') or (preview_key is not null and poster_key is not null)),
-  constraint sm_market_media_approved_chk check (status <> 'approved' or (approved_at is not null and approved_by is not null))
+  constraint sm_market_media_approved_chk check (
+    status <> 'approved' or (approved_at is not null and approved_by is not null and everyone_tagged_at is not null and everyone_tagged_by is not null))
 );
 create index if not exists sm_market_media_event_idx on public.sm_market_media (event_id, status);
 
