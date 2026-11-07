@@ -54,6 +54,8 @@ before(async () => {
   for (const r of ["anon", "authenticated"])
     await pool.query(`do $$ begin if not exists (select 1 from pg_roles where rolname = '${r}') then create role ${r} nologin; end if; end $$`);
   await pool.query(fs.readFileSync(path.join(__dirname, "..", "db", "migrations", "015_campaign_deal_graph.sql"), "utf8"));
+  // 038 pins every deal function's search path; the whole file runs with it.
+  await pool.query(fs.readFileSync(path.join(__dirname, "..", "db", "migrations", "038_pin_function_search_path.sql"), "utf8"));
   campaignDb.setPool(pool);
 
   // Two tenants: TOJ (four members) and an outside agency.
@@ -390,5 +392,27 @@ test("routes: 503 until CAMPAIGN_DATABASE_URL is set", async () => {
   } finally {
     if (saved) process.env.CAMPAIGN_DATABASE_URL = saved;
     campaignDb.setPool(pool);
+  }
+});
+
+test("every deal function runs with a pinned, empty search path (migration 038)", async () => {
+  const { rows } = await pool.query(
+    "select p.proname, p.proconfig from pg_proc p join pg_namespace n on n.oid = p.pronamespace where n.nspname = 'deal' order by 1"
+  );
+  assert.ok(rows.length >= 12);
+  for (const r of rows) assert.ok((r.proconfig || []).includes('search_path=""'), r.proname);
+  // A caller's search path can't reach inside: a decoy deal.actor() in the
+  // caller's first schema changes nothing.
+  await pool.query("create schema if not exists decoy");
+  await pool.query("create or replace function decoy.coalesce(text, text) returns text language sql as $$ select 'decoy' $$");
+  const c = await pool.connect();
+  try {
+    await c.query("set search_path = decoy, public");
+    const { rows: [x] } = await c.query("select deal.actor_role($1) as role", ["00000000-0000-0000-0000-000000000000"]);
+    assert.equal(x.role, null);
+  } finally {
+    await c.query("reset search_path");
+    c.release();
+    await pool.query("drop schema decoy cascade");
   }
 });
