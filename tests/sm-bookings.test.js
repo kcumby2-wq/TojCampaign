@@ -296,9 +296,14 @@ test("the form saves a booking and alerts staff by push and email", async () => 
   assert.equal(pushes.length, 1);
   assert.equal(pushes[0].to, "kyron@toj.test");
   assert.ok(!JSON.stringify(pushes[0].payload).includes("Jamie"));
-  assert.equal(mails.length, 1);
-  assert.deepEqual(mails[0].to, ["kyron@toj.test"]);
-  assert.match(mails[0].text, /Amy Near/);
+  const staff = mails.filter((m) => m.to.includes("kyron@toj.test"));
+  assert.equal(staff.length, 1);
+  assert.deepEqual(staff[0].to, ["kyron@toj.test"]);
+  assert.match(staff[0].text, /Amy Near/);
+  // And the booker's own note.
+  const theirs = mails.filter((m) => m.to.includes("jamie@example.com"));
+  assert.equal(theirs.length, 1);
+  assert.equal(theirs[0].subject, "Subject Medias: we got your booking request");
   assert.ok(db.tables.sm_bookings[0].alerted_at, "the row notes when the alert went");
   assert.equal(db.tables.sm_bookings[0].matches.length, 5);
 });
@@ -365,7 +370,9 @@ test("120 form bookings an hour in all; at most 30 alert emails an hour, pushes 
   await wait();
   await wait();
   assert.equal(db.tables.sm_bookings.length, 120, "every accepted booking is stored");
-  assert.equal(mails.length, 30);
+  assert.equal(mails.filter((m) => m.to.includes("kyron@toj.test")).length, 30);
+  // One address booked 120 times: its owner hears from us twice, not 120 times.
+  assert.equal(mails.filter((m) => m.to.includes("jamie@example.com")).length, 2);
   assert.equal(pushes.length, 120);
 });
 
@@ -529,4 +536,184 @@ test("staffing: a screened adult only; closed bookings keep who they had", async
   assert.equal(db.tables.sm_bookings[0].staffed_creator_id, "b", "who delivered it stays");
   assert.equal((await call("GET", "/api/sm/bookings", undefined, {}, cookie)).data.bookings.length, 0);
   assert.equal((await call("GET", "/api/sm/bookings?all=1", undefined, {}, cookie)).data.bookings.length, 1);
+});
+
+// ── The booker's note, the offer, and details after a direct Buy (034) ──
+const SITE_LINK = (sid) => `https://www.subjectmedias.com/?paid=${sid}#details`;
+const theirs = (addr) => mails.filter((m) => m.to.includes(addr));
+const staffMails = () => mails.filter((m) => m.to.includes("kyron@toj.test"));
+const detailsCall = (body, visitor = "198.51.100.9") => call("POST", "/api/sm/bookings/paid", { details: true, adult_confirmed: true, ...body }, { "X-SM-Secret": SECRET, "X-SM-Visitor": visitor });
+
+test("the 10% offer: only the homepage's claim is kept", () => {
+  for (const [given, want] of [["first10", "first10"], ["FIRST10", null], ["free", null], [true, null], [{ a: 1 }, null], [undefined, null]]) {
+    assert.equal(B.normalize(good({ offer: given }), { now: NOW }).value.offer, want, String(given));
+  }
+});
+
+test("the booker's note carries fixed words only, never what anyone typed", () => {
+  const junk = "Win $500 at http://evil.example now";
+  const { value } = B.normalize(good({ event_date: "2026-11-21", event_name: junk, event_city: junk, contact_name: junk, notes: junk, team_jersey: junk, sport: junk, offer: "first10" }), { now: NOW });
+  const m = B.bookerEmail({ ...value, id: "b1", source: "form" });
+  assert.equal(m.subject, "Subject Medias: we got your booking request");
+  assert.ok(!m.text.includes("evil") && !m.text.includes("$500"), m.text);
+  assert.match(m.text, /What: Video coverage/);
+  assert.match(m.text, /Game day: Sat, Nov 21, 2026/);
+  assert.match(m.text, /State: CA/);
+  assert.doesNotMatch(m.text, /Sport:/, "a sport off the list is Other, and Other isn't worth saying");
+  assert.match(m.text, /Offer: 10% off your first package/);
+  assert.match(m.text, /Nothing is booked or charged until then/);
+  assert.match(m.text, /Didn't send this\? You can ignore this email/);
+  // Bought from a payment link: thanks, the amount, and the details link when we need it.
+  const paid = B.normalizePaid({ stripe_session_id: "cs_live_abcdefgh1234", package: "elite", amount_cents: 13999, contact_name: junk, notes: junk }).value;
+  const asked = B.bookerEmail({ ...paid, id: "b2" }, { detailsUrl: SITE_LINK("cs_live_abcdefgh1234") });
+  assert.equal(asked.subject, "Subject Medias: thanks for booking");
+  assert.match(asked.text, /Paid: \$139\.99/);
+  assert.ok(asked.text.includes(SITE_LINK("cs_live_abcdefgh1234")));
+  assert.ok(!asked.text.includes("evil"));
+  assert.doesNotMatch(asked.text, /Offer:/);
+  const told = B.bookerEmail({ ...paid, id: "b2", details_at: "2026-10-28T15:00:00Z", event_date: "2026-11-21", event_state: "TX" });
+  assert.doesNotMatch(told.text, /One more step/);
+  assert.match(told.text, /Game day: Sat, Nov 21, 2026/);
+});
+
+test("details after a direct Buy: the date, the place and the adult box, as on the form", () => {
+  const sid = "cs_live_details12345";
+  const bad = B.normalizePaid({ stripe_session_id: sid, details: true, athletes: "0", contact_phone: "12" }, { now: NOW });
+  for (const f of ["event_date", "event_city", "event_state", "athletes", "contact_phone", "adult_confirmed"]) assert.ok(bad.errors.includes(f), f);
+  const ok = B.normalizePaid({ stripe_session_id: sid, details: true, adult_confirmed: true, event_date: "2026-11-21", event_city: "Dallas", event_state: "tx", athletes: "12", team_jersey: "Elite 7v7 #4" }, { now: NOW });
+  assert.deepEqual(ok.errors, []);
+  assert.equal(ok.value.details, true);
+  assert.equal(ok.value.region, "south_central");
+  assert.equal(ok.value.athletes, 12);
+  // The webhook stays easy-going: a payment always lands.
+  assert.deepEqual(B.normalizePaid({ stripe_session_id: sid, event_date: "soon" }, { now: NOW }).errors, []);
+  assert.equal(B.normalizePaid({ stripe_session_id: sid, event_date: "2020-01-01" }, { now: NOW }).value.event_date, "2020-01-01");
+});
+
+test("filling in: only what's missing; notes add on, saying where they came from", () => {
+  const have = { source: "stripe", package: "unsure", kind: "athlete", contact_name: B.STRIPE_NAME, event_city: "Austin", event_state: null, event_date: null, notes: "Event & date: Fall Classic", contact_phone: "555-111-2222" };
+  const inc = { package: "video", kind: "athlete", contact_name: "Pat Buyer", event_city: "Dallas", event_state: "TX", event_date: "2026-11-21", notes: "Gate 4", contact_phone: "555-999-0000" };
+  const p = B.fillPatch(have, inc, { from: "the event details form" });
+  assert.deepEqual(p, { event_date: "2026-11-21", event_state: "TX", region: "south_central", package: "video", kind: "athlete", contact_name: "Pat Buyer", notes: "Event & date: Fall Classic\n\nFrom the event details form: Gate 4" });
+  assert.deepEqual(B.fillPatch({ ...have, ...p }, inc, { from: "the event details form" }), {}, "the same answers twice change nothing");
+});
+
+test("the booker hears once for a request, and not again when it's paid", async () => {
+  const made = await form(good({ event_date: "2027-01-16", offer: "first10" }));
+  await wait();
+  const row = db.tables.sm_bookings[0];
+  assert.equal(row.offer, "first10");
+  assert.ok(row.booker_emailed_at);
+  const note = theirs("jamie@example.com");
+  assert.equal(note.length, 1);
+  assert.equal(note[0].replyTo, "hello@subjectmedias.com");
+  assert.match(note[0].text, /Offer: 10% off your first package/);
+  assert.ok(!note[0].text.includes("Lightning") && !note[0].text.includes("Los Angeles") && !note[0].text.includes("Pylon"), "nothing typed");
+  assert.match(staffMails()[0].text, /Offer: claimed 10% off the first package/);
+  // Paid from the success panel: Stripe's receipt covers it.
+  await paidCall({ stripe_session_id: "cs_live_joinedmail1", booking_id: made.data.id, package: "video", amount_cents: 9999, contact_email: "jamie@example.com" });
+  await wait();
+  assert.equal(theirs("jamie@example.com").length, 1);
+  const cookie = await staffCookie();
+  const list = await call("GET", "/api/sm/bookings", undefined, {}, cookie);
+  assert.equal(list.data.bookings[0].offer, "first10");
+});
+
+test("a direct Buy: thanks, with a link to tell us about the game; a retry sends nothing more", async () => {
+  const sid = "cs_live_directbuy123";
+  await paidCall({ stripe_session_id: sid, package: "video", amount_cents: 9999, contact_email: "Buyer@Example.com" });
+  await wait();
+  const note = theirs("buyer@example.com");
+  assert.equal(note.length, 1);
+  assert.equal(note[0].subject, "Subject Medias: thanks for booking");
+  assert.ok(note[0].text.includes(SITE_LINK(sid)), note[0].text);
+  await paidCall({ stripe_session_id: sid, package: "video", amount_cents: 9999, contact_email: "buyer@example.com" });
+  await wait();
+  assert.equal(theirs("buyer@example.com").length, 1);
+  assert.equal(pushes.length, 1, "a retry is quiet");
+});
+
+test("the booker's note couldn't go: it's let go, so the next delivery can send it", async () => {
+  mailer.setSender(async (m) => { mails.push(m); return m.to.includes("kyron@toj.test") ? { sent: true } : { sent: false, reason: "send_failed" }; });
+  try {
+    await form(good({ event_date: "2027-01-16" }));
+    await wait();
+    assert.equal(theirs("jamie@example.com").length, 1, "it tried");
+    assert.equal(db.tables.sm_bookings[0].booker_emailed_at, null);
+  } finally {
+    mailer.setSender(async (m) => { mails.push(m); return { sent: true }; });
+  }
+});
+
+test("details after the webhook: filled in once, staff hear, nobody's emailed twice", async () => {
+  const sid = "cs_live_webhookfirst1";
+  await paidCall({ stripe_session_id: sid, package: "elite", amount_cents: 13999, contact_email: "buyer@example.com", contact_name: "Pat Buyer" });
+  await wait();
+  pushes = [];
+  mails = [];
+  const r = await detailsCall({ stripe_session_id: sid, package: "elite", amount_cents: 13999, contact_email: "buyer@example.com", event_date: "2026-11-21", event_city: "Dallas", event_state: "TX", sport: "7v7 Football", team_jersey: "Elite 7v7 #4", notes: "Field 3" });
+  assert.equal(r.status, 200);
+  assert.equal(db.tables.sm_bookings.length, 1);
+  const row = db.tables.sm_bookings[0];
+  assert.equal(row.event_city, "Dallas");
+  assert.equal(row.region, "south_central");
+  assert.equal(row.team_jersey, "Elite 7v7 #4");
+  assert.ok(row.details_at);
+  assert.match(row.notes, /From the event details form: Field 3/);
+  await wait();
+  assert.equal(pushes.length, 1);
+  assert.equal(pushes[0].payload.title, "Event details in");
+  assert.match(staffMails()[0].subject, /^Event details in: Elite coverage, Dallas, TX/);
+  assert.equal(theirs("buyer@example.com").length, 0);
+  // A second answer changes nothing.
+  const again = await detailsCall({ stripe_session_id: sid, event_date: "2026-12-05", event_city: "Houston", event_state: "TX", notes: "Changed my mind" });
+  assert.equal(again.status, 200);
+  assert.equal(again.data.already, true);
+  assert.equal(db.tables.sm_bookings[0].event_city, "Dallas");
+  assert.doesNotMatch(db.tables.sm_bookings[0].notes, /Changed my mind/);
+});
+
+test("details before the webhook: one booking, their answers kept; the webhook fills only the gaps", async () => {
+  const sid = "cs_live_detailsfirst1";
+  const r = await detailsCall({ stripe_session_id: sid, package: "video", amount_cents: 9999, contact_email: "buyer@example.com", contact_name: "Pat Buyer", event_date: "2026-11-21", event_city: "Dallas", event_state: "TX" });
+  assert.equal(r.status, 200);
+  await wait();
+  assert.equal(pushes.length, 1);
+  assert.equal(pushes[0].payload.title, "Paid booking");
+  const note = theirs("buyer@example.com");
+  assert.equal(note.length, 1);
+  assert.ok(!note[0].text.includes("?paid="), "they've told us already: no link");
+  const hook = await paidCall({ stripe_session_id: sid, package: "video", amount_cents: 9999, contact_email: "buyer@example.com", contact_phone: "555-010-9999", event_city: "Austin", event_state: "TX", notes: "Team: Elite" });
+  assert.equal(hook.status, 200);
+  assert.equal(hook.data.duplicate, true);
+  assert.equal(db.tables.sm_bookings.length, 1);
+  const row = db.tables.sm_bookings[0];
+  assert.equal(row.event_city, "Dallas", "the buyer's answer stands");
+  assert.equal(row.contact_phone, "555-010-9999", "a gap filled");
+  assert.match(row.notes, /From the checkout: Team: Elite/);
+  await wait();
+  assert.equal(pushes.length, 1, "no second alert");
+  assert.equal(theirs("buyer@example.com").length, 1, "no second note");
+});
+
+test("details: wrong answers name their fields; the hidden field and the form's limits apply", async () => {
+  const sid = "cs_live_detailslimit1";
+  const bad = await detailsCall({ stripe_session_id: sid, event_date: "someday", adult_confirmed: false });
+  assert.equal(bad.status, 400);
+  for (const f of ["event_date", "event_city", "event_state", "adult_confirmed"]) assert.ok(bad.data.fields.includes(f), f);
+  const bot = await detailsCall({ stripe_session_id: sid, event_date: "2026-11-21", event_city: "Dallas", event_state: "TX", company: "Acme" });
+  assert.equal(bot.status, 200);
+  assert.equal((db.tables.sm_bookings || []).length, 0);
+  for (let i = 0; i < 8; i++) await detailsCall({ stripe_session_id: sid, event_date: "x" }, "198.51.100.77");
+  assert.equal((await detailsCall({ stripe_session_id: sid, event_date: "x" }, "198.51.100.77")).status, 429);
+});
+
+test("a details answer never joins a request: the request keeps its own details", async () => {
+  const made = await form(good({ event_date: "2027-01-16" }));
+  await wait();
+  const r = await detailsCall({ stripe_session_id: "cs_live_neverjoins1", booking_id: made.data.id, event_date: "2026-11-21", event_city: "Dallas", event_state: "TX" });
+  assert.equal(r.status, 200);
+  const request = db.tables.sm_bookings.find((b) => b.id === made.data.id);
+  assert.equal(request.stripe_session_id || null, null);
+  assert.equal(request.event_city, "Los Angeles");
 });
