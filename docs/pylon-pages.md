@@ -89,7 +89,7 @@ Pick the Stripe account that takes Pylon's payments (per the Pylon agreement). T
 4. Test: sign in to the app on tojcampaign.com, open a Pylon page, send a player request, pay with Stripe's test card, and check the request shows "Test payment" in the app and the `[TEST]` receipt note arrives. Signed out, the same page should say "Send request".
 5. Live: swap in the live restricted key, add the live webhook endpoint and its secret, and set `PYLON_STRIPE_LIVE=yes`. A live key does nothing without it.
 
-Optional: `PYLON_HELP_EMAIL` (where replies go), `PYLON_SITE_BASE` (where the pages live, default https://tojcampaign.com; Stripe sends people back there, and posts from it are accepted).
+Optional: `PYLON_HELP_EMAIL` (where replies go), `PYLON_APPROVAL_REPLY_TO` (an address nobody reads, for replies to the Concierge's approval emails; unset, they go back to the family), `PYLON_SITE_BASE` (where the pages live, default https://tojcampaign.com; Stripe sends people back there, and posts from it are accepted).
 
 ## The newsletter list
 
@@ -99,6 +99,38 @@ Optional: `PYLON_HELP_EMAIL` (where replies go), `PYLON_SITE_BASE` (where the pa
 
 The page asks them to tap Unsubscribe (so an email scanner opening the link changes nothing), then takes the address off.
 
+## The Concierge's messages to coaches
+
+Nothing goes to a college coach unless the person who signed up for the Concierge approved that exact message, to that exact coach and program. That's the athlete's parent or legal guardian, or the athlete at 18 or older: the request's contact, whom staff have checked on a call or in person (**I checked: it's them** on the request).
+
+In the app, a Concierge request has **Messages to coaches**:
+
+1. **New message**: the coach, their email, the program, the level, the subject and the message.
+2. **Ask the family to approve** emails the request's contact a one-time link. It's offered only once the contact is checked, and only while the request is open (not Done or Closed). Staff never see the link. It works once, for 14 days. Asking again replaces it. Changing anything the family is shown (the coach, their email, the program, the level, the subject or the message) while a link is out cancels the link. **Cancel the link** stops one that went to the wrong place.
+3. The family reads the message exactly as it would go out, types their name, ticks that they're the parent or guardian (or the athlete, 18+), and approves or declines. Staff get a push and an email saying which message was decided. The family gets a receipt by email, so if anyone else used their link, they find out at once.
+4. Once approved, the message can't change. Give it an hour (the family's receipt), then send it from your own email: **Open in email** fills it in (a very long message is copied instead: the address, the subject and the message each have their own Copy), then **Mark sent**.
+5. If the family says to stop an approved message, **The family took it back** (two taps): it can never be marked sent. Write a new one if they want another.
+6. When a coach writes back, **A coach replied** adds a line to the message's history. Real interest (a camp invite, an offer): call the family too.
+7. **Weekly update for the family** writes the week's update from the history: what went out, what came back, what's waiting on them. Read it over, then send it from your email.
+
+Every card change carries what the card showed: if the family answered (or someone else asked) meanwhile, the click is refused and the card shows what's there now.
+
+The link is safe from the places links usually leak:
+- it carries the token after `#t=`, which browsers never send to a server, so no request log holds it; the page keeps it for that tab only (a phone that reloads the page still works) and says "try again in a minute" when the server is busy or down, rather than calling a live link dead;
+- replies to the approval email don't come to staff (a reply quotes the link): they go to `PYLON_APPROVAL_REPLY_TO` if it's set (an address nobody reads), or back to the family's own address, and the email says to write to the help address in a new email;
+- with Gmail as the app's mail account, the Sent folder keeps a copy of every approval email, links included: whoever can open that account can see live links. Some sending services keep message bodies for days too (Postmark and Mailgun do): check yours, and keep whichever account sends to Kyron. Approval emails have their own share of the day's email budget, so busy public forms can't hold them up;
+- a bounced approval email usually comes back whole, link included, to the sending account. The family never got it: **Cancel the link** on that message, check the address with them, and ask again.
+
+The database holds the same line (migration `037_pylon_outreach.sql`):
+- the link's token is turned into a proof (its hash) by the server, and the table keeps only the proof's hash: nothing that can read the table can decide, and the trigger checks the proof against the link it burns;
+- an approval carries the fingerprint of everything the family was shown when the link went out, and nothing they were shown can change in the same update;
+- links go out only on an open request whose contact is checked; taking the check back, or marking the request Done or Closed, cancels its live links for good (with the reason in the history);
+- nothing changes after approval; a decline stays as recorded until the family is asked again;
+- nothing is marked sent without approval, after the family took it back, or twice;
+- every link, decision, cancellation, withdrawal and send is written to `pylon_outreach_events` by a function running as the table's owner, which the server's own service role can't imitate; the history is never changed, and a message with any of that on record is never deleted.
+
+The family's page uses two database functions that only the server can call. The code: `routes/pylon-outreach.js` (staff), `routes/pylon-parent.js` (the family's link), `public/parent-approval.html`.
+
 ## What this replaced
 
-The old design (migrations 008, 013 and 016, `routes/pylon.js` with about 60 endpoints, `routes/pylon-parent.js` and `public/parent-approval.html`, the sequence cron, six admin pages, `utils/parentApproval.js` and a seed of sales sequences) never ran in production: its tables were never created (and had no row level security), and its API never mounted because the database module it needed didn't exist. Its forms posted to endpoints that would have refused anyone not signed in. It was removed; git history keeps it. The Concierge's parent approval of each coach message comes back on the new tables in its own change.
+The old design (migrations 008, 013 and 016, `routes/pylon.js` with about 60 endpoints, the old `routes/pylon-parent.js` and `public/parent-approval.html`, the sequence cron, six admin pages, `utils/parentApproval.js` and a seed of sales sequences) never ran in production: its tables were never created (and had no row level security), and its API never mounted because the database module it needed didn't exist. Its forms posted to endpoints that would have refused anyone not signed in. It was removed; git history keeps it. The Concierge's approval of each coach message is rebuilt on the new tables (above).
