@@ -99,6 +99,25 @@ Optional: `PYLON_HELP_EMAIL` (where replies go), `PYLON_SITE_BASE` (where the pa
 
 The page asks them to tap Unsubscribe (so an email scanner opening the link changes nothing), then takes the address off.
 
+## The Concierge's messages to coaches
+
+Nothing goes to a college coach unless the person who signed up for the Concierge approved that exact message, to that exact coach. That's the athlete's parent or legal guardian, or the athlete at 18 or older.
+
+In the app, a Concierge request has **Messages to coaches**:
+
+1. **New message**: the coach, their email, the program, the level, the subject and the message.
+2. **Ask the family to approve** emails the request's contact a one-time link (`/parent-approval.html`). Staff never see the link. It works once, for 14 days. Asking again replaces it. Editing the message while a link is out cancels the link.
+3. The family reads the message exactly as it would go out, types their name, ticks that they're the parent or guardian (or the athlete, 18+), and approves or declines. Staff get a push and an email saying which message was decided.
+4. Once approved, the message can't change. Staff send it from their own email (**Open in email** fills it in), then **Mark sent**.
+
+The database holds the same line (migration `037_pylon_outreach.sql`):
+- a decision is recorded only in the update that burns an issued link;
+- an approval carries the fingerprint of the words as they were;
+- nothing changes after approval;
+- nothing is marked sent without approval, and only once.
+
+The family's page uses two database functions that only the server can call. The code: `routes/pylon-outreach.js` (staff), `routes/pylon-parent.js` (the family's link), `public/parent-approval.html`.
+
 ## What this replaced
 
-The old design (migrations 008, 013 and 016, `routes/pylon.js` with about 60 endpoints, `routes/pylon-parent.js` and `public/parent-approval.html`, the sequence cron, six admin pages, `utils/parentApproval.js` and a seed of sales sequences) never ran in production: its tables were never created (and had no row level security), and its API never mounted because the database module it needed didn't exist. Its forms posted to endpoints that would have refused anyone not signed in. It was removed; git history keeps it. The Concierge's parent approval of each coach message comes back on the new tables in its own change.
+The old design (migrations 008, 013 and 016, `routes/pylon.js` with about 60 endpoints, the old `routes/pylon-parent.js` and `public/parent-approval.html`, the sequence cron, six admin pages, `utils/parentApproval.js` and a seed of sales sequences) never ran in production: its tables were never created (and had no row level security), and its API never mounted because the database module it needed didn't exist. Its forms posted to endpoints that would have refused anyone not signed in. It was removed; git history keeps it. The Concierge's approval of each coach message is rebuilt on the new tables (above).

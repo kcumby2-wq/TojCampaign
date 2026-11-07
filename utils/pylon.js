@@ -446,7 +446,96 @@ function confirmEmail({ confirmUrl, help = "hello@pylonfootball.com" }) {
   };
 }
 
+// ── The Concierge's messages to coaches (migration 037) ──────────────────
+const APPROVAL_TTL_MS = 14 * 24 * 60 * 60 * 1000;
+const DRAFT_FIELDS = Object.freeze({
+  coach_name: (v) => clean(v, 80) || null,
+  coach_email: (v) => email(v),
+  program_name: (v) => clean(v, 120) || null,
+  program_level: (v) => {
+    const l = clean(v, 20);
+    return l === "" ? "" : has(LEVEL_WORDS, l) ? l : null;
+  },
+  draft_subject: (v) => clean(v, 200) || null,
+  draft_body: (v) => cleanNotes(v, 5000) || null,
+});
+// A draft from staff: { errors, value }. partial: an edit, where only the
+// fields sent are checked and changed. The level is optional ("" clears it).
+function normalizeDraft(raw, { partial = false } = {}) {
+  const r = raw && typeof raw === "object" && !Array.isArray(raw) ? raw : {};
+  const errors = [];
+  const value = {};
+  for (const [field, check] of Object.entries(DRAFT_FIELDS)) {
+    if (partial && r[field] === undefined) continue;
+    const v = check(r[field]);
+    if (field === "program_level") {
+      if (v === null) errors.push(field);
+      else value[field] = v || null;
+    } else if (v === null) errors.push(field);
+    else value[field] = v;
+  }
+  return { errors, value: errors.length ? null : value };
+}
+
+// Where a message stands, for staff: draft, waiting (a link is out), expired
+// (the link ran out unused), declined, approved, sent.
+function outreachState(o, now = Date.now()) {
+  if (o.sent_at) return "sent";
+  if (o.parent_approved) return "approved";
+  if (o.parent_approval_token_hash || o.parent_approval_expires_at) {
+    return o.parent_approval_expires_at && Date.parse(o.parent_approval_expires_at) > now ? "waiting" : "expired";
+  }
+  if (o.parent_decision === "declined") return "declined";
+  return "draft";
+}
+
+// The family's email with the one-time link. r: the recruiting request; o:
+// the message. The link is the only way to approve, and it goes nowhere else.
+function approvalEmail(r, o, { link, help = "hello@pylonfootball.com" }) {
+  const about = r.contact_role === "athlete" ? "for you" : `about ${firstName(r.athlete_name)}`;
+  return {
+    subject: `Approve a message to ${o.coach_name} at ${o.program_name}`,
+    text: [
+      `Hi ${firstName(r.contact_name)},`,
+      "",
+      `The Recruiting Concierge wrote a message to ${o.coach_name} at ${o.program_name} ${about}. Nothing goes to the coach until you approve it.`,
+      "",
+      "Read it exactly as it would be sent, then approve or decline it here:",
+      link,
+      "",
+      "The link works once, for 14 days. If the message changes, we'll send you a new one.",
+      "",
+      `Questions? Reply to this email or write to ${help}.`,
+      "Didn't sign up for the Recruiting Concierge? Reply and tell us, and don't use the link.",
+      "",
+      SIGN_OFF,
+    ].join("\n"),
+  };
+}
+
+// To staff when the family decides: which message, never the athlete.
+function decisionAlert(o, decision, appBase) {
+  const word = decision === "approved" ? "approved" : "declined";
+  return {
+    push: { title: `Pylon: message ${word}`, body: `To ${o.coach_name}, ${o.program_name}`, url: `/app/#pylon-request/${o.request_id}`, tag: `pylon-outreach-${o.id}` },
+    email: {
+      subject: `Pylon: the family ${word} the message to ${o.program_name}`,
+      text: [
+        `The family ${word} the Recruiting Concierge's message to ${o.coach_name} at ${o.program_name}.`,
+        decision === "approved" ? "It can go out now, exactly as approved. Mark it sent in the app once it has." : "It won't go out. Follow up with the family before writing a new one.",
+        "",
+        `Open it in the TOJ app: ${appBase}/app/#pylon-request/${o.request_id}`,
+      ].join("\n"),
+    },
+  };
+}
+
 module.exports = {
+  APPROVAL_TTL_MS,
+  normalizeDraft,
+  outreachState,
+  approvalEmail,
+  decisionAlert,
   KINDS,
   KIND_WORDS,
   PAGES,

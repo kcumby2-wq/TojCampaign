@@ -222,6 +222,9 @@ app.use("/api/campaign", require("./utils/staff").requireStaff, require("./route
 // The public Pylon pages: their requests, checkouts and newsletter, and the
 // staff view of them (routes/pylon.js, migration 036).
 app.use("/api/pylon", require("./routes/pylon"));
+// The family's side of a Recruiting Concierge message: approve or decline it
+// with the one-time link (routes/pylon-parent.js, migration 037).
+app.use("/api/pylon-parent", require("./routes/pylon-parent"));
 
 // Public health signal — powers the live status dot on the Command Center.
 // Reports which storage/AI backends are actually wired (no secrets leaked).

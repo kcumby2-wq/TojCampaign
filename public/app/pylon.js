@@ -178,6 +178,7 @@
       '<div class="head"><div><p class="kicker">' + h(((d.kinds || {})[r.kind] || r.kind) + " · " + t.ago(r.created_at)) + '</p><h1 class="title sm">' + h(r.summary) + "</h1></div>" + statusBadge(r.status) + "</div>" +
       '<section class="card"><div class="list">' + facts + "</div></section>" +
       contact + checkCard + consent + payCard +
+      (r.kind === "recruiting" ? '<section class="card" id="plOutreach"><h2 class="sec-h">Messages to coaches</h2><div class="spin"></div></section>' : "") +
       '<section class="card"><h2 class="sec-h">Status</h2><div class="chips" style="display:flex;flex-wrap:wrap;gap:8px">' + steps + "</div>" +
       '<label class="sub" for="plNote" style="display:block;margin-top:14px">Team note</label>' +
       '<textarea id="plNote" maxlength="2000" rows="3" style="width:100%;margin-top:6px">' + h(r.team_note || "") + "</textarea>" +
@@ -216,6 +217,129 @@
       T().post("/api/pylon/requests/" + encodeURIComponent(r.id), {}, "DELETE")
         .then(function () { T().toast("Deleted."); location.hash = "#pylon"; })
         .catch(function (e) { delBtn.disabled = false; document.getElementById("plMsg").innerHTML = '<span class="err">' + h(say(e)) + "</span>"; });
+    });
+    if (r.kind === "recruiting") outreach(r);
+  }
+
+  // ── The Concierge's messages to coaches (routes/pylon-outreach.js) ─────
+  // Each message is approved by the family through a one-time link we email
+  // them; staff never see the link. Once approved it can't change, and staff
+  // send it from their own email, then mark it sent.
+  var O_STATE = {
+    draft: ["Draft", ""],
+    waiting: ["Waiting for the family", "warn"],
+    expired: ["Link expired", "warn"],
+    declined: ["Declined by the family", ""],
+    approved: ["Approved", "ok"],
+    sent: ["Sent", "ok"],
+  };
+  var O_MSG = {
+    approved_locked: "Approved messages can't change. Write a new one.",
+    already_approved: "That message is already approved.",
+    not_approved: "Only a message the family approved can be sent.",
+    already_sent: "It's already marked sent.",
+    email_not_sent: "The email to the family didn't go, so no link is out. Check the app's email settings, then try again.",
+    too_many_asks: "That's a lot of links today for this family. Try again tomorrow.",
+    not_recruiting: "Only Concierge requests have coach messages.",
+  };
+  function oSay(e) { var c = e && e.data && e.data.error; return (c && O_MSG[c]) || say(e); }
+  function draftForm(o, levels) {
+    o = o || {};
+    var lv = Object.keys(levels || {}).map(function (k) { return '<option value="' + h(k) + '"' + (o.program_level === k ? " selected" : "") + ">" + h(levels[k]) + "</option>"; }).join("");
+    var f = function (id, label, value, attrs) { return '<label class="sub" for="' + id + '" style="display:block;margin-top:10px">' + h(label) + '</label><input id="' + id + '" value="' + h(value || "") + '" ' + attrs + ' style="width:100%;margin-top:4px">'; };
+    return f("oCoach", "Coach's name", o.coach_name, 'maxlength="80"') +
+      f("oEmail", "Coach's email", o.coach_email, 'type="email" maxlength="200"') +
+      f("oProgram", "Program", o.program_name, 'maxlength="120"') +
+      '<label class="sub" for="oLevel" style="display:block;margin-top:10px">Level</label><select id="oLevel" style="width:100%;margin-top:4px"><option value="">Not set</option>' + lv + "</select>" +
+      f("oSubject", "Subject", o.draft_subject, 'maxlength="200"') +
+      '<label class="sub" for="oBody" style="display:block;margin-top:10px">Message</label><textarea id="oBody" maxlength="5000" rows="8" style="width:100%;margin-top:4px">' + h(o.draft_body || "") + "</textarea>";
+  }
+  function readDraft() {
+    var v = function (id) { return document.getElementById(id).value; };
+    return { coach_name: v("oCoach"), coach_email: v("oEmail"), program_name: v("oProgram"), program_level: v("oLevel"), draft_subject: v("oSubject"), draft_body: v("oBody") };
+  }
+  async function outreach(r) {
+    var t = T(), box = document.getElementById("plOutreach");
+    if (!box) return;
+    var d;
+    try { d = await t.api("/api/pylon/requests/" + encodeURIComponent(r.id) + "/outreach"); }
+    catch (e) { if (e.stale) return; box.innerHTML = '<h2 class="sec-h">Messages to coaches</h2><p class="body err">' + h(oSay(e)) + "</p>"; return; }
+    var levels = d.levels || {};
+    var items = (d.outreach || []).map(function (o) {
+      var st = O_STATE[o.state] || [o.state, ""];
+      var line = o.state === "waiting" ? "Link emailed " + t.ago(o.parent_approval_requested_at) + ". It works for 14 days."
+        : o.state === "approved" ? "Approved by " + o.parent_decided_name + ", " + t.ago(o.parent_decided_at) + ". Send it from your email exactly as it is, then mark it sent."
+        : o.state === "declined" ? "Declined by " + o.parent_decided_name + ", " + t.ago(o.parent_decided_at) + "."
+        : o.state === "sent" ? "Sent " + t.ago(o.sent_at) + (o.sent_by ? " by " + o.sent_by : "") + "."
+        : o.state === "expired" ? "The link ran out unused. Ask again for a new one." : "Not sent to the family yet.";
+      var actions = "";
+      if (o.state === "approved") {
+        var mailto = "mailto:" + String(o.coach_email).split("@").map(encodeURIComponent).join("@") + "?subject=" + encodeURIComponent(o.draft_subject) + "&body=" + encodeURIComponent(o.draft_body);
+        actions = '<a class="btn small" href="' + h(mailto) + '">Open in email</a><button type="button" class="btn small soft" data-o-copy="' + h(o.id) + '">Copy the message</button><button type="button" class="btn small soft" data-o-sent="' + h(o.id) + '">Mark sent</button>';
+      } else if (o.state !== "sent") {
+        actions = '<button type="button" class="btn small" data-o-ask="' + h(o.id) + '">' + (o.state === "waiting" ? "Send a new link" : "Ask the family to approve") + '</button><button type="button" class="btn small soft" data-o-edit="' + h(o.id) + '">Edit</button>';
+      }
+      return '<div class="li" style="cursor:default;display:block" data-o="' + h(o.id) + '"><div style="display:flex;gap:8px;align-items:center;justify-content:space-between"><div class="name" style="font-size:15px">' + h(o.coach_name + ", " + o.program_name) + "</div>" + badge(st[0], st[1]) + "</div>" +
+        '<div class="sub">' + h(o.coach_email + (o.program_level ? " · " + (levels[o.program_level] || o.program_level) : "")) + "</div>" +
+        '<p class="body" style="font-size:14px;font-weight:700;color:var(--ink);margin-top:8px">' + h(o.draft_subject) + "</p>" +
+        '<p class="body" style="font-size:14px;white-space:pre-wrap">' + h(o.draft_body) + "</p>" +
+        '<p class="sub" style="margin-top:6px">' + h(line) + "</p>" +
+        (actions ? '<div class="btn-row" style="margin-top:8px">' + actions + "</div>" : "") + '<div class="o-edit"></div></div>';
+    }).join("");
+    box.innerHTML = '<h2 class="sec-h">Messages to coaches</h2>' +
+      '<p class="sub" style="margin-bottom:10px">Nothing goes to a coach until the family approves that exact message. Asking emails them a one-time link at ' + h(r.contact_email) + ". You never see the link.</p>" +
+      (items ? '<div class="list">' + items + "</div>" : '<p class="empty">No messages yet.</p>') +
+      '<div class="btn-row" style="margin-top:10px"><button type="button" class="btn small" id="oNew">New message</button></div><div id="oNewForm"></div>' +
+      '<p class="sub" id="oMsg" role="status" style="margin-top:8px"></p>';
+    var msg = document.getElementById("oMsg");
+    var fail = function (e) { msg.innerHTML = '<span class="err">' + h(oSay(e)) + "</span>"; };
+    var byId = function (id) { return (d.outreach || []).filter(function (o) { return o.id === id; })[0]; };
+    document.getElementById("oNew").addEventListener("click", function () {
+      var holder = document.getElementById("oNewForm");
+      holder.innerHTML = draftForm(null, levels) + '<div class="btn-row" style="margin-top:10px"><button type="button" class="btn small" id="oSave">Save the draft</button></div>';
+      document.getElementById("oSave").addEventListener("click", function () {
+        T().post("/api/pylon/requests/" + encodeURIComponent(r.id) + "/outreach", readDraft())
+          .then(function () { T().toast("Draft saved."); outreach(r); })
+          .catch(fail);
+      });
+    });
+    Array.prototype.forEach.call(box.querySelectorAll("[data-o-edit]"), function (b) {
+      b.addEventListener("click", function () {
+        var o = byId(b.getAttribute("data-o-edit"));
+        var holder = box.querySelector('[data-o="' + o.id + '"] .o-edit');
+        holder.innerHTML = draftForm(o, levels) + '<div class="btn-row" style="margin-top:10px"><button type="button" class="btn small" data-o-save>Save the changes</button></div>' +
+          (o.state === "waiting" ? '<p class="sub" style="margin-top:6px">Saving a change cancels the link that\'s out. Ask the family again after.</p>' : "");
+        holder.querySelector("[data-o-save]").addEventListener("click", function () {
+          T().post("/api/pylon/outreach/" + encodeURIComponent(o.id), readDraft(), "PATCH")
+            .then(function (out) { T().toast(out && out.link_cancelled ? "Saved. The link that was out no longer works." : "Saved."); outreach(r); })
+            .catch(fail);
+        });
+      });
+    });
+    Array.prototype.forEach.call(box.querySelectorAll("[data-o-ask]"), function (b) {
+      b.addEventListener("click", function () {
+        b.disabled = true;
+        T().post("/api/pylon/outreach/" + encodeURIComponent(b.getAttribute("data-o-ask")) + "/ask", {})
+          .then(function (out) { T().toast("Link emailed to " + ((out && out.sent_to) || "the family") + "."); outreach(r); })
+          .catch(function (e) { b.disabled = false; fail(e); });
+      });
+    });
+    Array.prototype.forEach.call(box.querySelectorAll("[data-o-sent]"), function (b) {
+      b.addEventListener("click", function () {
+        b.disabled = true;
+        T().post("/api/pylon/outreach/" + encodeURIComponent(b.getAttribute("data-o-sent")) + "/sent", {})
+          .then(function () { T().toast("Marked sent."); outreach(r); })
+          .catch(function (e) { b.disabled = false; fail(e); });
+      });
+    });
+    Array.prototype.forEach.call(box.querySelectorAll("[data-o-copy]"), function (b) {
+      b.addEventListener("click", function () {
+        var o = byId(b.getAttribute("data-o-copy"));
+        var text = "To: " + o.coach_email + "\nSubject: " + o.draft_subject + "\n\n" + o.draft_body;
+        (navigator.clipboard ? navigator.clipboard.writeText(text) : Promise.reject())
+          .then(function () { msg.textContent = "Copied. Send it exactly as it is."; })
+          .catch(function () { msg.textContent = "Couldn't copy here. Select the message and copy it."; });
+      });
     });
   }
 
