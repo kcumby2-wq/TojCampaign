@@ -875,6 +875,9 @@ router.get("/newsletter", requireStaff, safe(async (req, res) => {
   res.json({ counts, confirmed });
 }));
 
+// The Recruiting Concierge's messages to coaches (routes/pylon-outreach.js).
+router.use(require("./pylon-outreach"));
+
 // Anything else under /api/pylon is gone: the old API (never mounted) had
 // other paths, and they answer plainly instead of falling through.
 router.use((req, res) => res.status(404).json({ error: "not_found" }));
