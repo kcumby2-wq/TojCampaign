@@ -19,6 +19,11 @@ types.setTypeParser(1083, (v) => v); // time
 types.setTypeParser(1184, (v) => v.replace(" ", "T").replace(/([+-]\d\d)$/, "$1:00")); // timestamptz, as 2026-10-24T01:30:00.123456+00:00
 types.setTypeParser(1700, (v) => (v == null ? null : Number(v))); // numeric
 types.setTypeParser(20, (v) => (v == null ? null : Number(v))); // int8
+// A list of objects is a JSON array (a jsonb column), as PostgREST takes it;
+// node-postgres would send it as a Postgres array. Lists of plain values stay
+// Postgres arrays (text[], uuid[]). An empty list is ambiguous: it goes as an
+// empty Postgres array.
+const jsonArray = (v) => (Array.isArray(v) && v.some((x) => x !== null && typeof x === "object") ? JSON.stringify(v) : v);
 
 const MIGRATIONS = path.join(__dirname, "..", "..", "db", "migrations");
 
@@ -58,7 +63,7 @@ function pgSupabase(pool, schema) {
       this.returning = false;
     }
     p(v) {
-      this.params.push(v);
+      this.params.push(jsonArray(v));
       return "$" + this.params.length;
     }
     select(cols) {
@@ -105,7 +110,7 @@ function pgSupabase(pool, schema) {
                 const set = keys.filter((k) => !cols.includes(k)).map((k) => `${qi(k)} = excluded.${qi(k)}`);
                 sql += ` on conflict (${cols.map(qi).join(",")}) do ${set.length ? "update set " + set.join(",") : "nothing"}`;
               }
-              const res = await client.query(sql + " returning *", keys.map((k) => r[k]));
+              const res = await client.query(sql + " returning *", keys.map((k) => jsonArray(r[k])));
               out.push(...res.rows);
             }
             await client.query("commit");

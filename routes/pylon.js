@@ -1,954 +1,889 @@
-// routes/pylon.js
-// Pylon × TOJ Partnership · API surface for all 20 SKUs + Coordinators + Alumni + Data Feed.
-// Wire into server.js: app.use("/api/pylon", require("./routes/pylon"));
-// Auth pattern mirrors routes/hooks-agents.js — session OR X-Pylon-API-Key header.
+"use strict";
+// The public Pylon pages' requests and newsletter (migration 036; the rules
+// are in utils/pylon.js).
 //
-// Every SKU's revenue split lives in PYLON_REVENUE_SPLITS at the top — NEVER inline splits.
+//   GET    /api/pylon/checkout                  whether a checkout comes next (the button's words)
+//   POST   /api/pylon/requests                  a form from a Pylon page
+//   POST   /api/pylon/newsletter/subscribe      the free newsletter: emails a confirmation
+//   POST   /api/pylon/newsletter/confirm        { token } from that email
+//   POST   /api/pylon/newsletter/unsubscribe    { token } from an issue
+//   POST   /api/pylon/stripe/webhook            Stripe: a Pylon checkout paid, a subscription changed
+//   GET    /api/pylon/requests                  staff: open requests (?all=1 for every one)
+//   GET    /api/pylon/requests/:id              staff: one request
+//   PATCH  /api/pylon/requests/:id              staff: status, a note, who they checked, or paid outside Stripe
+//   DELETE /api/pylon/requests/:id              staff: remove an unpaid request ("didn't send this")
+//   GET    /api/pylon/newsletter                staff: the list, with each address's unsubscribe link
+//
+// A request is saved first. When Pylon's Stripe is set up (utils/pylon-stripe.js)
+// and the package has a price, the page then goes on to a Stripe checkout made
+// here, at the server's price; otherwise the contact hears we'll send a secure
+// payment link. Stripe's test mode is offered only to staff signed in on the
+// site, so the public never meets a checkout that takes no money. Each request
+// alerts staff (a push and an email that carry what came in, not who it's
+// about), and the contact gets one note of their own. If the database can't
+// take a request, the staff email carries all of it, so nobody's request is
+// lost (within its own budget).
+//
+// The public posts take JSON from the site's own pages only (another site's
+// form can't send JSON, and the browser names the page it came from).
+//
+// The contact, the athlete and the consent answer are shown to staff (owner
+// only, like the Subject Medias bookings: minors' data and money) and appear
+// nowhere else.
 
 const express = require("express");
+const crypto = require("crypto");
+const { getSupabase } = require("../utils/supabase");
+const { requireStaff, isStaff, staffEmails } = require("../utils/staff");
+const push = require("../utils/push");
+const mailer = require("../utils/mailer");
+const { logActivity } = require("../utils/team");
+const U = require("../utils/pylon");
+const PS = require("../utils/pylon-stripe");
+const H = require("../utils/pylon-http");
+
 const router = express.Router();
-const db = require("../db");
-const parentApproval = require("../utils/parentApproval");
+const safe = H.safe("pylon");
+const bodyOf = H.bodyOf;
+const env = (k) => String(process.env[k] || "").trim();
+const APP_BASE = () => (env("APP_BASE") || "https://tojcampaign.com").replace(/\/+$/, "");
+// Where the Pylon pages live: Stripe sends people back there.
+const SITE_BASE = () => (env("PYLON_SITE_BASE") || "https://tojcampaign.com").replace(/\/+$/, "");
+const helpEmail = () => U.email(env("PYLON_HELP_EMAIL")) || "hello@pylonfootball.com";
+const nowIso = () => new Date().toISOString();
+const HOUR = 60 * 60 * 1000;
+const DAY_MS = 24 * HOUR;
 
-// ═══════════════════════════════════════════════════════════════════════════
-// PYLON_REVENUE_SPLITS · Single source of truth for every SKU's split
-// ═══════════════════════════════════════════════════════════════════════════
-
-const PYLON_REVENUE_SPLITS = Object.freeze({
-  "1a": { toj: 0.40, pylon: 0.60, subject_media: 0.00, optimum: 0.00 },
-  "1b": { toj: 0.40, pylon: 0.60, subject_media: 0.00, optimum: 0.00 },
-  "1c": { toj: 0.30, pylon: 0.20, subject_media: 0.30, optimum: 0.20 },
-  "2":  { toj: 0.25, pylon: 0.25, subject_media: 0.00, optimum: 0.50 },
-  "3":  { toj: 0.35, pylon: 0.15, subject_media: 0.00, optimum: 0.50 },
-  "4a": { toj: 0.25, pylon: 0.75, subject_media: 0.00, optimum: 0.00 }, // commission
-  "4b": { toj: 0.25, pylon: 0.75, subject_media: 0.00, optimum: 0.00 },
-  "4c": { toj: 0.25, pylon: 0.75, subject_media: 0.00, optimum: 0.00 },
-  "4d": { toj: 0.40, pylon: 0.60, subject_media: 0.00, optimum: 0.00 },
-  "5a": { toj: 0.20, pylon: 0.60, subject_media: 0.00, optimum: 0.00 }, // + athlete 0.20 if name-drop
-  "5b": { toj: 0.20, pylon: 0.80, subject_media: 0.00, optimum: 0.00 },
-  "6":  { toj: 1.00, pylon: 0.00, subject_media: 0.00, optimum: 0.00 }, // flat platform fee
-  "7":  { toj: 0.40, pylon: 0.60, subject_media: 0.00, optimum: 0.00 },
-  "8":  { toj: 0.40, pylon: 0.60, subject_media: 0.00, optimum: 0.00 },
-  "9_individual": { toj: 0.40, pylon: 0.60, subject_media: 0.00, optimum: 0.00 },
-  "9_combine":    { toj: 0.40, pylon: 0.40, subject_media: 0.00, optimum: 0.20 },
-  "10": { toj: 0.40, pylon: 0.60, subject_media: 0.00, optimum: 0.00 },
-  "11_standard":     { toj: 0.45, pylon: 0.30, subject_media: 0.00, optimum: 0.25 },
-  "11_hbcu_premium": { toj: 0.45, pylon: 0.30, subject_media: 0.00, optimum: 0.25 },
-  "12": { toj: 0.40, pylon: 0.60, subject_media: 0.00, optimum: 0.00 },
-  "13": { toj: 0.40, pylon: 0.60, subject_media: 0.00, optimum: 0.00 },
-  "14": { toj: 0.40, pylon: 0.60, subject_media: 0.00, optimum: 0.00 },
-  // V3.1 additions
-  "15": { toj: 0.60, pylon: 0.40, subject_media: 0.00, optimum: 0.00 },
-  "16_episode":      { toj: 0.25, pylon: 0.60, subject_media: 0.15, optimum: 0.00 },
-  "16_season":       { toj: 0.25, pylon: 0.60, subject_media: 0.15, optimum: 0.00 },
-  "17": { toj: 0.25, pylon: 0.60, subject_media: 0.15, optimum: 0.00 },
-  "18_basic":       { toj: 0.55, pylon: 0.35, subject_media: 0.10, optimum: 0.00 },
-  "18_standard":    { toj: 0.55, pylon: 0.35, subject_media: 0.10, optimum: 0.00 },
-  "18_recruiting":  { toj: 0.55, pylon: 0.35, subject_media: 0.10, optimum: 0.00 },
-  "19_membership":  { toj: 0.33, pylon: 0.67, subject_media: 0.00, optimum: 0.00 },
-  "19_brand_collab":{ toj: 0.33, pylon: 0.67, subject_media: 0.00, optimum: 0.00 },
-  "19_mgmt_fee":    { toj: 1.00, pylon: 0.00, subject_media: 0.00, optimum: 0.00 },
-  "20": { toj: 0.50, pylon: 0.30, subject_media: 0.00, optimum: 0.20 },
-});
-
-function splitCents(sku, amountCents) {
-  const s = PYLON_REVENUE_SPLITS[sku];
-  if (!s) throw new Error(`Unknown SKU: ${sku}`);
-  return {
-    toj_take_cents: Math.round(amountCents * s.toj),
-    pylon_take_cents: Math.round(amountCents * s.pylon),
-    subject_media_take_cents: Math.round(amountCents * s.subject_media),
-    optimum_take_cents: Math.round(amountCents * s.optimum),
+// ── Abuse limits ─────────────────────────────────────────────────────────
+// Per visitor (the first X-Forwarded-For address, which Vercel's rewrite
+// sets; on IPv6, the /64): 12 forms per 10 minutes, counted before the form
+// is checked, so families on one event's Wi-Fi get through and one
+// visitor's junk stops only them. That's the only limit ordinary traffic
+// meets: what a form sets off (notes, staff emails, pushes) has its own caps.
+//
+// Past that, two circuit breakers for floods, counted only for forms that
+// pass: per connection (the caller Render saw: through Vercel that's Vercel,
+// for everyone; straight at Render, the caller, whatever headers it makes
+// up) 600 per 10 minutes, and 1,000 an hour (separately for requests and the
+// newsletter). Someone sending from many addresses can still trip them for
+// everyone, so tripping one tells staff at once (Vercel's firewall is the
+// lever then).
+const perVisitor = H.windowLimiter(12, 10 * 60 * 1000);
+const perPeer = H.windowLimiter(600, 10 * 60 * 1000);
+// The newsletter's links: 30 tries per visitor per 10 minutes. The token
+// itself (256 bits) is what keeps a guess from working.
+const linkTries = H.windowLimiter(30, 10 * 60 * 1000);
+function hourly(max) {
+  let times = [];
+  const take = (now = Date.now()) => {
+    times = times.filter((t) => now - t < HOUR);
+    if (times.length >= max) return false;
+    times.push(now);
+    return true;
   };
+  take.reset = () => { times = []; };
+  return take;
 }
-
-// ═══════════════════════════════════════════════════════════════════════════
-// Auth middleware · session OR X-Pylon-API-Key header
-// ═══════════════════════════════════════════════════════════════════════════
-
-function requireAuth(req, res, next) {
-  const apiKey = req.headers["x-pylon-api-key"];
-  const sessionUser = req.session && req.session.user;
-  if (apiKey && apiKey === process.env.PYLON_API_KEY) return next();
-  if (sessionUser) return next();
-  return res.status(401).json({ error: "unauthorized" });
+const requestsThisHour = hourly(1000);
+const signupsThisHour = hourly(1000);
+// A breaker tripped: staff hear once an hour.
+const floodAlerts = hourly(1);
+const pushesThisHour = hourly(60);
+// Money alerts (payments, second payments, plans that stop, payments with no
+// request) have their own count, so busy forms can't hold them up.
+const moneyPushesThisHour = hourly(60);
+// The staff email for each request and payment: 30 an hour, 100 a day.
+function budget(perHour, perDay) {
+  let times = [];
+  const take = (now = Date.now()) => {
+    times = times.filter((t) => now - t < DAY_MS);
+    if (times.length >= perDay || times.filter((t) => now - t < HOUR).length >= perHour) return false;
+    times.push(now);
+    return true;
+  };
+  take.reset = () => { times = []; };
+  return take;
 }
+const staffMailAllowed = budget(30, 100);
+const moneyMailAllowed = budget(30, 100);
+// When the database can't take a request, its email is the only copy: 10 an
+// hour and 30 a day, so an outage plus junk can't spend the account's day.
+const fallbackAllowed = budget(10, 30);
 
-function requirePylonApprover(req, res, next) {
-  const sessionUser = req.session && req.session.user;
-  if (!sessionUser) return res.status(401).json({ error: "unauthorized" });
-  const approvers = (process.env.PYLON_APPROVERS || "").split(",").map((s) => s.trim());
-  if (!approvers.includes(sessionUser.email)) {
-    return res.status(403).json({ error: "not a designated Pylon approver" });
+// The notes people get go to an address someone typed. A request's note: at
+// most 2 a day to one mailbox. A newsletter confirmation: 1 a day to one
+// mailbox. 6 a day from one visitor, and 30 an hour and 100 a day in all. So
+// the forms can't fill anyone's inbox, or use up the account the staff
+// alerts need. A payment's note comes from Stripe, not a form: it has its own
+// count (5 a day to one mailbox, 30 an hour, 100 a day), so junk forms can't
+// hold it up. Mailboxes and visitors go through an HMAC with a key made fresh
+// at each start; never kept. A note that couldn't go gives its place back.
+const SALT = crypto.randomBytes(32);
+const keyOf = (kind, v) => kind + ":" + crypto.createHmac("sha256", SALT).update(String(v)).digest("base64").slice(0, 22);
+function noteCounter({ perHour, perDay }) {
+  const sent = new Map();
+  let times = [];
+  function allowed(keys, now = Date.now()) {
+    times = times.filter((t) => now - t < DAY_MS);
+    if (times.length >= perDay) return null;
+    if (times.filter((t) => now - t < HOUR).length >= perHour) return null;
+    for (const [k, max] of keys) if ((sent.get(k) || []).filter((t) => now - t < DAY_MS).length >= max) return null;
+    for (const [k] of keys) sent.set(k, [...(sent.get(k) || []).filter((t) => now - t < DAY_MS), now]);
+    times.push(now);
+    if (sent.size > 20000) for (const [k, v] of sent) if (!v.some((t) => now - t < DAY_MS)) sent.delete(k);
+    const drop = (list) => {
+      const i = list.lastIndexOf(now);
+      if (i >= 0) list.splice(i, 1);
+    };
+    return () => {
+      drop(times);
+      for (const [k] of keys) drop(sent.get(k) || []);
+    };
   }
+  allowed.reset = () => {
+    sent.clear();
+    times = [];
+  };
+  return allowed;
+}
+const formNotes = noteCounter({ perHour: 30, perDay: 100 });
+const paidNotes = noteCounter({ perHour: 30, perDay: 100 });
+function noteAllowed(address, who, { confirm = false } = {}) {
+  const keys = [[keyOf(confirm ? "confirm" : "to", U.mailbox(address)), confirm ? 1 : 2]];
+  if (who) keys.push([keyOf("from", H.visitorKey(who)), 6]);
+  return formNotes(keys);
+}
+const paidNoteAllowed = (address) => paidNotes([[keyOf("paid", U.mailbox(address)), 5]]);
+
+const mailError = mailer.errorCode;
+// An error the request itself caused (a value Postgres or PostgREST refuses)
+// isn't the database being down.
+const inputError = (e) => !!e && /^(2[23]|PGRST1)/.test(String(e.code || ""));
+// The tables aren't there yet (the code deployed before migration 036).
+const notSetUp = (e) => !!e && (e.code === "42P01" || e.code === "PGRST205" || /does not exist|schema cache/i.test(String(e.message || "")));
+
+// ── Alerts ───────────────────────────────────────────────────────────────
+// A push and an email to staff. Never throws.
+function tellStaff(pushPayload, mail, { money = false } = {}) {
+  const to = [...staffEmails()];
+  if ((money ? moneyPushesThisHour : pushesThisHour)()) push.notifySoon(to, pushPayload);
+  if (mail && (money ? moneyMailAllowed : staffMailAllowed)()) {
+    mailer
+      .sendMail({ to, subject: mail.subject, text: mail.text, pool: "pylon" })
+      .then((r) => {
+        if (!r.sent) console.warn(`[pylon] staff email not sent (${r.reason})`);
+      })
+      .catch((e) => console.warn("[pylon] staff email failed:", mailError(e)));
+  } else if (mail) console.warn("[pylon] over the staff email budget: push only");
+}
+async function alertStaff(sb, row, { paid = false } = {}) {
+  try {
+    tellStaff(U.pushPayload(row), U.staffEmail(row, APP_BASE(), { paid }), { money: paid });
+    if (!paid) await sb.from("pylon_requests").update({ alerted_at: nowIso() }).eq("id", row.id);
+  } catch (e) {
+    console.warn("[pylon] alert failed:", e && e.message);
+  }
+}
+
+// A flood breaker tripped: the forms are refusing everyone for now.
+function floodTripped(which) {
+  console.warn(`[pylon] flood breaker tripped (${which})`);
+  if (!floodAlerts()) return;
+  tellStaff(
+    { title: "Pylon: forms paused by a flood", body: "Too many forms at once; real people are being turned away", url: "/app/#pylon", tag: "pylon-flood" },
+    {
+      subject: "Pylon: the forms are turning people away (a flood)",
+      text: [
+        `More ${which} came in than the Pylon pages take at once, from many addresses, so they're refusing everyone until the count resets (10 minutes to an hour).`,
+        "If it keeps up: Vercel → the tojcampaign.com project → Firewall → turn on Attack Challenge Mode, or add a rate-limit rule for /api/pylon.",
+      ].join("\n"),
+    },
+    { money: true }
+  );
+}
+
+// The database couldn't take the request: email it to staff whole. Critical
+// to the mailer's day (it's the only copy), within its own small budget.
+async function emailUnsaved(row) {
+  try {
+    if (!fallbackAllowed()) return false;
+    const mail = U.staffEmail({ ...row, id: "not-saved" }, APP_BASE(), { saved: false });
+    const r = await mailer.sendMail({ to: [...staffEmails()], subject: `${mail.subject} (not saved)`, text: mail.text, critical: true });
+    return !!(r && r.sent);
+  } catch (e) {
+    console.error("[pylon] fallback email failed:", mailError(e));
+    return false;
+  }
+}
+
+// The contact's note, once: claimed on the row (column) before it goes, so
+// two deliveries of one webhook can't both send it. If it couldn't go, the
+// claim and its place in the limits are given back. Never throws.
+async function emailContact(sb, row, column, build, giveBackFn) {
+  try {
+    if (!row || !row.contact_email || row[column]) return;
+    const giveBack = giveBackFn();
+    if (!giveBack) return console.warn("[pylon] contact note over its limits: not sent");
+    const claimed = await sb.from("pylon_requests").update({ [column]: nowIso() }).eq("id", row.id).is(column, null).select("id");
+    if (claimed.error || !(claimed.data || []).length) return giveBack();
+    const mail = build(row);
+    let r = null;
+    try {
+      r = await mailer.sendMail({ to: row.contact_email, subject: mail.subject, text: mail.text, replyTo: helpEmail(), pool: "pylon" });
+    } catch (e) {
+      console.warn("[pylon] contact note failed:", mailError(e));
+    }
+    if (!r || !r.sent) {
+      if (r) console.warn(`[pylon] contact note not sent (${r.reason})`);
+      giveBack();
+      await sb.from("pylon_requests").update({ [column]: null }).eq("id", row.id);
+    }
+  } catch (e) {
+    console.warn("[pylon] contact note failed:", mailError(e));
+  }
+}
+
+// ── Checkout ─────────────────────────────────────────────────────────────
+// A live checkout for anyone; Stripe's test mode only for staff signed in on
+// the site (trying the flow). Null: no checkout for this visitor.
+function checkoutFor(req) {
+  const m = PS.mode();
+  if (!m.ok) return null;
+  if (m.mode === "live") return m;
+  return req && isStaff(req) ? m : null;
+}
+
+// A creator code is Stripe's to know, and only Pylon's creator codes count: an
+// active promotion code by that name whose metadata says pylon_creator=yes.
+// Nothing else, typed or linked, takes money off a Pylon checkout.
+async function creatorPromo(stripe, code) {
+  try {
+    const list = await stripe.promotionCodes.list({ code, active: true, limit: 1 });
+    const hit = list && list.data && list.data[0];
+    return hit && hit.id && hit.metadata && hit.metadata.pylon_creator === "yes" ? hit.id : null;
+  } catch (e) {
+    console.warn("[pylon] creator code lookup failed:", e && (e.code || e.type));
+    return null;
+  }
+}
+
+// A Stripe checkout for a saved request, at the server's price. The URL, or
+// null when checkout isn't open to this visitor or didn't start (the request
+// stands, and the contact hears we'll send a link).
+async function startCheckout(sb, row, req) {
+  const item = U.CATALOG[row.kind] && U.CATALOG[row.kind][row.package];
+  if (!item || !item.cents || row.kind === "ambassador") return null;
+  if (!checkoutFor(req)) return null;
+  let s;
+  try {
+    s = PS.stripe();
+  } catch (e) {
+    return null;
+  }
+  const monthly = item.cadence === "month";
+  const page = SITE_BASE() + (U.PAGES[row.kind] || "/");
+  const meta = { kind: "pylon", request_id: row.id, package: row.package };
+  const params = {
+    mode: monthly ? "subscription" : "payment",
+    line_items: [
+      {
+        quantity: 1,
+        price_data: { currency: "usd", unit_amount: item.cents, product_data: { name: item.name }, ...(monthly ? { recurring: { interval: "month" } } : {}) },
+      },
+    ],
+    client_reference_id: row.id,
+    customer_email: row.contact_email,
+    metadata: meta,
+    success_url: `${page}?paid=1`,
+    cancel_url: `${page}?cancelled=1`,
+    // Cards (and the wallets that use them) only, so paid means paid at once.
+    payment_method_types: ["card"],
+  };
+  if (monthly) params.subscription_data = { metadata: meta };
+  else params.payment_intent_data = { metadata: meta };
+  // A player package's creator code, when it's one of Pylon's.
+  if (row.kind === "player_package" && row.referral_code) {
+    const promo = await creatorPromo(s.stripe, row.referral_code);
+    if (promo) params.discounts = [{ promotion_code: promo }];
+  }
+  let session;
+  try {
+    session = await s.stripe.checkout.sessions.create(params);
+  } catch (e) {
+    console.error("[pylon] checkout didn't start:", e && (e.code || e.type), e && e.message);
+    return null;
+  }
+  if (!session || !session.url || !/^cs_(test|live)_/.test(String(session.id))) return null;
+  const { error } = await sb
+    .from("pylon_requests")
+    .update({ checkout_session_id: session.id, checkout_mode: s.mode, updated_at: nowIso() })
+    .eq("id", row.id)
+    .is("checkout_session_id", null);
+  // The webhook still finds the request by its id if this didn't save.
+  if (error) console.warn("[pylon] checkout not noted on the request:", error.code || "", error.message || "");
+  return session.url;
+}
+
+// ── Public ───────────────────────────────────────────────────────────────
+// JSON from the site's own pages only.
+function publicPost(req, res, next) {
+  if (!req.is("application/json")) return res.status(415).json({ error: "json_only" });
+  if (!H.originOk(req)) return res.status(403).json({ error: "wrong_origin" });
   next();
 }
 
-router.use(requireAuth);
-
-// ═══════════════════════════════════════════════════════════════════════════
-// V2 CORE · Teams
-// ═══════════════════════════════════════════════════════════════════════════
-
-router.get("/teams", async (req, res) => {
-  const { region, active_season, search } = req.query;
-  let query = "SELECT * FROM pylon_teams WHERE 1=1";
-  const params = [];
-  if (region) { params.push(region); query += ` AND region = $${params.length}`; }
-  if (active_season) { params.push(active_season); query += ` AND active_season = $${params.length}`; }
-  if (search) { params.push(`%${search}%`); query += ` AND name ILIKE $${params.length}`; }
-  query += " ORDER BY name LIMIT 200";
-  const result = await db.query(query, params);
-  res.json(result.rows);
+// Whether a checkout comes next: the pages only change their button's words.
+router.get("/checkout", (req, res) => {
+  res.set("Cache-Control", "private, no-store");
+  res.json({ open: !!checkoutFor(req) });
 });
 
-router.post("/teams", async (req, res) => {
-  const { name, program, region, division, coach_name, coach_email, coach_phone, active_season, metadata } = req.body;
-  if (!name) return res.status(400).json({ error: "name required" });
-  const result = await db.query(
-    `INSERT INTO pylon_teams (name, program, region, division, coach_name, coach_email, coach_phone, first_registered_at, active_season, metadata)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,now(),$8,$9)
-     ON CONFLICT DO NOTHING
-     RETURNING *`,
-    [name, program, region, division, coach_name, coach_email, coach_phone, active_season, metadata || {}]
-  );
-  res.json(result.rows[0] || { note: "team may already exist" });
-});
+// Bots fill every field, including the one people never see (pf_trap: a
+// name no browser's autofill knows, so a person's form never fills it).
+const trapped = (raw) => typeof raw.pf_trap === "string" && raw.pf_trap.trim() !== "";
 
-// ═══════════════════════════════════════════════════════════════════════════
-// V2 CORE · Athletes
-// ═══════════════════════════════════════════════════════════════════════════
-
-router.get("/athletes", async (req, res) => {
-  const { team_id, class_year, represented, search } = req.query;
-  let query = "SELECT * FROM pylon_athletes WHERE 1=1";
-  const params = [];
-  if (team_id) { params.push(team_id); query += ` AND team_id = $${params.length}`; }
-  if (class_year) { params.push(class_year); query += ` AND class_year = $${params.length}`; }
-  if (represented === "true") { query += ` AND represented = true`; }
-  if (search) { params.push(`%${search}%`); query += ` AND canonical_name ILIKE $${params.length}`; }
-  query += " ORDER BY canonical_name LIMIT 500";
-  const result = await db.query(query, params);
-  res.json(result.rows);
-});
-
-router.post("/athletes", async (req, res) => {
-  const fields = ["canonical_name","team_id","parent_email","parent_phone","position","class_year","height_in","weight_lb","headshot_url","prospect_edge_profile_url","consent_public_stats","guardian_signed_release_on_file","represented","metadata"];
-  const values = fields.map((f) => req.body[f]);
-  if (!req.body.canonical_name) return res.status(400).json({ error: "canonical_name required" });
-  const placeholders = fields.map((_, i) => `$${i + 1}`).join(",");
-  const result = await db.query(
-    `INSERT INTO pylon_athletes (${fields.join(",")}) VALUES (${placeholders}) RETURNING *`,
-    values
-  );
-  res.json(result.rows[0]);
-});
-
-// ═══════════════════════════════════════════════════════════════════════════
-// V2 CORE · Events
-// ═══════════════════════════════════════════════════════════════════════════
-
-router.get("/events", async (req, res) => {
-  const { season, region, event_type } = req.query;
-  let query = "SELECT * FROM pylon_events WHERE 1=1";
-  const params = [];
-  if (season) { params.push(season); query += ` AND season = $${params.length}`; }
-  if (region) { params.push(region); query += ` AND region = $${params.length}`; }
-  if (event_type) { params.push(event_type); query += ` AND event_type = $${params.length}`; }
-  query += " ORDER BY start_date LIMIT 200";
-  const result = await db.query(query, params);
-  res.json(result.rows);
-});
-
-router.post("/events", async (req, res) => {
-  const fields = ["name","event_type","season","start_date","end_date","city","state","country","currency","team_cap","region","event_size_tier","is_international","team_inn_booking_url","metadata"];
-  const values = fields.map((f) => req.body[f]);
-  if (!req.body.name || !req.body.season || !req.body.start_date) return res.status(400).json({ error: "name, season, start_date required" });
-  const placeholders = fields.map((_, i) => `$${i + 1}`).join(",");
-  const result = await db.query(
-    `INSERT INTO pylon_events (${fields.join(",")}) VALUES (${placeholders}) RETURNING *`,
-    values
-  );
-  res.json(result.rows[0]);
-});
-
-// ═══════════════════════════════════════════════════════════════════════════
-// V2 CORE · Registrations
-// ═══════════════════════════════════════════════════════════════════════════
-
-router.post("/registrations", async (req, res) => {
-  const { team_id, event_id, base_fee_paid_cents } = req.body;
-  if (!team_id || !event_id) return res.status(400).json({ error: "team_id, event_id required" });
-  const result = await db.query(
-    `INSERT INTO pylon_registrations (team_id, event_id, base_fee_paid_cents)
-     VALUES ($1,$2,$3)
-     ON CONFLICT (team_id, event_id) DO UPDATE SET registration_status = 'confirmed'
-     RETURNING *`,
-    [team_id, event_id, base_fee_paid_cents]
-  );
-  res.json(result.rows[0]);
-});
-
-// ═══════════════════════════════════════════════════════════════════════════
-// V2 CORE · Package Orders (SKUs 1a/1b/1c/2/3/10/12/13/14/18)
-// ═══════════════════════════════════════════════════════════════════════════
-
-router.post("/packages/quote", async (req, res) => {
-  const { sku, amount_cents } = req.body;
-  if (!sku || !amount_cents) return res.status(400).json({ error: "sku, amount_cents required" });
-  const splits = splitCents(sku, amount_cents);
-  res.json({ sku, amount_cents, ...splits });
-});
-
-router.post("/packages/order", async (req, res) => {
-  const { registration_id, team_id, athlete_id, sku, amount_cents, currency = "USD", crew_type, metadata } = req.body;
-  if (!sku || !amount_cents) return res.status(400).json({ error: "sku, amount_cents required" });
-  const splits = splitCents(sku, amount_cents);
-  const result = await db.query(
-    `INSERT INTO pylon_package_orders
-      (registration_id, team_id, athlete_id, sku, amount_cents, currency,
-       toj_take_cents, optimum_take_cents, subject_media_take_cents, pylon_take_cents,
-       crew_type, status, metadata)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,'awaiting_payment',$12) RETURNING *`,
-    [registration_id, team_id, athlete_id, sku, amount_cents, currency,
-     splits.toj_take_cents, splits.optimum_take_cents, splits.subject_media_take_cents, splits.pylon_take_cents,
-     crew_type, metadata || {}]
-  );
-  // TODO: create Stripe checkout, return URL
-  res.json({ order: result.rows[0], stripe_checkout_url: null, todo: "wire stripe checkout in v1.2" });
-});
-
-router.post("/packages/webhook", async (req, res) => {
-  // Stripe webhook · verify signature, mark paid
-  const { order_id } = req.body;
-  if (!order_id) return res.status(400).json({ error: "order_id required" });
-  await db.query(`UPDATE pylon_package_orders SET status='pending_delivery', paid_at=now() WHERE id=$1`, [order_id]);
-  res.json({ ok: true });
-});
-
-// ═══════════════════════════════════════════════════════════════════════════
-// V2 CORE · Athlete Subscriptions (SKU #9)
-// ═══════════════════════════════════════════════════════════════════════════
-
-router.post("/subscriptions/quote", async (req, res) => {
-  const { tier } = req.body;
-  const priceMap = { individual: 9900, combine: 24900 };
-  if (!priceMap[tier]) return res.status(400).json({ error: "tier must be individual or combine" });
-  const sku = tier === "individual" ? "9_individual" : "9_combine";
-  const amount = priceMap[tier];
-  const splits = splitCents(sku, amount);
-  res.json({ tier, amount_cents: amount, ...splits });
-});
-
-router.post("/subscriptions/checkout", async (req, res) => {
-  const { athlete_id, tier, active_until } = req.body;
-  if (!athlete_id || !tier) return res.status(400).json({ error: "athlete_id, tier required" });
-  const priceMap = { individual: 9900, combine: 24900 };
-  const sku = tier === "individual" ? "9_individual" : "9_combine";
-  const amount = priceMap[tier];
-  if (!amount) return res.status(400).json({ error: "invalid tier" });
-  const splits = splitCents(sku, amount);
-  const result = await db.query(
-    `INSERT INTO pylon_athlete_subscriptions
-      (athlete_id, tier, amount_cents, toj_take_cents, pylon_take_cents, optimum_take_cents, active_until, next_billing_at)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$7)
-     ON CONFLICT (athlete_id) WHERE status = 'active' DO UPDATE SET tier=$2, amount_cents=$3
-     RETURNING *`,
-    [athlete_id, tier, amount, splits.toj_take_cents, splits.pylon_take_cents, splits.optimum_take_cents, active_until]
-  );
-  res.json({ subscription: result.rows[0], stripe_checkout_url: null, todo: "wire stripe checkout in v1.2" });
-});
-
-router.post("/subscriptions/webhook", async (req, res) => {
-  const { subscription_id, event_type } = req.body;
-  if (event_type === "invoice.paid") {
-    await db.query(`UPDATE pylon_athlete_subscriptions SET status='active', next_billing_at=next_billing_at + interval '1 year' WHERE id=$1`, [subscription_id]);
+router.post("/requests", publicPost, safe(async (req, res) => {
+  const raw = bodyOf(req);
+  if (trapped(raw)) return res.json({ ok: true, id: null, checkout_url: null });
+  if (perVisitor(H.visitorKey(H.visitor(req)))) return res.status(429).json({ error: "too_many" });
+  const { errors, value } = U.normalize(raw);
+  if (errors.length) return res.status(400).json({ error: "invalid", fields: errors });
+  if (perPeer(H.peer(req)) || !requestsThisHour()) {
+    floodTripped("requests");
+    return res.status(429).json({ error: "too_many" });
   }
-  res.json({ ok: true });
-});
+  const row = { ...value, status: "new" };
+  const who = H.visitor(req);
 
-// ═══════════════════════════════════════════════════════════════════════════
-// V2 CORE · Sponsors + Deals (SKUs 4a-4d + content sponsor)
-// ═══════════════════════════════════════════════════════════════════════════
-
-router.get("/sponsors/deals", async (req, res) => {
-  const { status, tier } = req.query;
-  let query = "SELECT * FROM pylon_sponsor_deals WHERE 1=1";
-  const params = [];
-  if (status) { params.push(status); query += ` AND status = $${params.length}`; }
-  if (tier) { params.push(tier); query += ` AND tier = $${params.length}`; }
-  query += " ORDER BY created_at DESC LIMIT 200";
-  const result = await db.query(query, params);
-  res.json(result.rows);
-});
-
-router.post("/sponsors/deals", async (req, res) => {
-  const { sponsor_id, event_id, tier, amount_cents, contract_start, contract_end, closed_by, category_exclusivity } = req.body;
-  if (!sponsor_id || !tier || !amount_cents) return res.status(400).json({ error: "sponsor_id, tier, amount_cents required" });
-  // Category exclusivity check
-  if (category_exclusivity) {
-    const conflict = await db.query(
-      `SELECT COUNT(*) AS n FROM pylon_sponsor_deals sd
-       JOIN pylon_sponsors s ON s.id = sd.sponsor_id
-       WHERE s.category = (SELECT category FROM pylon_sponsors WHERE id=$1)
-         AND sd.category_exclusivity = true AND sd.status IN ('signed','invoiced','paid','delivered')`,
-      [sponsor_id]
-    );
-    if (parseInt(conflict.rows[0].n, 10) > 0) {
-      return res.status(409).json({ error: "category exclusivity conflict" });
+  const sb = getSupabase();
+  if (sb) {
+    const { data, error } = await sb.from("pylon_requests").insert(row).select().single();
+    if (!error && data) {
+      const url = await startCheckout(sb, data, req);
+      res.json({ ok: true, id: data.id, checkout_url: url });
+      setImmediate(() => {
+        alertStaff(sb, data);
+        emailContact(sb, data, "contact_emailed_at", (r) => U.contactEmail(r, { checkout: !!url, help: helpEmail() }), () => noteAllowed(data.contact_email, who));
+      });
+      return;
     }
+    console.error("[pylon] insert failed:", error && (error.code || "") + " " + (error.message || ""));
+    if (inputError(error)) return res.status(400).json({ error: "invalid", fields: [] });
+    if (notSetUp(error)) return res.status(503).json({ error: "storage_unavailable" });
   }
-  const commissionCents = Math.round(amount_cents * 0.25);
-  const result = await db.query(
-    `INSERT INTO pylon_sponsor_deals (sponsor_id, event_id, tier, amount_cents, toj_commission_cents, status, contract_start, contract_end, closed_by, category_exclusivity)
-     VALUES ($1,$2,$3,$4,$5,'pending',$6,$7,$8,$9) RETURNING *`,
-    [sponsor_id, event_id, tier, amount_cents, commissionCents, contract_start, contract_end, closed_by, category_exclusivity || false]
+  if (await emailUnsaved(row)) return res.json({ ok: true, id: null, checkout_url: null });
+  return res.status(503).json({ error: "storage_unavailable" });
+}));
+
+const newToken = () => crypto.randomBytes(32).toString("hex");
+const hashToken = (t) => crypto.createHash("sha256").update(String(t), "utf8").digest("hex");
+const confirmLink = (token) => `${SITE_BASE()}/pylon-newsletter.html?confirm=${token}`;
+const unsubscribeLink = (token) => `${SITE_BASE()}/pylon-newsletter.html?unsubscribe=${token}`;
+
+// The answer is the same whatever the address, so the form can't tell anyone
+// whether an address is on the list.
+router.post("/newsletter/subscribe", publicPost, safe(async (req, res) => {
+  const raw = bodyOf(req);
+  if (trapped(raw)) return res.json({ ok: true });
+  if (perVisitor("nl:" + H.visitorKey(H.visitor(req)))) return res.status(429).json({ error: "too_many" });
+  const address = U.email(raw.email);
+  if (!address) return res.status(400).json({ error: "invalid", fields: ["email"] });
+  if (perPeer("nl:" + H.peer(req)) || !signupsThisHour()) {
+    floodTripped("newsletter sign-ups");
+    return res.status(429).json({ error: "too_many" });
+  }
+  const source = U.NEWSLETTER_SOURCES.includes(raw.source) ? raw.source : "newsletter_page";
+  const sb = getSupabase();
+  if (!sb) return res.status(503).json({ error: "storage_unavailable" });
+  const who = H.visitor(req);
+
+  const { data: cur, error } = await sb.from("pylon_newsletter").select("id,status").eq("email", address).maybeSingle();
+  if (error) {
+    console.error("[pylon] newsletter read failed:", error.code || "", error.message || "");
+    return res.status(503).json({ error: "storage_unavailable" });
+  }
+  if (cur && cur.status === "confirmed") return res.json({ ok: true });
+  // One confirmation a day to an address; past that, the last link still works.
+  const giveBack = noteAllowed(address, who, { confirm: true });
+  if (!giveBack) return res.json({ ok: true });
+  const token = newToken();
+  const at = nowIso();
+  const pending = { status: "pending", confirm_token_hash: hashToken(token), confirm_sent_at: at, updated_at: at };
+  let saved;
+  if (cur) {
+    saved = await sb.from("pylon_newsletter").update(pending).eq("id", cur.id).neq("status", "confirmed").select("id");
+  } else {
+    saved = await sb.from("pylon_newsletter").insert({ email: address, source, unsubscribe_token: newToken(), ...pending }).select("id");
+  }
+  if (saved.error || !(saved.data || []).length) {
+    giveBack();
+    // Two sign-ups at once: the other one's email is on its way.
+    if (saved.error && saved.error.code === "23505") return res.json({ ok: true });
+    if (saved.error) {
+      console.error("[pylon] newsletter save failed:", saved.error.code || "", saved.error.message || "");
+      return res.status(503).json({ error: "storage_unavailable" });
+    }
+    return res.json({ ok: true });
+  }
+  res.json({ ok: true });
+  setImmediate(async () => {
+    const mail = U.confirmEmail({ confirmUrl: confirmLink(token), help: helpEmail() });
+    let r = null;
+    try {
+      r = await mailer.sendMail({ to: address, subject: mail.subject, text: mail.text, replyTo: helpEmail(), pool: "pylon" });
+    } catch (e) {
+      console.warn("[pylon] newsletter confirmation failed:", mailError(e));
+    }
+    if (!r || !r.sent) {
+      if (r) console.warn(`[pylon] newsletter confirmation not sent (${r.reason})`);
+      giveBack();
+    }
+  });
+}));
+
+router.post("/newsletter/confirm", publicPost, safe(async (req, res) => {
+  if (linkTries(H.visitorKey(H.visitor(req)))) return res.status(429).json({ error: "too_many" });
+  const token = String(bodyOf(req).token || "");
+  if (!U.isToken(token)) return res.status(400).json({ error: "bad_link" });
+  const sb = getSupabase();
+  if (!sb) return res.status(503).json({ error: "storage_unavailable" });
+  const at = nowIso();
+  const since = new Date(Date.now() - U.CONFIRM_TTL_MS).toISOString();
+  const { data, error } = await sb
+    .from("pylon_newsletter")
+    .update({ status: "confirmed", confirmed_at: at, confirm_token_hash: null, updated_at: at })
+    .eq("confirm_token_hash", hashToken(token))
+    .eq("status", "pending")
+    .gt("confirm_sent_at", since)
+    .select("id");
+  if (error) return res.status(503).json({ error: "storage_unavailable" });
+  if (!(data || []).length) return res.status(404).json({ error: "link_not_active" });
+  res.json({ ok: true });
+}));
+
+router.post("/newsletter/unsubscribe", publicPost, safe(async (req, res) => {
+  if (linkTries(H.visitorKey(H.visitor(req)))) return res.status(429).json({ error: "too_many" });
+  const token = String(bodyOf(req).token || "");
+  if (!U.isToken(token)) return res.status(400).json({ error: "bad_link" });
+  const sb = getSupabase();
+  if (!sb) return res.status(503).json({ error: "storage_unavailable" });
+  const { data: cur, error } = await sb.from("pylon_newsletter").select("id,status").eq("unsubscribe_token", token).maybeSingle();
+  if (error) return res.status(503).json({ error: "storage_unavailable" });
+  if (!cur) return res.status(404).json({ error: "link_not_active" });
+  if (cur.status !== "unsubscribed") {
+    const at = nowIso();
+    const { error: e2 } = await sb
+      .from("pylon_newsletter")
+      .update({ status: "unsubscribed", unsubscribed_at: at, confirm_token_hash: null, updated_at: at })
+      .eq("id", cur.id);
+    if (e2) return res.status(503).json({ error: "storage_unavailable" });
+  }
+  res.json({ ok: true });
+}));
+
+// ── Stripe ───────────────────────────────────────────────────────────────
+const SESSION_ID = /^cs_(test|live)_[A-Za-z0-9]{8,200}$/;
+const SUB_ID = /^sub_[A-Za-z0-9]{6,200}$/;
+const SUB_STATUSES = ["active", "past_due", "unpaid", "canceled", "incomplete", "incomplete_expired", "trialing", "paused"];
+
+// Money Stripe took that the request already has, or that came through a
+// checkout that isn't the request's own: kept on the request, and staff told,
+// so nobody pays twice without someone knowing.
+async function extraPayment(sb, row, session, amount) {
+  const list = Array.isArray(row.extra_payments) ? row.extra_payments : [];
+  if (list.some((p) => p && p.checkout_session_id === session.id)) return { duplicate: true };
+  const entry = { checkout_session_id: session.id, amount_cents: amount, mode: session.livemode ? "live" : "test", at: nowIso() };
+  const { data, error } = await sb
+    .from("pylon_requests")
+    .update({ extra_payments: [...list, entry], updated_at: nowIso() })
+    .eq("id", row.id)
+    .eq("updated_at", row.updated_at)
+    .select()
+    .maybeSingle();
+  if (error) {
+    console.error("[pylon] extra payment not saved:", error.code || "", error.message || "");
+    return { error: true };
+  }
+  // Changed meanwhile: Stripe sends it again, and the next try reads it fresh.
+  if (!data) return { error: true };
+  console.warn("[pylon] a further payment came in for a request");
+  tellStaff(
+    { title: "Pylon: a second payment", body: `${U.money(amount)} more on Stripe for ${row.package_name}`, url: `/app/#pylon-request/${row.id}`, tag: `pylon-extra-${row.id}` },
+    {
+      subject: `Pylon: a second payment for ${row.package_name} (${U.money(amount)})`,
+      text: [
+        `Stripe took ${U.money(amount)}${entry.mode === "test" ? " (test mode: no money moved)" : ""} for a request that already ${row.paid_at ? "shows as paid" : "had another checkout"}.`,
+        "Check it in the app and refund one in Stripe if it's paid twice.",
+        "",
+        `Open it in the TOJ app: ${APP_BASE()}/app/#pylon-request/${row.id}`,
+      ].join("\n"),
+    },
+    { money: true }
   );
-  res.json(result.rows[0]);
-});
+  return { extra: data };
+}
 
-router.patch("/sponsors/deals/:id", async (req, res) => {
-  const { status } = req.body;
-  const result = await db.query(`UPDATE pylon_sponsor_deals SET status=$1 WHERE id=$2 RETURNING *`, [status, req.params.id]);
-  res.json(result.rows[0]);
-});
-
-// ═══════════════════════════════════════════════════════════════════════════
-// V2 CORE · Email Campaigns (SKU #4d)
-// ═══════════════════════════════════════════════════════════════════════════
-
-router.post("/email-campaigns", async (req, res) => {
-  const { sponsor_deal_id, campaign_name, subject_line, send_at, segment, audience_count } = req.body;
-  const result = await db.query(
-    `INSERT INTO pylon_email_campaigns (sponsor_deal_id, campaign_name, subject_line, send_at, segment, audience_count)
-     VALUES ($1,$2,$3,$4,$5,$6) RETURNING *`,
-    [sponsor_deal_id, campaign_name, subject_line, send_at, segment, audience_count]
+// Stripe took money for a Pylon checkout whose request isn't in the app
+// (deleted, or never saved): staff hear, so it's refunded or added by hand.
+function paymentWithoutRequest(session, cents) {
+  console.warn("[pylon] a Pylon payment has no request in the app");
+  const where = session.livemode ? "" : " (test mode: no money moved)";
+  tellStaff(
+    { title: "Pylon: a payment with no request", body: `${U.money(cents)} on Stripe${where}`, url: "/app/#pylon/all", tag: `pylon-orphan-${session.id}` },
+    {
+      subject: `Pylon: a payment with no request (${U.money(cents)})`,
+      text: [
+        `Stripe took ${U.money(cents)}${where} through Pylon checkout ${session.id}, but its request isn't in the app (it may have been deleted).`,
+        "Find the payment in Stripe by that checkout: refund it, or add the request by hand and tell the family.",
+      ].join("\n"),
+    },
+    { money: true }
   );
-  res.json(result.rows[0]);
-});
+}
 
-router.patch("/email-campaigns/:id", async (req, res) => {
-  const { status, opens, clicks, conversions, report_url } = req.body;
-  const result = await db.query(
-    `UPDATE pylon_email_campaigns SET status=coalesce($1,status), opens=coalesce($2,opens), clicks=coalesce($3,clicks), conversions=coalesce($4,conversions), report_url=coalesce($5,report_url) WHERE id=$6 RETURNING *`,
-    [status, opens, clicks, conversions, report_url, req.params.id]
-  );
-  res.json(result.rows[0]);
-});
-
-// ═══════════════════════════════════════════════════════════════════════════
-// V2 CORE · Merch Drops (SKUs #5a/5b)
-// ═══════════════════════════════════════════════════════════════════════════
-
-router.post("/merch-drops", async (req, res) => {
-  const { drop_type, team_id, event_id, athlete_id, name, storefront_url, opens_at, closes_at } = req.body;
-  const result = await db.query(
-    `INSERT INTO pylon_merch_drops (drop_type, team_id, event_id, athlete_id, name, storefront_url, opens_at, closes_at)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *`,
-    [drop_type, team_id, event_id, athlete_id, name, storefront_url, opens_at, closes_at]
-  );
-  res.json(result.rows[0]);
-});
-
-// ═══════════════════════════════════════════════════════════════════════════
-// V2 CORE · City League Hosts (SKU #7) + V3.1 Ownership Fund
-// ═══════════════════════════════════════════════════════════════════════════
-
-router.post("/city-league-hosts", async (req, res) => {
-  const { host_name, city, region, contact_name, contact_email, league_format, toolkit_tier, toolkit_amount_cents, season, ownership_model } = req.body;
-  const tojTake = toolkit_amount_cents ? Math.round(toolkit_amount_cents * 0.40) : null;
-  const result = await db.query(
-    `INSERT INTO pylon_city_league_hosts (host_name, city, region, contact_name, contact_email, league_format, toolkit_tier, toolkit_amount_cents, toj_take_cents, season, ownership_model)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING *`,
-    [host_name, city, region, contact_name, contact_email, league_format, toolkit_tier, toolkit_amount_cents, tojTake, season, ownership_model || 'toolkit_license']
-  );
-  res.json(result.rows[0]);
-});
-
-// ═══════════════════════════════════════════════════════════════════════════
-// V2 CORE · Sales Sequences + Runs
-// ═══════════════════════════════════════════════════════════════════════════
-
-router.get("/sequences", async (req, res) => {
-  const result = await db.query("SELECT * FROM pylon_sales_sequences WHERE active=true ORDER BY phase, sequence_key");
-  res.json(result.rows);
-});
-
-router.post("/sequences/fire", async (req, res) => {
-  const { sequence_id, team_id, athlete_id, event_id } = req.body;
-  if (!sequence_id) return res.status(400).json({ error: "sequence_id required" });
-  const result = await db.query(
-    `INSERT INTO pylon_sequence_runs (sequence_id, team_id, athlete_id, event_id)
-     VALUES ($1,$2,$3,$4) RETURNING *`,
-    [sequence_id, team_id, athlete_id, event_id]
-  );
-  res.json(result.rows[0]);
-});
-
-router.get("/sequences/runs", async (req, res) => {
-  const { team_id, delivery_status, since } = req.query;
-  let query = "SELECT * FROM pylon_sequence_runs WHERE 1=1";
-  const params = [];
-  if (team_id) { params.push(team_id); query += ` AND team_id = $${params.length}`; }
-  if (delivery_status) { params.push(delivery_status); query += ` AND delivery_status = $${params.length}`; }
-  if (since) { params.push(since); query += ` AND fired_at >= $${params.length}`; }
-  query += " ORDER BY fired_at DESC LIMIT 200";
-  const result = await db.query(query, params);
-  res.json(result.rows);
-});
-
-// ═══════════════════════════════════════════════════════════════════════════
-// V2 CORE · Live Event Console (SKU #10)
-// ═══════════════════════════════════════════════════════════════════════════
-
-router.post("/live-posts", async (req, res) => {
-  const { event_id, team_id, athlete_id, post_type, asset_url, sponsor_tag, operator, metadata } = req.body;
-  if (!event_id || !post_type) return res.status(400).json({ error: "event_id, post_type required" });
-  const result = await db.query(
-    `INSERT INTO pylon_live_posts (event_id, team_id, athlete_id, post_type, asset_url, sponsor_tag, operator, metadata)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *`,
-    [event_id, team_id, athlete_id, post_type, asset_url, sponsor_tag, operator, metadata || {}]
-  );
-  res.json(result.rows[0]);
-});
-
-router.get("/live-posts", async (req, res) => {
-  const { event_id, status } = req.query;
-  const params = [];
-  let query = "SELECT * FROM pylon_live_posts WHERE 1=1";
-  if (event_id) { params.push(event_id); query += ` AND event_id = $${params.length}`; }
-  if (status) { params.push(status); query += ` AND status = $${params.length}`; }
-  query += " ORDER BY posted_at DESC NULLS LAST, created_at DESC LIMIT 100";
-  const result = await db.query(query, params);
-  res.json(result.rows);
-});
-
-// Console cards pass the same approver gate as every content asset (migration 016).
-// A card starts 'queued'; only a PYLON_APPROVERS approver can approve or reject it.
-router.post("/live-posts/:id/approve", requirePylonApprover, async (req, res) => {
-  const result = await db.query(
-    `UPDATE pylon_live_posts SET status='approved', decided_by=$1, decided_at=now()
-      WHERE id=$2 AND status='queued' RETURNING *`,
-    [req.session.user.email, req.params.id]
-  );
-  if (result.rowCount === 0) return res.status(409).json({ error: "card not found or not waiting for approval" });
-  res.json(result.rows[0]);
-});
-
-router.post("/live-posts/:id/reject", requirePylonApprover, async (req, res) => {
-  const result = await db.query(
-    `UPDATE pylon_live_posts SET status='rejected', decided_by=$1, decided_at=now()
-      WHERE id=$2 AND status IN ('queued','approved') RETURNING *`,
-    [req.session.user.email, req.params.id]
-  );
-  if (result.rowCount === 0) return res.status(409).json({ error: "card not found or already published or rejected" });
-  res.json(result.rows[0]);
-});
-
-router.post("/live-posts/:id/publish", async (req, res) => {
-  const { channels } = req.body;
-  const result = await db.query(
-    `UPDATE pylon_live_posts SET status='published', posted_at=now(), channels=$1
-      WHERE id=$2 AND status='approved' RETURNING *`,
-    [channels || [], req.params.id]
-  );
-  if (result.rowCount === 0) return res.status(400).json({ error: "live card must be approved before publish" });
-  res.json(result.rows[0]);
-});
-
-// ═══════════════════════════════════════════════════════════════════════════
-// V2.5 · Content Pieces + approvals
-// ═══════════════════════════════════════════════════════════════════════════
-
-router.get("/content", async (req, res) => {
-  const { pillar, status, scheduled_before, scheduled_after } = req.query;
-  let query = "SELECT * FROM pylon_content_pieces WHERE 1=1";
-  const params = [];
-  if (pillar) { params.push(pillar); query += ` AND pillar = $${params.length}`; }
-  if (status) { params.push(status); query += ` AND status = $${params.length}`; }
-  if (scheduled_before) { params.push(scheduled_before); query += ` AND scheduled_at <= $${params.length}`; }
-  if (scheduled_after) { params.push(scheduled_after); query += ` AND scheduled_at >= $${params.length}`; }
-  query += " ORDER BY scheduled_at DESC NULLS LAST LIMIT 200";
-  const result = await db.query(query, params);
-  res.json(result.rows);
-});
-
-router.post("/content", async (req, res) => {
-  const fields = ["pillar","asset_type","title","primary_channel","cross_post_channels","scheduled_at","status","assigned_to","sponsor_deal_id","copy_body","cta_url","athlete_ids","team_ids","event_id","metadata"];
-  const values = fields.map((f) => req.body[f]);
-  const placeholders = fields.map((_, i) => `$${i + 1}`).join(",");
-  const result = await db.query(
-    `INSERT INTO pylon_content_pieces (${fields.join(",")}) VALUES (${placeholders}) RETURNING *`,
-    values
-  );
-  res.json(result.rows[0]);
-});
-
-// V2.5 · Approval gate — only Pylon-designated approvers per PYLON_APPROVERS
-router.post("/content/:id/approve", requirePylonApprover, async (req, res) => {
-  const result = await db.query(
-    `UPDATE pylon_content_pieces SET status='approved', approver=$1 WHERE id=$2 RETURNING *`,
-    [req.session.user.email, req.params.id]
-  );
-  res.json(result.rows[0]);
-});
-
-router.post("/content/:id/publish", async (req, res) => {
-  const result = await db.query(
-    `UPDATE pylon_content_pieces SET status='published', published_at=now() WHERE id=$1 AND status='approved' RETURNING *`,
-    [req.params.id]
-  );
-  if (result.rowCount === 0) return res.status(400).json({ error: "content must be approved before publish" });
-  res.json(result.rows[0]);
-});
-
-router.post("/content/:id/performance", async (req, res) => {
-  const { reach, impressions, likes, comments, shares, saves, clicks, conversions, conversion_revenue_cents, raw } = req.body;
-  const result = await db.query(
-    `INSERT INTO pylon_content_performance (content_piece_id, reach, impressions, likes, comments, shares, saves, clicks, conversions, conversion_revenue_cents, raw)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING *`,
-    [req.params.id, reach || 0, impressions || 0, likes || 0, comments || 0, shares || 0, saves || 0, clicks || 0, conversions || 0, conversion_revenue_cents || 0, raw || {}]
-  );
-  res.json(result.rows[0]);
-});
-
-// ═══════════════════════════════════════════════════════════════════════════
-// V2.5 · Ambassadors + Newsletter
-// ═══════════════════════════════════════════════════════════════════════════
-
-router.get("/ambassadors", async (req, res) => {
-  const { status, tier } = req.query;
-  let query = "SELECT * FROM pylon_ambassadors WHERE 1=1";
-  const params = [];
-  if (status) { params.push(status); query += ` AND status = $${params.length}`; }
-  if (tier) { params.push(tier); query += ` AND tier = $${params.length}`; }
-  query += " ORDER BY tier DESC, follower_count_total DESC LIMIT 200";
-  const result = await db.query(query, params);
-  res.json(result.rows);
-});
-
-router.post("/ambassadors", async (req, res) => {
-  const fields = ["athlete_id","tier","monthly_stipend_cents","posts_expected_weekly","brand_affiliate_slots_monthly","ig_handle","tiktok_handle","twitter_handle","youtube_channel","follower_count_total","status","metadata"];
-  const values = fields.map((f) => req.body[f]);
-  if (!req.body.athlete_id) return res.status(400).json({ error: "athlete_id required" });
-  const placeholders = fields.map((_, i) => `$${i + 1}`).join(",");
-  const result = await db.query(
-    `INSERT INTO pylon_ambassadors (${fields.join(",")}, onboarded_at) VALUES (${placeholders},now()) RETURNING *`,
-    values
-  );
-  res.json(result.rows[0]);
-});
-
-router.post("/newsletter/subscribe", async (req, res) => {
-  const { email, first_name, last_name, source, team_id, athlete_id } = req.body;
-  if (!email) return res.status(400).json({ error: "email required" });
-  const result = await db.query(
-    `INSERT INTO pylon_newsletter_subscribers (email, first_name, last_name, tier, source, team_id, athlete_id)
-     VALUES ($1,$2,$3,'free',$4,$5,$6)
-     ON CONFLICT (email) DO NOTHING RETURNING *`,
-    [email, first_name, last_name, source, team_id, athlete_id]
-  );
-  res.json(result.rows[0] || { note: "already subscribed" });
-});
-
-// ═══════════════════════════════════════════════════════════════════════════
-// V2.7 · Recruiting Concierge (SKU #11) + HBCU premium
-// ═══════════════════════════════════════════════════════════════════════════
-
-router.post("/recruiting/subscribe", async (req, res) => {
-  const { athlete_id, tier, billing_cadence, hbcu_focus, target_college_list } = req.body;
-  if (!athlete_id || !tier || !billing_cadence) return res.status(400).json({ error: "athlete_id, tier, billing_cadence required" });
-  const priceMap = {
-    "standard_monthly": 9900,
-    "standard_season": 49900,
-    "hbcu_premium_monthly": 14900,
-    "hbcu_premium_season": 74900,
+// Finds the request the checkout was made for, and records the payment once.
+// { error } asks Stripe to send the event again.
+async function markPaid(sb, session, { eventAt = nowIso() } = {}) {
+  if (!session || (session.payment_status !== "paid" && session.payment_status !== "no_payment_required")) return {};
+  if (!SESSION_ID.test(String(session.id || ""))) return {};
+  const meta = session.metadata || {};
+  const id = String(session.client_reference_id || meta.request_id || "");
+  const amount = Number(session.amount_total);
+  const paidCents = Number.isInteger(amount) && amount >= 0 && amount <= U.MAX_CENTS ? amount : null;
+  if (!U.UUID.test(id)) {
+    paymentWithoutRequest(session, paidCents || 0);
+    return {};
+  }
+  const { data: row, error } = await sb.from("pylon_requests").select("*").eq("id", id).maybeSingle();
+  if (error) {
+    console.error("[pylon] paid: read failed:", error.code || "", error.message || "");
+    return { error: true };
+  }
+  if (!row) {
+    paymentWithoutRequest(session, paidCents || 0);
+    return {};
+  }
+  if (row.kind === "ambassador") return {};
+  const cents = paidCents !== null ? paidCents : row.price_cents || 0;
+  // The same checkout again (Stripe retrying): nothing new.
+  if (row.paid_at && row.paid_via === "stripe" && row.checkout_session_id === session.id) return { duplicate: true };
+  // Paid already (by hand, or through another checkout), or a checkout that
+  // isn't this request's own: record it and tell staff.
+  if (row.paid_at || (row.checkout_session_id && row.checkout_session_id !== session.id)) return extraPayment(sb, row, session, cents);
+  const at = nowIso();
+  const patch = {
+    paid_at: at,
+    paid_cents: cents,
+    paid_via: "stripe",
+    checkout_session_id: session.id,
+    checkout_mode: session.livemode ? "live" : "test",
+    updated_at: at,
   };
-  const key = `${tier}_${billing_cadence}`;
-  const amount = priceMap[key];
-  if (!amount) return res.status(400).json({ error: "invalid tier/cadence combo" });
-  const sku = tier === "hbcu_premium" ? "11_hbcu_premium" : "11_standard";
-  const splits = splitCents(sku, amount);
-  const activeUntil = new Date();
-  if (billing_cadence === "monthly") activeUntil.setMonth(activeUntil.getMonth() + 1);
-  else activeUntil.setFullYear(activeUntil.getFullYear() + 1);
-  const result = await db.query(
-    `INSERT INTO pylon_recruiting_subscriptions
-      (athlete_id, tier, billing_cadence, amount_cents, toj_take_cents, pylon_take_cents, optimum_take_cents, active_until, next_billing_at, hbcu_focus, target_college_list)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$8,$9,$10) RETURNING *`,
-    [athlete_id, tier, billing_cadence, amount, splits.toj_take_cents, splits.pylon_take_cents, splits.optimum_take_cents, activeUntil, hbcu_focus || (tier === "hbcu_premium"), target_college_list || []]
-  );
-  res.json({ subscription: result.rows[0], stripe_checkout_url: null, todo: "wire stripe checkout in v1.2" });
-});
-
-router.post("/recruiting/draft", async (req, res) => {
-  const { subscription_id, athlete_id, coach_name, coach_email, program_name, program_level, is_hbcu, outreach_type, draft_subject, draft_body } = req.body;
-  const result = await db.query(
-    `INSERT INTO pylon_recruiting_outreach
-      (subscription_id, athlete_id, coach_name, coach_email, program_name, program_level, is_hbcu, outreach_type, draft_subject, draft_body)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING *`,
-    [subscription_id, athlete_id, coach_name, coach_email, program_name, program_level, is_hbcu || false, outreach_type, draft_subject, draft_body]
-  );
-  res.json(result.rows[0]);
-});
-
-// Staff can only REQUEST the parent's approval. This issues a one-time link for
-// the parent (see routes/pylon-parent.js and public/parent-approval.html).
-// Approval itself is recorded only by the parent, through that link; the
-// database refuses any other path (migration 013). Requesting again replaces
-// the previous link.
-router.post("/recruiting/request-approval/:id", async (req, res) => {
-  const token = parentApproval.newToken();
-  const result = await db.query(
-    `UPDATE pylon_recruiting_outreach o
-        SET parent_approval_token_hash   = $2,
-            parent_approval_requested_at = now(),
-            parent_approval_expires_at   = $3,
-            parent_decision              = null,
-            parent_decided_at            = null,
-            parent_decided_name          = null
-       FROM pylon_athletes a
-      WHERE o.id = $1
-        AND a.id = o.athlete_id
-        AND o.parent_approved = false
-        AND o.sent_at IS NULL
-      RETURNING o.id, o.parent_approval_expires_at, (a.parent_email IS NOT NULL) AS parent_email_on_file`,
-    [req.params.id, parentApproval.hashToken(token), parentApproval.expiresAt()]
-  );
-  if (result.rowCount === 0)
-    return res.status(409).json({ error: "draft not found, already approved, or already sent" });
-  const row = result.rows[0];
-  res.json({
-    outreach_id: row.id,
-    approval_url: parentApproval.approvalUrl(req, token),
-    expires_at: row.parent_approval_expires_at,
-    parent_email_on_file: row.parent_email_on_file,
-    note: "Share this link with the parent or guardian only. It works once and is not stored.",
+  // A monthly plan starts active, unless Stripe already told us otherwise
+  // (its own events can arrive first).
+  if (typeof session.subscription === "string" && SUB_ID.test(session.subscription) && !row.stripe_subscription_id) {
+    patch.stripe_subscription_id = session.subscription;
+    if (!row.subscription_status) Object.assign(patch, { subscription_status: "active", subscription_updated_at: eventAt });
+  }
+  const { data, error: e2 } = await sb.from("pylon_requests").update(patch).eq("id", row.id).is("paid_at", null).select().maybeSingle();
+  if (e2) {
+    if (e2.code === "23505") return {};
+    console.error("[pylon] paid: update failed:", e2.code || "", e2.message || "");
+    return { error: true };
+  }
+  if (!data) {
+    // Something marked it paid between the read and now: read it again.
+    const { data: again } = await sb.from("pylon_requests").select("*").eq("id", row.id).maybeSingle();
+    if (again && again.paid_at && !(again.paid_via === "stripe" && again.checkout_session_id === session.id)) return extraPayment(sb, again, session, cents);
+    return { duplicate: true };
+  }
+  setImmediate(() => {
+    alertStaff(sb, data, { paid: true });
+    emailContact(sb, data, "paid_emailed_at", (r) => U.paidEmail(r, { help: helpEmail() }), () => paidNoteAllowed(data.contact_email));
   });
-});
+  return { row: data };
+}
 
-// The old staff route that set parent_approved=true directly. Kept as a clear
-// refusal so any caller still using it learns the new path.
-router.post("/recruiting/approve/:id", (_req, res) =>
-  res.status(410).json({
-    error: "parent approval is recorded only by the parent",
-    use: "POST /api/pylon/recruiting/request-approval/:id, then share the link with the parent",
-  })
-);
+// A monthly plan changed on Stripe's side (cancelled, a renewal failed): the
+// request shows it, and staff hear when it stops being active. Stripe can
+// deliver events late or out of order (a retry of one that failed), so an
+// event older than the last one applied changes nothing, and a plan that
+// ended stays ended.
+const FINAL = ["canceled", "incomplete_expired"];
+async function subscriptionChanged(sb, sub, { deleted = false, eventAt = nowIso() } = {}) {
+  const meta = sub.metadata || {};
+  const id = String(meta.request_id || "");
+  if (!U.UUID.test(id) || !SUB_ID.test(String(sub.id || ""))) return {};
+  const status = deleted ? "canceled" : SUB_STATUSES.includes(sub.status) ? sub.status : null;
+  if (!status) return {};
+  const { data: row, error } = await sb.from("pylon_requests").select("id,package_name,stripe_subscription_id,subscription_status,subscription_updated_at,updated_at").eq("id", id).maybeSingle();
+  if (error) return { error: true };
+  if (!row || (row.stripe_subscription_id && row.stripe_subscription_id !== sub.id)) return {};
+  if (FINAL.includes(row.subscription_status)) return { duplicate: true };
+  if (row.subscription_updated_at) {
+    const was = Date.parse(row.subscription_updated_at);
+    const now = Date.parse(eventAt);
+    // Same second: only an ending wins.
+    if (now < was || (now === was && !FINAL.includes(status))) return { stale: true };
+  }
+  // The same status again (a renewal that went through): nothing to show,
+  // but its time moves forward, so an older event retried later loses.
+  if (row.subscription_status === status) {
+    const { data: moved, error: e1 } = await sb
+      .from("pylon_requests")
+      .update({ subscription_updated_at: eventAt, updated_at: nowIso() })
+      .eq("id", row.id)
+      .eq("updated_at", row.updated_at)
+      .select("id")
+      .maybeSingle();
+    return e1 || !moved ? { error: true } : { duplicate: true };
+  }
+  const ended = FINAL.includes(status) ? (Number.isInteger(sub.ended_at) ? new Date(sub.ended_at * 1000).toISOString() : eventAt) : null;
+  const { data: saved, error: e2 } = await sb
+    .from("pylon_requests")
+    .update({ stripe_subscription_id: sub.id, subscription_status: status, subscription_ended_at: ended, subscription_updated_at: eventAt, updated_at: nowIso() })
+    .eq("id", row.id)
+    .eq("updated_at", row.updated_at)
+    .select("id")
+    .maybeSingle();
+  // Changed meanwhile (another event): Stripe sends this one again, and the
+  // next try reads it fresh.
+  if (e2 || !saved) return { error: true };
+  if (["past_due", "unpaid", "canceled"].includes(status)) {
+    const words = status === "canceled" ? "was cancelled" : "has a payment that didn't go through";
+    tellStaff(
+      { title: `Pylon: monthly plan ${status === "canceled" ? "cancelled" : "payment failed"}`, body: row.package_name, url: `/app/#pylon-request/${row.id}`, tag: `pylon-sub-${row.id}` },
+      { subject: `Pylon: a monthly plan ${words}`, text: `${row.package_name} ${words} on Stripe.\n\nOpen it in the TOJ app: ${APP_BASE()}/app/#pylon-request/${row.id}` },
+      { money: true }
+    );
+  }
+  return { ok: true };
+}
 
-router.post("/recruiting/inbound", async (req, res) => {
-  const { outreach_id, coach_reply_body } = req.body;
-  // TODO: sentiment classification via Claude
-  const sentiment = "warm"; // placeholder — wire Claude call
-  const result = await db.query(
-    `UPDATE pylon_recruiting_outreach SET coach_replied_at=now(), coach_reply_body=$1, reply_sentiment=$2, escalated_to_human=$3 WHERE id=$4 RETURNING *`,
-    [coach_reply_body, sentiment, sentiment === "hot", outreach_id]
-  );
-  res.json(result.rows[0]);
-});
+router.post("/stripe/webhook", safe(async (req, res) => {
+  const secret = env("PYLON_STRIPE_WEBHOOK_SECRET");
+  if (!secret) return res.status(503).json({ error: "webhook_not_configured" });
+  let event;
+  try {
+    event = PS.verify(req.rawBody || Buffer.from(""), req.headers["stripe-signature"], secret);
+  } catch (e) {
+    return res.status(400).json({ error: "bad_signature" });
+  }
+  const obj = (event.data && event.data.object) || {};
+  if ((obj.metadata || {}).kind !== "pylon") return res.json({ received: true });
+  const sb = getSupabase();
+  if (!sb) return res.status(503).json({ error: "storage_unavailable" });
+  let r = {};
+  const eventAt = Number.isInteger(event.created) ? new Date(event.created * 1000).toISOString() : nowIso();
+  if (event.type === "checkout.session.completed" || event.type === "checkout.session.async_payment_succeeded") r = await markPaid(sb, obj, { eventAt });
+  else if (event.type === "customer.subscription.updated") r = await subscriptionChanged(sb, obj, { eventAt });
+  else if (event.type === "customer.subscription.deleted") r = await subscriptionChanged(sb, obj, { deleted: true, eventAt });
+  if (r.error) return res.status(500).json({ error: "webhook_failed" });
+  res.json({ received: true });
+}));
 
-// ═══════════════════════════════════════════════════════════════════════════
-// V2.8 · Creator Referrals (25% OFF loop)
-// ═══════════════════════════════════════════════════════════════════════════
+// ── Staff ────────────────────────────────────────────────────────────────
+const LIST_FIELDS = "id,kind,package,package_name,price_cents,cadence,contact_name,status,details,paid_at,paid_cents,paid_via,checkout_session_id,checkout_mode,extra_payments,subscription_status,contact_verified_at,created_at";
+function listRow(r) {
+  return {
+    id: r.id,
+    kind: r.kind,
+    package: r.package,
+    package_name: r.package_name,
+    price_cents: r.price_cents,
+    cadence: r.cadence,
+    contact_name: r.contact_name,
+    status: r.status,
+    summary: U.summary(r),
+    paid: !!r.paid_at,
+    paid_cents: r.paid_cents,
+    paid_via: r.paid_via,
+    test: U.testPaid(r),
+    went_to_checkout: !!r.checkout_session_id,
+    extra_payments: Array.isArray(r.extra_payments) ? r.extra_payments.length : 0,
+    subscription_status: r.subscription_status || null,
+    verified: !!r.contact_verified_at,
+    created_at: r.created_at,
+  };
+}
+const words = () => ({ kinds: U.KIND_WORDS, statuses: U.STATUS_WORDS, regions: U.REGION_WORDS, levels: U.LEVEL_WORDS, who: U.WHO_WORDS });
+const staffWho = (req) => String(req.session.userEmail || "").toLowerCase().slice(0, 200) || null;
 
-router.post("/creator-referrals", async (req, res) => {
-  const { creator_email, creator_name, referral_code, active_at_event_id, active_until } = req.body;
-  if (!creator_email || !referral_code) return res.status(400).json({ error: "creator_email, referral_code required" });
-  const result = await db.query(
-    `INSERT INTO pylon_creator_referrals (creator_email, creator_name, referral_code, active_at_event_id, active_until)
-     VALUES ($1,$2,$3,$4,$5) RETURNING *`,
-    [creator_email, creator_name, referral_code.toUpperCase(), active_at_event_id, active_until]
-  );
-  res.json(result.rows[0]);
-});
+router.get("/requests", requireStaff, safe(async (req, res) => {
+  const sb = getSupabase();
+  if (!sb) return res.status(503).json({ error: "storage_unavailable" });
+  let q = sb.from("pylon_requests").select(LIST_FIELDS).order("created_at", { ascending: false }).limit(300);
+  if (req.query.all !== "1") q = q.in("status", U.OPEN);
+  const { data, error } = await q;
+  if (error) return res.status(503).json({ error: "storage_unavailable" });
+  res.json({ requests: (data || []).map(listRow), ...words() });
+}));
 
-// ═══════════════════════════════════════════════════════════════════════════
-// V2.9 · Media Assignments + Booth Staffing
-// ═══════════════════════════════════════════════════════════════════════════
+router.get("/requests/:id", requireStaff, safe(async (req, res) => {
+  if (!U.UUID.test(req.params.id)) return res.status(404).json({ error: "not_found" });
+  const sb = getSupabase();
+  if (!sb) return res.status(503).json({ error: "storage_unavailable" });
+  const { data, error } = await sb.from("pylon_requests").select("*").eq("id", req.params.id).maybeSingle();
+  if (error) return res.status(503).json({ error: "storage_unavailable" });
+  if (!data) return res.status(404).json({ error: "not_found" });
+  res.json({ request: { ...data, summary: U.summary(data), test: U.testPaid(data) }, ...words() });
+}));
 
-router.post("/media-assignments", async (req, res) => {
-  const { event_id, team_id, athlete_id, creator_email, creator_name, content_taxonomy_slot } = req.body;
-  const result = await db.query(
-    `INSERT INTO pylon_media_assignments (event_id, team_id, athlete_id, creator_email, creator_name, content_taxonomy_slot, briefed_at)
-     VALUES ($1,$2,$3,$4,$5,$6,now()) RETURNING *`,
-    [event_id, team_id, athlete_id, creator_email, creator_name, content_taxonomy_slot]
-  );
-  res.json(result.rows[0]);
-});
+// The family's open checkout, closed when staff record a payment made
+// another way (or delete the request), so they can't also pay on Stripe.
+// True when Stripe closed it now; false when it wasn't open (already paid,
+// already expired) or Stripe couldn't be reached.
+async function closeCheckout(sessionId) {
+  try {
+    const s = PS.stripe();
+    await s.stripe.checkout.sessions.expire(sessionId);
+    return true;
+  } catch (e) {
+    return false;
+  }
+}
 
-router.patch("/media-assignments/:id", async (req, res) => {
-  const { status, shot_at, delivered_at } = req.body;
-  const result = await db.query(
-    `UPDATE pylon_media_assignments SET status=coalesce($1,status), shot_at=coalesce($2,shot_at), delivered_at=coalesce($3,delivered_at) WHERE id=$4 RETURNING *`,
-    [status, shot_at, delivered_at, req.params.id]
-  );
-  res.json(result.rows[0]);
-});
+// status; team_note; verified: true records that this staff member checked,
+// on a call or in person, that the contact is who the form says (false takes
+// it back); paid: true records a payment made outside Stripe (an invoice,
+// cash), at paid_cents or the list price; paid: false takes back only such a
+// payment. A Stripe payment is Stripe's: refunds happen there.
+router.patch("/requests/:id", requireStaff, safe(async (req, res) => {
+  if (!U.UUID.test(req.params.id)) return res.status(404).json({ error: "not_found" });
+  const body = bodyOf(req);
+  const sb = getSupabase();
+  if (!sb) return res.status(503).json({ error: "storage_unavailable" });
+  const { data: row, error } = await sb.from("pylon_requests").select("id,kind,price_cents,paid_at,paid_via,status,checkout_session_id,extra_payments,contact_verified_at,updated_at").eq("id", req.params.id).maybeSingle();
+  if (error) return res.status(503).json({ error: "storage_unavailable" });
+  if (!row) return res.status(404).json({ error: "not_found" });
 
-router.post("/media-assignments/:id/qc", async (req, res) => {
-  const { qc_score, qc_notes } = req.body;
-  const result = await db.query(
-    `UPDATE pylon_media_assignments SET qc_score=$1, qc_notes=$2 WHERE id=$3 RETURNING *`,
-    [qc_score, qc_notes, req.params.id]
-  );
-  res.json(result.rows[0]);
-});
+  const patch = {};
+  if (body.status !== undefined) {
+    if (!U.STATUSES.includes(body.status)) return res.status(400).json({ error: "bad_status" });
+    if (body.status !== row.status) patch.status = body.status;
+  }
+  if (body.team_note !== undefined) {
+    if (body.team_note !== null && typeof body.team_note !== "string") return res.status(400).json({ error: "bad_note" });
+    patch.team_note = U.cleanNotes(body.team_note || "", 2000) || null;
+  }
+  if (body.verified === true) {
+    if (!row.contact_verified_at) Object.assign(patch, { contact_verified_at: nowIso(), contact_verified_by: staffWho(req) });
+  } else if (body.verified === false) {
+    if (row.contact_verified_at) Object.assign(patch, { contact_verified_at: null, contact_verified_by: null });
+  } else if (body.verified !== undefined) return res.status(400).json({ error: "bad_verified" });
+  let paidWhere = null;
+  if (body.paid === true) {
+    if (row.kind === "ambassador") return res.status(400).json({ error: "nothing_to_pay" });
+    if (row.paid_at) return res.status(409).json({ error: "already_paid" });
+    const cents = body.paid_cents === undefined || body.paid_cents === null ? row.price_cents : Number(body.paid_cents);
+    if (!Number.isInteger(cents) || cents < 0 || cents > U.MAX_CENTS) return res.status(400).json({ error: "bad_amount" });
+    Object.assign(patch, { paid_at: nowIso(), paid_cents: cents, paid_via: "manual" });
+    paidWhere = "unpaid";
+  } else if (body.paid === false) {
+    if (row.paid_at && row.paid_via !== "manual") return res.status(409).json({ error: "paid_on_stripe" });
+    // Stripe took money on it too: the record stays paid while that's sorted
+    // out in Stripe (refund the one that shouldn't stand).
+    if (row.paid_at && Array.isArray(row.extra_payments) && row.extra_payments.length) return res.status(409).json({ error: "extra_payments" });
+    if (row.paid_at) {
+      Object.assign(patch, { paid_at: null, paid_cents: null, paid_via: null });
+      paidWhere = "manual";
+    }
+  } else if (body.paid !== undefined) return res.status(400).json({ error: "bad_paid" });
+  if (!Object.keys(patch).length) return res.json({ ok: true });
+  // An athlete's request is Confirmed or Done only once staff checked who
+  // they're dealing with (the database holds this line too).
+  const nextStatus = patch.status || row.status;
+  const nextChecked = "contact_verified_at" in patch ? !!patch.contact_verified_at : !!row.contact_verified_at;
+  if (U.ATHLETE_KINDS.includes(row.kind) && (nextStatus === "confirmed" || nextStatus === "done") && !nextChecked) return res.status(409).json({ error: "check_first" });
 
-router.post("/booth-plans", async (req, res) => {
-  const { event_id, event_size_tier, dedicated_sellers_planned, creators_planned, booth_manager_planned } = req.body;
-  const result = await db.query(
-    `INSERT INTO pylon_booth_staffing_plans (event_id, event_size_tier, dedicated_sellers_planned, creators_planned, booth_manager_planned)
-     VALUES ($1,$2,$3,$4,$5) RETURNING *`,
-    [event_id, event_size_tier, dedicated_sellers_planned || 0, creators_planned || 0, booth_manager_planned || false]
-  );
-  res.json(result.rows[0]);
-});
+  patch.status_by = staffWho(req);
+  patch.updated_at = nowIso();
+  let q = sb.from("pylon_requests").update(patch).eq("id", row.id);
+  // A payment changes only from the state that was read: Stripe can't land
+  // in between and be overwritten.
+  if (paidWhere === "unpaid") q = q.is("paid_at", null);
+  if (paidWhere === "manual") q = q.eq("paid_via", "manual");
+  const { data, error: e2 } = await q.select().maybeSingle();
+  if (e2) return res.status(inputError(e2) ? 400 : 503).json({ error: inputError(e2) ? "invalid" : "storage_unavailable" });
+  if (!data) return res.status(409).json({ error: "changed_meanwhile" });
+  if (paidWhere === "unpaid" && data.checkout_session_id) await closeCheckout(data.checkout_session_id);
+  res.json({ ok: true, request: { ...data, summary: U.summary(data), test: U.testPaid(data) } });
+}));
 
-router.post("/booth-plans/:id/close", async (req, res) => {
-  const { actual_sellers_present, actual_creators_present, booth_manager_present, gross_booth_sales_cents } = req.body;
-  const result = await db.query(
-    `UPDATE pylon_booth_staffing_plans SET actual_sellers_present=$1, actual_creators_present=$2, booth_manager_present=$3, gross_booth_sales_cents=$4, event_completed_at=now() WHERE id=$5 RETURNING *`,
-    [actual_sellers_present, actual_creators_present, booth_manager_present, gross_booth_sales_cents, req.params.id]
-  );
-  res.json(result.rows[0]);
-});
+// Where a request's Stripe checkout stands: "open", "complete", "expired",
+// or null when Stripe can't say.
+async function checkoutStatus(sessionId) {
+  try {
+    const s = PS.stripe();
+    const cs = await s.stripe.checkout.sessions.retrieve(sessionId);
+    return cs && ["open", "complete", "expired"].includes(cs.status) ? cs.status : null;
+  } catch (e) {
+    return null;
+  }
+}
 
-// ═══════════════════════════════════════════════════════════════════════════
-// V3.0 · Regional Coordinators
-// ═══════════════════════════════════════════════════════════════════════════
+// "Didn't send this? Reply and we'll delete it." An unpaid request goes; a
+// paid one stays (payment records are kept: refund it in Stripe, and close it).
+// Its Stripe checkout is closed first, so nobody can pay for a request that's
+// gone; if Stripe shows it paid already, the request stays.
+router.delete("/requests/:id", requireStaff, safe(async (req, res) => {
+  if (!U.UUID.test(req.params.id)) return res.status(404).json({ error: "not_found" });
+  const sb = getSupabase();
+  if (!sb) return res.status(503).json({ error: "storage_unavailable" });
+  const { data: row, error } = await sb.from("pylon_requests").select("id,paid_at,extra_payments,checkout_session_id,checkout_mode,created_at").eq("id", req.params.id).maybeSingle();
+  if (error) return res.status(503).json({ error: "storage_unavailable" });
+  if (!row) return res.status(404).json({ error: "not_found" });
+  if (row.paid_at || (Array.isArray(row.extra_payments) && row.extra_payments.length)) return res.status(409).json({ error: "paid_keep" });
+  if (row.checkout_session_id && !(await closeCheckout(row.checkout_session_id))) {
+    // It wasn't open, or Stripe couldn't be asked: find out why.
+    const st = await checkoutStatus(row.checkout_session_id);
+    if (st === "complete") return res.status(409).json({ error: "checkout_complete" });
+    // Fine to go: an expired checkout; a test-mode one (no real money moves
+    // through it, and after the switch to live Stripe can't find it); one
+    // past Stripe's 24 hours, which has expired by now.
+    const test = row.checkout_mode === "test" || /^cs_test_/.test(row.checkout_session_id);
+    const old = Date.now() - Date.parse(row.created_at) > 25 * HOUR;
+    if (st !== "expired" && !test && !old) return res.status(503).json({ error: PS.mode().ok ? "stripe_unavailable" : "stripe_not_set_up" });
+  }
+  const { error: e2 } = await sb.from("pylon_requests").delete().eq("id", row.id).is("paid_at", null);
+  if (e2) {
+    if (e2.code === "23503") return res.status(409).json({ error: "has_messages" });
+    return res.status(503).json({ error: "storage_unavailable" });
+  }
+  logActivity(staffWho(req), "pylon_request_deleted", row.id);
+  res.json({ ok: true });
+}));
 
-router.get("/coordinators", async (req, res) => {
-  const { territory, status } = req.query;
-  let query = "SELECT * FROM pylon_regional_coordinators WHERE 1=1";
-  const params = [];
-  if (territory) { params.push(territory); query += ` AND territory = $${params.length}`; }
-  if (status) { params.push(status); query += ` AND onboarding_status = $${params.length}`; }
-  query += " ORDER BY territory";
-  const result = await db.query(query, params);
-  res.json(result.rows);
-});
+router.get("/newsletter", requireStaff, safe(async (req, res) => {
+  const sb = getSupabase();
+  if (!sb) return res.status(503).json({ error: "storage_unavailable" });
+  const { data, error } = await sb
+    .from("pylon_newsletter")
+    .select("email,status,source,confirmed_at,unsubscribe_token,created_at")
+    .order("created_at", { ascending: false })
+    .limit(5000);
+  if (error) return res.status(503).json({ error: "storage_unavailable" });
+  const rows = data || [];
+  const counts = { pending: 0, confirmed: 0, unsubscribed: 0 };
+  for (const r of rows) if (counts[r.status] !== undefined) counts[r.status] += 1;
+  // Only confirmed addresses are on the list, each with the unsubscribe link
+  // every issue must carry; the rest are counts.
+  const confirmed = rows
+    .filter((r) => r.status === "confirmed")
+    .map((r) => ({ email: r.email, source: r.source, confirmed_at: r.confirmed_at, unsubscribe_url: unsubscribeLink(r.unsubscribe_token) }));
+  res.set("Cache-Control", "private, no-store");
+  res.json({ counts, confirmed });
+}));
 
-router.post("/coordinators", async (req, res) => {
-  const fields = ["full_name","email","phone","territory","base_city","hire_quarter","retainer_cents_monthly","commission_percent_territory","commission_metric_notes","contract_start","contract_end","metadata"];
-  const values = fields.map((f) => req.body[f]);
-  if (!req.body.full_name || !req.body.email || !req.body.territory) return res.status(400).json({ error: "full_name, email, territory required" });
-  const placeholders = fields.map((_, i) => `$${i + 1}`).join(",");
-  const result = await db.query(
-    `INSERT INTO pylon_regional_coordinators (${fields.join(",")}, onboarding_status) VALUES (${placeholders},'onboarding') RETURNING *`,
-    values
-  );
-  res.json(result.rows[0]);
-});
-
-// ═══════════════════════════════════════════════════════════════════════════
-// V3.1 · CE-1 Pylon AI Coach (SKU #15)
-// ═══════════════════════════════════════════════════════════════════════════
-
-router.post("/ai-coach/subscribe", async (req, res) => {
-  const { coach_email, coach_name, team_id, tier } = req.body;
-  const amount = tier === "season" ? 99900 : 9900;
-  const sku = "15";
-  const splits = splitCents(sku, amount);
-  const activeUntil = new Date();
-  if (tier === "monthly") activeUntil.setMonth(activeUntil.getMonth() + 1);
-  else activeUntil.setFullYear(activeUntil.getFullYear() + 1);
-  const result = await db.query(
-    `INSERT INTO pylon_ai_coach_subscriptions (coach_email, coach_name, team_id, tier, amount_cents, toj_take_cents, pylon_take_cents, active_until, next_billing_at)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$8) RETURNING *`,
-    [coach_email, coach_name, team_id, tier, amount, splits.toj_take_cents, splits.pylon_take_cents, activeUntil]
-  );
-  res.json({ subscription: result.rows[0], stripe_checkout_url: null });
-});
-
-router.post("/ai-coach/brief", async (req, res) => {
-  const { subscription_id, brief_type, target_week, target_opponent_team_id, content_body } = req.body;
-  const result = await db.query(
-    `INSERT INTO pylon_ai_coach_briefs (subscription_id, brief_type, target_week, target_opponent_team_id, content_body)
-     VALUES ($1,$2,$3,$4,$5) RETURNING *`,
-    [subscription_id, brief_type, target_week, target_opponent_team_id, content_body]
-  );
-  res.json(result.rows[0]);
-});
-
-// ═══════════════════════════════════════════════════════════════════════════
-// V3.1 · CE-2 Pylon Momentum Score
-// ═══════════════════════════════════════════════════════════════════════════
-
-router.get("/momentum/:athlete_id", async (req, res) => {
-  const result = await db.query(
-    `SELECT * FROM pylon_athlete_momentum WHERE athlete_id=$1 ORDER BY measured_at DESC LIMIT 20`,
-    [req.params.athlete_id]
-  );
-  res.json(result.rows);
-});
-
-router.post("/momentum/:athlete_id/compute", async (req, res) => {
-  // TODO: implement computation from grade + volume + measurables + footage + recruiting + engagement
-  const { season, week, grade_component, volume_component, measurable_component, footage_component, recruiting_component, engagement_component } = req.body;
-  const composite = (
-    (grade_component || 0) * 0.30 +
-    (volume_component || 0) * 0.15 +
-    (measurable_component || 0) * 0.15 +
-    (footage_component || 0) * 0.15 +
-    (recruiting_component || 0) * 0.15 +
-    (engagement_component || 0) * 0.10
-  );
-  const trend = req.body.trend_direction || "insufficient_data";
-  const result = await db.query(
-    `INSERT INTO pylon_athlete_momentum (athlete_id, season, week, grade_component, volume_component, measurable_component, footage_component, recruiting_component, engagement_component, composite_score, trend_direction)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING *`,
-    [req.params.athlete_id, season, week, grade_component, volume_component, measurable_component, footage_component, recruiting_component, engagement_component, composite, trend]
-  );
-  res.json(result.rows[0]);
-});
-
-// ═══════════════════════════════════════════════════════════════════════════
-// V3.1 · CE-3 Signature Series (SKU #16)
-// ═══════════════════════════════════════════════════════════════════════════
-
-router.post("/signature-series", async (req, res) => {
-  const { season, episode_number, title, anchor_athlete_id, anchor_team_id, narrative_theme, runtime_minutes } = req.body;
-  const result = await db.query(
-    `INSERT INTO pylon_signature_series_episodes (season, episode_number, title, anchor_athlete_id, anchor_team_id, narrative_theme, runtime_minutes)
-     VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
-    [season, episode_number, title, anchor_athlete_id, anchor_team_id, narrative_theme, runtime_minutes]
-  );
-  res.json(result.rows[0]);
-});
-
-// ═══════════════════════════════════════════════════════════════════════════
-// V3.1 · CE-5 HBCU Coaches
-// ═══════════════════════════════════════════════════════════════════════════
-
-router.get("/hbcu-coaches", async (req, res) => {
-  const { program_name, active } = req.query;
-  let query = "SELECT * FROM pylon_hbcu_coaches WHERE 1=1";
-  const params = [];
-  if (program_name) { params.push(program_name); query += ` AND program_name = $${params.length}`; }
-  if (active !== undefined) { params.push(active === "true"); query += ` AND active = $${params.length}`; }
-  query += " ORDER BY program_name, coach_role LIMIT 500";
-  const result = await db.query(query, params);
-  res.json(result.rows);
-});
-
-router.post("/hbcu-coaches", async (req, res) => {
-  const fields = ["program_name","conference","coach_name","coach_email","coach_role","position_group","active","notes","metadata"];
-  const values = fields.map((f) => req.body[f]);
-  const placeholders = fields.map((_, i) => `$${i + 1}`).join(",");
-  const result = await db.query(
-    `INSERT INTO pylon_hbcu_coaches (${fields.join(",")}) VALUES (${placeholders}) RETURNING *`,
-    values
-  );
-  res.json(result.rows[0]);
-});
-
-// ═══════════════════════════════════════════════════════════════════════════
-// V3.1 · CE-6 AI Highlight Reel (SKU #18)
-// ═══════════════════════════════════════════════════════════════════════════
-
-router.post("/highlight-reel/subscribe", async (req, res) => {
-  const { athlete_id, tier } = req.body;
-  const priceMap = { basic: 2900, standard: 9900, recruiting: 14900 };
-  const amount = priceMap[tier];
-  if (!amount) return res.status(400).json({ error: "tier must be basic/standard/recruiting" });
-  const sku = `18_${tier}`;
-  const splits = splitCents(sku, amount);
-  const activeUntil = new Date();
-  activeUntil.setFullYear(activeUntil.getFullYear() + 1);
-  const result = await db.query(
-    `INSERT INTO pylon_highlight_reel_subscriptions (athlete_id, tier, amount_cents, toj_take_cents, pylon_take_cents, subject_media_take_cents, active_until)
-     VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
-    [athlete_id, tier, amount, splits.toj_take_cents, splits.pylon_take_cents, splits.subject_media_take_cents, activeUntil]
-  );
-  res.json({ subscription: result.rows[0], stripe_checkout_url: null });
-});
-
-router.post("/highlight-reel/produce", async (req, res) => {
-  const { subscription_id, athlete_id, event_id, reel_url, duration_seconds, plays_included, momentum_score_snapshot } = req.body;
-  const result = await db.query(
-    `INSERT INTO pylon_ai_highlight_reels (subscription_id, athlete_id, event_id, reel_url, duration_seconds, plays_included, momentum_score_snapshot)
-     VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
-    [subscription_id, athlete_id, event_id, reel_url, duration_seconds, plays_included, momentum_score_snapshot]
-  );
-  res.json(result.rows[0]);
-});
-
-// ═══════════════════════════════════════════════════════════════════════════
-// V3.1 · CE-7 Alumni Network (SKU #19)
-// ═══════════════════════════════════════════════════════════════════════════
-
-router.get("/alumni", async (req, res) => {
-  const { alumni_type, membership_tier } = req.query;
-  let query = "SELECT * FROM pylon_alumni WHERE 1=1";
-  const params = [];
-  if (alumni_type) { params.push(alumni_type); query += ` AND alumni_type = $${params.length}`; }
-  if (membership_tier) { params.push(membership_tier); query += ` AND membership_tier = $${params.length}`; }
-  query += " ORDER BY membership_tier DESC, full_name LIMIT 500";
-  const result = await db.query(query, params);
-  res.json(result.rows);
-});
-
-router.post("/alumni", async (req, res) => {
-  const fields = ["full_name","email","phone","alumni_type","playing_position","college_program","nfl_team","years_active","membership_tier","membership_amount_cents","membership_active_until","mentor_active","investment_circle_member","investment_committed_cents","ig_handle","metadata"];
-  const values = fields.map((f) => req.body[f]);
-  if (!req.body.full_name) return res.status(400).json({ error: "full_name required" });
-  const placeholders = fields.map((_, i) => `$${i + 1}`).join(",");
-  const result = await db.query(
-    `INSERT INTO pylon_alumni (${fields.join(",")}) VALUES (${placeholders}) RETURNING *`,
-    values
-  );
-  res.json(result.rows[0]);
-});
-
-router.post("/alumni/:alumni_id/pair", async (req, res) => {
-  const { athlete_id } = req.body;
-  if (!athlete_id) return res.status(400).json({ error: "athlete_id required" });
-  const result = await db.query(
-    `INSERT INTO pylon_alumni_mentorships (alumni_id, athlete_id) VALUES ($1,$2) RETURNING *`,
-    [req.params.alumni_id, athlete_id]
-  );
-  res.json(result.rows[0]);
-});
-
-// ═══════════════════════════════════════════════════════════════════════════
-// V3.1 · CE-8 Data Feed B2B (SKU #20)
-// ═══════════════════════════════════════════════════════════════════════════
-
-router.post("/data-feed/licensees", async (req, res) => {
-  const { organization_name, contact_name, contact_email, license_type, data_scope, refresh_cadence, amount_cents_annual, license_start, license_end } = req.body;
-  const sku = "20";
-  const splits = splitCents(sku, amount_cents_annual || 0);
-  const result = await db.query(
-    `INSERT INTO pylon_data_feed_licensees (organization_name, contact_name, contact_email, license_type, data_scope, refresh_cadence, amount_cents_annual, toj_take_cents_annual, pylon_take_cents_annual, optimum_take_cents_annual, license_start, license_end)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING *`,
-    [organization_name, contact_name, contact_email, license_type, data_scope || [], refresh_cadence, amount_cents_annual, splits.toj_take_cents, splits.pylon_take_cents, splits.optimum_take_cents, license_start, license_end]
-  );
-  res.json(result.rows[0]);
-});
-
-// ═══════════════════════════════════════════════════════════════════════════
-// Cross-cutting · Dashboard (Kyron's overview across all lines)
-// ═══════════════════════════════════════════════════════════════════════════
-
-router.get("/dashboard", async (req, res) => {
-  const [orders, subs, deals, coordinators, ambassadors, momentum] = await Promise.all([
-    db.query(`SELECT sku, COUNT(*) AS n, COALESCE(SUM(toj_take_cents),0) AS toj_take FROM pylon_package_orders WHERE status IN ('pending_delivery','delivered') GROUP BY sku`),
-    db.query(`SELECT tier, COUNT(*) AS n, COALESCE(SUM(toj_take_cents),0) AS toj_take FROM pylon_athlete_subscriptions WHERE status='active' GROUP BY tier`),
-    db.query(`SELECT status, COUNT(*) AS n, COALESCE(SUM(toj_commission_cents),0) AS commission FROM pylon_sponsor_deals GROUP BY status`),
-    db.query(`SELECT territory, onboarding_status FROM pylon_regional_coordinators`),
-    db.query(`SELECT tier, COUNT(*) AS n FROM pylon_ambassadors WHERE status='active' GROUP BY tier`),
-    db.query(`SELECT COUNT(*) AS scored, AVG(composite_score) AS avg_score FROM pylon_athlete_momentum WHERE measured_at > now() - interval '30 days'`),
-  ]);
-  res.json({
-    orders_by_sku: orders.rows,
-    subscriptions_by_tier: subs.rows,
-    deals_by_status: deals.rows,
-    coordinators,
-    ambassadors: ambassadors.rows,
-    momentum: momentum.rows[0],
-  });
-});
-
-// ═══════════════════════════════════════════════════════════════════════════
+// Anything else under /api/pylon is gone: the old API (never mounted) had
+// other paths, and they answer plainly instead of falling through.
+router.use((req, res) => res.status(404).json({ error: "not_found" }));
 
 module.exports = router;
+module.exports.markPaid = markPaid;
+module.exports.startCheckout = startCheckout;
+// Tests: every limit, and _reset() to start them all over.
+module.exports._limits = { perVisitor, perPeer, linkTries, requestsThisHour, signupsThisHour, floodAlerts, pushesThisHour, moneyPushesThisHour, staffMailAllowed, moneyMailAllowed, fallbackAllowed, formNotes, paidNotes };
+module.exports._reset = () => {
+  for (const f of Object.values(module.exports._limits)) f.reset();
+};
