@@ -1,6 +1,6 @@
 // Migrations 030, 034 and 035 in a real Postgres: the rules the database
 // enforces for Subject Medias bookings and the site's counts, so no route bug
-// can break them, and the unfinished-checkout reminder's queries run here.
+// can break them. (The routes on a real Postgres: sm-bookings-routes-db.test.js.)
 //
 // Needs a throwaway Postgres: TEST_DATABASE_URL=postgres://… node --test tests/
 // Works in its own schema (sm_db_test), which it DROPS and recreates. Never
@@ -155,57 +155,4 @@ test("035: pay now is a form request's, and only a pay-now request is reminded",
   await refused(`update sm_bookings set checkout_reminded_at = now() where id = $1`, [b.id], "sm_bookings_reminder_pay_now");
   const idx = await q(`select indexdef from pg_indexes where schemaname = $1 and indexname = 'sm_bookings_unfinished_checkout'`, [S]);
   assert.match(idx.rows[0].indexdef, /WHERE \(pay_now AND \(stripe_session_id IS NULL\) AND \(checkout_reminded_at IS NULL\)\)/);
-});
-
-test("035: the reminder's queries on real Postgres: one email, claimed once, the claim given back when it can't go", async () => {
-  const { pgSupabase } = require("./helpers/pg-supabase");
-  const mailer = require("../utils/mailer");
-  const router = require("../routes/sm-bookings");
-  const sb = pgSupabase(pool, S);
-  const sent = [];
-  process.env.EMAIL_USER = "subjectmedias@gmail.com";
-  process.env.EMAIL_PASS = "app-password";
-  mailer.setSender(async (m) => { sent.push(m); return { sent: true }; });
-  try {
-    router._resetLimits();
-    await q(`delete from sm_bookings`);
-    const day = (await q(`select (current_date + 30)::text as d`)).rows[0].d;
-    const add = async (over) => (await q(...form({ package: "video", event_date: day, pay_now: true, ...over }))).rows[0];
-    // Due: a pay-now request from 90 minutes ago, unpaid.
-    const due = await add({ contact_email: "due@example.com" });
-    await q(`update sm_bookings set created_at = now() - interval '90 minutes' where id = $1`, [due.id]);
-    assert.deepEqual(await router._remind(sb), { off: "no_webhook_yet" });
-    // The webhook joined a payment to a request: reminders are on.
-    await add({ contact_email: "joined@example.com", stripe_session_id: "cs_live_joinedpg0001", amount_cents: 9999 });
-    // Not due: inside the hour, and three days old.
-    const fresh = await add({ contact_email: "fresh@example.com" });
-    const stale = await add({ contact_email: "stale@example.com" });
-    await q(`update sm_bookings set created_at = now() - interval '3 days' where id = $1`, [stale.id]);
-    mailer.setSender(async () => ({ sent: false, reason: "daily_limit" }));
-    assert.deepEqual(await router._remind(sb), { sent: 0 });
-    assert.equal((await q(`select checkout_reminded_at from sm_bookings where id = $1`, [due.id])).rows[0].checkout_reminded_at, null, "given back");
-    mailer.setSender(async (m) => { sent.push(m); return { sent: true }; });
-    assert.deepEqual(await router._remind(sb), { sent: 1 });
-    assert.deepEqual(sent.map((m) => m.to), [["due@example.com"]]);
-    assert.ok(sent[0].text.includes(`client_reference_id=${due.id}`));
-    const rows = (await q(`select id, checkout_reminded_at from sm_bookings where id = any($1)`, [[due.id, fresh.id, stale.id]])).rows;
-    assert.deepEqual(rows.filter((r) => r.checkout_reminded_at).map((r) => r.id), [due.id]);
-    assert.deepEqual(await router._remind(sb), { sent: 0 }, "once");
-    // Two servers at once (a second copy of the module: its own run guard
-    // and limits), on the same database: the claim lets one email through.
-    await q(`update sm_bookings set checkout_reminded_at = null where id = $1`, [due.id]);
-    router._resetLimits();
-    sent.length = 0;
-    const key = require.resolve("../routes/sm-bookings");
-    delete require.cache[key];
-    const other = require("../routes/sm-bookings");
-    assert.notEqual(other, router);
-    const both = await Promise.all([router._remind(sb), other._remind(sb)]);
-    assert.equal(sent.length, 1, JSON.stringify(both));
-    assert.deepEqual(both.map((r) => r.sent).sort(), [0, 1]);
-  } finally {
-    delete process.env.EMAIL_USER;
-    delete process.env.EMAIL_PASS;
-    mailer.setSender(null);
-  }
 });

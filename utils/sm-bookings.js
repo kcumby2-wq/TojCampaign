@@ -335,21 +335,23 @@ function checkoutUnfinished(b, now = Date.now()) {
   const at = Date.parse(b.created_at);
   return Number.isFinite(at) && +now - at >= REMIND_AFTER_MS;
 }
-// The game is today or later (a day's grace for time zones behind UTC), or
-// its day isn't known.
-function gameNotPast(b, now = Date.now()) {
+// 'YYYY-MM-DD' in New York, where the business keeps its days.
+const NY_DAY = new Intl.DateTimeFormat("en-CA", { timeZone: "America/New_York", year: "numeric", month: "2-digit", day: "2-digit" });
+const nyDay = (now = Date.now()) => NY_DAY.format(new Date(+now));
+// The game is after today in New York: a reminder on game day, or after it,
+// is no use to anyone.
+function gameAfterToday(b, now = Date.now()) {
   const day = dayValue(b && b.event_date);
-  return day === null || day >= todayValue(new Date(+now)) - DAY;
+  return day !== null && isoDay(day) > nyDay(now);
 }
-// The checkout a pay-now request went on to, as the site opened it: the
-// package's payment link with the request's id (so the payment joins the
-// request) and the booker's email filled in. Null when there's no such link.
+// The checkout a pay-now request went on to: the package's payment link
+// with the request's id, so the payment joins the request. No email in it
+// (the site fills theirs in; here an address's +tag would be words someone
+// typed). Null when there's no such link.
 function checkoutLink(b) {
   const p = b && has(PAY_NOW, b.package) ? PAY_NOW[b.package] : null;
   if (!p || !UUID.test(String(b.id || ""))) return null;
-  const q = [`client_reference_id=${encodeURIComponent(String(b.id).toLowerCase())}`];
-  if (isEmail(b.contact_email)) q.push(`prefilled_email=${encodeURIComponent(b.contact_email)}`);
-  return `${p.link}?${q.join("&")}`;
+  return `${p.link}?client_reference_id=${encodeURIComponent(String(b.id).toLowerCase())}`;
 }
 function what(b) {
   return b.package && b.package !== "unsure" ? PACKAGES[b.package] || "Coverage" : KIND_WORDS[b.kind] || "Coverage";
@@ -481,13 +483,15 @@ function bookerEmail(b, { detailsUrl = null, help = "hello@subjectmedias.com", s
   return { subject: bought ? "Subject Medias: thanks for booking" : "Subject Medias: we got your booking request", text: lines.join("\n") };
 }
 
-// The one reminder for an unfinished checkout: their details are saved, the
-// payment didn't come, and here's the same checkout again. Fixed words only,
-// like the booker's note (the package and its price, a sport from the list,
-// the date, the state code): nothing anyone typed.
+// The one reminder for an unfinished checkout: their details are saved, no
+// payment has reached us, and here's the checkout again. It claims nothing
+// it can't know (they may have left, or a payment may still be on its way),
+// and adds no urgency. Fixed words only, like the booker's note (the package
+// and its price, a sport from the list, the date, the state code): nothing
+// anyone typed.
 function checkoutReminderEmail(b, { payUrl, help = "hello@subjectmedias.com", site = "https://www.subjectmedias.com" } = {}) {
   const p = has(PAY_NOW, b.package) ? PAY_NOW[b.package] : null;
-  const lines = ["You started booking with Subject Medias and your details are saved, but the payment didn't go through, so your creator isn't locked in yet.", ""];
+  const lines = ["Your Subject Medias booking details are saved. We haven't received a payment for it yet.", ""];
   const facts = [
     ["What", p ? `${what(b)}, ${money(p.cents)}` : what(b)],
     ["Sport", SPORTS.includes(b.sport) && b.sport !== "Other" ? b.sport : null],
@@ -496,10 +500,10 @@ function checkoutReminderEmail(b, { payUrl, help = "hello@subjectmedias.com", si
   ];
   for (const [k, v] of facts) if (v) lines.push(`${k}: ${v}`);
   lines.push("");
-  lines.push("Finish booking on Stripe's secure checkout:");
+  lines.push("To finish booking, pay on Stripe's secure checkout:");
   lines.push(String(payUrl));
   lines.push("");
-  lines.push("Already paid? Then you're all set, and we'll be in touch within 24 hours.");
+  lines.push("Already paid? Then you're all set. A payment can take a little while to reach us, and we'll be in touch within 24 hours.");
   lines.push("Rather talk first? Reply to this email.");
   lines.push("Didn't start this booking? You can ignore this email.");
   lines.push("");
@@ -507,7 +511,7 @@ function checkoutReminderEmail(b, { payUrl, help = "hello@subjectmedias.com", si
   lines.push("");
   lines.push("Subject Medias");
   lines.push(String(site).replace(/\/+$/, ""));
-  return { subject: `Subject Medias: your ${what(b).toLowerCase()} isn't booked yet`, text: lines.join("\n") };
+  return { subject: "Subject Medias: finish your booking", text: lines.join("\n") };
 }
 
 module.exports = {
@@ -542,7 +546,8 @@ module.exports = {
   PAY_NOW,
   REMIND_AFTER_MS,
   checkoutUnfinished,
-  gameNotPast,
+  gameAfterToday,
+  nyDay,
   checkoutLink,
   checkoutReminderEmail,
 };

@@ -53,13 +53,13 @@
   function needsDetails(b) {
     return b.source === "stripe" && !b.details_at && !b.event_date;
   }
-  // Sent from a package's Buy button: still on its way to Stripe, or (an hour
-  // on, unpaid: b.unfinished from the server) a checkout they didn't finish,
-  // with the one reminder the app emails them once the site's payments are
-  // known to arrive.
+  // Sent from a package's Buy button: on its way to Stripe, or (an hour on,
+  // with no payment in the app: b.unfinished from the server) no payment yet.
+  // The app only knows what reached it: a payment can still be on its way, so
+  // this never says they didn't pay. The reminder, when it went, too.
   function checkoutFact(b) {
     if (!b.pay_now || b.paid) return null;
-    if (b.unfinished) return "Not finished: they went on to Stripe and haven't paid." + (b.checkout_reminded_at ? " Reminder emailed " + T().ago(b.checkout_reminded_at) + "." : "");
+    if (b.unfinished) return "No payment has reached the app yet. They went on to Stripe " + T().ago(b.created_at) + "." + (b.checkout_reminded_at ? " Reminder emailed " + T().ago(b.checkout_reminded_at) + "." : "");
     return b.status === "new" ? "They went on to Stripe to pay, " + T().ago(b.created_at) + "." : null;
   }
 
@@ -105,7 +105,7 @@
     }
     var rows = (d.bookings || []).map(function (b) {
       return '<a class="li" href="#booking/' + h(b.id) + '"><div class="grow"><div class="name" style="font-size:15px">' + h(b.summary) + '</div><div class="sub">' +
-        h([b.event_name, b.paid ? "Paid " + money(b.amount_cents) : "Request", b.offer === "first10" ? "10% claimed" : null, needsDetails(b) ? "Waiting on details" : null, b.unfinished ? (b.checkout_reminded_at ? "Checkout not finished, reminded" : "Checkout not finished") : null, t.ago(b.created_at)].filter(Boolean).join(" · ")) +
+        h([b.event_name, b.paid ? "Paid " + money(b.amount_cents) : "Request", b.offer === "first10" ? "10% claimed" : null, needsDetails(b) ? "Waiting on details" : null, b.unfinished ? (b.checkout_reminded_at ? "No payment yet, reminded" : "No payment yet") : null, t.ago(b.created_at)].filter(Boolean).join(" · ")) +
         "</div></div>" + statusBadge(b.status) + t.I.chev + "</a>";
     }).join("");
     t.show("today",
