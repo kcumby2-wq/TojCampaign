@@ -1259,3 +1259,32 @@ test("the checkout link, the hour and the game day, by the rules", () => {
   assert.equal(B.gameAfterToday({ event_date: null }, late), false);
   assert.deepEqual(Object.keys(B.PAY_NOW), ["photo", "video", "elite"]);
 });
+
+test("a database that returns fewer rows than asked still has every booking read: none is skipped", () => withReminders(async () => {
+  // The due request, then three others, then the same inbox again: they came
+  // back, so no reminder. Capped at three rows a request, a read that moved
+  // on by a fixed page would never see that last booking.
+  const id = await due({ contact_email: "capped@example.com" }, "198.51.100.230");
+  for (let i = 0; i < 3; i++) {
+    const other = await form(good({ event_date: "2027-01-16", contact_email: `between${i}@example.com` }), `198.51.100.${231 + i}`);
+    age(other.data.id, 50 * 60 * 1000 - i * 1000);
+  }
+  await form(good({ event_date: "2027-01-16", contact_email: "capped@example.com" }), "198.51.100.240");
+  await wait();
+  const from = db.from.bind(db);
+  db.from = (name) => {
+    const q = from(name);
+    const run = q.run.bind(q);
+    q.run = () => {
+      const r = run();
+      return r && Array.isArray(r.data) && q.op === "select" ? { ...r, data: r.data.slice(0, 3) } : r;
+    };
+    return q;
+  };
+  try {
+    assert.deepEqual(await router._remind(db), { sent: 0 });
+    assert.equal(rowOf(id).checkout_reminded_at || null, null);
+  } finally {
+    db.from = from;
+  }
+}));

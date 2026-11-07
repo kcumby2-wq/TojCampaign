@@ -564,30 +564,35 @@ async function stripeCompleted(stripe, sinceMs) {
 async function dueRequests(sb, now) {
   const rows = [];
   for (let page = 0; page < MAX_PAGES; page++) {
+    const at = rows.length;
     const { data, error } = await sb.from("sm_bookings")
       .select("id,source,status,package,sport,event_date,event_state,contact_email,pay_now,stripe_session_id,checkout_reminded_at,created_at")
       .eq("pay_now", true).is("stripe_session_id", null).is("checkout_reminded_at", null).eq("status", "new")
       .lte("created_at", new Date(now - B.REMIND_AFTER_MS).toISOString())
       .gte("created_at", new Date(now - REMIND_WITHIN_MS).toISOString())
       .gt("event_date", B.nyDay(now))
-      .order("created_at", { ascending: true }).range(page * PAGE_ROWS, page * PAGE_ROWS + PAGE_ROWS - 1);
+      .order("created_at", { ascending: true }).range(at, at + PAGE_ROWS - 1);
     if (error) return { error };
-    rows.push(...(data || []));
-    if (!data || data.length < PAGE_ROWS) break;
+    // On from what came back, until a page is empty: a project can return
+    // fewer rows than asked for, so a short page isn't proof it's the last.
+    if (!data || !data.length) return { rows };
+    rows.push(...data);
   }
   return { rows };
 }
 
 // Every booking since a moment, a page at a time (Supabase stops a request at
-// 1,000 rows). Null past ten pages: too many to read, so nothing goes.
+// 1,000 rows, or fewer if the project says so), until a page comes back
+// empty. Null past ten pages: too many to read, so nothing goes.
 async function bookingsSince(sb, fromIso) {
   const rows = [];
   for (let page = 0; page < MAX_PAGES; page++) {
+    const at = rows.length;
     const { data, error } = await sb.from("sm_bookings").select("id,contact_email,stripe_session_id,created_at").gte("created_at", fromIso)
-      .order("created_at", { ascending: true }).range(page * 1000, page * 1000 + 999);
+      .order("created_at", { ascending: true }).range(at, at + 999);
     if (error) return null;
-    rows.push(...(data || []));
-    if (!data || data.length < 1000) return rows;
+    if (!data || !data.length) return rows;
+    rows.push(...data);
   }
   return null;
 }
