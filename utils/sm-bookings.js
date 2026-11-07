@@ -161,6 +161,10 @@ function normalize(raw, { now = new Date() } = {}) {
   if (!v.adult_confirmed) errors.push("adult_confirmed");
   // The homepage's 10% first-package offer, claimed with this request.
   v.offer = OFFERS.includes(r.offer) ? r.offer : null;
+  // Sent from a package's Buy button: the site takes them on to that package's
+  // Stripe checkout with this request's id. Not a column: it only changes
+  // which notes go out now (utils route).
+  v.pay_now = r.pay_now === true && ["photo", "video", "elite"].includes(v.package) && !v.offer;
 
   return { errors, value: v };
 }
@@ -352,12 +356,13 @@ function money(cents) {
 // matches null means nobody was looked up (the booking isn't stored). With
 // saved false the email is the only copy, so it carries the whole booking.
 // detailsIn: the buyer of a paid package just told us about their game.
-function emailText(b, matches, appBase, { saved = true, detailsIn = false, detailsFor = null } = {}) {
+function emailText(b, matches, appBase, { saved = true, detailsIn = false, detailsFor = null, payNow = false } = {}) {
   const base = String(appBase || "https://tojcampaign.com").replace(/\/+$/, "");
   const subject = `${detailsIn ? "Event details in" : paid(b) ? "Paid booking" : "New booking"}: ${[what(b), place(b), dateWords(b.event_date)].filter(Boolean).join(", ")}`;
   const lines = [];
   if (detailsIn) lines.push(`The buyer of a paid package (${money(b.amount_cents)}) told us about their game.`);
   else if (paid(b)) lines.push(`Paid on subjectmedias.com: ${money(b.amount_cents)}${b.source === "form" ? ", for the request they sent from the booking form" : ""}.`);
+  else if (payNow) lines.push("A new booking request from subjectmedias.com, sent from a package's Buy button: they went on to Stripe to pay for it. If they finish, a \"Paid booking\" alert follows; if not, follow up like any request.");
   else lines.push("A new booking request from subjectmedias.com.");
   lines.push("");
   lines.push(`What: ${[what(b), b.sport].filter(Boolean).join(", ")}`);
@@ -402,14 +407,15 @@ function emailText(b, matches, appBase, { saved = true, detailsIn = false, detai
 }
 
 // The booker's own note: we got your request (the form), or thanks for
-// booking (a package bought straight from a payment link, with a link to tell
-// us about the game when we don't know yet). It goes to an address someone
+// booking once it's paid (a request paid on the way in, or a package bought
+// straight from a payment link, with a link to tell us about the game when we
+// don't know yet). It goes to an address someone
 // typed into a form, so like a push it carries fixed words only: the package,
 // a sport from the list, the date, the state code, the offer. No name, city,
 // event name, team, jersey or notes: nothing anyone typed, so nobody can use
 // the form to send our email with their words in it to someone else.
 function bookerEmail(b, { detailsUrl = null, help = "hello@subjectmedias.com", site = "https://www.subjectmedias.com" } = {}) {
-  const bought = b.source === "stripe";
+  const bought = paid(b);
   const lines = [bought ? "Thanks for booking with Subject Medias. Your payment came through." : "Thanks for reaching out to Subject Medias. We got your booking request.", ""];
   const facts = [
     ["What", what(b)],
