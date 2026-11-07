@@ -8,11 +8,14 @@
 //                                for the buyer). sk_test_/rk_test_ until live.
 //   PYLON_STRIPE_WEBHOOK_SECRET  the signing secret of the webhook endpoint
 //                                https://tojcampaign.com/api/pylon/stripe/webhook
-//                                (event: checkout.session.completed)
+//                                (events: checkout.session.completed,
+//                                checkout.session.async_payment_succeeded,
+//                                customer.subscription.updated and .deleted)
 //   PYLON_STRIPE_LIVE=yes        the only way a live key is used
 //
 // Without a usable key the pages still take requests: people get "we'll send
-// a secure payment link", and staff send one.
+// a secure payment link", and staff send one. A test key opens checkouts to
+// staff signed in on the site only (routes/pylon.js).
 
 "use strict";
 

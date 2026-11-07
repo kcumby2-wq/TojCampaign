@@ -15,19 +15,21 @@
 
   // ── The consent words ──────────────────────────────────────────────────
   var I_AM = { parent: "I'm the athlete's parent.", guardian: "I'm the athlete's legal guardian.", adult: "I'm the athlete and I'm 18 or older." };
-  function agree(kind, who, publicOk) {
+  function agree(kind, who) {
     var them = who === "adult" ? "me" : "them";
     if (kind === "player_package")
-      return "I agree to Pylon filming and photographing " + them + " at this event for this package." +
-        (publicOk ? " Pylon may also post the coverage on Pylon's own channels." : " Pylon won't post the coverage on its own channels.");
-    if (kind === "transcript") return "I agree to Pylon setting up a season-long recruiting profile for " + them + ", which " + (who === "adult" ? "I" : "we") + " can share with coaches.";
+      return "I agree to Pylon filming and photographing " + them + " at this event for this package. " +
+        (who === "adult"
+          ? "The coverage is for me; Pylon posts it publicly only with my separate yes, recorded at the event."
+          : "The coverage is for our family; Pylon posts it publicly only with a separate yes from a parent or guardian, recorded at the event.");
+    if (kind === "transcript") return "I agree to Pylon setting up a season-long recruiting profile for " + them + ", with stats and film, which " + (who === "adult" ? "I" : "we") + " can share with coaches.";
     if (kind === "recruiting") return "I agree to the Recruiting Concierge contacting college coaches about " + them + ". Nothing goes to a coach until I approve the exact message.";
     if (kind === "ambassador") return "I agree to this application" + (who === "adult" ? "" : " for them") + ". Nothing starts until I review and sign an agreement.";
     return null;
   }
-  function consentWords(kind, who, publicOk) {
+  function consentWords(kind, who) {
     if (!Object.prototype.hasOwnProperty.call(I_AM, who)) return null;
-    var a = agree(kind, who, !!publicOk);
+    var a = agree(kind, who);
     return a ? I_AM[who] + " " + a : null;
   }
   root.PylonForms = { consentWords: consentWords };
@@ -77,9 +79,13 @@
   }).catch(function () {});
 
   // ── Errors ─────────────────────────────────────────────────────────────
-  var FIELD_FOR = { contact_email_same: "contact_email" };
+  var FIELD_FOR = { contact_email_same: "contact_email", who_age: "who", consent_words: "consent_confirm" };
   var WORDS = {
     who: "Tell us who's filling this in.",
+    who_age: "An athlete of 18 or older is in the class of " + (new Date().getFullYear() + (new Date().getMonth() >= 7 ? 2 : 1)) + " or earlier. For a younger athlete, a parent or guardian fills this in.",
+    consent_words: "The words you're agreeing to just changed. Reload the page and read them again.",
+    athlete_name: "Names are letters only: no numbers or links.",
+    contact_name: "Names are letters only: no numbers or links.",
     consent_confirm: "Tick the box to agree, or this can't be sent.",
     contact_email_same: "The parent or guardian's email has to be their own, not the athlete's.",
     package: "Pick a package first.",
@@ -112,7 +118,6 @@
     var whoSel = form.querySelector('[name="who"]');
     var consentBox = form.querySelector('[name="consent_confirm"]');
     var consentText = form.querySelector("[data-consent-words]");
-    var publicBox = form.querySelector('[name="public_ok"]');
     var panel = form.nextElementSibling && form.nextElementSibling.classList.contains("pf-done") ? form.nextElementSibling : null;
 
     var ev = params.get("event") || params.get("event_id");
@@ -132,15 +137,17 @@
         show(row, on);
         each(row.querySelectorAll("[data-req]"), function (el) { el.required = on; });
       });
-      if (consentText) consentText.textContent = consentWords(kind, who, publicBox && publicBox.checked) || "Choose who's filling this in to see what you're agreeing to.";
-      if (consentBox) {
-        consentBox.disabled = !Object.prototype.hasOwnProperty.call(I_AM, who);
-        if (consentBox.disabled) consentBox.checked = false;
+      var shown = consentWords(kind, who);
+      // New words, a new yes: the box is ticked only next to what's on screen.
+      if (consentText && consentText.getAttribute("data-shown") !== String(shown)) {
+        consentText.textContent = shown || "Choose who's filling this in to see what you're agreeing to.";
+        consentText.setAttribute("data-shown", String(shown));
+        if (consentBox) consentBox.checked = false;
       }
+      if (consentBox) consentBox.disabled = !shown;
       if (submit) submit.disabled = minor;
     }
     if (whoSel) whoSel.addEventListener("change", whoChanged);
-    if (publicBox) publicBox.addEventListener("change", whoChanged);
     whoChanged();
 
     form.addEventListener("submit", function (e) {
@@ -153,6 +160,8 @@
       });
       var endpoint = form.getAttribute("data-endpoint") || "/api/pylon/requests";
       if (kind) body.kind = kind;
+      // The words this person read: the server keeps them only if they're its own.
+      if (consentText && whoSel) body.consent_words = consentWords(kind, whoSel.value) || "";
       if (!body["package"] && form.getAttribute("data-package")) body["package"] = form.getAttribute("data-package");
       if (submit) submit.disabled = true;
       say(msg, "Sending…");
@@ -179,7 +188,7 @@
         location.assign(d.checkout_url);
         return;
       }
-      var to = body.contact_email || body.email || "";
+      var to = body.contact_email || body.athlete_email || body.email || "";
       var title = "Request sent", lines;
       if (form.getAttribute("data-endpoint")) {
         title = "Check your email";

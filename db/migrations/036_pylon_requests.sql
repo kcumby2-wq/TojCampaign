@@ -18,13 +18,19 @@
 --     parent or legal guardian for an athlete, or the athlete when they're
 --     18 or older. Shown to staff in the app, never on a public page. A plain
 --     address only, so a staff Email button can't be made to copy anyone in.
+--     Anyone can fill in a form, so staff check who they're dealing with (on
+--     a call or in person) before anything is done for an athlete, and the
+--     request records who checked and when.
 --   * The athlete, by name, when the service is for one, with the answer to
 --     the form's consent question and the exact words agreed to. Every
 --     athlete on a request comes with that answer; a team request names no
 --     athlete (each athlete's footage is cleared through their own parent or
 --     guardian, at the event).
 --   * The price from the server's own list (never the page's), the Stripe
---     checkout the page started, and the payment once Stripe confirms it.
+--     checkout the page started, and the payment once Stripe confirms it (in
+--     test mode or live). Money Stripe took beyond that (a second payment, or
+--     one through another checkout) is kept too, so it's never missed. A
+--     monthly plan's subscription, and whether it's still active.
 --   * Service role only: RLS on, no policies, nothing granted to anon or
 --     authenticated.
 
@@ -56,6 +62,13 @@ create table if not exists public.pylon_requests (
   paid_at timestamptz,
   paid_cents int check (paid_cents is null or paid_cents between 0 and 99999999),
   paid_via text check (paid_via is null or paid_via in ('stripe', 'manual')),
+  extra_payments jsonb not null default '[]'::jsonb check (jsonb_typeof(extra_payments) = 'array'),
+  stripe_subscription_id text check (stripe_subscription_id is null or stripe_subscription_id ~ '^sub_[A-Za-z0-9]{6,200}$'),
+  subscription_status text check (subscription_status is null
+    or subscription_status in ('active', 'past_due', 'unpaid', 'canceled', 'incomplete', 'incomplete_expired', 'trialing', 'paused')),
+  subscription_ended_at timestamptz,
+  contact_verified_at timestamptz,
+  contact_verified_by text check (contact_verified_by is null or char_length(contact_verified_by) between 3 and 200),
   contact_emailed_at timestamptz,
   paid_emailed_at timestamptz,
   alerted_at timestamptz,
@@ -87,7 +100,11 @@ create table if not exists public.pylon_requests (
     (paid_at is null and paid_cents is null and paid_via is null)
     or (paid_at is not null and paid_cents is not null and paid_via is not null)),
   constraint pylon_requests_paid_stripe check (paid_via is distinct from 'stripe' or checkout_session_id is not null),
-  constraint pylon_requests_checkout_mode check ((checkout_session_id is null) = (checkout_mode is null))
+  constraint pylon_requests_checkout_mode check ((checkout_session_id is null) = (checkout_mode is null)),
+  -- Only a monthly plan has a subscription.
+  constraint pylon_requests_subscription_monthly check ((stripe_subscription_id is null and subscription_status is null) or cadence = 'month'),
+  -- A check of who the contact is says who made it.
+  constraint pylon_requests_verified_whole check ((contact_verified_at is null) = (contact_verified_by is null))
 );
 
 create index if not exists pylon_requests_status_idx on public.pylon_requests (status, created_at desc);

@@ -77,18 +77,26 @@ const WHO_WORDS = Object.freeze({ parent: "the athlete's parent", guardian: "the
 const ATHLETE_KINDS = Object.freeze(["player_package", "transcript", "recruiting", "ambassador"]);
 
 // The words each answer agrees to, kept on the request as they were. They're
-// fixed here, so what's on file is what the page showed (the pages carry the
-// same sentences next to the question).
+// fixed here, and the page sends back the words it showed: a request whose
+// words don't match these is refused (the page reloads), so what's on file is
+// what the person read. public/pylon-forms.js builds the same sentences.
+//
+// A form's answer isn't confirmed by anyone, so it never clears public
+// posting: the coverage is for the family, and anything on Pylon's own
+// channels goes through the consent recorded at the event (migration 024's
+// roster consent and an approver's sign-off).
 const I_AM = Object.freeze({ parent: "I'm the athlete's parent.", guardian: "I'm the athlete's legal guardian.", adult: "I'm the athlete and I'm 18 or older." });
 const THEM = Object.freeze({ parent: "them", guardian: "them", adult: "me" });
-function consentText(kind, who, { publicOk = false } = {}) {
+function consentText(kind, who) {
   if (!has(I_AM, who)) return null;
   const them = THEM[who];
   const agree = {
     player_package:
-      `I agree to Pylon filming and photographing ${them} at this event for this package.` +
-      (publicOk ? " Pylon may also post the coverage on Pylon's own channels." : " Pylon won't post the coverage on its own channels."),
-    transcript: `I agree to Pylon setting up a season-long recruiting profile for ${them}, which ${who === "adult" ? "I" : "we"} can share with coaches.`,
+      `I agree to Pylon filming and photographing ${them} at this event for this package. ` +
+      (who === "adult"
+        ? "The coverage is for me; Pylon posts it publicly only with my separate yes, recorded at the event."
+        : "The coverage is for our family; Pylon posts it publicly only with a separate yes from a parent or guardian, recorded at the event."),
+    transcript: `I agree to Pylon setting up a season-long recruiting profile for ${them}, with stats and film, which ${who === "adult" ? "I" : "we"} can share with coaches.`,
     recruiting: `I agree to the Recruiting Concierge contacting college coaches about ${them}. Nothing goes to a coach until I approve the exact message.`,
     ambassador: `I agree to this application${who === "adult" ? "" : " for them"}. Nothing starts until I review and sign an agreement.`,
   }[kind];
@@ -98,7 +106,9 @@ function consentText(kind, who, { publicOk = false } = {}) {
 // ── Cleaning what came in ────────────────────────────────────────────────
 // Only strings and finite numbers are values; anything else counts as
 // missing, so no input can make these throw.
-const text = (v) => (typeof v === "string" ? v : typeof v === "number" && Number.isFinite(v) ? String(v) : "");
+// A lone half of a surrogate pair isn't text: the database's JSON refuses it.
+const LONE = /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/g;
+const text = (v) => (typeof v === "string" ? v.replace(LONE, "\uFFFD") : typeof v === "number" && Number.isFinite(v) ? String(v) : "");
 // At most max characters, counted as Postgres counts them (code points).
 const clip = (s, max) => {
   const t = String(s);
@@ -145,10 +155,30 @@ const referral = (s) => {
   return /^[A-Z0-9_-]{2,30}$/.test(v) ? v : null;
 };
 const yes = (v) => v === true || v === "true" || v === "yes" || v === "on" || v === "1";
+// A person's name, as it goes into the note we email them: letters (any
+// alphabet), spaces, apostrophes, hyphens, commas and a period after a
+// letter ("Jr."), and nothing that reads as a link or an address: no digits,
+// no @ / : and no period run into a word ("evil.example").
+const NAME = /^[\p{L}\p{M}][\p{L}\p{M}' ’,.-]*$/u;
+const personName = (s) => {
+  const v = clean(s, 80);
+  return v && NAME.test(v) && !/\.[\p{L}]/u.test(v) ? v : null;
+};
+// The class that's in its senior year now (August on, the next year's).
+function seniorClass(now = new Date()) {
+  const d = new Date(now);
+  return d.getUTCFullYear() + (d.getUTCMonth() >= 7 ? 1 : 0);
+}
+// An athlete of 18 or older is a senior or younger at most by a year: a later
+// class can't be 18 yet. The year from a class year, or from "WR 2027".
+function tooYoungForAdult(classYear, now = new Date()) {
+  const m = /\b(20\d\d)\b/.exec(String(classYear || ""));
+  return !!m && +m[1] > seniorClass(now) + 1;
+}
 
 // What a form sent, checked: { errors: [field names], value: the row }.
 // raw is the page's JSON. Nothing in it decides a price.
-function normalize(raw) {
+function normalize(raw, { now = new Date() } = {}) {
   const r = raw && typeof raw === "object" && !Array.isArray(raw) ? raw : {};
   const errors = [];
   const need = (field, v) => {
@@ -182,7 +212,7 @@ function normalize(raw) {
 
   if (kind === "team_package") {
     v.contact_role = "coach";
-    v.contact_name = need("contact_name", clean(r.contact_name, 80));
+    v.contact_name = need("contact_name", personName(r.contact_name));
     v.contact_email = need("contact_email", email(r.contact_email));
     details.team_name = need("team_name", clean(r.team_name, 80));
     const region = clean(r.region, 20);
@@ -191,16 +221,16 @@ function normalize(raw) {
     if (ev) details.event = ev;
   } else if (kind === "newsletter_premium") {
     v.contact_role = "subscriber";
-    v.contact_name = need("contact_name", clean(r.contact_name, 80));
+    v.contact_name = need("contact_name", personName(r.contact_name));
     v.contact_email = need("contact_email", email(r.contact_email));
   } else {
     // About one athlete: who's filling it in decides the contact and the consent.
     const who = clean(r.who, 20);
     if (!has(WHO, who)) errors.push("who");
-    v.athlete_name = need("athlete_name", clean(r.athlete_name, 80));
+    v.athlete_name = need("athlete_name", personName(r.athlete_name));
     // An athlete of 18 or older is the contact: their own name, and for an
     // application their own address, when the form didn't repeat them.
-    let name = clean(r.contact_name, 80);
+    let name = personName(r.contact_name);
     let address = email(r.contact_email);
     if (who === "adult") {
       if (!name) name = v.athlete_name;
@@ -220,7 +250,6 @@ function normalize(raw) {
       details.class_year = need("class_year", year(r.class_year));
       details.team_name = need("team_name", clean(r.team_name, 80));
       details.event = need("event", clean(r.event, 120));
-      details.public_ok = yes(r.public_ok);
       v.referral_code = referral(r.referral_code);
     } else if (kind === "transcript") {
       details.position_class = need("position_class", clean(r.position_class, 40));
@@ -254,7 +283,14 @@ function normalize(raw) {
       const why = cleanNotes(r.why, 1000);
       if (why) v.notes = why;
     }
-    if (v.consent && item) v.consent_text = consentText(kind, v.consent, { publicOk: details.public_ok === true });
+    // 18 or older, with a class that can't be 18 yet: a parent fills it in.
+    if (who === "adult" && tooYoungForAdult(details.class_year || details.position_class, now)) errors.push("who_age");
+    if (v.consent && item) {
+      v.consent_text = consentText(kind, v.consent);
+      // The words the page showed have to be these: the stored words are what
+      // the person read, even while a new page and a new server roll out.
+      if (clean(r.consent_words, 600) !== v.consent_text) errors.push("consent_words");
+    }
   }
   for (const k of Object.keys(details)) if (details[k] === null || details[k] === undefined || details[k] === "") delete details[k];
   return { errors: [...new Set(errors)], value: errors.length ? null : v };
@@ -285,10 +321,13 @@ function summary(r) {
   return [r.package_name, price, ...where].filter(Boolean).join(", ");
 }
 
+// A payment through Stripe's test mode: no money moved.
+const testPaid = (r) => !!r && r.paid_via === "stripe" && r.checkout_mode === "test";
+
 // The push to staff: what came in, never who it's about.
 function pushPayload(r) {
   return {
-    title: r.paid_at ? "Pylon: paid" : "Pylon: new " + (KIND_WORDS[r.kind] || "request").toLowerCase(),
+    title: r.paid_at ? (testPaid(r) ? "Pylon: test payment" : "Pylon: paid") : "Pylon: new " + (KIND_WORDS[r.kind] || "request").toLowerCase(),
     body: summary(r),
     url: "/app/#pylon-request/" + r.id,
     tag: "pylon-" + r.id,
@@ -299,11 +338,12 @@ function pushPayload(r) {
 // contacts stay in the app). Not saved: the whole request, since the email is
 // then the only copy.
 function staffEmail(r, appBase, { saved = true, paid = false } = {}) {
+  const test = paid && testPaid(r);
   const subject = paid
-    ? `Pylon payment: ${r.package_name} (${money(r.paid_cents)})`
+    ? `Pylon ${test ? "TEST payment" : "payment"}: ${r.package_name} (${money(r.paid_cents)})`
     : `Pylon request: ${r.package_name}${r.price_cents ? " (" + priceWords(r) + ")" : ""}`;
   const lines = [];
-  if (paid) lines.push(`Stripe confirmed ${money(r.paid_cents)} for ${r.package_name}.`, "");
+  if (paid) lines.push(test ? `Stripe test mode: ${money(r.paid_cents)} for ${r.package_name}. No money moved.` : `Stripe confirmed ${money(r.paid_cents)} for ${r.package_name}.`, "");
   else lines.push(`New Pylon request: ${KIND_WORDS[r.kind] || r.kind}, from ${PAGES[r.kind] || "a Pylon page"}.`, "", `What: ${summary(r)}`);
   if (saved) {
     lines.push("", `Open it in the TOJ app: ${appBase}/app/#pylon-request/${r.id}`, "", "Names and contact details are in the app, not in this email.");
@@ -368,18 +408,22 @@ function contactEmail(r, { checkout = false, help = "hello@pylonfootball.com" } 
   return { subject: r.kind === "ambassador" ? "Pylon: we got the ambassador application" : "Pylon: we got your request", text: lines.join("\n") };
 }
 
-// Once Stripe confirms the payment.
+// Once Stripe confirms the payment. Only staff can reach a test checkout
+// (routes/pylon.js), so a test note goes to them, marked as one.
 function paidEmail(r, { help = "hello@pylonfootball.com" } = {}) {
+  const test = testPaid(r);
   const lines = [
     `Hi ${firstName(r.contact_name)},`,
     "",
-    `We received your payment of ${money(r.paid_cents)} for ${r.package_name}${r.athlete_name ? " for " + r.athlete_name : ""}. Stripe sends the receipt.`,
+    test
+      ? `This was a Stripe test payment of ${money(r.paid_cents)} for ${r.package_name}. No money moved. A real payment's note reads the same from here on.`
+      : `We received your payment of ${money(r.paid_cents)} for ${r.package_name}${r.athlete_name ? " for " + r.athlete_name : ""}. Stripe sends the receipt.`,
     "",
     NEXT[r.kind] || "We'll be in touch within 24 hours.",
   ];
   if (r.cadence === "month") lines.push("", `It renews each month. To cancel, reply to this email or write to ${help}.`);
   lines.push("", `Questions? Reply to this email or write to ${help}.`, "", SIGN_OFF);
-  return { subject: "Pylon: payment received", text: lines.join("\n") };
+  return { subject: test ? "[TEST] Pylon: payment received" : "Pylon: payment received", text: lines.join("\n") };
 }
 
 // The newsletter's confirmation: the only email an address gets until its
@@ -425,6 +469,10 @@ module.exports = {
   email,
   mailbox,
   consentText,
+  personName,
+  seniorClass,
+  tooYoungForAdult,
+  testPaid,
   normalize,
   money,
   priceWords,

@@ -1,7 +1,8 @@
 // Migration 036 on a real Postgres: what pylon_requests and pylon_newsletter
 // refuse, that the API roles are shut out, and the routes' writes (a request,
-// a payment arriving twice at once, a hand-marked payment racing Stripe, the
-// newsletter's link) through tests/helpers/pg-supabase.js.
+// a payment arriving twice at once, a hand-marked payment racing Stripe, a
+// second payment, a monthly plan's changes, a delete, the newsletter's link)
+// through tests/helpers/pg-supabase.js.
 //
 // Needs a throwaway Postgres: TEST_DATABASE_URL=postgres://… node --test tests/
 // Works in its own schema (gfs_pylon_test), which it DROPS and recreates.
@@ -29,6 +30,7 @@ const { pgSupabase } = require("./helpers/pg-supabase");
 const push = require("../utils/push");
 const mailer = require("../utils/mailer");
 const PS = require("../utils/pylon-stripe");
+const U = require("../utils/pylon");
 const router = require("../routes/pylon");
 
 const NAME = "gfs_pylon_test";
@@ -46,13 +48,24 @@ function signed(event) {
   return call("POST", "/api/pylon/stripe/webhook", payload, { "Stripe-Signature": helper.webhooks.generateTestHeaderString({ payload, secret: process.env.PYLON_STRIPE_WEBHOOK_SECRET }) });
 }
 let n = 0;
+const expired = [];
+// Live, as the public meets it (test mode is for staff only).
 const fakeStripe = {
-  mode: "test",
+  mode: "live",
   stripe: {
-    checkout: { sessions: { create: async () => { n += 1; const id = "cs_test_db" + String(n).padStart(8, "0"); return { id, url: "https://checkout.stripe.com/c/pay/" + id }; } } },
+    checkout: {
+      sessions: {
+        create: async () => { n += 1; const id = "cs_live_db" + String(n).padStart(8, "0"); return { id, url: "https://checkout.stripe.com/c/pay/" + id }; },
+        expire: async (id) => { expired.push(id); return { id, status: "expired" }; },
+      },
+    },
     promotionCodes: { list: async () => ({ data: [] }) },
   },
 };
+// A form as the page sends it, with the consent words it showed.
+const withWords = (f) => ({ ...f, consent_words: U.consentText(f.kind, f.who) });
+const player = (over = {}) => withWords({ kind: "player_package", package: "13", who: "parent", consent_confirm: true, athlete_name: "Jordan Ellis", position: "WR", class_year: "2028", team_name: "Elite", event: "Pylon Dallas", contact_name: "Pat Ellis", contact_email: "pat@example.com", ...over });
+const paidEvent = (row, over = {}) => ({ id: "evt_" + row.id.slice(0, 8), type: "checkout.session.completed", data: { object: { id: row.checkout_session_id, client_reference_id: row.id, payment_status: "paid", amount_total: row.price_cents, livemode: true, metadata: { kind: "pylon", request_id: row.id }, ...over } } });
 
 before(async () => {
   const admin = new Pool({ connectionString: URL_ });
@@ -93,7 +106,7 @@ const row = (over = {}) => ({
 });
 function insert(r) {
   const cols = Object.keys(r);
-  return pool.query(`insert into pylon_requests (${cols.join(",")}) values (${cols.map((_, i) => "$" + (i + 1)).join(",")}) returning id`, cols.map((c) => (c === "details" ? JSON.stringify(r[c]) : r[c])));
+  return pool.query(`insert into pylon_requests (${cols.join(",")}) values (${cols.map((_, i) => "$" + (i + 1)).join(",")}) returning id`, cols.map((c) => (c === "details" || c === "extra_payments" ? JSON.stringify(r[c]) : r[c])));
 }
 
 test("the API roles are shut out of both tables", async () => {
@@ -131,6 +144,17 @@ test("a payment is whole, and one through Stripe is a checkout's", async () => {
   assert.ok(await refused(insert(row({ checkout_session_id: "not-a-session", checkout_mode: "test" }))));
   assert.ok((await insert(row({ checkout_session_id: "cs_test_abcdefgh12", checkout_mode: "test", paid_at: new Date(), paid_cents: 9900, paid_via: "stripe" }))).rows[0].id);
   assert.ok(await refused(insert(row({ checkout_session_id: "cs_test_abcdefgh12", checkout_mode: "test" }))), "one request per checkout");
+  assert.ok(await refused(insert(row({ extra_payments: {} }))), "further payments are a list");
+  assert.ok(await refused(insert(row({ contact_verified_at: new Date() }))), "a check of the contact says who made it");
+  assert.ok((await insert(row({ contact_verified_at: new Date(), contact_verified_by: "kyron@toj.test" }))).rows[0].id);
+});
+
+test("a monthly plan's subscription is only on a monthly package, by Stripe's names", async () => {
+  const monthly = { kind: "recruiting", package: "hbcu_monthly", package_name: "HBCU Premium Concierge", price_cents: 14900, cadence: "month", contact_role: "guardian", consent: "guardian" };
+  assert.ok((await insert(row({ ...monthly, stripe_subscription_id: "sub_ABC123456", subscription_status: "past_due" }))).rows[0].id);
+  assert.ok(await refused(insert(row({ stripe_subscription_id: "sub_ABC654321", subscription_status: "active" }))), "a one-time package has no plan");
+  assert.ok(await refused(insert(row({ ...monthly, stripe_subscription_id: "nope", subscription_status: "active" }))));
+  assert.ok(await refused(insert(row({ ...monthly, stripe_subscription_id: "sub_ABC999999", subscription_status: "gone" }))));
 });
 
 test("plain lowercase addresses, known statuses, tidy package keys", async () => {
@@ -144,13 +168,15 @@ test("plain lowercase addresses, known statuses, tidy package keys", async () =>
 
 test("the routes on Postgres: a request, its checkout, and a payment delivered twice at once", async () => {
   PS._set(fakeStripe);
-  const r = await call("POST", "/api/pylon/requests", { kind: "player_package", package: "13", who: "parent", consent_confirm: true, athlete_name: "Jordan Ellis", position: "WR", class_year: "2028", team_name: "Elite", event: "Pylon Dallas", contact_name: "Pat Ellis", contact_email: "pat@example.com", public_ok: true });
+  const r = await call("POST", "/api/pylon/requests", player({ public_ok: true }));
   assert.equal(r.status, 200);
   assert.match(r.data.checkout_url, /^https:\/\/checkout\.stripe\.com\//);
   const { rows: [saved] } = await pool.query("select * from pylon_requests where id = $1", [r.data.id]);
-  assert.equal(saved.details.public_ok, true);
-  assert.equal(saved.checkout_mode, "test");
-  const ev = { id: "evt_1", type: "checkout.session.completed", data: { object: { id: saved.checkout_session_id, client_reference_id: saved.id, payment_status: "paid", amount_total: 9900, livemode: false, metadata: { kind: "pylon", request_id: saved.id } } } };
+  assert.equal(saved.details.public_ok, undefined, "the form never clears public posting");
+  assert.equal(saved.consent_text, U.consentText("player_package", "parent"));
+  assert.equal(saved.checkout_mode, "live");
+  assert.deepEqual(saved.extra_payments, []);
+  const ev = paidEvent(saved);
   mails = [];
   const both = await Promise.all([signed(ev), signed(ev)]);
   assert.deepEqual(both.map((x) => x.status), [200, 200]);
@@ -170,20 +196,65 @@ test("a hand-marked payment and Stripe's arriving together: one of them lands", 
   const r = await call("POST", "/api/pylon/requests", { kind: "team_package", package: "1a", contact_name: "Coach Lee", contact_email: "coach@example.com", team_name: "Elite", region: "west" }, { "X-Forwarded-For": "198.51.100.77" });
   const { rows: [saved] } = await pool.query("select * from pylon_requests where id = $1", [r.data.id]);
   const c = await staff();
-  const ev = { id: "evt_2", type: "checkout.session.completed", data: { object: { id: saved.checkout_session_id, client_reference_id: saved.id, payment_status: "paid", amount_total: 29900, livemode: false, metadata: { kind: "pylon", request_id: saved.id } } } };
-  const [hook, hand] = await Promise.all([signed(ev), call("PATCH", `/api/pylon/requests/${saved.id}`, { paid: true }, { Cookie: c })]);
+  const [hook, hand] = await Promise.all([signed(paidEvent(saved)), call("PATCH", `/api/pylon/requests/${saved.id}`, { paid: true }, { Cookie: c })]);
   assert.equal(hook.status, 200);
   assert.ok([200, 409].includes(hand.status));
-  const { rows: [after] } = await pool.query("select paid_via, paid_cents from pylon_requests where id = $1", [saved.id]);
+  const { rows: [after] } = await pool.query("select paid_via, paid_cents, extra_payments from pylon_requests where id = $1", [saved.id]);
   assert.equal(after.paid_via, hand.status === 200 ? "manual" : "stripe", "whoever landed first is the record, and nothing overwrote it");
   assert.equal(after.paid_cents, 29900);
+  assert.equal(after.extra_payments.length, hand.status === 200 ? 1 : 0, "Stripe's money after a hand-marked payment is kept on the request");
+});
+
+test("a second payment delivered twice at once is recorded once", async () => {
+  PS._set(fakeStripe);
+  const r = await call("POST", "/api/pylon/requests", player({ contact_email: "second@example.com" }), { "X-Forwarded-For": "198.51.100.78" });
+  const c = await staff();
+  assert.equal((await call("PATCH", `/api/pylon/requests/${r.data.id}`, { paid: true }, { Cookie: c })).status, 200);
+  const { rows: [saved] } = await pool.query("select * from pylon_requests where id = $1", [r.data.id]);
+  assert.ok(expired.includes(saved.checkout_session_id), "the open checkout was closed");
+  const ev = paidEvent(saved);
+  const both = await Promise.all([signed(ev), signed(ev)]);
+  assert.ok(both.some((x) => x.status === 200));
+  // A delivery that lost the race asks Stripe to send it again; then it's a repeat.
+  assert.equal((await signed(ev)).status, 200);
+  const { rows: [after] } = await pool.query("select paid_via, extra_payments from pylon_requests where id = $1", [saved.id]);
+  assert.equal(after.paid_via, "manual");
+  assert.equal(after.extra_payments.length, 1);
+  assert.equal(after.extra_payments[0].checkout_session_id, saved.checkout_session_id);
+  assert.equal((await call("PATCH", `/api/pylon/requests/${saved.id}`, { paid: false }, { Cookie: c })).data.error, "extra_payments");
+  assert.equal((await call("DELETE", `/api/pylon/requests/${saved.id}`, undefined, { Cookie: c })).data.error, "paid_keep");
+});
+
+test("a monthly plan on Postgres: the subscription joins the request, and its changes land", async () => {
+  PS._set(fakeStripe);
+  const r = await call("POST", "/api/pylon/requests", withWords({ kind: "recruiting", package: "standard_monthly", who: "adult", consent_confirm: true, athlete_name: "Alex Brown", contact_email: "alex@example.com", contact_phone: "555-010-2030", position_class: "WR 2027", target_level: "ncaa_d2" }), { "X-Forwarded-For": "198.51.100.79" });
+  assert.equal(r.status, 200);
+  const { rows: [saved] } = await pool.query("select * from pylon_requests where id = $1", [r.data.id]);
+  assert.equal((await signed(paidEvent(saved, { mode: "subscription", subscription: "sub_DB0000001" }))).status, 200);
+  const sub = (type, over) => signed({ id: "evt_sub", type, data: { object: { id: "sub_DB0000001", object: "subscription", status: "past_due", metadata: { kind: "pylon", request_id: saved.id }, ...over } } });
+  assert.equal((await sub("customer.subscription.updated", {})).status, 200);
+  assert.equal((await sub("customer.subscription.deleted", { status: "canceled", ended_at: 1794000000 })).status, 200);
+  const { rows: [after] } = await pool.query("select stripe_subscription_id, subscription_status, subscription_ended_at from pylon_requests where id = $1", [saved.id]);
+  assert.equal(after.stripe_subscription_id, "sub_DB0000001");
+  assert.equal(after.subscription_status, "canceled");
+  assert.ok(String(after.subscription_ended_at).startsWith("2026-11-06T21:20:00"), String(after.subscription_ended_at));
+});
+
+test("staff delete on Postgres: an unpaid request goes, a paid one stays", async () => {
+  const c = await staff();
+  const { rows: [{ id: unpaid }] } = await insert(row());
+  const { rows: [{ id: paid }] } = await insert(row({ paid_at: new Date(), paid_cents: 9900, paid_via: "manual" }));
+  assert.equal((await call("DELETE", `/api/pylon/requests/${unpaid}`, undefined, { Cookie: c })).status, 200);
+  assert.equal((await pool.query("select 1 from pylon_requests where id = $1", [unpaid])).rows.length, 0);
+  assert.equal((await call("DELETE", `/api/pylon/requests/${paid}`, undefined, { Cookie: c })).status, 409);
+  assert.equal((await pool.query("select 1 from pylon_requests where id = $1", [paid])).rows.length, 1);
 });
 
 test("the newsletter on Postgres: one row per address, the link works once", async () => {
   mails = [];
   assert.equal((await call("POST", "/api/pylon/newsletter/subscribe", { email: "fan@example.com" }, { "X-Forwarded-For": "203.0.113.90" })).status, 200);
   await wait();
-  const token = /confirm=([0-9a-f]{64})/.exec(mails[0].text)[1];
+  const token = /confirm=([0-9a-f]{64})/.exec(mails.find((m) => [].concat(m.to).includes("fan@example.com")).text)[1];
   // Twice at once, from elsewhere: still one row.
   router._reset();
   await Promise.all([1, 2].map((i) => call("POST", "/api/pylon/newsletter/subscribe", { email: "fan2@example.com" }, { "X-Forwarded-For": `203.0.113.9${i}` })));
