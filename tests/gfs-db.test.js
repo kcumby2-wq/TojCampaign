@@ -258,13 +258,31 @@ test("B3: the last screened adult can't step away from a youth creator, even in 
   try {
     await c1.query("begin");
     await c2.query("begin");
+    const pid2 = (await c2.query("select pg_backend_pid() as pid")).rows[0].pid;
     await c1.query(`update gfs_crew set status = 'confirmed' where id = $1`, [y2]);
-    const second = c2.query(`update gfs_crew set status = 'removed' where id = $1`, [lead]);
-    await new Promise((r) => setTimeout(r, 150));
-    await c1.query("commit");
-    await assert.rejects(second, /crew_youth_left_alone/);
+    // Caught from the start: the refusal can arrive before anything awaits
+    // it, and a rejection nobody is listening for yet fails the whole run.
+    const second = c2.query(`update gfs_crew set status = 'removed' where id = $1`, [lead]).then(() => null, (e) => e);
+    // Only once the second is waiting on the first's lock is it a race the
+    // lock decides (a sleep could let it run after the commit instead).
+    for (let i = 0; ; i++) {
+      const w = await q(`select wait_event_type from pg_stat_activity where pid = $1`, [pid2]);
+      if (w.rows[0] && w.rows[0].wait_event_type === "Lock") break;
+      assert.ok(i < 200, "the second update never waited on the first");
+      await new Promise((r) => setTimeout(r, 10));
+    }
+    // The commit and a wait together, so the refusal arrives before anything
+    // awaits it, every time.
+    await Promise.all([c1.query("commit"), new Promise((r) => setTimeout(r, 200))]);
+    const refusal = await second;
+    assert.ok(refusal, "the second change was refused");
+    assert.match(refusal.message, /crew_youth_left_alone/);
     await c2.query("rollback");
   } finally {
+    // A failure part way leaves a transaction open: end it before the
+    // connections go back to the pool, so later tests don't inherit it.
+    await c1.query("rollback").catch(() => {});
+    await c2.query("rollback").catch(() => {});
     c1.release();
     c2.release();
   }
