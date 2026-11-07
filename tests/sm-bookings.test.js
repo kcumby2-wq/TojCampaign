@@ -539,7 +539,7 @@ test("staffing: a screened adult only; closed bookings keep who they had", async
 });
 
 // ── The booker's note, the offer, and details after a direct Buy (034) ──
-const SITE_LINK = (sid) => `https://www.subjectmedias.com/?paid=${sid}#details`;
+const SITE_LINK = (sid) => `https://www.subjectmedias.com/details?paid=${sid}`;
 const theirs = (addr) => mails.filter((m) => m.to.includes(addr));
 const staffMails = () => mails.filter((m) => m.to.includes("kyron@toj.test"));
 const detailsCall = (body, visitor = "198.51.100.9") => call("POST", "/api/sm/bookings/paid", { details: true, adult_confirmed: true, ...body }, { "X-SM-Secret": SECRET, "X-SM-Visitor": visitor });
@@ -659,6 +659,7 @@ test("details after the webhook: filled in once, staff hear, nobody's emailed tw
   assert.equal(row.region, "south_central");
   assert.equal(row.team_jersey, "Elite 7v7 #4");
   assert.ok(row.details_at);
+  assert.equal(row.adult_confirmed, true);
   assert.match(row.notes, /From the event details form: Field 3/);
   await wait();
   assert.equal(pushes.length, 1);
@@ -683,6 +684,7 @@ test("details before the webhook: one booking, their answers kept; the webhook f
   const note = theirs("buyer@example.com");
   assert.equal(note.length, 1);
   assert.ok(!note[0].text.includes("?paid="), "they've told us already: no link");
+  assert.equal(db.tables.sm_bookings[0].adult_confirmed, true, "they ticked the box");
   const hook = await paidCall({ stripe_session_id: sid, package: "video", amount_cents: 9999, contact_email: "buyer@example.com", contact_phone: "555-010-9999", event_city: "Austin", event_state: "TX", notes: "Team: Elite" });
   assert.equal(hook.status, 200);
   assert.equal(hook.data.duplicate, true);

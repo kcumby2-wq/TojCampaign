@@ -192,7 +192,8 @@ function normalizePaid(raw, { now = new Date() } = {}) {
     if (n === false) errors.push("athletes");
     if (clean(r.contact_phone, 40) && !v.contact_phone) errors.push("contact_phone");
     const adult = r.adult_confirmed === true || r.adult_confirmed === "true" || r.adult_confirmed === "on";
-    if (!adult) errors.push("adult_confirmed");
+    if (adult) v.adult_confirmed = true;
+    else errors.push("adult_confirmed");
   } else {
     const day = dayValue(r.event_date);
     v.event_date = day === null ? null : isoDay(day);
@@ -215,6 +216,7 @@ function fillPatch(b, inc, { from = "the checkout" } = {}) {
     if (b.source === "stripe" && KINDS.includes(inc.kind)) patch.kind = inc.kind;
   }
   if ((blank(b.contact_name) || b.contact_name === STRIPE_NAME) && !blank(inc.contact_name) && inc.contact_name !== STRIPE_NAME) patch.contact_name = inc.contact_name;
+  if (inc.adult_confirmed === true && b.adult_confirmed !== true) patch.adult_confirmed = true;
   if (!blank(inc.notes) && !String(b.notes || "").includes(inc.notes)) {
     patch.notes = [b.notes, `From ${from}: ${inc.notes}`].filter(Boolean).join("\n\n").slice(0, 1000);
   }

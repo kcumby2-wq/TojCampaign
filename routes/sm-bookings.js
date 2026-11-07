@@ -131,9 +131,9 @@ function bookerMailAllowed(address, now = Date.now()) {
   if (bookerSent.size > 20000) for (const [k, v] of bookerSent) if (!v.some((t) => now - t < DAY_MS)) bookerSent.delete(k);
   return true;
 }
-// Where a buyer tells us about their game: the homepage opens the details form
-// for this checkout (subjectmedias-site's js/details.js and api/details.js).
-const detailsLink = (sid) => `${siteBase()}/?paid=${encodeURIComponent(sid)}#details`;
+// Where a buyer tells us about their game: the site's details page for this
+// checkout (subjectmedias-site's details.html and api/details.js).
+const detailsLink = (sid) => `${siteBase()}/details?paid=${encodeURIComponent(sid)}`;
 
 // ── Alerts ───────────────────────────────────────────────────────────────
 async function findMatches(sb, booking) {
