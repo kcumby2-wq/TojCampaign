@@ -32,10 +32,13 @@ const safe = H.safe("pylon-parent");
 const env = (k) => String(process.env[k] || "").trim();
 const APP_BASE = () => (env("APP_BASE") || "https://tojcampaign.com").replace(/\/+$/, "");
 const helpEmail = () => U.email(env("PYLON_HELP_EMAIL")) || "hello@pylonfootball.com";
-// Guessing at links: 30 tries per visitor and 120 per connection (the hop
-// Render saw, which made-up X-Forwarded-For headers can't change) per 10 minutes.
+// Guessing at links: 30 tries per visitor per 10 minutes; the 256-bit token
+// is what stops a guess. Per connection (the hop Render saw, which made-up
+// X-Forwarded-For headers can't change; through Vercel, shared by every
+// family), 600 per 10 minutes: a breaker for floods only, and the page says
+// "try again in a minute" if it trips.
 const perVisitor = H.windowLimiter(30, 10 * 60 * 1000);
-const perPeer = H.windowLimiter(120, 10 * 60 * 1000);
+const perPeer = H.windowLimiter(600, 10 * 60 * 1000);
 const proofOf = (token) => crypto.createHash("sha256").update(String(token), "utf8").digest("hex");
 const wellFormed = (t) => typeof t === "string" && /^[0-9a-f]{64}$/.test(t);
 // The function's one column comes back as rows of { outreach_id }; a bare

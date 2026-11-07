@@ -502,6 +502,6 @@ test("guessing at links is slowed down", async () => {
   assert.equal(limited, 5, "30 tries per visitor per 10 minutes");
   parent._reset();
   let ok = 0;
-  for (let i = 0; i < 125; i++) if ((await family("view", { token: crypto.randomBytes(32).toString("hex") }, { "X-Forwarded-For": `192.0.2.${i}` })).status !== 429) ok += 1;
-  assert.equal(ok, 120, "made-up visitor addresses still meet the connection's limit");
+  for (let i = 0; i < 605; i++) if ((await family("view", { token: crypto.randomBytes(32).toString("hex") }, { "X-Forwarded-For": `192.0.${Math.floor(i / 200)}.${i % 200}` })).status !== 429) ok += 1;
+  assert.equal(ok, 600, "made-up visitor addresses still meet the connection's breaker");
 });
