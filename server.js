@@ -33,9 +33,9 @@ const { sessionCookie, TRUST_PROXY_HOPS } = require("./utils/session-cookie");
 app.set("trust proxy", TRUST_PROXY_HOPS);
 const PORT = process.env.PORT || 3000;
 
-// The Stripe webhooks (the Creator Club's and Subject Medias') need the exact
-// bytes Stripe signed.
-const STRIPE_HOOKS = ["/api/creators/stripe/webhook", "/api/sm/stripe/webhook"];
+// The Stripe webhooks (the Creator Club's, Subject Medias' and the Pylon
+// pages') need the exact bytes Stripe signed.
+const STRIPE_HOOKS = ["/api/creators/stripe/webhook", "/api/sm/stripe/webhook", "/api/pylon/stripe/webhook"];
 app.use(
   express.json({
     limit: "5mb",
@@ -219,28 +219,12 @@ app.get(["/studio", "/studio/"], (_req, res) => res.redirect(302, "/app/#studio"
 // Campaign deal graph + campaign agents — staff only; membership checked per
 // campaign inside the route. Needs CAMPAIGN_DATABASE_URL (503 until set).
 app.use("/api/campaign", require("./utils/staff").requireStaff, require("./routes/campaign"));
-// Pylon route needs a Postgres `db` module (it calls db.query(...) throughout).
-// That module was never wired, so requiring it crashes boot. Mount defensively:
-// if ../db is missing, skip the route with a warning instead of taking the whole
-// server down. It auto-enables the day a real db module exists.
-try {
-  app.use("/api/pylon", require("./routes/pylon"));
-} catch (e) {
-  console.warn("[pylon] route not mounted — missing ../db module:", e.message);
-}
-// Public, token-gated parent approval of recruiting outreach (migration 013).
-// Same db dependency as /api/pylon, so it is mounted the same defensive way.
-try {
-  app.use("/api/pylon-parent", require("./routes/pylon-parent"));
-} catch (e) {
-  console.warn("[pylon-parent] route not mounted — missing ../db module:", e.message);
-}
-
-// Pylon × TOJ · pre/during/post-event sales sequence cron
-// Toggle via env: PYLON_CRON_ENABLED=true
-if (process.env.PYLON_CRON_ENABLED === "true") {
-  require("./utils/pylon-sequence-cron").start();
-}
+// The public Pylon pages: their requests, checkouts and newsletter, and the
+// staff view of them (routes/pylon.js, migration 036).
+app.use("/api/pylon", require("./routes/pylon"));
+// The family's side of a Recruiting Concierge message: approve or decline it
+// with the one-time link (routes/pylon-parent.js, migration 037).
+app.use("/api/pylon-parent", require("./routes/pylon-parent"));
 
 // Public health signal — powers the live status dot on the Command Center.
 // Reports which storage/AI backends are actually wired (no secrets leaked).

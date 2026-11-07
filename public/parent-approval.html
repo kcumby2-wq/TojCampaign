@@ -54,8 +54,15 @@
     <p class="lede">It may have been used already, it may have expired, or the message was changed after the link was sent. Please ask your Recruiting Concierge contact for a new link.</p>
   </div>
 
+  <div id="later" class="state center">
+    <div class="mark">⏳</div>
+    <h1>Not just now</h1>
+    <p class="lede" id="laterText">We couldn't load the message. Your link still works: wait a minute, then try again.</p>
+    <button class="btn no" type="button" id="retry" style="max-width:240px;margin:18px auto 0">Try again</button>
+  </div>
+
   <form id="form" class="state" novalidate>
-    <h1>A message about <em id="athlete">your athlete</em>, waiting for you.</h1>
+    <h1 id="headline">A message about <em id="athlete">your athlete</em>, waiting for you.</h1>
     <p class="lede">Nothing goes to a college coach until you approve it. Read it below exactly as it will be sent, then approve it or decline it.</p>
 
     <div class="card">
@@ -71,18 +78,18 @@
     </div>
 
     <div class="card">
-      <label class="opt" for="pname">Your name (parent or guardian)</label>
-      <input type="text" id="pname" autocomplete="name" placeholder="Full name" />
+      <label class="opt" for="pname" id="pnameLabel">Your name (parent or guardian)</label>
+      <input type="text" id="pname" autocomplete="name" placeholder="Full name" maxlength="80" />
       <label class="checkline">
         <input type="checkbox" id="ok" />
-        <span>I am this athlete's parent or legal guardian, and my decision below is about this message only.</span>
+        <span id="okText">I am this athlete's parent or legal guardian, and my decision below is about this message only.</span>
       </label>
       <div class="row">
         <button class="btn yes" type="button" id="approve">Approve and allow sending</button>
         <button class="btn no" type="button" id="decline">Decline</button>
       </div>
       <div class="err" id="err" role="alert"></div>
-      <p class="note">Approving covers this message only. Any change to it needs your approval again. No one is promised an offer, a roster spot or a scholarship.</p>
+      <p class="note">Approving covers this message only. Any change to it needs your approval again. We'll email you a receipt. No one is promised an offer, a roster spot or a scholarship.</p>
     </div>
   </form>
 
@@ -96,48 +103,90 @@
 <script>
 (function(){
   function $(id){ return document.getElementById(id); }
-  function show(id){ ["loading","invalid","form","done"].forEach(function(s){ $(s).classList.toggle("on", s === id); }); }
-  var token = new URLSearchParams(location.search).get("token") || "";
-  // Keep the token out of the address bar, browser history sync and screenshots.
+  function show(id){ ["loading","invalid","later","form","done"].forEach(function(s){ $(s).classList.toggle("on", s === id); }); }
+  var KEY = "pylon-approval";
+  var athlete = false;
+  // The link carries the token after "#t=": a fragment never leaves the
+  // browser, so no server logs it. It's kept for this tab only (a phone that
+  // reloads the page still has it), then taken off the address bar.
+  var m = /^#t=([0-9a-f]{64})$/.exec(location.hash || "");
+  var token = m ? m[1] : "";
+  try {
+    if (token) sessionStorage.setItem(KEY, token);
+    else token = sessionStorage.getItem(KEY) || "";
+  } catch (e) {}
   try { history.replaceState(null, "", location.pathname); } catch (e) {}
-  var base = "/api/pylon-parent/approval/" + encodeURIComponent(token);
   if (!/^[0-9a-f]{64}$/.test(token)) { show("invalid"); return; }
+  function forget(){ try { sessionStorage.removeItem(KEY); } catch (e) {} }
+  function post(path, body){
+    return fetch("/api/pylon-parent/approval/" + path, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body)
+    }).then(function(r){ return r.json().catch(function(){ return {}; }).then(function(d){ return { status: r.status, data: d || {} }; }); });
+  }
+  // A limit or a server that's down isn't a dead link: say so, and let them retry.
+  function later(status){
+    $("laterText").textContent = status === 429
+      ? "Too many tries from here just now. Your link still works: wait a minute, then try again."
+      : "We couldn't reach the server. Your link still works: wait a minute, then try again.";
+    show("later");
+  }
 
-  fetch(base).then(function(r){ return r.ok ? r.json() : null; }).then(function(d){
-    if (!d || !d.ok) { show("invalid"); return; }
-    $("athlete").textContent = d.athlete_first_name || "your athlete";
-    $("program").textContent = [d.program_name, d.program_level].filter(Boolean).join(" · ") || "—";
-    $("coach").textContent = d.coach_name || "—";
-    $("email").textContent = d.coach_email || "—";
-    $("subject").textContent = d.draft_subject || "(no subject)";
-    $("body").textContent = d.draft_body || "";
-    show("form");
-  }).catch(function(){ show("invalid"); });
+  function load(){
+    show("loading");
+    post("view", { token: token }).then(function(r){
+      var d = r.data;
+      if (r.status === 200 && d.ok) {
+        $("athlete").textContent = d.athlete_first_name || "your athlete";
+        // The link went to the athlete themselves (18 or older): the words say so.
+        if (d.approver === "athlete") {
+          athlete = true;
+          $("headline").textContent = "A message about you, waiting for your OK.";
+          $("pnameLabel").textContent = "Your name";
+          $("okText").textContent = "I am the athlete, I'm 18 or older, and my decision below is about this message only.";
+        }
+        $("program").textContent = [d.program_name, d.program_level].filter(Boolean).join(" · ") || "—";
+        $("coach").textContent = d.coach_name || "—";
+        $("email").textContent = d.coach_email || "—";
+        $("subject").textContent = d.draft_subject || "(no subject)";
+        $("body").textContent = d.draft_body || "";
+        show("form");
+      } else if (r.status === 400 || r.status === 404) {
+        forget();
+        show("invalid");
+      } else later(r.status);
+    }).catch(function(){ later(0); });
+  }
+  $("retry").addEventListener("click", load);
+  load();
 
   function decide(decision){
     var err = $("err"); err.textContent = "";
     var name = $("pname").value.trim();
-    if (name.length < 2) { err.textContent = "Please enter your name."; return; }
-    if (!$("ok").checked) { err.textContent = "Please confirm you are the parent or legal guardian."; return; }
+    if ((name.match(/\p{L}/gu) || []).length < 2) { err.textContent = "Please enter your name."; return; }
+    if (!$("ok").checked) { err.textContent = athlete ? "Please confirm it's you." : "Please confirm you are the parent or legal guardian."; return; }
     $("approve").disabled = true; $("decline").disabled = true;
-    fetch(base, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ decision: decision, parent_name: name, confirm: true })
-    }).then(function(r){ return r.json().catch(function(){ return {}; }); })
-      .then(function(out){
-        if (out && out.ok) {
-          $("doneTitle").textContent = decision === "approved" ? "Approved." : "Declined.";
-          $("doneText").textContent = decision === "approved"
-            ? "This message may now be sent to the coach, exactly as you read it."
-            : "This message will not be sent. Your Recruiting Concierge contact will follow up with you.";
-          show("done");
-        } else {
-          err.textContent = "This link may no longer be active. Please ask for a new one.";
-          $("approve").disabled = false; $("decline").disabled = false;
-        }
-      })
-      .catch(function(){ err.textContent = "Network error. Please try again."; $("approve").disabled = false; $("decline").disabled = false; });
+    var again = function(text){ err.textContent = text; $("approve").disabled = false; $("decline").disabled = false; };
+    post("decide", { token: token, decision: decision, parent_name: name, confirm: true }).then(function(r){
+      if (r.status === 200 && r.data.ok) {
+        forget();
+        $("doneTitle").textContent = decision === "approved" ? "Approved." : "Declined.";
+        $("doneText").textContent = decision === "approved"
+          ? "This message may now be sent to the coach, exactly as you read it. Any change to it needs your OK again. We've emailed you a receipt."
+          : "This message will not be sent. Your Recruiting Concierge contact will follow up with you. We've emailed you a receipt.";
+        show("done");
+      } else if (r.status === 404) {
+        forget();
+        err.textContent = "This link isn't active anymore: it may have been used, replaced or cancelled. Please ask for a new one.";
+      } else if (r.status === 400 && r.data.error === "name_required") {
+        again("Please enter your name as letters, without links or numbers.");
+      } else if (r.status === 429) {
+        again("Too many tries from here just now. Wait a minute, then try again. Your link still works.");
+      } else {
+        again("We couldn't record that just now. Wait a minute, then try again. Your link still works.");
+      }
+    }).catch(function(){ again("Network error. Please try again. Your link still works."); });
   }
   $("approve").addEventListener("click", function(){ decide("approved"); });
   $("decline").addEventListener("click", function(){ decide("declined"); });

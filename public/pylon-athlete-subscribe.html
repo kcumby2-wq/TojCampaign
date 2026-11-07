@@ -10,6 +10,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Anton&family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect fill='%230A0A0A' width='100' height='100'/%3E%3Cpath fill='%23F4C82E' d='M20 20h60v60H20z'/%3E%3Cpath fill='%230A0A0A' d='M35 35h30v30H35z'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="/pylon-forms.css">
 <style>
 :root{--black:#0A0A0A;--near-black:#161616;--surface:#1A1A1A;--surface-2:#222;--yellow:#F4C82E;--yellow-2:#FFE066;--white:#FFFFFF;--dim:rgba(255,255,255,.72);--dimmer:rgba(255,255,255,.5);--line:#2A2A2A;--green:#5FCF80}
 *{box-sizing:border-box;margin:0;padding:0}
@@ -140,7 +141,7 @@ footer a{color:var(--yellow)}
           <li>Shareable URL — direct to any coach</li>
           <li><b>Pylon Momentum Score</b> included</li>
         </ul>
-        <button class="book" data-tier="individual" data-amount="9900" data-name="Individual · $99/season">Start Individual</button>
+        <button class="book" data-package="individual" data-name="Individual · $99/season">Start Individual</button>
       </div>
 
       <div class="tier featured">
@@ -155,7 +156,7 @@ footer a{color:var(--yellow)}
           <li>Priority Momentum Score weekly recompute</li>
           <li>Grade-informed play tags on every clip</li>
         </ul>
-        <button class="book" data-tier="combine" data-amount="24900" data-name="Combine · $249/season">Start Combine</button>
+        <button class="book" data-package="combine" data-name="Combine · $249/season">Start Combine</button>
       </div>
     </div>
   </div>
@@ -165,7 +166,7 @@ footer a{color:var(--yellow)}
   <div class="shell">
     <span class="chapter-tag">◆ What's in your profile</span>
     <h2 class="chapter-h">Everything a coach needs · <span class="accent">in one place.</span></h2>
-    <p class="sec-lede">Every Pylon event feeds your profile automatically. No forms. No re-entry. Coaches read one page, see the athlete's whole season.</p>
+    <p class="sec-lede">Pylon adds each Pylon event you play in to your profile. No forms, no re-entry. Coaches read one page and see the athlete's whole season.</p>
 
     <div class="feat-grid">
       <div class="feat">
@@ -174,7 +175,7 @@ footer a{color:var(--yellow)}
       </div>
       <div class="feat">
         <h4>Season Stat Line</h4>
-        <p>Every game, every event, stat totals. Auto-updated within 48 hours of each event's close.</p>
+        <p>Every game, every event, stat totals, added by Pylon after each event.</p>
       </div>
       <div class="feat">
         <h4>Film Links</h4>
@@ -182,7 +183,7 @@ footer a{color:var(--yellow)}
       </div>
       <div class="feat">
         <h4>Optimum Grades (Combine)</h4>
-        <p>On-field grade every event. The professional evaluation coaches trust — not a highlight reel with hype.</p>
+        <p>An on-field grade at every event: an evaluation, not a highlight reel with hype.</p>
       </div>
       <div class="feat">
         <h4>Offer Wall</h4>
@@ -190,7 +191,7 @@ footer a{color:var(--yellow)}
       </div>
       <div class="feat">
         <h4>Pylon Momentum Score</h4>
-        <p>The 0-100 longitudinal metric coaches use to see trajectory. Not a ranking. A trajectory.</p>
+        <p>A 0-100 score that follows an athlete across seasons. Not a ranking. A trajectory.</p>
       </div>
     </div>
   </div>
@@ -202,58 +203,55 @@ footer a{color:var(--yellow)}
       <div>
         <span class="chapter-tag">◆ The metric that lives on your profile</span>
         <h3>Pylon <span class="accent">Momentum Score.</span></h3>
-        <p style="color:var(--dim);font-size:16px;line-height:1.55;margin-bottom:16px">A 0-100 longitudinal score combining on-field grade, event volume, measurables trend, footage volume, recruiting momentum, and engagement. Recomputed weekly during the season.</p>
+        <p style="color:var(--dim);font-size:16px;line-height:1.55;margin-bottom:16px">A 0-100 longitudinal score combining on-field grade, event volume, measurables trend, footage volume, recruiting momentum, and engagement, updated through the season.</p>
         <p style="color:var(--dim);font-size:15px;line-height:1.55">Nobody else has this metric because nobody else has the multi-year Pylon-event data underneath it. It's on your profile the day you start Combine tier.</p>
       </div>
       <div class="mo-viz">
         <div class="mo-score">87</div>
-        <div class="mo-label">Pylon Momentum Score</div>
+        <div class="mo-label">Pylon Momentum Score · example</div>
         <div class="mo-trend">Trend: <b>↑ +12 · last 30 days</b></div>
       </div>
     </div>
   </div>
 </section>
 
-<!-- Booking modal -->
+<!-- Booking: the form goes to /api/pylon/requests (public/pylon-forms.js) -->
 <div class="modal-backdrop" id="modal">
-  <div class="modal">
-    <h3 id="modal-title">Start Subscription</h3>
-    <p id="modal-sub">Set up your athlete's Prospect Edge profile — Stripe subscription, cancel anytime, first profile update within 48 hours.</p>
-    <form id="booking-form">
-      <div class="form-row">
-        <label>Athlete Name</label>
-        <input type="text" name="athlete_name" required placeholder="e.g. Kaydon Finley">
-      </div>
-      <div class="form-row">
-        <label>Position · Class Year</label>
-        <input type="text" name="position_class" required placeholder="e.g. WR 2027">
-      </div>
-      <div class="form-row">
-        <label>Team / Program</label>
-        <input type="text" name="team_name" required>
-      </div>
-      <div class="form-row">
-        <label>Parent Name</label>
-        <input type="text" name="parent_name" required>
-      </div>
-      <div class="form-row">
-        <label>Parent Email</label>
-        <input type="email" name="parent_email" required>
-      </div>
-      <div class="form-row">
-        <label>Guardian Consent (required for minors)</label>
-        <select name="guardian_consent" required>
-          <option value="">Select…</option>
-          <option value="parent_yes">Parent — I consent</option>
-          <option value="guardian_yes">Legal guardian — I consent</option>
-          <option value="adult">Athlete is 18+</option>
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+    <h3 id="modal-title">Start the profile</h3>
+    <p id="modal-sub">Tell us about your athlete. We set up the profile with you within 24 hours.</p>
+    <form class="pf" data-kind="transcript">
+      <input type="hidden" name="package" value="">
+      <div class="pf-row"><label for="tr-who">Who's filling this in?</label>
+        <select id="tr-who" name="who" required>
+          <option value="">Choose…</option>
+          <option value="parent">I'm the athlete's parent</option>
+          <option value="guardian">I'm the athlete's legal guardian</option>
+          <option value="adult">I'm the athlete, 18 or older</option>
+          <option value="minor">I'm the athlete, under 18</option>
         </select>
       </div>
-      <div class="modal-actions">
-        <button type="button" class="secondary" onclick="closeModal()">Cancel</button>
-        <button type="submit" class="primary" id="submit-btn">Continue to Checkout</button>
+      <div class="pf-stop" data-minor-stop hidden>Ask your parent or guardian to fill this in with you. It has to come from them, and our emails go to them.</div>
+      <div class="pf-row"><label for="tr-athlete">Athlete's full name</label><input id="tr-athlete" name="athlete_name" required maxlength="80" placeholder="e.g. Jordan Ellis"></div>
+      <div class="pf-two">
+        <div class="pf-row"><label for="tr-pc">Position and class year</label><input id="tr-pc" name="position_class" required maxlength="40" placeholder="e.g. WR 2027"></div>
+        <div class="pf-row"><label for="tr-team">Team or program</label><input id="tr-team" name="team_name" required maxlength="80"></div>
+      </div>
+      <div class="pf-row" data-family><label for="tr-name">Your name</label><input id="tr-name" name="contact_name" data-req required maxlength="80" autocomplete="name"></div>
+      <div class="pf-two">
+        <div class="pf-row"><label for="tr-email">Your email</label><input id="tr-email" type="email" name="contact_email" required maxlength="200" autocomplete="email"></div>
+        <div class="pf-row"><label for="tr-phone">Phone <span class="pf-opt">optional</span></label><input id="tr-phone" type="tel" name="contact_phone" maxlength="30" autocomplete="tel"></div>
+      </div>
+      <label class="pf-check"><input type="checkbox" name="consent_confirm" required><span data-consent-words>Choose who's filling this in to see what you're agreeing to.</span></label>
+      <div class="pf-row"><label for="tr-notes">Anything else <span class="pf-opt">optional</span></label><textarea id="tr-notes" name="notes" maxlength="1000" placeholder="Film links, schools you're talking to, questions."></textarea></div>
+      <div class="pf-hp" aria-hidden="true"><label for="tr-trap">Leave this empty</label><input id="tr-trap" name="pf_trap" tabindex="-1" autocomplete="off"></div>
+      <div class="pf-msg" role="status" aria-live="polite"></div>
+      <div class="pf-actions">
+        <button type="button" class="pf-secondary" data-close>Cancel</button>
+        <button type="submit" class="pf-primary" data-pay="Continue to payment" data-wait="Send request">Send request</button>
       </div>
     </form>
+    <div class="pf-done" hidden></div>
   </div>
 </div>
 
@@ -264,75 +262,7 @@ footer a{color:var(--yellow)}
   </div>
 </footer>
 
-<script>
-const urlParams = new URLSearchParams(window.location.search);
-const preselectTier = urlParams.get('tier');
-const preselectAthleteId = urlParams.get('athlete_id');
-
-let currentBooking = null;
-
-document.querySelectorAll('.book').forEach(btn => {
-  btn.addEventListener('click', () => {
-    currentBooking = {
-      tier: btn.dataset.tier,
-      amount: parseInt(btn.dataset.amount, 10),
-      name: btn.dataset.name,
-      athlete_id: preselectAthleteId,
-    };
-    document.getElementById('modal-title').textContent = currentBooking.name;
-    document.getElementById('modal').classList.add('show');
-  });
-});
-
-function closeModal() {
-  document.getElementById('modal').classList.remove('show');
-}
-
-document.getElementById('modal').addEventListener('click', (e) => {
-  if (e.target.id === 'modal') closeModal();
-});
-
-document.getElementById('booking-form').addEventListener('submit', async (e) => {
-  e.preventDefault();
-  const formData = Object.fromEntries(new FormData(e.target));
-  const submitBtn = document.getElementById('submit-btn');
-  submitBtn.disabled = true;
-  submitBtn.textContent = 'Setting up subscription…';
-  try {
-    const res = await fetch('/api/pylon/subscriptions/checkout', {
-      method: 'POST',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({
-        athlete_id: currentBooking.athlete_id,
-        tier: currentBooking.tier,
-        active_until: new Date(Date.now() + 365 * 86400 * 1000).toISOString(),
-        metadata: formData,
-      }),
-    });
-    const data = await res.json();
-    if (data.stripe_checkout_url) {
-      window.location.href = data.stripe_checkout_url;
-    } else {
-      submitBtn.textContent = 'Subscription Set Up ✓';
-      setTimeout(() => {
-        alert('Subscription recorded. We will follow up within 24 hours with payment link + Prospect Edge profile setup.');
-        closeModal();
-        submitBtn.disabled = false;
-        submitBtn.textContent = 'Continue to Checkout';
-      }, 800);
-    }
-  } catch (err) {
-    submitBtn.disabled = false;
-    submitBtn.textContent = 'Continue to Checkout';
-    alert('Something went wrong. Please email hello@pylonfootball.com.');
-  }
-});
-
-if (preselectTier) {
-  const btn = document.querySelector(`.book[data-tier="${preselectTier}"]`);
-  if (btn) btn.click();
-}
-</script>
+<script src="/pylon-forms.js" defer></script>
 
 </body>
 </html>
