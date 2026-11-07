@@ -1,6 +1,7 @@
-// The sign-in cookie is httpOnly, and Secure whenever the request came in over
-// HTTPS through the proxy (Render, with Vercel's rewrite in front). Uses the
-// same settings server.js does (utils/session-cookie.js).
+// The sign-in cookie is httpOnly, SameSite=Lax (never sent with a request
+// another site starts), and Secure whenever the request came in over HTTPS
+// through the proxy (Render, with Vercel's rewrite in front). Uses the same
+// settings server.js does (utils/session-cookie.js).
 //
 //   node --test tests/session-cookie.test.js
 
@@ -37,6 +38,7 @@ test("over HTTPS through the proxy, the cookie is Secure and httpOnly", async ()
   assert.match(c, /connect\.sid=/, "a session cookie is set");
   assert.match(c, /;\s*Secure/i);
   assert.match(c, /;\s*HttpOnly/i);
+  assert.match(c, /;\s*SameSite=Lax/i, "never sent with another site's form posts");
   assert.match(c, /Max-Age=604800|Expires=/i, "it lasts a week");
 });
 
@@ -46,10 +48,11 @@ test("over plain HTTP (local development), sign-in still works, without the Secu
   assert.match(c, /connect\.sid=/, "a session cookie is still set");
   assert.doesNotMatch(c, /;\s*Secure/i);
   assert.match(c, /;\s*HttpOnly/i);
+  assert.match(c, /;\s*SameSite=Lax/i);
 });
 
 test("the settings are the ones server.js uses", () => {
-  assert.deepEqual(sessionCookie(), { maxAge: WEEK_MS, httpOnly: true, secure: "auto" });
+  assert.deepEqual(sessionCookie(), { maxAge: WEEK_MS, httpOnly: true, secure: "auto", sameSite: "lax" });
   assert.equal(TRUST_PROXY_HOPS, 1);
   const src = require("fs").readFileSync(require("path").join(__dirname, "..", "server.js"), "utf8");
   assert.match(src, /app\.set\("trust proxy", TRUST_PROXY_HOPS\)/);
