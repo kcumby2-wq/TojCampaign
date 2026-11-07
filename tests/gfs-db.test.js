@@ -259,10 +259,17 @@ test("B3: the last screened adult can't step away from a youth creator, even in 
     await c1.query("begin");
     await c2.query("begin");
     await c1.query(`update gfs_crew set status = 'confirmed' where id = $1`, [y2]);
-    const second = c2.query(`update gfs_crew set status = 'removed' where id = $1`, [lead]);
+    // Caught from the start: the refusal can arrive before anything awaits
+    // it, and a rejection nobody is listening for yet fails the whole run.
+    // The wait after sending the commit makes it arrive first every time.
+    const second = c2.query(`update gfs_crew set status = 'removed' where id = $1`, [lead]).then(() => null, (e) => e);
     await new Promise((r) => setTimeout(r, 150));
-    await c1.query("commit");
-    await assert.rejects(second, /crew_youth_left_alone/);
+    const committed = c1.query("commit");
+    await new Promise((r) => setTimeout(r, 200));
+    await committed;
+    const refusal = await second;
+    assert.ok(refusal, "the second change was refused");
+    assert.match(refusal.message, /crew_youth_left_alone/);
     await c2.query("rollback");
   } finally {
     c1.release();
