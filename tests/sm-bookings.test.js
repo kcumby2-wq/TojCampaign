@@ -633,16 +633,44 @@ test("a direct Buy: thanks, with a link to tell us about the game; a retry sends
   assert.equal(pushes.length, 1, "a retry is quiet");
 });
 
-test("the booker's note couldn't go: it's let go, so the next delivery can send it", async () => {
+test("the booker's note couldn't go: the row says so, and its place in the limits comes back", async () => {
   mailer.setSender(async (m) => { mails.push(m); return m.to.includes("kyron@toj.test") ? { sent: true } : { sent: false, reason: "send_failed" }; });
   try {
-    await form(good({ event_date: "2027-01-16" }));
+    for (let i = 0; i < 3; i++) await form(good({ event_date: "2027-01-16" }), "198.51.100." + i);
     await wait();
-    assert.equal(theirs("jamie@example.com").length, 1, "it tried");
-    assert.equal(db.tables.sm_bookings[0].booker_emailed_at, null);
+    assert.equal(theirs("jamie@example.com").length, 3, "each one tried: a failed note doesn't use up the mailbox's two");
+    assert.ok(db.tables.sm_bookings.every((b) => b.booker_emailed_at === null), "the app shows it didn't go");
   } finally {
     mailer.setSender(async (m) => { mails.push(m); return { sent: true }; });
   }
+  await form(good({ event_date: "2027-01-16" }), "198.51.100.9");
+  await wait();
+  assert.equal(theirs("jamie@example.com").length, 4);
+  assert.ok(db.tables.sm_bookings[3].booker_emailed_at);
+});
+
+test("the booker's limits count the mailbox, not the spelling, and the visitor too", async () => {
+  // Gmail ignores dots and +tags: one inbox, two notes a day.
+  for (const [i, e] of ["jamie.parent@gmail.com", "jamieparent+1@gmail.com", "J.a.m.i.e.parent+x@googlemail.com"].entries()) await form(good({ event_date: "2027-01-16", contact_email: e }), "203.0.113." + (10 + i));
+  await wait();
+  assert.equal(mails.filter((m) => !m.to.includes("kyron@toj.test")).length, 2);
+  assert.equal(B.mailbox("J.a.m.i.e.parent+x@GoogleMail.com"), "jamieparent@gmail.com");
+  assert.equal(B.mailbox("pat.smith+games@example.com"), "pat.smith@example.com", "dots count elsewhere");
+  // One visitor, many inboxes: three notes a day.
+  mails = [];
+  for (let i = 0; i < 5; i++) await form(good({ event_date: "2027-01-16", contact_email: `someone${i}@example.com` }), "198.51.100.200");
+  await wait();
+  assert.equal(mails.filter((m) => !m.to.includes("kyron@toj.test")).length, 3);
+  assert.equal(db.tables.sm_bookings.length, 8, "every booking is still saved");
+});
+
+test("cutting text never leaves half an emoji", () => {
+  const note = "x".repeat(999) + "🏈🏈";
+  assert.equal(B.clip(note, 1000), "x".repeat(999) + "🏈");
+  assert.ok(!/[\uD800-\uDBFF]$/.test(B.normalize(good({ notes: note }), { now: NOW }).value.notes));
+  const joined = B.joinNotes("y".repeat(990), "From the checkout: 🏈🏈🏈🏈");
+  assert.equal(Array.from(joined).length, 1000);
+  assert.ok(!/[\uD800-\uDBFF]$/.test(joined));
 });
 
 test("details after the webhook: filled in once, staff hear, nobody's emailed twice", async () => {
@@ -718,4 +746,89 @@ test("a details answer never joins a request: the request keeps its own details"
   const request = db.tables.sm_bookings.find((b) => b.id === made.data.id);
   assert.equal(request.stripe_session_id || null, null);
   assert.equal(request.event_city, "Los Angeles");
+});
+
+test("webhook first, then the buyer's answers: their answers win over the checkout's fields", async () => {
+  const sid = "cs_live_answerswin123";
+  await paidCall({ stripe_session_id: sid, package: "video", amount_cents: 9999, contact_email: "buyer@example.com", event_date: "2026-11-21", event_city: "Austin", event_state: "TX", notes: "Shirt size: M" });
+  await wait();
+  pushes = [];
+  mails = [];
+  const r = await detailsCall({ stripe_session_id: sid, package: "video", amount_cents: 9999, contact_email: "buyer@example.com", event_date: "2026-12-05", event_city: "Dallas", event_state: "TX", notes: "Field 3", checkout_notes: "Shirt size: M" });
+  assert.equal(r.status, 200);
+  const row = db.tables.sm_bookings[0];
+  assert.equal(row.event_date, "2026-12-05");
+  assert.equal(row.event_city, "Dallas");
+  assert.equal(row.notes, "Shirt size: M\n\nFrom the event details form: Field 3", "the checkout's own notes once");
+  await wait();
+  assert.match(staffMails()[0].subject, /^Event details in: Video coverage, Dallas, TX, Dec 5, 2026/);
+  assert.equal(pushes[0].payload.tag, `sm-booking-${row.id}-details`, "its own notification, not a quiet replacement");
+});
+
+test("details first, with the checkout's notes: they come once, whichever order", async () => {
+  const sid = "cs_live_notesonce1234";
+  await detailsCall({ stripe_session_id: sid, package: "video", amount_cents: 9999, contact_email: "buyer@example.com", event_date: "2026-12-05", event_city: "Dallas", event_state: "TX", notes: "Field 3", checkout_notes: "Shirt size: M" });
+  await paidCall({ stripe_session_id: sid, package: "video", amount_cents: 9999, contact_email: "buyer@example.com", notes: "Shirt size: M" });
+  assert.equal(db.tables.sm_bookings[0].notes, "Field 3\n\nFrom the checkout: Shirt size: M");
+});
+
+test("the answers couldn't be added: staff get them by email, and the page hears the truth", async () => {
+  const sid = "cs_live_fillfails1234";
+  await paidCall({ stripe_session_id: sid, package: "video", amount_cents: 9999, contact_email: "buyer@example.com" });
+  await wait();
+  mails = [];
+  const real = db.from.bind(db);
+  db.from = (name) => {
+    const q = real(name);
+    if (name !== "sm_bookings") return q;
+    const update = q.update.bind(q);
+    q.update = (patch) => (patch.details_at ? { eq: () => ({ is: () => ({ select: () => ({ maybeSingle: async () => ({ data: null, error: { code: "57014", message: "statement timeout" } }) }) }) }) } : update(patch));
+    return q;
+  };
+  try {
+    const r = await detailsCall({ stripe_session_id: sid, event_date: "2026-12-05", event_city: "Dallas", event_state: "TX", team_jersey: "Elite #4" });
+    assert.equal(r.status, 200);
+    const staff = staffMails();
+    assert.equal(staff.length, 1);
+    assert.match(staff[0].subject, /^Event details for paid booking cs_live_fillfails1234 \(not saved/);
+    assert.match(staff[0].text, /Team and jersey: Elite #4/);
+    assert.equal(staff[0].critical, true);
+    mailer.setSender(async (m) => { mails.push(m); return { sent: false, reason: "send_failed" }; });
+    const again = await detailsCall({ stripe_session_id: sid, event_date: "2026-12-05", event_city: "Dallas", event_state: "TX" });
+    assert.equal(again.status, 503, "not stored and not emailed: the page shows the email address");
+  } finally {
+    db.from = real;
+    mailer.setSender(async (m) => { mails.push(m); return { sent: true }; });
+  }
+});
+
+test("a checkout that names a request already paid: a booking of its own, flagged, with no details link", async () => {
+  const made = await form(good({ event_date: "2027-01-16" }));
+  await paidCall({ stripe_session_id: "cs_live_firstpay1234", booking_id: made.data.id, package: "video", amount_cents: 9999, contact_email: "jamie@example.com" });
+  await wait();
+  mails = [];
+  const r = await paidCall({ stripe_session_id: "cs_live_secondpay123", booking_id: made.data.id, package: "video", amount_cents: 9999, contact_email: "jamie@example.com" });
+  assert.equal(r.status, 200);
+  const extra = db.tables.sm_bookings.find((b) => b.stripe_session_id === "cs_live_secondpay123");
+  assert.equal(extra.source, "stripe");
+  assert.match(extra.notes, new RegExp(`named booking request ${made.data.id}`));
+  await wait();
+  const note = theirs("jamie@example.com");
+  assert.equal(note.length, 1);
+  assert.ok(!note[0].text.includes("?paid="), "the details page wouldn't ask about it");
+});
+
+test("every column the routes write is one the migrations make", async () => {
+  const fs = require("fs"), path = require("path");
+  const sql = ["030_sm_bookings.sql", "034_sm_bookings_more.sql"].map((f) => fs.readFileSync(path.join(__dirname, "..", "db", "migrations", f), "utf8")).join("\n");
+  const table = /create table if not exists public\.sm_bookings \(([\s\S]*?)\n\);/.exec(sql)[1];
+  const cols = new Set([...table.matchAll(/^\s{2}([a-z_]+) [a-z]/gm)].map((m) => m[1]).filter((c) => c !== "constraint"));
+  for (const m of sql.matchAll(/add column if not exists ([a-z_]+)/g)) cols.add(m[1]);
+  await form(good({ event_date: "2027-01-16", offer: "first10" }));
+  await form(good({ event_date: "2027-01-16" }), "198.51.100.40");
+  await paidCall({ stripe_session_id: "cs_live_columns12345", package: "video", amount_cents: 9999, contact_email: "a@example.com", contact_phone: "555-010-0000", event_date: "2026-11-21", event_city: "Dallas", event_state: "TX", team_jersey: "x", notes: "n" });
+  await detailsCall({ stripe_session_id: "cs_live_columns67890", package: "video", amount_cents: 9999, contact_email: "b@example.com", event_date: "2026-12-05", event_city: "Dallas", event_state: "TX", athletes: "2", checkout_notes: "c" });
+  await detailsCall({ stripe_session_id: "cs_live_columns12345", event_date: "2026-12-05", event_city: "Dallas", event_state: "TX" }, "198.51.100.41");
+  await wait();
+  for (const row of db.tables.sm_bookings) for (const k of Object.keys(row)) assert.ok(cols.has(k) || ["id", "created_at", "updated_at"].includes(k), `sm_bookings has no column ${k}`);
 });

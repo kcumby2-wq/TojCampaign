@@ -53,9 +53,29 @@ const DAY = 864e5;
 // object, an array) counts as missing, so no input can make these throw.
 const text = (v) => (typeof v === "string" ? v : typeof v === "number" && Number.isFinite(v) ? String(v) : "");
 // One line: control characters out (Postgres refuses NUL), single spaces.
-const clean = (s, max) => text(s).replace(/[\u0000-\u001f\u007f]/g, " ").replace(/\s+/g, " ").trim().slice(0, max);
+// At most max characters, counted as Postgres counts them (code points), so a
+// cut never leaves half an emoji, which Postgres refuses.
+const clip = (s, max) => {
+  const t = String(s);
+  return t.length <= max ? t : Array.from(t).slice(0, max).join("");
+};
+const clean = (s, max) => clip(text(s).replace(/[\u0000-\u001f\u007f]/g, " ").replace(/\s+/g, " ").trim(), max);
 // Free text that keeps its line breaks.
-const cleanNotes = (s, max) => text(s).replace(/\r\n?/g, "\n").replace(/[\u0000-\u0008\u000b-\u001f\u007f]/g, "").trim().slice(0, max);
+const cleanNotes = (s, max) => clip(text(s).replace(/\r\n?/g, "\n").replace(/[\u0000-\u0008\u000b-\u001f\u007f]/g, "").trim(), max);
+// Notes from more than one place, each once, within the column's 1000.
+const joinNotes = (...parts) => clip(parts.filter(Boolean).join("\n\n"), 1000) || null;
+// The mailbox an address delivers to, for limits: lowercase, no +tag, and for
+// Gmail no dots (Gmail ignores both, so they'd let one inbox count as many).
+function mailbox(address) {
+  const a = String(address || "").trim().toLowerCase();
+  const at = a.lastIndexOf("@");
+  if (at < 1) return a;
+  let user = a.slice(0, at).split("+")[0];
+  let domain = a.slice(at + 1);
+  if (domain === "googlemail.com") domain = "gmail.com";
+  if (domain === "gmail.com") user = user.replace(/\./g, "");
+  return user + "@" + domain;
+}
 const has = (obj, k) => typeof k === "string" && Object.prototype.hasOwnProperty.call(obj, k);
 // A plain address, lowercase: nothing that could add recipients or text to a
 // mailto: link (no ? & # % / or spaces). Migration 030 checks the same.
@@ -194,6 +214,10 @@ function normalizePaid(raw, { now = new Date() } = {}) {
     const adult = r.adult_confirmed === true || r.adult_confirmed === "true" || r.adult_confirmed === "on";
     if (adult) v.adult_confirmed = true;
     else errors.push("adult_confirmed");
+    // What the checkout's own fields said beyond the event: kept apart from the
+    // buyer's notes, so whichever of the webhook and this comes second can see
+    // it's there already. Not a column.
+    v.checkout_notes = cleanNotes(r.checkout_notes, 1000) || null;
   } else {
     const day = dayValue(r.event_date);
     v.event_date = day === null ? null : isoDay(day);
@@ -202,14 +226,21 @@ function normalizePaid(raw, { now = new Date() } = {}) {
 }
 
 // A second word about a booking we already have: the webhook after the
-// details form, or the details form after the webhook. Fills only what the
-// booking doesn't have yet, so whichever came first keeps its answers; notes
-// add on, marked with where they came from. Returns the changes (maybe none).
+// details form, or the details form after the webhook. The buyer's own answers
+// win (override: the details form): what they typed about their game beats
+// what the checkout's fields said. The webhook only fills what's missing.
+// Notes add on, marked with where they came from, each only once. Returns the
+// changes (maybe none).
 const FILLS = ["sport", "event_name", "event_date", "event_city", "event_state", "athletes", "team_jersey", "contact_email", "contact_phone"];
+// What the buyer answers on the details form; never their email or the payment.
+const ANSWERED = ["sport", "event_name", "event_date", "event_city", "event_state", "athletes", "team_jersey", "contact_phone"];
 const blank = (x) => x === null || x === undefined || x === "";
-function fillPatch(b, inc, { from = "the checkout" } = {}) {
+function fillPatch(b, inc, { from = "the checkout", override = false, checkoutNotes = null } = {}) {
   const patch = {};
-  for (const k of FILLS) if (blank(b[k]) && !blank(inc[k])) patch[k] = inc[k];
+  for (const k of FILLS) {
+    if (blank(inc[k])) continue;
+    if (blank(b[k]) || (override && ANSWERED.includes(k) && inc[k] !== b[k])) patch[k] = inc[k];
+  }
   if (patch.event_state) patch.region = regionFor(patch.event_state);
   if (b.package === "unsure" && has(PACKAGES, inc.package) && inc.package !== "unsure") {
     patch.package = inc.package;
@@ -217,9 +248,10 @@ function fillPatch(b, inc, { from = "the checkout" } = {}) {
   }
   if ((blank(b.contact_name) || b.contact_name === STRIPE_NAME) && !blank(inc.contact_name) && inc.contact_name !== STRIPE_NAME) patch.contact_name = inc.contact_name;
   if (inc.adult_confirmed === true && b.adult_confirmed !== true) patch.adult_confirmed = true;
-  if (!blank(inc.notes) && !String(b.notes || "").includes(inc.notes)) {
-    patch.notes = [b.notes, `From ${from}: ${inc.notes}`].filter(Boolean).join("\n\n").slice(0, 1000);
-  }
+  let notes = b.notes || "";
+  if (!blank(inc.notes) && !notes.includes(inc.notes)) notes = joinNotes(notes, `From ${from}: ${inc.notes}`) || "";
+  if (!blank(checkoutNotes) && !notes.includes(checkoutNotes)) notes = joinNotes(notes, `From the checkout: ${checkoutNotes}`) || "";
+  if (notes !== (b.notes || "")) patch.notes = notes;
   return patch;
 }
 
@@ -305,7 +337,7 @@ function pushPayload(b, crewCount, { detailsIn = false } = {}) {
     title: detailsIn ? "Event details in" : paid(b) ? "Paid booking" : "New booking",
     body: `${pushLine(b)} · ${near}`,
     url: `/app/#booking/${b.id}`,
-    tag: `sm-booking-${b.id}`,
+    tag: `sm-booking-${b.id}${detailsIn ? "-details" : ""}`,
   };
 }
 
@@ -415,6 +447,9 @@ module.exports = {
   STATE_REGION,
   UUID,
   OFFERS,
+  clip,
+  joinNotes,
+  mailbox,
   STRIPE_NAME,
   isEmail,
   regionFor,

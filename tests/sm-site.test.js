@@ -14,8 +14,10 @@ const { setSupabase } = require("../utils/supabase");
 const { fakeSupabase } = require("./helpers/fake-supabase");
 const router = require("../routes/sm-site");
 
-let server, base, db, counted;
-const wait = () => new Promise((r) => setTimeout(r, 40));
+let server, base, db, counted, calls;
+// Counts add up in the server and go to the database once a minute; the tests
+// send them on now.
+const wait = async () => { await new Promise((r) => setTimeout(r, 20)); await router._flush(); };
 async function call(method, path, headers = {}, body) {
   const r = await fetch(base + path, { method, headers: { "Content-Type": "application/json", ...headers }, body: body === undefined ? undefined : JSON.stringify(body) });
   let data = null;
@@ -47,7 +49,8 @@ after(() => { server && server.close(); setSupabase(null); });
 beforeEach(() => {
   router._reset();
   counted = [];
-  db = fakeSupabase({ sm_site_counts: [], sm_bookings: [] }, { rpc: { sm_site_count: (_t, args) => { counted.push(args.p_name); return { data: null, error: null }; } } });
+  calls = [];
+  db = fakeSupabase({ sm_site_counts: [], sm_bookings: [] }, { rpc: { sm_site_count: (_t, args) => { calls.push(args); for (let i = 0; i < args.p_n; i++) counted.push(args.p_name); return { data: null, error: null }; } } });
   setSupabase(db);
 });
 
@@ -72,6 +75,25 @@ test("40 counts per visitor per 10 minutes; another visitor has their own", asyn
   await beacon("book_open", "198.51.100.3");
   await wait();
   assert.equal(counted.length, 41);
+  assert.deepEqual(calls, [{ p_name: "book_open", p_n: 41 }], "one write for the lot");
+});
+
+test("someone changing their forwarded-for header still stops at 5,000 an hour of each kind", async () => {
+  const sends = [];
+  for (let i = 0; i < 5100; i++) sends.push(beacon("buy_tap", "10.0." + (i >> 8) + "." + (i & 255)));
+  await Promise.all(sends);
+  await beacon("visit_home", "10.9.9.9");
+  await wait();
+  assert.equal(counted.filter((n) => n === "buy_tap").length, 5000);
+  assert.equal(counted.filter((n) => n === "visit_home").length, 1, "other kinds still count");
+});
+
+test("a database that doesn't answer loses the minute's counts, nothing else", async () => {
+  db = fakeSupabase({}, { rpc: { sm_site_count: () => ({ data: null, error: { message: "down" } }) } });
+  setSupabase(db);
+  await beacon("visit_home");
+  await wait();
+  assert.deepEqual(router._pending(), {}, "dropped, not piled up");
 });
 
 test("the counts are staff only", async () => {
@@ -97,10 +119,12 @@ test("the last 7 and 30 days: the site's taps, plus requests, claims and payment
     { created_at: day(15).toISOString(), source: "form", offer: null, stripe_session_id: null, notes: "Claimed it? No." },
     { created_at: day(5).toISOString(), source: "stripe", offer: null, stripe_session_id: "cs_live_y1234567", notes: null }
   );
+  // More bookings than one Supabase page holds: every one counts.
+  for (let i = 0; i < 1500; i++) db.tables.sm_bookings.push({ created_at: day(8).toISOString(), source: "form", offer: null, stripe_session_id: null, notes: null });
   const cookie = await staffCookie();
   const r = await call("GET", "/api/sm/site/counts", { Cookie: cookie });
   assert.equal(r.status, 200);
   assert.equal(r.data.today, nyDay(new Date()));
   assert.deepEqual(r.data.week, { visit_home: 15, visit_fellowship: 0, book_open: 4, offer_shown: 7, buy_tap: 0, requests: 2, claims: 2, paid: 2 });
-  assert.deepEqual(r.data.month, { visit_home: 115, visit_fellowship: 0, book_open: 4, offer_shown: 7, buy_tap: 2, requests: 3, claims: 2, paid: 2 });
+  assert.deepEqual(r.data.month, { visit_home: 115, visit_fellowship: 0, book_open: 4, offer_shown: 7, buy_tap: 2, requests: 1503, claims: 2, paid: 2 });
 });

@@ -118,23 +118,26 @@ test("034: the offer is the homepage's claim or nothing; details and the booker'
   assert.equal((await q(...form())).rows[0].offer, null, "bookings without one are untouched");
 });
 
-test("034: the site's counts are daily totals, one more per call, by name only", async () => {
+test("034: the site's counts are daily totals, added a batch at a time, by name only", async () => {
   await q(`select sm_site_count('visit_home')`);
-  await q(`select sm_site_count('visit_home')`);
-  await q(`select sm_site_count('book_open')`);
+  await q(`select sm_site_count('visit_home', 4)`);
+  await q(`select sm_site_count('book_open', 0)`);
+  await q(`select sm_site_count('book_open', -50)`);
   const rows = (await q(`select day, name, n from sm_site_counts order by name`)).rows;
-  assert.deepEqual(rows.map((r) => [r.name, r.n]), [["book_open", 1], ["visit_home", 2]]);
+  assert.deepEqual(rows.map((r) => [r.name, r.n]), [["book_open", 2], ["visit_home", 5]], "a batch adds its size; nonsense adds one");
   const ny = (await q(`select (now() at time zone 'America/New_York')::date as d`)).rows[0].d;
   assert.equal(rows[0].day.toISOString(), ny.toISOString(), "New York's day");
   await refused(`select sm_site_count('admin')`, [], "sm_site_counts_name_check|check");
   // A day stops at a million.
-  await q(`update sm_site_counts set n = 1000000 where name = 'book_open'`);
-  await q(`select sm_site_count('book_open')`);
+  await q(`update sm_site_counts set n = 999990 where name = 'book_open'`);
+  await q(`select sm_site_count('book_open', 2000000000)`);
+  assert.equal((await q(`select n from sm_site_counts where name = 'book_open'`)).rows[0].n, 1000000);
+  await q(`select sm_site_count('book_open', 5)`);
   assert.equal((await q(`select n from sm_site_counts where name = 'book_open'`)).rows[0].n, 1000000);
 });
 
 test("034: only the server counts; the API roles can't call it or read the counts", async () => {
-  const fn = `${S}.sm_site_count(text)`;
+  const fn = `${S}.sm_site_count(text, integer)`;
   for (const role of ["anon", "authenticated"]) {
     assert.equal((await q(`select has_function_privilege('${role}', '${fn}', 'execute') as can`)).rows[0].can, false, role);
     assert.equal((await q(`select has_table_privilege('${role}', '${S}.sm_site_counts', 'select') as can`)).rows[0].can, false, role);

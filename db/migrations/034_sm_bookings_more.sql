@@ -32,30 +32,32 @@ create table if not exists public.sm_site_counts (
   primary key (day, name)
 );
 
--- One more for today. A day's count stops at a million, so a flood that gets
--- past the server's limits can't run it up forever.
-create or replace function public.sm_site_count(p_name text) returns void
+-- Add today's taps of one kind. The server adds them up and calls this about
+-- once a minute per kind, so a busy day is a few writes, not one per visit. A
+-- day's count stops at a million, so a flood that gets past the server's
+-- limits can't run it up forever.
+create or replace function public.sm_site_count(p_name text, p_n integer default 1) returns void
 language sql volatile set search_path = '' as $$
   insert into public.sm_site_counts as c (day, name, n)
-  values ((now() at time zone 'America/New_York')::date, p_name, 1)
-  on conflict (day, name) do update set n = c.n + 1 where c.n < 1000000
+  values ((now() at time zone 'America/New_York')::date, p_name, least(greatest(coalesce(p_n, 1), 1), 1000000))
+  on conflict (day, name) do update set n = least(c.n + least(greatest(coalesce(p_n, 1), 1), 1000000), 1000000)
 $$;
 
 alter table public.sm_site_counts enable row level security;
 -- Callable by the server only (Supabase grants new functions to its API roles),
 -- and the API roles get no table rights (a bare Postgres in tests has no roles).
-revoke all on function public.sm_site_count(text) from public;
+revoke all on function public.sm_site_count(text, integer) from public;
 do $$
 begin
   if exists (select 1 from pg_roles where rolname = 'anon') then
     revoke all on public.sm_site_counts from anon;
-    revoke all on function public.sm_site_count(text) from anon;
+    revoke all on function public.sm_site_count(text, integer) from anon;
   end if;
   if exists (select 1 from pg_roles where rolname = 'authenticated') then
     revoke all on public.sm_site_counts from authenticated;
-    revoke all on function public.sm_site_count(text) from authenticated;
+    revoke all on function public.sm_site_count(text, integer) from authenticated;
   end if;
   if exists (select 1 from pg_roles where rolname = 'service_role') then
-    grant execute on function public.sm_site_count(text) to service_role;
+    grant execute on function public.sm_site_count(text, integer) to service_role;
   end if;
 end $$;

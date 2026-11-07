@@ -62,14 +62,16 @@ function secretOk(req) {
 
 // ── Abuse limits ─────────────────────────────────────────────────────────
 // 8 form bookings per visitor per 10 minutes, and 120 an hour in all. Staff
-// emails go out at most 30 an hour, so a flood can't use up the Gmail account
-// the reports send from; every booking is still saved and pushed.
+// emails go out at most 30 an hour and 100 a day, so a flood can't use up the
+// Gmail account everything sends from (utils/mailer.js keeps a day's budget
+// for all of it); every booking is still saved and pushed.
 const WINDOW_MS = 10 * 60 * 1000;
 const MAX_PER_WINDOW = 8;
 const MAX_TRACKED = 5000;
 const HOUR = 60 * 60 * 1000;
 const MAX_FORMS_PER_HOUR = 120;
 const MAX_EMAILS_PER_HOUR = 30;
+const MAX_EMAILS_PER_DAY = 100;
 const hits = new Map();
 let forms = [];
 let emails = [];
@@ -102,34 +104,44 @@ function formAllowed(now = Date.now()) {
   return r.ok;
 }
 function emailAllowed(now = Date.now()) {
-  const r = underHourly(emails, MAX_EMAILS_PER_HOUR, now);
-  emails = r.list;
-  return r.ok;
+  emails = emails.filter((t) => now - t < 24 * HOUR);
+  if (emails.length >= MAX_EMAILS_PER_DAY || emails.filter((t) => now - t < HOUR).length >= MAX_EMAILS_PER_HOUR) return false;
+  emails.push(now);
+  return true;
 }
 const visitor = (req) => String(req.headers["x-sm-visitor"] || "").split(",")[0].trim().slice(0, 100) || "unknown";
 
 // The booker's note goes to an address someone typed. At most 2 a day to one
-// address, and 30 an hour and 150 a day in all: the form can't fill anyone's
-// inbox, or use up the Gmail account (500 a day) the staff alerts need.
-// Addresses go through an HMAC with a key made fresh each start; never kept.
+// mailbox (Gmail's dots and +tags count as the same one), 3 a day from one
+// visitor, and 30 an hour and 100 a day in all: the form can't fill anyone's
+// inbox, or use up the Gmail account the staff alerts need. Mailboxes and
+// visitors go through an HMAC with a key made fresh each start; never kept.
+// A note that couldn't go gives its place back.
 const DAY_MS = 24 * HOUR;
-const MAX_BOOKER_PER_ADDRESS = 2;
+const MAX_BOOKER_PER_MAILBOX = 2;
+const MAX_BOOKER_PER_VISITOR = 3;
 const MAX_BOOKER_PER_HOUR = 30;
-const MAX_BOOKER_PER_DAY = 150;
+const MAX_BOOKER_PER_DAY = 100;
 const SALT = crypto.randomBytes(32);
-const bookerSent = new Map();
+const bookerSent = new Map(); // mailbox or visitor key → times
 let bookerTimes = [];
-function bookerMailAllowed(address, now = Date.now()) {
+const keyOf = (kind, v) => kind + ":" + crypto.createHmac("sha256", SALT).update(String(v)).digest("base64").slice(0, 22);
+// Takes a place for one note, or says no. Returns the way to give it back.
+function bookerMailAllowed(address, who, now = Date.now()) {
   bookerTimes = bookerTimes.filter((t) => now - t < DAY_MS);
-  if (bookerTimes.length >= MAX_BOOKER_PER_DAY) return false;
-  if (bookerTimes.filter((t) => now - t < HOUR).length >= MAX_BOOKER_PER_HOUR) return false;
-  const key = crypto.createHmac("sha256", SALT).update(String(address)).digest("base64").slice(0, 22);
-  const mine = (bookerSent.get(key) || []).filter((t) => now - t < DAY_MS);
-  if (mine.length >= MAX_BOOKER_PER_ADDRESS) return false;
-  bookerSent.set(key, [...mine, now]);
+  if (bookerTimes.length >= MAX_BOOKER_PER_DAY) return null;
+  if (bookerTimes.filter((t) => now - t < HOUR).length >= MAX_BOOKER_PER_HOUR) return null;
+  const keys = [[keyOf("to", B.mailbox(address)), MAX_BOOKER_PER_MAILBOX]];
+  if (who) keys.push([keyOf("from", who), MAX_BOOKER_PER_VISITOR]);
+  for (const [k, max] of keys) if ((bookerSent.get(k) || []).filter((t) => now - t < DAY_MS).length >= max) return null;
+  for (const [k] of keys) bookerSent.set(k, [...(bookerSent.get(k) || []).filter((t) => now - t < DAY_MS), now]);
   bookerTimes.push(now);
   if (bookerSent.size > 20000) for (const [k, v] of bookerSent) if (!v.some((t) => now - t < DAY_MS)) bookerSent.delete(k);
-  return true;
+  const drop = (list) => { const i = list.lastIndexOf(now); if (i >= 0) list.splice(i, 1); };
+  return () => {
+    drop(bookerTimes);
+    for (const [k] of keys) drop(bookerSent.get(k) || []);
+  };
 }
 // Where a buyer tells us about their game: the site's details page for this
 // checkout (subjectmedias-site's details.html and api/details.js).
@@ -157,8 +169,8 @@ async function alertStaff(sb, row, { detailsIn = false } = {}) {
       mailer
         .sendMail({ to, subject: mail.subject, text: mail.text })
         .then((r) => { if (!r.sent) console.warn(`[sm-bookings] email not sent (${r.reason})`); })
-        .catch((e) => console.warn("[sm-bookings] email failed:", e && e.message));
-    } else console.warn("[sm-bookings] over the hourly email budget: push only");
+        .catch((e) => console.warn("[sm-bookings] email failed:", mailError(e)));
+    } else console.warn("[sm-bookings] over the email budget: push only");
     const snapshot = matches.crew.map((c) => ({ id: c.id, name: c.name, home_city: c.home_city, tier: c.tier, screened: c.screened }));
     await sb.from("sm_bookings").update({ alerted_at: new Date().toISOString(), matches: snapshot }).eq("id", row.id);
   } catch (e) {
@@ -166,43 +178,57 @@ async function alertStaff(sb, row, { detailsIn = false } = {}) {
   }
 }
 
+// What went wrong with an email, without the addresses a mail server's error
+// message can carry.
+const mailError = (e) => (e && (e.responseCode || e.code || e.name)) || "error";
+
 // The booker's own note, once. A request joined by its payment had its note
 // with the request; Stripe sends the receipt. Claimed on the row before it
-// goes, so two deliveries of one webhook can't both send it, and let go again
-// if it couldn't go. Never throws.
-async function emailBooker(sb, row) {
+// goes, so two deliveries of one webhook can't both send it; if it couldn't
+// go, the claim and its place in the limits are given back (nothing sends it
+// again by itself: staff see in the app whether it went). askDetails false:
+// don't send the details link (the checkout named a request, so the details
+// page won't ask). Never throws.
+async function emailBooker(sb, row, { who = null, askDetails = true } = {}) {
   try {
     if (!row || !row.contact_email || (row.source === "form" && row.stripe_session_id)) return;
-    if (!bookerMailAllowed(row.contact_email)) return console.warn("[sm-bookings] booker note over its limits: not sent");
+    const giveBack = bookerMailAllowed(row.contact_email, who);
+    if (!giveBack) return console.warn("[sm-bookings] booker note over its limits: not sent");
     const claimed = await sb.from("sm_bookings").update({ booker_emailed_at: new Date().toISOString() }).eq("id", row.id).is("booker_emailed_at", null).select("id");
-    if (claimed.error || !(claimed.data || []).length) return;
-    const ask = row.source === "stripe" && !row.details_at && row.stripe_session_id;
+    if (claimed.error || !(claimed.data || []).length) return giveBack();
+    const ask = askDetails && row.source === "stripe" && !row.details_at && row.stripe_session_id;
     const mail = B.bookerEmail(row, { detailsUrl: ask ? detailsLink(row.stripe_session_id) : null, help: helpEmail(), site: siteBase() });
     let r = null;
     try {
       r = await mailer.sendMail({ to: row.contact_email, subject: mail.subject, text: mail.text, replyTo: helpEmail() });
     } catch (e) {
-      console.warn("[sm-bookings] booker note failed:", e && e.message);
+      console.warn("[sm-bookings] booker note failed:", mailError(e));
     }
     if (!r || !r.sent) {
       if (r) console.warn(`[sm-bookings] booker note not sent (${r.reason})`);
+      giveBack();
       await sb.from("sm_bookings").update({ booker_emailed_at: null }).eq("id", row.id);
     }
   } catch (e) {
-    console.warn("[sm-bookings] booker note failed:", e && e.message);
+    console.warn("[sm-bookings] booker note failed:", mailError(e));
   }
 }
 
 // The booking couldn't be stored: email it to staff whole, so it isn't lost.
-// Always sent (it's the only copy), whatever the hourly budget.
-async function emailUnsaved(row) {
+// Always sent (it's the only copy), whatever the hourly budget, and critical
+// to the mailer's day's budget. detailsFor: these are the event details for a
+// paid booking we have (by its checkout) but couldn't add them to.
+async function emailUnsaved(row, { detailsFor = null } = {}) {
   try {
     const mail = B.emailText({ ...row, id: "not-saved" }, null, APP_BASE(), { saved: false });
+    const subject = detailsFor
+      ? `Event details for paid booking ${detailsFor} (not saved: add them in the app)`
+      : `${mail.subject} (not saved: the app's database didn't take it)`;
     emailAllowed();
-    const r = await mailer.sendMail({ to: [...staffEmails()], subject: `${mail.subject} (not saved: the app's database didn't take it)`, text: mail.text });
+    const r = await mailer.sendMail({ to: [...staffEmails()], subject, text: mail.text, critical: true });
     return !!(r && r.sent);
   } catch (e) {
-    console.error("[sm-bookings] fallback email failed:", e && e.message);
+    console.error("[sm-bookings] fallback email failed:", mailError(e));
     return false;
   }
 }
@@ -223,6 +249,8 @@ router.post("/", safe(async (req, res) => {
   const { errors, value } = B.normalize(raw);
   if (errors.length) return res.status(400).json({ error: "invalid", fields: errors });
   const row = { ...value, source: "form", status: "new" };
+  if (!row.offer) delete row.offer;
+  const who = visitor(req);
 
   const sb = getSupabase();
   if (sb) {
@@ -231,7 +259,7 @@ router.post("/", safe(async (req, res) => {
       res.json({ ok: true, id: data.id });
       setImmediate(() => {
         alertStaff(sb, data);
-        emailBooker(sb, data);
+        emailBooker(sb, data, { who });
       });
       return;
     }
@@ -253,7 +281,7 @@ async function payRequest(sb, id, paid) {
   const patch = { stripe_session_id: paid.stripe_session_id, amount_cents: paid.amount_cents, updated_at: new Date().toISOString() };
   if (paid.package !== "unsure") patch.package = paid.package;
   if (!b.contact_phone && paid.contact_phone) patch.contact_phone = paid.contact_phone;
-  if (paid.notes) patch.notes = [b.notes, `From the checkout: ${paid.notes}`].filter(Boolean).join("\n\n").slice(0, 1000);
+  if (paid.notes) patch.notes = B.joinNotes(b.notes, `From the checkout: ${paid.notes}`);
   // Only while unpaid: two deliveries of one webhook can't both join it.
   const { data, error: e2 } = await sb.from("sm_bookings").update(patch).eq("id", b.id).is("stripe_session_id", null).select().maybeSingle();
   if (e2) return e2.code === "23505" ? { duplicate: true } : {};
@@ -261,15 +289,22 @@ async function payRequest(sb, id, paid) {
 }
 
 // The same checkout again: Stripe retrying its webhook, or the second of the
-// webhook and the details form (either can come first). Fills in only what the
-// booking doesn't have yet (utils/sm-bookings.js, fillPatch). The details form
-// counts once per booking: a second answer changes nothing.
-async function fillIn(sb, inc, details) {
+// webhook and the details form (either can come first). The buyer's answers
+// win over what the checkout said; the webhook only fills what's missing
+// (utils/sm-bookings.js, fillPatch). The details form counts once per booking:
+// a second answer changes nothing. { error } when the database didn't answer.
+async function fillIn(sb, inc, details, checkoutNotes) {
   const { data: b, error } = await sb.from("sm_bookings").select("*").eq("stripe_session_id", inc.stripe_session_id).maybeSingle();
-  if (error || !b) return {};
+  if (error) {
+    console.error("[sm-bookings] fill-in read failed:", error.code || "", error.message || "");
+    return { error: true };
+  }
+  if (!b) return { error: true };
   if (details && b.details_at) return { already: true };
   const at = new Date().toISOString();
-  const patch = B.fillPatch(b, inc, { from: details ? "the event details form" : "the checkout" });
+  const patch = details
+    ? B.fillPatch(b, inc, { from: "the event details form", override: true, checkoutNotes })
+    : B.fillPatch(b, inc, { from: "the checkout" });
   if (details) patch.details_at = at;
   if (!Object.keys(patch).length) return { row: b };
   patch.updated_at = at;
@@ -279,8 +314,8 @@ async function fillIn(sb, inc, details) {
   q = details ? q.is("details_at", null) : q.eq("updated_at", b.updated_at);
   const { data, error: e2 } = await q.select().maybeSingle();
   if (e2) {
-    console.error("[sm-bookings] fill-in failed:", (e2.code || "") + " " + (e2.message || ""));
-    return {};
+    console.error("[sm-bookings] fill-in failed:", e2.code || "", e2.message || "");
+    return { error: true };
   }
   if (!data) return details ? { already: true } : { row: b };
   return { row: data, filled: true };
@@ -298,7 +333,11 @@ router.post("/paid", safe(async (req, res) => {
   }
   const { errors, value } = B.normalizePaid(raw);
   if (errors.length) return res.status(400).json({ error: "invalid", fields: errors });
-  const { booking_id: requestId, details: _answers, ...paid } = value;
+  const { booking_id: requestId, details: _answers, checkout_notes: checkoutNotes, ...paid } = value;
+  // A webhook checkout that named a request we couldn't join it to (paid
+  // already, or not ours): a booking of its own, and the details page won't
+  // ask about it, so the thanks note doesn't link there.
+  let named = false;
 
   const sb = getSupabase();
   if (sb) {
@@ -311,24 +350,34 @@ router.post("/paid", safe(async (req, res) => {
         setImmediate(() => alertStaff(sb, joined.row));
         return;
       }
-      // Not a request we have, or one already paid: a booking of its own.
+      named = true;
     }
     const row = { ...paid, status: "new" };
-    if (details) row.details_at = new Date().toISOString();
+    if (details) {
+      row.details_at = new Date().toISOString();
+      row.notes = B.joinNotes(paid.notes, checkoutNotes && `From the checkout: ${checkoutNotes}`);
+    }
+    if (named) row.notes = B.joinNotes(`This checkout named booking request ${requestId}, which was paid already or isn't ours.`, row.notes);
     const { data, error } = await sb.from("sm_bookings").insert(row).select().single();
     if (!error && data) {
       res.json({ ok: true, id: data.id });
       setImmediate(() => {
         alertStaff(sb, data);
-        emailBooker(sb, data);
+        emailBooker(sb, data, { askDetails: !named });
       });
       return;
     }
     // Already here: fill in what's missing. Staff hear when a buyer's details
     // come in; a webhook's retry is quiet.
     if (error && error.code === "23505") {
-      const r = await fillIn(sb, paid, details);
+      const r = await fillIn(sb, paid, details, checkoutNotes);
       if (r.already) return res.json({ ok: true, duplicate: true, already: true });
+      if (r.error && details) {
+        // We have the booking but couldn't add the answers: staff get them by
+        // email so they aren't lost; with no email either, the page says so.
+        if (await emailUnsaved({ ...paid, notes: B.joinNotes(paid.notes, checkoutNotes && `From the checkout: ${checkoutNotes}`) }, { detailsFor: paid.stripe_session_id })) return res.json({ ok: true, id: null });
+        return res.status(503).json({ error: "storage_unavailable" });
+      }
       if (details && r.row && r.filled) setImmediate(() => alertStaff(sb, r.row, { detailsIn: true }));
       return res.json({ ok: true, duplicate: true, id: (r.row && r.row.id) || null });
     }
@@ -336,7 +385,8 @@ router.post("/paid", safe(async (req, res) => {
   }
   // Not stored: the email carries it, and Stripe can stop retrying. If the
   // email can't go either, a 503 makes Stripe try again later.
-  if (await emailUnsaved(paid)) return res.json({ ok: true, id: null });
+  const all = details ? { ...paid, notes: B.joinNotes(paid.notes, checkoutNotes && `From the checkout: ${checkoutNotes}`) } : paid;
+  if (await emailUnsaved(all)) return res.json({ ok: true, id: null });
   return res.status(503).json({ error: "storage_unavailable" });
 }));
 

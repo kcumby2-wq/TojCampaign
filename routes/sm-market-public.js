@@ -253,7 +253,8 @@ async function sendOrderLink(sb, order, ev, token) {
   if (!(claimed || []).length) return { sent: true, reason: "already" };
   let r;
   try {
-    r = await mailer.sendMail({ to: order.email, ...M.orderEmail(ev, order, M.linkTo.order(token)) });
+    // Someone paid for these: their link goes even when the day's mail budget is nearly spent.
+    r = await mailer.sendMail({ to: order.email, ...M.orderEmail(ev, order, M.linkTo.order(token)), critical: true });
   } catch (e) {
     console.warn("[sm-market-public] order email failed:", e && e.message);
     r = { sent: false, reason: "send_failed" };
