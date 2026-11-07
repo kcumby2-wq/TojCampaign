@@ -56,13 +56,17 @@ const DAY_MS = 24 * HOUR;
 
 // ── Abuse limits ─────────────────────────────────────────────────────────
 // Per visitor (the first X-Forwarded-For address, which Vercel's rewrite
-// sets): 12 forms per 10 minutes, so families on one event's Wi-Fi get
-// through. Per connection (the caller Render saw: Vercel itself, or someone
-// going straight at Render with made-up headers): 60 per 10 minutes. Only
-// forms that pass the checks count toward the hour's total (300, separately
-// for requests and the newsletter), so junk can't lock everyone out.
+// sets): 12 forms per 10 minutes, counted before the form is checked, so
+// families on one event's Wi-Fi get through and one visitor's junk stops
+// only them. Per connection (the caller Render saw: through Vercel that's
+// Vercel, for everyone; straight at Render, the caller, whatever headers it
+// makes up): 150 forms per 10 minutes, counted only for forms that pass, so
+// junk can't use it up for everyone. The hour's total (300, separately for
+// requests and the newsletter) also counts only forms that pass.
 const perVisitor = H.windowLimiter(12, 10 * 60 * 1000);
-const perPeer = H.windowLimiter(60, 10 * 60 * 1000);
+const perPeer = H.windowLimiter(150, 10 * 60 * 1000);
+// The newsletter's links: 30 tries per visitor per 10 minutes. The token
+// itself (256 bits) is what keeps a guess from working.
 const linkTries = H.windowLimiter(30, 10 * 60 * 1000);
 function hourly(max) {
   let times = [];
@@ -78,6 +82,9 @@ function hourly(max) {
 const requestsThisHour = hourly(300);
 const signupsThisHour = hourly(300);
 const pushesThisHour = hourly(60);
+// Money alerts (payments, second payments, plans that stop, payments with no
+// request) have their own count, so busy forms can't hold them up.
+const moneyPushesThisHour = hourly(60);
 // The staff email for each request and payment: 30 an hour, 100 a day.
 function budget(perHour, perDay) {
   let times = [];
@@ -91,10 +98,10 @@ function budget(perHour, perDay) {
   return take;
 }
 const staffMailAllowed = budget(30, 100);
+const moneyMailAllowed = budget(30, 100);
 // When the database can't take a request, its email is the only copy: 10 an
 // hour and 30 a day, so an outage plus junk can't spend the account's day.
 const fallbackAllowed = budget(10, 30);
-const limitedVisitor = (req, prefix = "") => perVisitor(prefix + H.visitorKey(H.visitor(req))) || perPeer(prefix + H.peer(req));
 
 // The notes people get go to an address someone typed. A request's note: at
 // most 2 a day to one mailbox. A newsletter confirmation: 1 a day to one
@@ -150,10 +157,10 @@ const notSetUp = (e) => !!e && (e.code === "42P01" || e.code === "PGRST205" || /
 
 // ── Alerts ───────────────────────────────────────────────────────────────
 // A push and an email to staff. Never throws.
-function tellStaff(pushPayload, mail) {
+function tellStaff(pushPayload, mail, { money = false } = {}) {
   const to = [...staffEmails()];
-  if (pushesThisHour()) push.notifySoon(to, pushPayload);
-  if (mail && staffMailAllowed()) {
+  if ((money ? moneyPushesThisHour : pushesThisHour)()) push.notifySoon(to, pushPayload);
+  if (mail && (money ? moneyMailAllowed : staffMailAllowed)()) {
     mailer
       .sendMail({ to, subject: mail.subject, text: mail.text, pool: "pylon" })
       .then((r) => {
@@ -164,7 +171,7 @@ function tellStaff(pushPayload, mail) {
 }
 async function alertStaff(sb, row, { paid = false } = {}) {
   try {
-    tellStaff(U.pushPayload(row), U.staffEmail(row, APP_BASE(), { paid }));
+    tellStaff(U.pushPayload(row), U.staffEmail(row, APP_BASE(), { paid }), { money: paid });
     if (!paid) await sb.from("pylon_requests").update({ alerted_at: nowIso() }).eq("id", row.id);
   } catch (e) {
     console.warn("[pylon] alert failed:", e && e.message);
@@ -314,10 +321,10 @@ const trapped = (raw) => typeof raw.pf_trap === "string" && raw.pf_trap.trim() !
 router.post("/requests", publicPost, safe(async (req, res) => {
   const raw = bodyOf(req);
   if (trapped(raw)) return res.json({ ok: true, id: null, checkout_url: null });
-  if (limitedVisitor(req)) return res.status(429).json({ error: "too_many" });
+  if (perVisitor(H.visitorKey(H.visitor(req)))) return res.status(429).json({ error: "too_many" });
   const { errors, value } = U.normalize(raw);
   if (errors.length) return res.status(400).json({ error: "invalid", fields: errors });
-  if (!requestsThisHour()) return res.status(429).json({ error: "too_many" });
+  if (perPeer(H.peer(req)) || !requestsThisHour()) return res.status(429).json({ error: "too_many" });
   const row = { ...value, status: "new" };
   const who = H.visitor(req);
 
@@ -351,10 +358,10 @@ const unsubscribeLink = (token) => `${SITE_BASE()}/pylon-newsletter.html?unsubsc
 router.post("/newsletter/subscribe", publicPost, safe(async (req, res) => {
   const raw = bodyOf(req);
   if (trapped(raw)) return res.json({ ok: true });
-  if (limitedVisitor(req, "nl:")) return res.status(429).json({ error: "too_many" });
+  if (perVisitor("nl:" + H.visitorKey(H.visitor(req)))) return res.status(429).json({ error: "too_many" });
   const address = U.email(raw.email);
   if (!address) return res.status(400).json({ error: "invalid", fields: ["email"] });
-  if (!signupsThisHour()) return res.status(429).json({ error: "too_many" });
+  if (perPeer("nl:" + H.peer(req)) || !signupsThisHour()) return res.status(429).json({ error: "too_many" });
   const source = U.NEWSLETTER_SOURCES.includes(raw.source) ? raw.source : "newsletter_page";
   const sb = getSupabase();
   if (!sb) return res.status(503).json({ error: "storage_unavailable" });
@@ -405,7 +412,7 @@ router.post("/newsletter/subscribe", publicPost, safe(async (req, res) => {
 }));
 
 router.post("/newsletter/confirm", publicPost, safe(async (req, res) => {
-  if (linkTries(H.visitorKey(H.visitor(req))) || perPeer("nlt:" + H.peer(req))) return res.status(429).json({ error: "too_many" });
+  if (linkTries(H.visitorKey(H.visitor(req)))) return res.status(429).json({ error: "too_many" });
   const token = String(bodyOf(req).token || "");
   if (!U.isToken(token)) return res.status(400).json({ error: "bad_link" });
   const sb = getSupabase();
@@ -425,7 +432,7 @@ router.post("/newsletter/confirm", publicPost, safe(async (req, res) => {
 }));
 
 router.post("/newsletter/unsubscribe", publicPost, safe(async (req, res) => {
-  if (linkTries(H.visitorKey(H.visitor(req))) || perPeer("nlt:" + H.peer(req))) return res.status(429).json({ error: "too_many" });
+  if (linkTries(H.visitorKey(H.visitor(req)))) return res.status(429).json({ error: "too_many" });
   const token = String(bodyOf(req).token || "");
   if (!U.isToken(token)) return res.status(400).json({ error: "bad_link" });
   const sb = getSupabase();
@@ -480,30 +487,54 @@ async function extraPayment(sb, row, session, amount) {
         "",
         `Open it in the TOJ app: ${APP_BASE()}/app/#pylon-request/${row.id}`,
       ].join("\n"),
-    }
+    },
+    { money: true }
   );
   return { extra: data };
 }
 
+// Stripe took money for a Pylon checkout whose request isn't in the app
+// (deleted, or never saved): staff hear, so it's refunded or added by hand.
+function paymentWithoutRequest(session, cents) {
+  console.warn("[pylon] a Pylon payment has no request in the app");
+  const where = session.livemode ? "" : " (test mode: no money moved)";
+  tellStaff(
+    { title: "Pylon: a payment with no request", body: `${U.money(cents)} on Stripe${where}`, url: "/app/#pylon/all", tag: `pylon-orphan-${session.id}` },
+    {
+      subject: `Pylon: a payment with no request (${U.money(cents)})`,
+      text: [
+        `Stripe took ${U.money(cents)}${where} through Pylon checkout ${session.id}, but its request isn't in the app (it may have been deleted).`,
+        "Find the payment in Stripe by that checkout: refund it, or add the request by hand and tell the family.",
+      ].join("\n"),
+    },
+    { money: true }
+  );
+}
+
 // Finds the request the checkout was made for, and records the payment once.
 // { error } asks Stripe to send the event again.
-async function markPaid(sb, session) {
+async function markPaid(sb, session, { eventAt = nowIso() } = {}) {
   if (!session || (session.payment_status !== "paid" && session.payment_status !== "no_payment_required")) return {};
+  if (!SESSION_ID.test(String(session.id || ""))) return {};
   const meta = session.metadata || {};
   const id = String(session.client_reference_id || meta.request_id || "");
-  if (!U.UUID.test(id) || !SESSION_ID.test(String(session.id || ""))) return {};
+  const amount = Number(session.amount_total);
+  const paidCents = Number.isInteger(amount) && amount >= 0 && amount <= U.MAX_CENTS ? amount : null;
+  if (!U.UUID.test(id)) {
+    paymentWithoutRequest(session, paidCents || 0);
+    return {};
+  }
   const { data: row, error } = await sb.from("pylon_requests").select("*").eq("id", id).maybeSingle();
   if (error) {
     console.error("[pylon] paid: read failed:", error.code || "", error.message || "");
     return { error: true };
   }
   if (!row) {
-    console.warn("[pylon] paid: no request for that checkout");
+    paymentWithoutRequest(session, paidCents || 0);
     return {};
   }
   if (row.kind === "ambassador") return {};
-  const amount = Number(session.amount_total);
-  const cents = Number.isInteger(amount) && amount >= 0 && amount <= U.MAX_CENTS ? amount : row.price_cents || 0;
+  const cents = paidCents !== null ? paidCents : row.price_cents || 0;
   // The same checkout again (Stripe retrying): nothing new.
   if (row.paid_at && row.paid_via === "stripe" && row.checkout_session_id === session.id) return { duplicate: true };
   // Paid already (by hand, or through another checkout), or a checkout that
@@ -518,9 +549,11 @@ async function markPaid(sb, session) {
     checkout_mode: session.livemode ? "live" : "test",
     updated_at: at,
   };
-  if (typeof session.subscription === "string" && SUB_ID.test(session.subscription)) {
+  // A monthly plan starts active, unless Stripe already told us otherwise
+  // (its own events can arrive first).
+  if (typeof session.subscription === "string" && SUB_ID.test(session.subscription) && !row.stripe_subscription_id) {
     patch.stripe_subscription_id = session.subscription;
-    patch.subscription_status = "active";
+    if (!row.subscription_status) Object.assign(patch, { subscription_status: "active", subscription_updated_at: eventAt });
   }
   const { data, error: e2 } = await sb.from("pylon_requests").update(patch).eq("id", row.id).is("paid_at", null).select().maybeSingle();
   if (e2) {
@@ -542,28 +575,45 @@ async function markPaid(sb, session) {
 }
 
 // A monthly plan changed on Stripe's side (cancelled, a renewal failed): the
-// request shows it, and staff hear when it stops being active.
-async function subscriptionChanged(sb, sub, { deleted = false } = {}) {
+// request shows it, and staff hear when it stops being active. Stripe can
+// deliver events late or out of order (a retry of one that failed), so an
+// event older than the last one applied changes nothing, and a plan that
+// ended stays ended.
+const FINAL = ["canceled", "incomplete_expired"];
+async function subscriptionChanged(sb, sub, { deleted = false, eventAt = nowIso() } = {}) {
   const meta = sub.metadata || {};
   const id = String(meta.request_id || "");
   if (!U.UUID.test(id) || !SUB_ID.test(String(sub.id || ""))) return {};
   const status = deleted ? "canceled" : SUB_STATUSES.includes(sub.status) ? sub.status : null;
   if (!status) return {};
-  const { data: row, error } = await sb.from("pylon_requests").select("id,package_name,stripe_subscription_id,subscription_status").eq("id", id).maybeSingle();
+  const { data: row, error } = await sb.from("pylon_requests").select("id,package_name,stripe_subscription_id,subscription_status,subscription_updated_at,updated_at").eq("id", id).maybeSingle();
   if (error) return { error: true };
   if (!row || (row.stripe_subscription_id && row.stripe_subscription_id !== sub.id)) return {};
+  if (FINAL.includes(row.subscription_status)) return { duplicate: true };
+  if (row.subscription_updated_at) {
+    const was = Date.parse(row.subscription_updated_at);
+    const now = Date.parse(eventAt);
+    // Same second: only an ending wins.
+    if (now < was || (now === was && !FINAL.includes(status))) return { stale: true };
+  }
   if (row.subscription_status === status) return { duplicate: true };
-  const ended = status === "canceled" ? (Number.isInteger(sub.ended_at) ? new Date(sub.ended_at * 1000).toISOString() : nowIso()) : null;
-  const { error: e2 } = await sb
+  const ended = FINAL.includes(status) ? (Number.isInteger(sub.ended_at) ? new Date(sub.ended_at * 1000).toISOString() : eventAt) : null;
+  const { data: saved, error: e2 } = await sb
     .from("pylon_requests")
-    .update({ stripe_subscription_id: sub.id, subscription_status: status, subscription_ended_at: ended, updated_at: nowIso() })
-    .eq("id", row.id);
-  if (e2) return { error: true };
+    .update({ stripe_subscription_id: sub.id, subscription_status: status, subscription_ended_at: ended, subscription_updated_at: eventAt, updated_at: nowIso() })
+    .eq("id", row.id)
+    .eq("updated_at", row.updated_at)
+    .select("id")
+    .maybeSingle();
+  // Changed meanwhile (another event): Stripe sends this one again, and the
+  // next try reads it fresh.
+  if (e2 || !saved) return { error: true };
   if (["past_due", "unpaid", "canceled"].includes(status)) {
     const words = status === "canceled" ? "was cancelled" : "has a payment that didn't go through";
     tellStaff(
       { title: `Pylon: monthly plan ${status === "canceled" ? "cancelled" : "payment failed"}`, body: row.package_name, url: `/app/#pylon-request/${row.id}`, tag: `pylon-sub-${row.id}` },
-      { subject: `Pylon: a monthly plan ${words}`, text: `${row.package_name} ${words} on Stripe.\n\nOpen it in the TOJ app: ${APP_BASE()}/app/#pylon-request/${row.id}` }
+      { subject: `Pylon: a monthly plan ${words}`, text: `${row.package_name} ${words} on Stripe.\n\nOpen it in the TOJ app: ${APP_BASE()}/app/#pylon-request/${row.id}` },
+      { money: true }
     );
   }
   return { ok: true };
@@ -583,9 +633,10 @@ router.post("/stripe/webhook", safe(async (req, res) => {
   const sb = getSupabase();
   if (!sb) return res.status(503).json({ error: "storage_unavailable" });
   let r = {};
-  if (event.type === "checkout.session.completed" || event.type === "checkout.session.async_payment_succeeded") r = await markPaid(sb, obj);
-  else if (event.type === "customer.subscription.updated") r = await subscriptionChanged(sb, obj);
-  else if (event.type === "customer.subscription.deleted") r = await subscriptionChanged(sb, obj, { deleted: true });
+  const eventAt = Number.isInteger(event.created) ? new Date(event.created * 1000).toISOString() : nowIso();
+  if (event.type === "checkout.session.completed" || event.type === "checkout.session.async_payment_succeeded") r = await markPaid(sb, obj, { eventAt });
+  else if (event.type === "customer.subscription.updated") r = await subscriptionChanged(sb, obj, { eventAt });
+  else if (event.type === "customer.subscription.deleted") r = await subscriptionChanged(sb, obj, { deleted: true, eventAt });
   if (r.error) return res.status(500).json({ error: "webhook_failed" });
   res.json({ received: true });
 }));
@@ -638,13 +689,16 @@ router.get("/requests/:id", requireStaff, safe(async (req, res) => {
 }));
 
 // The family's open checkout, closed when staff record a payment made
-// another way, so they can't also pay on Stripe. Best effort.
+// another way (or delete the request), so they can't also pay on Stripe.
+// True when Stripe closed it now; false when it wasn't open (already paid,
+// already expired) or Stripe couldn't be reached.
 async function closeCheckout(sessionId) {
   try {
     const s = PS.stripe();
     await s.stripe.checkout.sessions.expire(sessionId);
+    return true;
   } catch (e) {
-    // Already paid, already expired, or Stripe isn't set up: nothing to close.
+    return false;
   }
 }
 
@@ -695,6 +749,11 @@ router.patch("/requests/:id", requireStaff, safe(async (req, res) => {
     }
   } else if (body.paid !== undefined) return res.status(400).json({ error: "bad_paid" });
   if (!Object.keys(patch).length) return res.json({ ok: true });
+  // An athlete's request is Confirmed or Done only once staff checked who
+  // they're dealing with (the database holds this line too).
+  const nextStatus = patch.status || row.status;
+  const nextChecked = "contact_verified_at" in patch ? !!patch.contact_verified_at : !!row.contact_verified_at;
+  if (U.ATHLETE_KINDS.includes(row.kind) && (nextStatus === "confirmed" || nextStatus === "done") && !nextChecked) return res.status(409).json({ error: "check_first" });
 
   patch.status_by = staffWho(req);
   patch.updated_at = nowIso();
@@ -710,16 +769,36 @@ router.patch("/requests/:id", requireStaff, safe(async (req, res) => {
   res.json({ ok: true, request: { ...data, summary: U.summary(data), test: U.testPaid(data) } });
 }));
 
+// Where a request's Stripe checkout stands: "open", "complete", "expired",
+// or null when Stripe can't say.
+async function checkoutStatus(sessionId) {
+  try {
+    const s = PS.stripe();
+    const cs = await s.stripe.checkout.sessions.retrieve(sessionId);
+    return cs && ["open", "complete", "expired"].includes(cs.status) ? cs.status : null;
+  } catch (e) {
+    return null;
+  }
+}
+
 // "Didn't send this? Reply and we'll delete it." An unpaid request goes; a
 // paid one stays (payment records are kept: refund it in Stripe, and close it).
+// Its Stripe checkout is closed first, so nobody can pay for a request that's
+// gone; if Stripe shows it paid already, the request stays.
 router.delete("/requests/:id", requireStaff, safe(async (req, res) => {
   if (!U.UUID.test(req.params.id)) return res.status(404).json({ error: "not_found" });
   const sb = getSupabase();
   if (!sb) return res.status(503).json({ error: "storage_unavailable" });
-  const { data: row, error } = await sb.from("pylon_requests").select("id,paid_at,extra_payments").eq("id", req.params.id).maybeSingle();
+  const { data: row, error } = await sb.from("pylon_requests").select("id,paid_at,extra_payments,checkout_session_id").eq("id", req.params.id).maybeSingle();
   if (error) return res.status(503).json({ error: "storage_unavailable" });
   if (!row) return res.status(404).json({ error: "not_found" });
   if (row.paid_at || (Array.isArray(row.extra_payments) && row.extra_payments.length)) return res.status(409).json({ error: "paid_keep" });
+  if (row.checkout_session_id && !(await closeCheckout(row.checkout_session_id))) {
+    // It wasn't open: find out why.
+    const st = await checkoutStatus(row.checkout_session_id);
+    if (st === "complete") return res.status(409).json({ error: "checkout_complete" });
+    if (st !== "expired") return res.status(503).json({ error: "stripe_unavailable" });
+  }
   const { error: e2 } = await sb.from("pylon_requests").delete().eq("id", row.id).is("paid_at", null);
   if (e2) {
     if (e2.code === "23503") return res.status(409).json({ error: "has_messages" });
@@ -758,7 +837,7 @@ module.exports = router;
 module.exports.markPaid = markPaid;
 module.exports.startCheckout = startCheckout;
 // Tests: every limit, and _reset() to start them all over.
-module.exports._limits = { perVisitor, perPeer, linkTries, requestsThisHour, signupsThisHour, pushesThisHour, staffMailAllowed, fallbackAllowed, formNotes, paidNotes };
+module.exports._limits = { perVisitor, perPeer, linkTries, requestsThisHour, signupsThisHour, pushesThisHour, moneyPushesThisHour, staffMailAllowed, moneyMailAllowed, fallbackAllowed, formNotes, paidNotes };
 module.exports._reset = () => {
   for (const f of Object.values(module.exports._limits)) f.reset();
 };

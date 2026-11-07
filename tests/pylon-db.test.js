@@ -157,6 +157,15 @@ test("a monthly plan's subscription is only on a monthly package, by Stripe's na
   assert.ok(await refused(insert(row({ ...monthly, stripe_subscription_id: "sub_ABC999999", subscription_status: "gone" }))));
 });
 
+test("an athlete's request is Confirmed or Done only with a check of who the contact is", async () => {
+  assert.ok(await refused(insert(row({ status: "confirmed" }))));
+  assert.ok(await refused(insert(row({ status: "done" }))));
+  assert.ok((await insert(row({ status: "confirmed", contact_verified_at: new Date(), contact_verified_by: "kyron@toj.test" }))).rows[0].id);
+  assert.ok((await insert(row({ kind: "team_package", package: "1a", package_name: "Pylon Team Recap", contact_role: "coach", athlete_name: null, consent: null, consent_text: null, status: "done" }))).rows[0].id, "a coach's booking names no athlete");
+  const { rows: [{ id }] } = await insert(row({ status: "confirmed", contact_verified_at: new Date(), contact_verified_by: "kyron@toj.test" }));
+  assert.ok(await refused(pool.query("update pylon_requests set contact_verified_at = null, contact_verified_by = null where id = $1", [id])));
+});
+
 test("plain lowercase addresses, known statuses, tidy package keys", async () => {
   assert.ok(await refused(insert(row({ contact_email: "Pat@Example.com" }))));
   assert.ok(await refused(insert(row({ contact_email: "x@y.co?cc=a@b.c" }))));

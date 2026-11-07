@@ -156,13 +156,13 @@ const referral = (s) => {
 };
 const yes = (v) => v === true || v === "true" || v === "yes" || v === "on" || v === "1";
 // A person's name, as it goes into the note we email them: letters (any
-// alphabet), spaces, apostrophes, hyphens, commas and a period after a
-// letter ("Jr."), and nothing that reads as a link or an address: no digits,
-// no @ / : and no period run into a word ("evil.example").
+// alphabet), spaces, apostrophes, hyphens, commas and periods ("Jr.",
+// "A.J."), and nothing that reads as a link or an address: no digits, no
+// @ / : and no period run into two or more letters ("evil.example").
 const NAME = /^[\p{L}\p{M}][\p{L}\p{M}' ’,.-]*$/u;
 const personName = (s) => {
   const v = clean(s, 80);
-  return v && NAME.test(v) && !/\.[\p{L}]/u.test(v) ? v : null;
+  return v && NAME.test(v) && !/\.\p{L}\p{M}*\p{L}/u.test(v) ? v : null;
 };
 // The class that's in its senior year now (August on, the next year's).
 function seniorClass(now = new Date()) {

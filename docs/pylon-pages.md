@@ -22,8 +22,8 @@ The code: `routes/pylon.js` (the API), `utils/pylon.js` (prices, what each form 
 * The Concierge's words say nothing goes to a coach until the parent approves the exact message.
 * An ambassador application from a parent or guardian needs the parent's own email, not the athlete's (Gmail's dots and +tags count as the same mailbox). Nothing starts until they sign an agreement.
 * A team booking names no athlete. The coach's note says we only post an athlete's footage publicly once their parent or guardian has said yes.
-* Names are names: letters (any alphabet), spaces, apostrophes, hyphens, commas and a period after a letter. Nothing that reads as a link or an address, since names go into the emails.
-* Anyone can fill in a form and type any address. So before anything is done for an athlete (filming a player package, delivering anything, setting up a Transcript profile, asking about coach messages), staff call or meet the contact, check they're the athlete's parent or legal guardian (or the athlete, 18 or older) and that the email is theirs, and tap **I checked: it's them**. The request records who checked and when (`contact_verified_at`, `contact_verified_by`); the list says "Not checked yet" until then.
+* Names are names: letters (any alphabet), spaces, apostrophes, hyphens, commas and periods ("Jr.", "A.J."). Nothing that reads as a link or an address ("evil.example"), since names go into the emails.
+* Anyone can fill in a form and type any address. So before anything is done for an athlete (filming a player package, delivering anything, setting up a Transcript profile, asking about coach messages), staff call or meet the contact, check they're the athlete's parent or legal guardian (or the athlete, 18 or older) and that the email is theirs, and tap **I checked: it's them**. The request records who checked and when (`contact_verified_at`, `contact_verified_by`); the list says "Not checked yet" until then, and an athlete's request can't be marked Confirmed or Done before it (the database refuses too).
 
 ## Who sees it
 
@@ -32,7 +32,7 @@ Requests are for the owner (ADMIN_EMAILS, staff role), like the Subject Medias b
 * `#pylon`: open requests (`#pylon/all` for every one). Flags: Not checked yet, Test payment, "Paid twice: check it", and a monthly plan that's past due or cancelled.
 * `#pylon-request/<id>`: who to call, checking who they are, the athlete, what they agreed to, payment, status (New, Contacted, Confirmed, Done, Closed) and a team note.
   * "Paid another way" records a payment made outside Stripe (an invoice, cash) and closes the family's open Stripe checkout, so they can't also pay there. Only that kind can be taken back. Refunds of Stripe payments happen in Stripe.
-  * **Delete** (two taps) is for a request someone says they didn't send. A paid request, or one with a further Stripe payment on it, stays on file.
+  * **Delete** (two taps) is for a request someone says they didn't send. Its Stripe checkout is closed first, so nobody can pay for a request that's gone. A paid request, one with a further Stripe payment on it, or one whose checkout Stripe shows as paid already stays on file; if Stripe can't be reached to check, it stays too (try again).
 * `#pylon-newsletter`: the confirmed list, with a button that copies it as CSV: `email,unsubscribe_url`.
 
 The staff push and email say what came in and link to the app. Names and contact details stay in the app. If the database can't take a request, the staff email carries all of it (it's then the only copy).
@@ -47,6 +47,7 @@ The staff push and email say what came in and link to the app. Names and contact
 | Staff | Each request, each payment | What and where, and the app link. A test payment says TEST. |
 | Staff | A further payment on a request | Stripe took money on a request that was already paid (or through a checkout that isn't the request's own): check it, refund one in Stripe. |
 | Staff | A monthly plan stops | Its renewal failed (past due, unpaid) or it was cancelled. |
+| Staff | A payment with no request | Stripe took money through a Pylon checkout whose request isn't in the app (deleted, or never saved): refund it, or add the request by hand. |
 
 Replies go to `PYLON_HELP_EMAIL` (default hello@pylonfootball.com). The sender is the app's mail settings (EMAIL_FROM or the Gmail account), the same as every other email the app sends.
 
@@ -54,10 +55,12 @@ Replies go to `PYLON_HELP_EMAIL` (default hello@pylonfootball.com). The sender i
 
 So the forms can't be used to fill anyone's inbox or lock people out:
 
-* Forms: 12 per visitor per 10 minutes (a visitor is the address Vercel passes on; on IPv6, the /64), and 60 per connection to the server (so made-up addresses sent straight at Render still stop). Only forms that pass the checks count toward the hour's total: 300 requests and, separately, 300 newsletter sign-ups.
+* Forms: 12 per visitor per 10 minutes (a visitor is the address Vercel passes on; on IPv6, the /64), counted before the form is checked, so one visitor's junk stops only them. Per connection to the server, 150 forms that pass the checks per 10 minutes: through Vercel every visitor shares Vercel's connection, so junk doesn't count toward it, and someone going straight at Render with made-up addresses still stops there. Only forms that pass count toward the hour's total too: 300 requests and, separately, 300 newsletter sign-ups.
+* The newsletter's confirm and unsubscribe links: 30 tries per visitor per 10 minutes. The 256-bit token is what stops a guess.
+* Known limit: someone going straight at Render with made-up visitor addresses can still send 150 believable forms in 10 minutes, and so use up the hour's 300 for everyone. The fix is for Vercel to mark its own traffic (Edge Middleware adding a secret header on `/api/pylon*`, the server trusting X-Forwarded-For only with it); it needs a secret set on both Vercel and Render, and a preview test.
 * Notes from forms: at most 2 a day to one mailbox (1 a day for a newsletter confirmation), 6 a day from one visitor, 30 an hour and 100 a day in all. A note that couldn't go gives its place back, and the app shows which requests got one.
 * Payment notes have their own count (5 a day to one mailbox, 30 an hour, 100 a day), so junk forms can't hold up a receipt.
-* Staff emails: 30 an hour and 100 a day (the push always goes, up to 60 an hour). When the database is down, the "only copy" emails: 10 an hour and 30 a day. Past that, the page says it couldn't take the request.
+* Staff emails: 30 an hour and 100 a day (the push always goes, up to 60 an hour). Money alerts (payments, second payments, plans that stop, payments with no request) have their own 30 an hour and 100 a day, and their own pushes, so busy forms can't hold them up. When the database is down, the "only copy" emails: 10 an hour and 30 a day. Past that, the page says it couldn't take the request.
 
 ## Payments
 
@@ -73,7 +76,7 @@ Creator codes: a player-package link with `?ref=CODE` shows the code and sends i
 
 Second payments are never dropped: money Stripe takes on a request that's already paid, or through a checkout that isn't the request's own, is kept on the request (`extra_payments`) and staff are told. While it's there, the hand-marked payment can't be taken back and the request can't be deleted; refund the one that shouldn't stand in Stripe.
 
-The webhook listens for `checkout.session.completed` (and `checkout.session.async_payment_succeeded`), `customer.subscription.updated` and `customer.subscription.deleted`. A monthly plan's status (active, past due, cancelled) shows on its request.
+The webhook listens for `checkout.session.completed` (and `checkout.session.async_payment_succeeded`), `customer.subscription.updated` and `customer.subscription.deleted`. A monthly plan's status (active, past due, cancelled) shows on its request. Stripe can deliver events late or out of order (a retry of one that failed), so an event older than the last one applied changes nothing, and a plan that ended stays ended.
 
 ## Go-live settings (Render, toj-csv-app)
 

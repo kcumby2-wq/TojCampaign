@@ -67,6 +67,9 @@ create table if not exists public.pylon_requests (
   subscription_status text check (subscription_status is null
     or subscription_status in ('active', 'past_due', 'unpaid', 'canceled', 'incomplete', 'incomplete_expired', 'trialing', 'paused')),
   subscription_ended_at timestamptz,
+  -- When the last of Stripe's subscription events that was applied happened
+  -- (events can arrive late or out of order).
+  subscription_updated_at timestamptz,
   contact_verified_at timestamptz,
   contact_verified_by text check (contact_verified_by is null or char_length(contact_verified_by) between 3 and 200),
   contact_emailed_at timestamptz,
@@ -104,8 +107,43 @@ create table if not exists public.pylon_requests (
   -- Only a monthly plan has a subscription.
   constraint pylon_requests_subscription_monthly check ((stripe_subscription_id is null and subscription_status is null) or cadence = 'month'),
   -- A check of who the contact is says who made it.
-  constraint pylon_requests_verified_whole check ((contact_verified_at is null) = (contact_verified_by is null))
+  constraint pylon_requests_verified_whole check ((contact_verified_at is null) = (contact_verified_by is null)),
+  -- An athlete's request is Confirmed or Done only once staff checked who
+  -- they're dealing with.
+  constraint pylon_requests_confirmed_checked check (
+    kind not in ('player_package', 'transcript', 'recruiting', 'ambassador')
+    or status not in ('confirmed', 'done') or contact_verified_at is not null)
 );
+
+-- Columns and checks that came after this file's first version, for any
+-- database that ran it then (none persistent is known; this keeps reruns whole).
+alter table public.pylon_requests add column if not exists extra_payments jsonb not null default '[]'::jsonb;
+alter table public.pylon_requests add column if not exists stripe_subscription_id text;
+alter table public.pylon_requests add column if not exists subscription_status text;
+alter table public.pylon_requests add column if not exists subscription_ended_at timestamptz;
+alter table public.pylon_requests add column if not exists subscription_updated_at timestamptz;
+alter table public.pylon_requests add column if not exists contact_verified_at timestamptz;
+alter table public.pylon_requests add column if not exists contact_verified_by text;
+do $$
+declare
+  c record;
+begin
+  for c in
+    select * from (values
+      ('pylon_requests_extra_payments_check', 'check (jsonb_typeof(extra_payments) = ''array'')'),
+      ('pylon_requests_stripe_subscription_id_check', 'check (stripe_subscription_id is null or stripe_subscription_id ~ ''^sub_[A-Za-z0-9]{6,200}$'')'),
+      ('pylon_requests_subscription_status_check', 'check (subscription_status is null or subscription_status in (''active'', ''past_due'', ''unpaid'', ''canceled'', ''incomplete'', ''incomplete_expired'', ''trialing'', ''paused''))'),
+      ('pylon_requests_contact_verified_by_check', 'check (contact_verified_by is null or char_length(contact_verified_by) between 3 and 200)'),
+      ('pylon_requests_subscription_monthly', 'check ((stripe_subscription_id is null and subscription_status is null) or cadence = ''month'')'),
+      ('pylon_requests_verified_whole', 'check ((contact_verified_at is null) = (contact_verified_by is null))'),
+      ('pylon_requests_confirmed_checked', 'check (kind not in (''player_package'', ''transcript'', ''recruiting'', ''ambassador'') or status not in (''confirmed'', ''done'') or contact_verified_at is not null)')
+    ) as t(name, def)
+  loop
+    if not exists (select 1 from pg_constraint where conrelid = 'public.pylon_requests'::regclass and conname = c.name) then
+      execute format('alter table public.pylon_requests add constraint %I %s', c.name, c.def);
+    end if;
+  end loop;
+end $$;
 
 create index if not exists pylon_requests_status_idx on public.pylon_requests (status, created_at desc);
 

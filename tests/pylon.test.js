@@ -143,7 +143,8 @@ test("names are names: nothing that reads as a link or an address", () => {
     assert.ok(norm(player({ contact_name: bad })).errors.includes("contact_name"), bad);
     assert.ok(norm(player({ athlete_name: bad })).errors.includes("athlete_name"), bad);
   }
-  for (const good of ["Mary-Jane O’Neil", "D'Andre Smith", "Ellis, Jr.", "José Ñúñez", "A. B. Carter", "李小龙"]) assert.deepEqual(norm(player({ contact_name: good })).errors, [], good);
+  for (const good of ["Mary-Jane O’Neil", "D'Andre Smith", "Ellis, Jr.", "José Ñúñez", "A. B. Carter", "李小龙", "A.J. Brown", "T.J. Watt", "J.J.", "J.T. Smith"]) assert.deepEqual(norm(player({ contact_name: good })).errors, [], good);
+  for (const bad of ["x.co", "Pat at evil.example", "a.b.cd"]) assert.ok(norm(player({ contact_name: bad })).errors.includes("contact_name"), bad);
   assert.ok(norm(team({ contact_name: "https://x.example" })).errors.includes("contact_name"));
   assert.ok(norm({ kind: "newsletter_premium", package: "premium", contact_name: "go to evil.example", contact_email: "a@b.co" }).errors.includes("contact_name"));
 });
@@ -245,7 +246,7 @@ test("the notes say what came in, and staff alerts carry no names", () => {
 });
 
 // ── The routes ───────────────────────────────────────────────────────────
-let server, base, db, pushes, mails, created, expired, promos;
+let server, base, db, pushes, mails, created, expired, promos, stripeStatus;
 const wait = (ms = 60) => new Promise((r) => setTimeout(r, ms));
 async function call(method, p, body, headers = {}) {
   const r = await fetch(base + p, {
@@ -285,7 +286,13 @@ function fakeStripe({ mode = "live", fail = false } = {}) {
             created.push(params);
             return { id, url: "https://checkout.stripe.com/c/pay/" + id };
           },
-          expire: async (id) => { expired.push(id); return { id, status: "expired" }; },
+          expire: async (id) => {
+            if (stripeStatus[id] && stripeStatus[id] !== "open") throw Object.assign(new Error("not open"), { type: "StripeInvalidRequestError" });
+            expired.push(id);
+            stripeStatus[id] = "expired";
+            return { id, status: "expired" };
+          },
+          retrieve: async (id) => ({ id, status: stripeStatus[id] || "open" }),
         },
       },
       promotionCodes: { list: async ({ code }) => ({ data: promos[code] ? [promos[code]] : [] }) },
@@ -318,6 +325,7 @@ beforeEach(() => {
   created = [];
   expired = [];
   promos = {};
+  stripeStatus = {};
   db = fakeSupabase(
     { push_subscriptions: [{ id: "p1", email: "kyron@toj.test", endpoint: "https://push.test/1", p256dh: "k", auth: "a", kind: "web", fail_count: 0 }] },
     { unique: { pylon_requests: ["checkout_session_id"], pylon_newsletter: ["email", "unsubscribe_token", "confirm_token_hash"] } }
@@ -384,10 +392,19 @@ test("limits: 12 forms per visitor per 10 minutes, however an IPv6 /64 is writte
   assert.equal((await send(player(), "2001:0db8:0000:0001:ffff::1")).status, 429);
 });
 
-test("made-up visitor addresses from one caller still hit the caller's own limit", async () => {
+test("made-up visitor addresses from one caller still meet the connection's limit", async () => {
   let ok = 0;
-  for (let i = 0; i < 70; i++) if ((await send(team(), `192.0.2.${i}`)).status === 200) ok += 1;
-  assert.equal(ok, 60, "60 per caller per 10 minutes, whatever X-Forwarded-For says");
+  for (let i = 0; i < 160; i++) if ((await send(team(), `192.0.${Math.floor(i / 200)}.${i % 200}`)).status === 200) ok += 1;
+  assert.equal(ok, 150, "150 forms that pass per connection per 10 minutes, whatever X-Forwarded-For says");
+});
+
+test("junk from many visitors doesn't use up the connection's count", async () => {
+  for (let v = 0; v < 20; v++) for (let i = 0; i < 10; i++) assert.equal((await send({ kind: "team_package", package: "1a" }, `198.18.7.${v}`)).status, 400);
+  assert.equal((await send(team(), "203.0.113.120")).status, 200, "a real coach after 200 junk posts");
+  for (let i = 0; i < 70; i++) await call("POST", "/api/pylon/newsletter/unsubscribe", { token: "a".repeat(64) }, { "X-Forwarded-For": `198.18.8.${i}` });
+  const tok = "b".repeat(64);
+  db.tables.pylon_newsletter = [{ id: "n1", email: "fan@example.com", status: "confirmed", confirmed_at: new Date().toISOString(), unsubscribe_token: tok }];
+  assert.equal((await call("POST", "/api/pylon/newsletter/unsubscribe", { token: tok }, { "X-Forwarded-For": "203.0.113.121" })).status, 200, "bad links from others don't block a real unsubscribe");
 });
 
 test("the hour's count is of forms that pass: junk can't lock people out", async () => {
@@ -693,6 +710,68 @@ test("a monthly plan's changes reach the request; staff hear when it stops", asy
   assert.equal(db.tables.pylon_requests[0].subscription_status, "canceled");
 });
 
+test("a plan that ended stays ended, and a late or older event changes nothing", async () => {
+  PS._set(fakeStripe());
+  const plan = async (ip) => {
+    const r = await send(recruiting(), ip);
+    return r.data.id;
+  };
+  const ev = (id, type, status, created, subId) => ({ id: "evt_" + created, type, created, data: { object: { id: subId, object: "subscription", status, metadata: { kind: "pylon", request_id: id } } } });
+  const rowOf = (id) => db.tables.pylon_requests.find((r) => r.id === id);
+  // Ended, then an older "active" arrives late (a retried delivery).
+  const a = await plan("198.51.100.70");
+  await signed({ ...paidEvent(a, rowOf(a).checkout_session_id, { mode: "subscription", subscription: "sub_AAA111111", amount_total: 14900 }), created: 1794000000 });
+  await signed(ev(a, "customer.subscription.updated", "past_due", 1794000100, "sub_AAA111111"));
+  await signed(ev(a, "customer.subscription.deleted", "canceled", 1794000200, "sub_AAA111111"));
+  await signed(ev(a, "customer.subscription.updated", "active", 1794000150, "sub_AAA111111"));
+  await signed(ev(a, "customer.subscription.updated", "active", 1794000300, "sub_AAA111111"));
+  assert.equal(rowOf(a).subscription_status, "canceled", "ended stays ended");
+  assert.ok(rowOf(a).subscription_ended_at);
+  // Out of order: the newer past_due first, then an older active.
+  const b = await plan("198.51.100.71");
+  await signed(ev(b, "customer.subscription.updated", "past_due", 1794001000, "sub_BBB111111"));
+  await signed(ev(b, "customer.subscription.updated", "active", 1794000900, "sub_BBB111111"));
+  assert.equal(rowOf(b).subscription_status, "past_due");
+  // The same second: the ending wins, whichever comes first.
+  await signed(ev(b, "customer.subscription.deleted", "canceled", 1794001100, "sub_BBB111111"));
+  await signed(ev(b, "customer.subscription.updated", "active", 1794001100, "sub_BBB111111"));
+  assert.equal(rowOf(b).subscription_status, "canceled");
+  // The plan's own events before the checkout's: the checkout doesn't revive it.
+  const c = await plan("198.51.100.72");
+  await signed(ev(c, "customer.subscription.deleted", "canceled", 1794002000, "sub_CCC111111"));
+  await signed({ ...paidEvent(c, rowOf(c).checkout_session_id, { mode: "subscription", subscription: "sub_CCC111111", amount_total: 14900 }), created: 1794001900 });
+  assert.equal(rowOf(c).subscription_status, "canceled");
+  assert.ok(rowOf(c).paid_at, "the payment itself is still recorded");
+});
+
+test("money alerts have their own budget: busy forms can't hold them up", async () => {
+  PS._set(fakeStripe());
+  const r = await send(player());
+  const sid = db.tables.pylon_requests[0].checkout_session_id;
+  for (let i = 0; i < 30; i++) router._limits.staffMailAllowed();
+  const c = await staffCookie();
+  await call("PATCH", `/api/pylon/requests/${r.data.id}`, { paid: true }, { Cookie: c });
+  await wait();
+  mails = [];
+  await signed(paidEvent(r.data.id, sid));
+  await wait();
+  assert.ok(mails.some((m) => /second payment/.test(m.subject)), "the second payment's email still goes");
+});
+
+test("an athlete's request is Confirmed or Done only once staff checked who they are", async () => {
+  await send(player());
+  await send(team(), "198.51.100.80");
+  const [athleteReq, teamReq] = db.tables.pylon_requests.map((r) => r.id);
+  const c = await staffCookie();
+  const patch = (id, body) => call("PATCH", `/api/pylon/requests/${id}`, body, { Cookie: c });
+  assert.equal((await patch(athleteReq, { status: "confirmed" })).data.error, "check_first");
+  assert.equal((await patch(athleteReq, { status: "done" })).data.error, "check_first");
+  assert.equal((await patch(athleteReq, { verified: true, status: "confirmed" })).status, 200, "checked and confirmed in one go");
+  assert.equal((await patch(athleteReq, { verified: false })).data.error, "check_first", "can't un-check a confirmed one");
+  assert.equal((await patch(athleteReq, { verified: false, status: "contacted" })).status, 200);
+  assert.equal((await patch(teamReq, { status: "confirmed" })).status, 200, "a coach's booking names no athlete");
+});
+
 test("no signing secret: the webhook says it isn't set up", async () => {
   const saved = process.env.PYLON_STRIPE_WEBHOOK_SECRET;
   delete process.env.PYLON_STRIPE_WEBHOOK_SECRET;
@@ -755,6 +834,31 @@ test("paid another way: staff record it, and take back only that", async () => {
   assert.equal(db.tables.pylon_requests[0].paid_at, null);
   Object.assign(db.tables.pylon_requests[0], { paid_at: new Date().toISOString(), paid_cents: 9900, paid_via: "stripe", checkout_session_id: "cs_live_aaaaaaaaaa", checkout_mode: "live" });
   assert.equal((await call("PATCH", `/api/pylon/requests/${id}`, { paid: false }, { Cookie: c })).status, 409);
+});
+
+test("delete closes the request's Stripe checkout first; one Stripe shows paid stays", async () => {
+  PS._set(fakeStripe());
+  await send(player());
+  await send(player(), "198.51.100.62");
+  await send(player(), "198.51.100.63");
+  const [a, b, c2] = db.tables.pylon_requests.map((r) => [r.id, r.checkout_session_id]);
+  const c = await staffCookie();
+  assert.equal((await call("DELETE", `/api/pylon/requests/${a[0]}`, undefined, { Cookie: c })).status, 200);
+  assert.deepEqual(expired, [a[1]], "the open checkout was closed");
+  stripeStatus[b[1]] = "complete";
+  assert.equal((await call("DELETE", `/api/pylon/requests/${b[0]}`, undefined, { Cookie: c })).data.error, "checkout_complete");
+  PS._set(null);
+  assert.equal((await call("DELETE", `/api/pylon/requests/${c2[0]}`, undefined, { Cookie: c })).data.error, "stripe_unavailable", "can't tell: it stays");
+  assert.equal(db.tables.pylon_requests.length, 2);
+});
+
+test("a payment for a request that isn't in the app reaches staff", async () => {
+  PS._set(fakeStripe());
+  const ghost = "22222222-2222-4222-8222-222222222222";
+  assert.equal((await signed(paidEvent(ghost, "cs_live_ghostghost01"))).status, 200);
+  await wait();
+  assert.equal(pushes[0].payload.title, "Pylon: a payment with no request");
+  assert.ok(mails.some((m) => /a payment with no request \(\$99\)/.test(m.subject) && /cs_live_ghostghost01/.test(m.text)));
 });
 
 test("\"didn't send this\": staff delete an unpaid request; a paid one stays", async () => {
