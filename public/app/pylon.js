@@ -35,6 +35,7 @@
     check_first: "Check who they are first (above): an athlete's request is Confirmed or Done only after that.",
     checkout_complete: "Stripe shows this checkout as paid, so the request stays: the payment will show here shortly.",
     stripe_unavailable: "Couldn't check its Stripe checkout just now, so it wasn't deleted. Try again in a minute.",
+    stripe_not_set_up: "Its Stripe checkout can't be checked: Stripe isn't set up on the server. It can be deleted a day after it came in, once the checkout has run out.",
     bad_amount: "That amount isn't a number of cents.",
     changed_meanwhile: "It changed while you were looking. Open it again.",
     paid_keep: "A paid request stays on file. Refund it in Stripe, then close it.",

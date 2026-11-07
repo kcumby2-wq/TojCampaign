@@ -4,7 +4,7 @@
 //
 //   node --test tests/pylon.test.js
 
-const { test, before, after, beforeEach } = require("node:test");
+const { test, before, after, beforeEach, afterEach } = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("fs");
 const path = require("path");
@@ -317,6 +317,8 @@ before(async () => {
   mailer.setSender(async (m) => { mails.push(m); return { sent: true }; });
 });
 after(() => { server && server.close(); push.setSender(null); mailer.setSender(null); setSupabase(null); PS._set(null); });
+// Let each test's after-the-reply emails land before the next starts.
+afterEach(() => wait(30));
 beforeEach(() => {
   router._reset();
   PS._set(null);
@@ -392,10 +394,18 @@ test("limits: 12 forms per visitor per 10 minutes, however an IPv6 /64 is writte
   assert.equal((await send(player(), "2001:0db8:0000:0001:ffff::1")).status, 429);
 });
 
-test("made-up visitor addresses from one caller still meet the connection's limit", async () => {
+test("a flood from many addresses meets the breakers, and staff hear at once", async () => {
   let ok = 0;
-  for (let i = 0; i < 160; i++) if ((await send(team(), `192.0.${Math.floor(i / 200)}.${i % 200}`)).status === 200) ok += 1;
-  assert.equal(ok, 150, "150 forms that pass per connection per 10 minutes, whatever X-Forwarded-For says");
+  for (let i = 0; i < 610; i++) if ((await send(team(), `192.0.${Math.floor(i / 200)}.${i % 200}`)).status === 200) ok += 1;
+  assert.equal(ok, 600, "600 forms that pass per connection per 10 minutes, whatever X-Forwarded-For says");
+  await wait();
+  const flood = pushes.filter((p) => p.payload.title === "Pylon: forms paused by a flood");
+  assert.equal(flood.length, 1, "one alert, not one per refusal");
+  assert.ok(mails.some((m) => /a flood/.test(m.subject) && /Attack Challenge Mode/.test(m.text)));
+});
+
+test("an event's worth of families all get through", async () => {
+  for (let i = 0; i < 200; i++) assert.equal((await send(player({ contact_email: `family${i}@example.com` }), `203.0.${100 + Math.floor(i / 100)}.${i % 100}`)).status, 200, `family ${i + 1}`);
 });
 
 test("junk from many visitors doesn't use up the connection's count", async () => {
@@ -416,12 +426,10 @@ test("the hour's count is of forms that pass: junk can't lock people out", async
   }
   fresh();
   assert.equal((await send(team(), "203.0.113.99")).status, 200, "310 bad forms later, a good one gets in");
-  for (let i = 1; i < 300; i++) {
-    if (i % 50 === 0) fresh();
-    assert.equal((await send(team(), `198.19.${i % 250}.${Math.floor(i / 250)}`)).status, 200);
-  }
-  fresh();
-  assert.equal((await send(team(), "203.0.113.100")).status, 429, "300 good ones an hour");
+  // The hour's breaker: 1,000 forms that pass.
+  for (let i = 1; i < 999; i++) L.requestsThisHour();
+  assert.equal((await send(team(), "203.0.113.101")).status, 200, "the 1,000th");
+  assert.equal((await send(team(), "203.0.113.100")).status, 429, "1,000 an hour");
   assert.equal((await call("POST", "/api/pylon/newsletter/subscribe", { email: "fan@example.com" }, { "X-Forwarded-For": "203.0.113.98" })).status, 200, "the newsletter has its own count");
 });
 
@@ -736,6 +744,13 @@ test("a plan that ended stays ended, and a late or older event changes nothing",
   await signed(ev(b, "customer.subscription.deleted", "canceled", 1794001100, "sub_BBB111111"));
   await signed(ev(b, "customer.subscription.updated", "active", 1794001100, "sub_BBB111111"));
   assert.equal(rowOf(b).subscription_status, "canceled");
+  // A repeat of the status on file still moves its time forward: an older
+  // event retried later loses.
+  const d = await plan("198.51.100.73");
+  await signed({ ...paidEvent(d, rowOf(d).checkout_session_id, { mode: "subscription", subscription: "sub_DDD111111", amount_total: 14900 }), created: 1794003000 });
+  await signed(ev(d, "customer.subscription.updated", "active", 1794003500, "sub_DDD111111"));
+  await signed(ev(d, "customer.subscription.updated", "past_due", 1794003300, "sub_DDD111111"));
+  assert.equal(rowOf(d).subscription_status, "active");
   // The plan's own events before the checkout's: the checkout doesn't revive it.
   const c = await plan("198.51.100.72");
   await signed(ev(c, "customer.subscription.deleted", "canceled", 1794002000, "sub_CCC111111"));
@@ -847,9 +862,26 @@ test("delete closes the request's Stripe checkout first; one Stripe shows paid s
   assert.deepEqual(expired, [a[1]], "the open checkout was closed");
   stripeStatus[b[1]] = "complete";
   assert.equal((await call("DELETE", `/api/pylon/requests/${b[0]}`, undefined, { Cookie: c })).data.error, "checkout_complete");
-  PS._set(null);
+  // Stripe can't say, and the checkout is live and recent: it stays.
+  PS._set({ ...fakeStripe(), stripe: { ...fakeStripe().stripe, checkout: { sessions: { expire: async () => { throw new Error("down"); }, retrieve: async () => { throw new Error("down"); } } } } });
   assert.equal((await call("DELETE", `/api/pylon/requests/${c2[0]}`, undefined, { Cookie: c })).data.error, "stripe_unavailable", "can't tell: it stays");
-  assert.equal(db.tables.pylon_requests.length, 2);
+  PS._set(null);
+  assert.equal((await call("DELETE", `/api/pylon/requests/${c2[0]}`, undefined, { Cookie: c })).data.error, "stripe_not_set_up", "no key: says so");
+  // A day later the checkout has run out: it can go.
+  db.tables.pylon_requests.find((r) => r.id === c2[0]).created_at = new Date(Date.now() - 26 * 3600 * 1000).toISOString();
+  assert.equal((await call("DELETE", `/api/pylon/requests/${c2[0]}`, undefined, { Cookie: c })).status, 200);
+  assert.equal(db.tables.pylon_requests.length, 1);
+});
+
+test("a staff test request can be deleted after the switch to live", async () => {
+  PS._set(fakeStripe({ mode: "test" }));
+  const c = await staffCookie();
+  await send(player(), "198.51.100.64", { Cookie: c });
+  const [id, sid] = [db.tables.pylon_requests[0].id, db.tables.pylon_requests[0].checkout_session_id];
+  // The live key can't find a test checkout.
+  PS._set({ ...fakeStripe(), stripe: { ...fakeStripe().stripe, checkout: { sessions: { expire: async () => { throw new Error("No such checkout.session"); }, retrieve: async () => { throw new Error("No such checkout.session"); } } } } });
+  assert.match(sid, /^cs_test_/);
+  assert.equal((await call("DELETE", `/api/pylon/requests/${id}`, undefined, { Cookie: c })).status, 200);
 });
 
 test("a payment for a request that isn't in the app reaches staff", async () => {

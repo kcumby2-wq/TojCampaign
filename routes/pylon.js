@@ -56,15 +56,20 @@ const DAY_MS = 24 * HOUR;
 
 // ── Abuse limits ─────────────────────────────────────────────────────────
 // Per visitor (the first X-Forwarded-For address, which Vercel's rewrite
-// sets): 12 forms per 10 minutes, counted before the form is checked, so
-// families on one event's Wi-Fi get through and one visitor's junk stops
-// only them. Per connection (the caller Render saw: through Vercel that's
-// Vercel, for everyone; straight at Render, the caller, whatever headers it
-// makes up): 150 forms per 10 minutes, counted only for forms that pass, so
-// junk can't use it up for everyone. The hour's total (300, separately for
-// requests and the newsletter) also counts only forms that pass.
+// sets; on IPv6, the /64): 12 forms per 10 minutes, counted before the form
+// is checked, so families on one event's Wi-Fi get through and one
+// visitor's junk stops only them. That's the only limit ordinary traffic
+// meets: what a form sets off (notes, staff emails, pushes) has its own caps.
+//
+// Past that, two circuit breakers for floods, counted only for forms that
+// pass: per connection (the caller Render saw: through Vercel that's Vercel,
+// for everyone; straight at Render, the caller, whatever headers it makes
+// up) 600 per 10 minutes, and 1,000 an hour (separately for requests and the
+// newsletter). Someone sending from many addresses can still trip them for
+// everyone, so tripping one tells staff at once (Vercel's firewall is the
+// lever then).
 const perVisitor = H.windowLimiter(12, 10 * 60 * 1000);
-const perPeer = H.windowLimiter(150, 10 * 60 * 1000);
+const perPeer = H.windowLimiter(600, 10 * 60 * 1000);
 // The newsletter's links: 30 tries per visitor per 10 minutes. The token
 // itself (256 bits) is what keeps a guess from working.
 const linkTries = H.windowLimiter(30, 10 * 60 * 1000);
@@ -79,8 +84,10 @@ function hourly(max) {
   take.reset = () => { times = []; };
   return take;
 }
-const requestsThisHour = hourly(300);
-const signupsThisHour = hourly(300);
+const requestsThisHour = hourly(1000);
+const signupsThisHour = hourly(1000);
+// A breaker tripped: staff hear once an hour.
+const floodAlerts = hourly(1);
 const pushesThisHour = hourly(60);
 // Money alerts (payments, second payments, plans that stop, payments with no
 // request) have their own count, so busy forms can't hold them up.
@@ -176,6 +183,23 @@ async function alertStaff(sb, row, { paid = false } = {}) {
   } catch (e) {
     console.warn("[pylon] alert failed:", e && e.message);
   }
+}
+
+// A flood breaker tripped: the forms are refusing everyone for now.
+function floodTripped(which) {
+  console.warn(`[pylon] flood breaker tripped (${which})`);
+  if (!floodAlerts()) return;
+  tellStaff(
+    { title: "Pylon: forms paused by a flood", body: "Too many forms at once; real people are being turned away", url: "/app/#pylon", tag: "pylon-flood" },
+    {
+      subject: "Pylon: the forms are turning people away (a flood)",
+      text: [
+        `More ${which} came in than the Pylon pages take at once, from many addresses, so they're refusing everyone until the count resets (10 minutes to an hour).`,
+        "If it keeps up: Vercel → the tojcampaign.com project → Firewall → turn on Attack Challenge Mode, or add a rate-limit rule for /api/pylon.",
+      ].join("\n"),
+    },
+    { money: true }
+  );
 }
 
 // The database couldn't take the request: email it to staff whole. Critical
@@ -324,7 +348,10 @@ router.post("/requests", publicPost, safe(async (req, res) => {
   if (perVisitor(H.visitorKey(H.visitor(req)))) return res.status(429).json({ error: "too_many" });
   const { errors, value } = U.normalize(raw);
   if (errors.length) return res.status(400).json({ error: "invalid", fields: errors });
-  if (perPeer(H.peer(req)) || !requestsThisHour()) return res.status(429).json({ error: "too_many" });
+  if (perPeer(H.peer(req)) || !requestsThisHour()) {
+    floodTripped("requests");
+    return res.status(429).json({ error: "too_many" });
+  }
   const row = { ...value, status: "new" };
   const who = H.visitor(req);
 
@@ -361,7 +388,10 @@ router.post("/newsletter/subscribe", publicPost, safe(async (req, res) => {
   if (perVisitor("nl:" + H.visitorKey(H.visitor(req)))) return res.status(429).json({ error: "too_many" });
   const address = U.email(raw.email);
   if (!address) return res.status(400).json({ error: "invalid", fields: ["email"] });
-  if (perPeer("nl:" + H.peer(req)) || !signupsThisHour()) return res.status(429).json({ error: "too_many" });
+  if (perPeer("nl:" + H.peer(req)) || !signupsThisHour()) {
+    floodTripped("newsletter sign-ups");
+    return res.status(429).json({ error: "too_many" });
+  }
   const source = U.NEWSLETTER_SOURCES.includes(raw.source) ? raw.source : "newsletter_page";
   const sb = getSupabase();
   if (!sb) return res.status(503).json({ error: "storage_unavailable" });
@@ -596,7 +626,18 @@ async function subscriptionChanged(sb, sub, { deleted = false, eventAt = nowIso(
     // Same second: only an ending wins.
     if (now < was || (now === was && !FINAL.includes(status))) return { stale: true };
   }
-  if (row.subscription_status === status) return { duplicate: true };
+  // The same status again (a renewal that went through): nothing to show,
+  // but its time moves forward, so an older event retried later loses.
+  if (row.subscription_status === status) {
+    const { data: moved, error: e1 } = await sb
+      .from("pylon_requests")
+      .update({ subscription_updated_at: eventAt, updated_at: nowIso() })
+      .eq("id", row.id)
+      .eq("updated_at", row.updated_at)
+      .select("id")
+      .maybeSingle();
+    return e1 || !moved ? { error: true } : { duplicate: true };
+  }
   const ended = FINAL.includes(status) ? (Number.isInteger(sub.ended_at) ? new Date(sub.ended_at * 1000).toISOString() : eventAt) : null;
   const { data: saved, error: e2 } = await sb
     .from("pylon_requests")
@@ -789,15 +830,20 @@ router.delete("/requests/:id", requireStaff, safe(async (req, res) => {
   if (!U.UUID.test(req.params.id)) return res.status(404).json({ error: "not_found" });
   const sb = getSupabase();
   if (!sb) return res.status(503).json({ error: "storage_unavailable" });
-  const { data: row, error } = await sb.from("pylon_requests").select("id,paid_at,extra_payments,checkout_session_id").eq("id", req.params.id).maybeSingle();
+  const { data: row, error } = await sb.from("pylon_requests").select("id,paid_at,extra_payments,checkout_session_id,checkout_mode,created_at").eq("id", req.params.id).maybeSingle();
   if (error) return res.status(503).json({ error: "storage_unavailable" });
   if (!row) return res.status(404).json({ error: "not_found" });
   if (row.paid_at || (Array.isArray(row.extra_payments) && row.extra_payments.length)) return res.status(409).json({ error: "paid_keep" });
   if (row.checkout_session_id && !(await closeCheckout(row.checkout_session_id))) {
-    // It wasn't open: find out why.
+    // It wasn't open, or Stripe couldn't be asked: find out why.
     const st = await checkoutStatus(row.checkout_session_id);
     if (st === "complete") return res.status(409).json({ error: "checkout_complete" });
-    if (st !== "expired") return res.status(503).json({ error: "stripe_unavailable" });
+    // Fine to go: an expired checkout; a test-mode one (no real money moves
+    // through it, and after the switch to live Stripe can't find it); one
+    // past Stripe's 24 hours, which has expired by now.
+    const test = row.checkout_mode === "test" || /^cs_test_/.test(row.checkout_session_id);
+    const old = Date.now() - Date.parse(row.created_at) > 25 * HOUR;
+    if (st !== "expired" && !test && !old) return res.status(503).json({ error: PS.mode().ok ? "stripe_unavailable" : "stripe_not_set_up" });
   }
   const { error: e2 } = await sb.from("pylon_requests").delete().eq("id", row.id).is("paid_at", null);
   if (e2) {
@@ -837,7 +883,7 @@ module.exports = router;
 module.exports.markPaid = markPaid;
 module.exports.startCheckout = startCheckout;
 // Tests: every limit, and _reset() to start them all over.
-module.exports._limits = { perVisitor, perPeer, linkTries, requestsThisHour, signupsThisHour, pushesThisHour, moneyPushesThisHour, staffMailAllowed, moneyMailAllowed, fallbackAllowed, formNotes, paidNotes };
+module.exports._limits = { perVisitor, perPeer, linkTries, requestsThisHour, signupsThisHour, floodAlerts, pushesThisHour, moneyPushesThisHour, staffMailAllowed, moneyMailAllowed, fallbackAllowed, formNotes, paidNotes };
 module.exports._reset = () => {
   for (const f of Object.values(module.exports._limits)) f.reset();
 };
