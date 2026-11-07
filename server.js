@@ -191,6 +191,8 @@ app.use("/c", require("./routes/creators").pageRouter);
 // Subject Medias bookings from subjectmedias.com (the form is public; the list is staff only).
 app.use("/api/sm/bookings", require("./routes/sm-bookings"));
 app.use("/api/sm/fellowship", require("./routes/sm-fellowship"));
+// subjectmedias.com's own counts: visits and taps as daily totals (migration 034).
+app.use("/api/sm/site", require("./routes/sm-site"));
 // The Subject Medias marketplace (migration 033): the staff side of events,
 // rosters, consent, uploads and review. Families use /m/, the pages
 // subjectmedias.com/m/ rewrites here (routes/sm-market-public.js).

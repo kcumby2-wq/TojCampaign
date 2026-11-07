@@ -7,6 +7,9 @@
 // and date, all from fixed lists, so nothing anyone typed goes out through a
 // push service. The email adds the city and the booker's own contact so Kyron
 // can call back. Notes and the athlete's team and jersey stay in the app.
+//
+// The booker's own note (we got your request; thanks for booking) goes to an
+// address someone typed, so it carries fixed words only, like a push.
 
 const { credentialProblems } = require("./gfs");
 
@@ -28,6 +31,10 @@ const OPEN = Object.freeze(["new", "contacted", "offered"]);
 const CLOSED = Object.freeze(["delivered", "cancelled"]);
 const REGION_WORDS = Object.freeze({ west: "West", south_central: "South Central", northeast: "Northeast", southeast: "Southeast", midwest: "Midwest" });
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+// The homepage's offers a request can claim (migration 034).
+const OFFERS = Object.freeze(["first10"]);
+// A paid booking's name when the checkout had none.
+const STRIPE_NAME = "Stripe customer";
 // Stripe's own ceiling for one charge, and well inside the int column.
 const MAX_CENTS = 99999999;
 
@@ -46,9 +53,29 @@ const DAY = 864e5;
 // object, an array) counts as missing, so no input can make these throw.
 const text = (v) => (typeof v === "string" ? v : typeof v === "number" && Number.isFinite(v) ? String(v) : "");
 // One line: control characters out (Postgres refuses NUL), single spaces.
-const clean = (s, max) => text(s).replace(/[\u0000-\u001f\u007f]/g, " ").replace(/\s+/g, " ").trim().slice(0, max);
+// At most max characters, counted as Postgres counts them (code points), so a
+// cut never leaves half an emoji, which Postgres refuses.
+const clip = (s, max) => {
+  const t = String(s);
+  return t.length <= max ? t : Array.from(t).slice(0, max).join("");
+};
+const clean = (s, max) => clip(text(s).replace(/[\u0000-\u001f\u007f]/g, " ").replace(/\s+/g, " ").trim(), max);
 // Free text that keeps its line breaks.
-const cleanNotes = (s, max) => text(s).replace(/\r\n?/g, "\n").replace(/[\u0000-\u0008\u000b-\u001f\u007f]/g, "").trim().slice(0, max);
+const cleanNotes = (s, max) => clip(text(s).replace(/\r\n?/g, "\n").replace(/[\u0000-\u0008\u000b-\u001f\u007f]/g, "").trim(), max);
+// Notes from more than one place, each once, within the column's 1000.
+const joinNotes = (...parts) => clip(parts.filter(Boolean).join("\n\n"), 1000) || null;
+// The mailbox an address delivers to, for limits: lowercase, no +tag, and for
+// Gmail no dots (Gmail ignores both, so they'd let one inbox count as many).
+function mailbox(address) {
+  const a = String(address || "").trim().toLowerCase();
+  const at = a.lastIndexOf("@");
+  if (at < 1) return a;
+  let user = a.slice(0, at).split("+")[0];
+  let domain = a.slice(at + 1);
+  if (domain === "googlemail.com") domain = "gmail.com";
+  if (domain === "gmail.com") user = user.replace(/\./g, "");
+  return user + "@" + domain;
+}
 const has = (obj, k) => typeof k === "string" && Object.prototype.hasOwnProperty.call(obj, k);
 // A plain address, lowercase: nothing that could add recipients or text to a
 // mailto: link (no ? & # % / or spaces). Migration 030 checks the same.
@@ -71,6 +98,21 @@ function dayValue(s) {
 }
 const todayValue = (now) => Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
 const isoDay = (t) => new Date(t).toISOString().slice(0, 10);
+
+// The game's day: real, from yesterday (a day's grace for time zones behind
+// UTC) to two years out. Returns 'YYYY-MM-DD', or null.
+function eventDay(s, now) {
+  const day = dayValue(s);
+  const today = todayValue(now);
+  return day === null || day < today - DAY || day > today + 730 * DAY ? null : isoDay(day);
+}
+// How many athletes, 1 to 500. Blank is null; anything else is false.
+function athleteCount(s) {
+  const count = clean(s, 10);
+  if (!count) return null;
+  const n = Number(count);
+  return Number.isInteger(n) && n >= 1 && n <= 500 ? n : false;
+}
 
 function phone(s) {
   const p = clean(s, 30).replace(/[^0-9+().\- ]/g, "");
@@ -95,23 +137,16 @@ function normalize(raw, { now = new Date() } = {}) {
   v.sport = sportOf(r.sport);
   v.event_name = clean(r.event_name, 120) || null;
 
-  const day = dayValue(r.event_date);
-  const today = todayValue(now);
-  // A day's grace for time zones behind UTC; nothing more than two years out.
-  if (day === null || day < today - DAY || day > today + 730 * DAY) errors.push("event_date");
-  else v.event_date = isoDay(day);
+  v.event_date = eventDay(r.event_date, now) || (errors.push("event_date"), null);
 
   v.event_city = clean(r.event_city, 80) || (errors.push("event_city"), null);
   const st = clean(r.event_state, 2).toUpperCase();
   v.event_state = STATE_REGION[st] ? st : (errors.push("event_state"), null);
   v.region = regionFor(v.event_state);
 
-  const count = clean(r.athletes, 10);
-  if (count) {
-    const n = Number(count);
-    if (Number.isInteger(n) && n >= 1 && n <= 500) v.athletes = n;
-    else errors.push("athletes");
-  } else v.athletes = null;
+  const n = athleteCount(r.athletes);
+  if (n === false) errors.push("athletes");
+  v.athletes = n || null;
 
   v.team_jersey = clean(r.team_jersey, 60) || null;
   v.contact_name = clean(r.contact_name, 80) || (errors.push("contact_name"), null);
@@ -124,6 +159,8 @@ function normalize(raw, { now = new Date() } = {}) {
   v.notes = cleanNotes(r.notes, 1000) || null;
   v.adult_confirmed = r.adult_confirmed === true || r.adult_confirmed === "true" || r.adult_confirmed === "on";
   if (!v.adult_confirmed) errors.push("adult_confirmed");
+  // The homepage's 10% first-package offer, claimed with this request.
+  v.offer = OFFERS.includes(r.offer) ? r.offer : null;
 
   return { errors, value: v };
 }
@@ -132,10 +169,16 @@ function normalize(raw, { now = new Date() } = {}) {
 // checkout id is required: a payment always lands, even with little else.
 // booking_id is the request the buyer paid for from the form's success panel
 // (the checkout's client_reference_id); the route joins the two.
-function normalizePaid(raw) {
+//
+// With details: true it's the buyer telling us about their game after a
+// direct Buy (the site's /api/details, which checked the payment with Stripe
+// first and sends the checkout along with the answers). Then, as on the
+// booking form, the date, city and state are required, and the adult box.
+function normalizePaid(raw, { now = new Date() } = {}) {
   const r = raw && typeof raw === "object" && !Array.isArray(raw) ? raw : {};
   const errors = [];
   const v = { source: "stripe" };
+  const details = r.details === true;
   const sid = text(r.stripe_session_id);
   if (/^cs_[A-Za-z0-9_]{8,200}$/.test(sid)) v.stripe_session_id = sid;
   else errors.push("stripe_session_id");
@@ -145,7 +188,7 @@ function normalizePaid(raw) {
   v.kind = v.package === "team" ? "team" : v.package === "event" ? "event" : "athlete";
   const cents = Number(text(r.amount_cents) || NaN);
   v.amount_cents = Number.isInteger(cents) && cents >= 0 && cents <= MAX_CENTS ? cents : null;
-  v.contact_name = clean(r.contact_name, 80) || "Stripe customer";
+  v.contact_name = clean(r.contact_name, 80) || STRIPE_NAME;
   const email = clean(r.contact_email, 200).toLowerCase();
   // Stripe nearly always has the buyer's email. Without one the booking still
   // lands; staff find the buyer in Stripe by the checkout id.
@@ -153,15 +196,66 @@ function normalizePaid(raw) {
   v.contact_phone = phone(r.contact_phone);
   v.sport = sportOf(r.sport);
   v.event_name = clean(r.event_name, 120) || null;
-  const day = dayValue(r.event_date);
-  v.event_date = day === null ? null : isoDay(day);
-  v.event_city = clean(r.event_city, 80) || null;
   const st = clean(r.event_state, 2).toUpperCase();
   v.event_state = STATE_REGION[st] ? st : null;
   v.region = regionFor(v.event_state);
+  v.event_city = clean(r.event_city, 80) || null;
   v.team_jersey = clean(r.team_jersey, 60) || null;
   v.notes = cleanNotes(r.notes, 1000) || null;
+  const n = athleteCount(r.athletes);
+  v.athletes = n || null;
+  if (details) {
+    v.details = true;
+    v.event_date = eventDay(r.event_date, now) || (errors.push("event_date"), null);
+    if (!v.event_city) errors.push("event_city");
+    if (!v.event_state) errors.push("event_state");
+    if (n === false) errors.push("athletes");
+    if (clean(r.contact_phone, 40) && !v.contact_phone) errors.push("contact_phone");
+    const adult = r.adult_confirmed === true || r.adult_confirmed === "true" || r.adult_confirmed === "on";
+    if (adult) v.adult_confirmed = true;
+    else errors.push("adult_confirmed");
+    // What the checkout's own fields said beyond the event: kept apart from the
+    // buyer's notes, so whichever of the webhook and this comes second can see
+    // it's there already. Not a column.
+    v.checkout_notes = cleanNotes(r.checkout_notes, 1000) || null;
+  } else {
+    const day = dayValue(r.event_date);
+    v.event_date = day === null ? null : isoDay(day);
+  }
   return { errors, value: v };
+}
+
+// A second word about a booking we already have: the webhook after the
+// details form, or the details form after the webhook. The buyer's own answers
+// win (override: the details form): what they typed about their game beats
+// what the checkout's fields said. The webhook only fills what's missing.
+// Notes add on, marked with where they came from, each only once. Returns the
+// changes (maybe none).
+const FILLS = ["sport", "event_name", "event_date", "event_city", "event_state", "athletes", "team_jersey", "contact_email", "contact_phone"];
+// What the buyer answers on the details form; never their email or the payment.
+const ANSWERED = ["sport", "event_name", "event_date", "event_city", "event_state", "athletes", "team_jersey", "contact_phone"];
+const blank = (x) => x === null || x === undefined || x === "";
+function fillPatch(b, inc, { from = "the checkout", override = false, checkoutNotes = null } = {}) {
+  const patch = {};
+  for (const k of FILLS) {
+    if (blank(inc[k])) continue;
+    if (blank(b[k]) || (override && ANSWERED.includes(k) && inc[k] !== b[k])) patch[k] = inc[k];
+  }
+  if (patch.event_state) patch.region = regionFor(patch.event_state);
+  if (b.package === "unsure" && has(PACKAGES, inc.package) && inc.package !== "unsure") {
+    patch.package = inc.package;
+    if (b.source === "stripe" && KINDS.includes(inc.kind)) patch.kind = inc.kind;
+  }
+  if ((blank(b.contact_name) || b.contact_name === STRIPE_NAME) && !blank(inc.contact_name) && inc.contact_name !== STRIPE_NAME) patch.contact_name = inc.contact_name;
+  if (inc.adult_confirmed === true && b.adult_confirmed !== true) patch.adult_confirmed = true;
+  let notes = b.notes || "";
+  // A part is already there when it's one of the notes' own parts, as it is or
+  // under its label; a short note that only appears inside another isn't.
+  const hasPart = (part, label) => notes.split("\n\n").some((p) => p === part || p === `${label}: ${part}`);
+  if (!blank(inc.notes) && !hasPart(inc.notes, `From ${from}`)) notes = joinNotes(notes, `From ${from}: ${inc.notes}`) || "";
+  if (!blank(checkoutNotes) && !hasPart(checkoutNotes, "From the checkout")) notes = joinNotes(notes, `From the checkout: ${checkoutNotes}`) || "";
+  if (notes !== (b.notes || "")) patch.notes = notes;
+  return patch;
 }
 
 // The Pylon screening rule (utils/gfs.js, credentialProblems): active, a
@@ -238,14 +332,15 @@ function pushLine(b) {
 }
 
 // The push to the TOJ app. No names, no contact, no notes, no free text.
-function pushPayload(b, crewCount) {
+// detailsIn: the buyer of a paid package just told us about their game.
+function pushPayload(b, crewCount, { detailsIn = false } = {}) {
   const n = Number(crewCount) || 0;
   const near = b.region ? (n ? `${n} ${n === 1 ? "creator" : "creators"} in the region` : "no creators in that region yet") : "no place given";
   return {
-    title: paid(b) ? "Paid booking" : "New booking",
+    title: detailsIn ? "Event details in" : paid(b) ? "Paid booking" : "New booking",
     body: `${pushLine(b)} · ${near}`,
     url: `/app/#booking/${b.id}`,
-    tag: `sm-booking-${b.id}`,
+    tag: `sm-booking-${b.id}${detailsIn ? "-details" : ""}`,
   };
 }
 
@@ -256,11 +351,13 @@ function money(cents) {
 // The staff email: enough to call the booker back and to know who to ask.
 // matches null means nobody was looked up (the booking isn't stored). With
 // saved false the email is the only copy, so it carries the whole booking.
-function emailText(b, matches, appBase, { saved = true } = {}) {
+// detailsIn: the buyer of a paid package just told us about their game.
+function emailText(b, matches, appBase, { saved = true, detailsIn = false, detailsFor = null } = {}) {
   const base = String(appBase || "https://tojcampaign.com").replace(/\/+$/, "");
-  const subject = `${paid(b) ? "Paid booking" : "New booking"}: ${[what(b), place(b), dateWords(b.event_date)].filter(Boolean).join(", ")}`;
+  const subject = `${detailsIn ? "Event details in" : paid(b) ? "Paid booking" : "New booking"}: ${[what(b), place(b), dateWords(b.event_date)].filter(Boolean).join(", ")}`;
   const lines = [];
-  if (paid(b)) lines.push(`Paid on subjectmedias.com: ${money(b.amount_cents)}${b.source === "form" ? ", for the request they sent from the booking form" : ""}.`);
+  if (detailsIn) lines.push(`The buyer of a paid package (${money(b.amount_cents)}) told us about their game.`);
+  else if (paid(b)) lines.push(`Paid on subjectmedias.com: ${money(b.amount_cents)}${b.source === "form" ? ", for the request they sent from the booking form" : ""}.`);
   else lines.push("A new booking request from subjectmedias.com.");
   lines.push("");
   lines.push(`What: ${[what(b), b.sport].filter(Boolean).join(", ")}`);
@@ -268,6 +365,7 @@ function emailText(b, matches, appBase, { saved = true } = {}) {
   lines.push(`Where: ${place(b) || "not given"}${b.region ? ` (${REGION_WORDS[b.region]})` : ""}`);
   lines.push(`When: ${dateWords(b.event_date, { weekday: true }) || "not given"}`);
   if (b.athletes) lines.push(`Athletes: ${b.athletes}`);
+  if (b.offer === "first10") lines.push("Offer: claimed 10% off the first package. Take it off when you confirm.");
   lines.push(`Booked by: ${[b.contact_name, b.contact_email || "no email on the checkout", b.contact_phone].filter(Boolean).join(", ")}`);
   if (b.stripe_session_id) lines.push(`Stripe checkout: ${b.stripe_session_id}`);
   if (!saved) {
@@ -295,10 +393,52 @@ function emailText(b, matches, appBase, { saved = true } = {}) {
   if (saved) {
     lines.push(`Open it in the TOJ app: ${base}/app/#booking/${b.id}`);
     lines.push("Notes and the athlete's team and jersey are in the app.");
+  } else if (detailsFor) {
+    lines.push(`The paid booking is in the app (Stripe checkout ${detailsFor}), but these details aren't. Add them there.`);
   } else {
     lines.push("This booking is NOT in the app. Reply to the booker from here.");
   }
   return { subject, text: lines.join("\n") };
+}
+
+// The booker's own note: we got your request (the form), or thanks for
+// booking (a package bought straight from a payment link, with a link to tell
+// us about the game when we don't know yet). It goes to an address someone
+// typed into a form, so like a push it carries fixed words only: the package,
+// a sport from the list, the date, the state code, the offer. No name, city,
+// event name, team, jersey or notes: nothing anyone typed, so nobody can use
+// the form to send our email with their words in it to someone else.
+function bookerEmail(b, { detailsUrl = null, help = "hello@subjectmedias.com", site = "https://www.subjectmedias.com" } = {}) {
+  const bought = b.source === "stripe";
+  const lines = [bought ? "Thanks for booking with Subject Medias. Your payment came through." : "Thanks for reaching out to Subject Medias. We got your booking request.", ""];
+  const facts = [
+    ["What", what(b)],
+    ["Sport", SPORTS.includes(b.sport) && b.sport !== "Other" ? b.sport : null],
+    ["Game day", dateWords(b.event_date, { weekday: true })],
+    ["State", STATE_REGION[b.event_state] ? b.event_state : null],
+    ["Paid", bought && Number.isInteger(b.amount_cents) ? money(b.amount_cents) : null],
+    ["Offer", !bought && b.offer === "first10" ? "10% off your first package, taken off when we confirm your booking" : null],
+  ];
+  for (const [k, v] of facts) if (v) lines.push(`${k}: ${v}`);
+  lines.push("");
+  if (bought && detailsUrl) {
+    lines.push("One more step: tell us about your game (the date, where it is, and the team and jersey number) so we can line up your creator:");
+    lines.push(detailsUrl);
+    lines.push("");
+    lines.push("Already told us? Then you're all set. We'll be in touch within 24 hours.");
+  } else if (bought) {
+    lines.push("We'll be in touch within 24 hours to confirm the details and line up your creator.");
+  } else {
+    lines.push("What happens next: we'll reply within 24 hours to confirm the details and send your payment link. Nothing is booked or charged until then.");
+    lines.push("");
+    lines.push("Didn't send this? You can ignore this email.");
+  }
+  lines.push("");
+  lines.push(`Questions? Reply to this email, write to ${help}, or DM @subjectmedias on Instagram.`);
+  lines.push("");
+  lines.push("Subject Medias");
+  lines.push(String(site).replace(/\/+$/, ""));
+  return { subject: bought ? "Subject Medias: thanks for booking" : "Subject Medias: we got your booking request", text: lines.join("\n") };
 }
 
 module.exports = {
@@ -311,10 +451,16 @@ module.exports = {
   REGION_WORDS,
   STATE_REGION,
   UUID,
+  OFFERS,
+  clip,
+  joinNotes,
+  mailbox,
+  STRIPE_NAME,
   isEmail,
   regionFor,
   normalize,
   normalizePaid,
+  fillPatch,
   screened,
   staffProblems,
   rankCreators,
@@ -322,5 +468,6 @@ module.exports = {
   summary,
   pushPayload,
   emailText,
+  bookerEmail,
   dateWords,
 };

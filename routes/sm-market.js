@@ -339,10 +339,10 @@ router.post("/athletes/:id/consents", approver, jsonOnly, withDb(async (req, res
     ]);
     if (ev && team) {
       try {
-        const r = await mailer.sendMail({ to: value.email, ...M.familyEmail(ev, team.name, a.jersey, value.level, link) });
+        const r = await mailer.sendMail({ to: value.email, ...M.familyEmail(ev, team.name, a.jersey, value.level, link), pool: "market" });
         emailed = !!(r && r.sent);
       } catch (e) {
-        console.warn("[sm-market] family link email failed:", e && e.message);
+        console.warn("[sm-market] family link email failed:", mailer.errorCode(e));
       }
     }
   }

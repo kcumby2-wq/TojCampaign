@@ -1,0 +1,66 @@
+-- 034: More for Subject Medias bookings (routes/sm-bookings.js), and the
+-- site's own counts (routes/sm-site.js).
+--
+-- On sm_bookings (migration 030), three columns, all empty for the bookings
+-- already there:
+--   * offer: 'first10' when the booker claimed the 10% first-package offer on
+--     the homepage. Staff take the 10% off when they confirm the booking.
+--   * details_at: when the buyer of a package bought straight from a payment
+--     link told us about their game (the site's "Tell us about your event"
+--     form after paying). Set once: a second answer changes nothing.
+--   * booker_emailed_at: when the booker's own note went out (we got your
+--     request, or thanks for booking). Claimed before sending, so it goes once.
+--
+-- sm_site_counts: how many times a day the homepage and the fellowship page
+-- were opened, and how many times someone opened the booking form, tapped Buy
+-- or saw the 10% offer. Totals per day (New York time) and nothing else: no
+-- cookie, no address, no device, nothing about who. Requests sent, claims and
+-- payments come from sm_bookings itself.
+--
+-- Service role only: RLS on, no policies, nothing granted to anon or
+-- authenticated, and the counting function callable by the server only.
+
+alter table public.sm_bookings
+  add column if not exists offer text check (offer is null or offer in ('first10')),
+  add column if not exists details_at timestamptz,
+  add column if not exists booker_emailed_at timestamptz;
+
+create table if not exists public.sm_site_counts (
+  day date not null,
+  name text not null check (name in ('visit_home', 'visit_fellowship', 'book_open', 'buy_tap', 'offer_shown')),
+  n integer not null default 0 check (n >= 0),
+  primary key (day, name)
+);
+
+-- Add today's taps of one kind. The server adds them up and calls this about
+-- once a minute per kind, so a busy day is a few writes, not one per visit. A
+-- day's count stops at a million, so a flood that gets past the server's
+-- limits can't run it up forever.
+-- (An early draft took only the name; if it was ever applied, it goes, so
+-- sm_site_count('x') has one meaning.)
+drop function if exists public.sm_site_count(text);
+create or replace function public.sm_site_count(p_name text, p_n integer default 1) returns void
+language sql volatile set search_path = '' as $$
+  insert into public.sm_site_counts as c (day, name, n)
+  values ((now() at time zone 'America/New_York')::date, p_name, least(greatest(coalesce(p_n, 1), 1), 1000000))
+  on conflict (day, name) do update set n = least(c.n + least(greatest(coalesce(p_n, 1), 1), 1000000), 1000000)
+$$;
+
+alter table public.sm_site_counts enable row level security;
+-- Callable by the server only (Supabase grants new functions to its API roles),
+-- and the API roles get no table rights (a bare Postgres in tests has no roles).
+revoke all on function public.sm_site_count(text, integer) from public;
+do $$
+begin
+  if exists (select 1 from pg_roles where rolname = 'anon') then
+    revoke all on public.sm_site_counts from anon;
+    revoke all on function public.sm_site_count(text, integer) from anon;
+  end if;
+  if exists (select 1 from pg_roles where rolname = 'authenticated') then
+    revoke all on public.sm_site_counts from authenticated;
+    revoke all on function public.sm_site_count(text, integer) from authenticated;
+  end if;
+  if exists (select 1 from pg_roles where rolname = 'service_role') then
+    grant execute on function public.sm_site_count(text, integer) to service_role;
+  end if;
+end $$;

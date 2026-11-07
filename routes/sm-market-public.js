@@ -253,9 +253,10 @@ async function sendOrderLink(sb, order, ev, token) {
   if (!(claimed || []).length) return { sent: true, reason: "already" };
   let r;
   try {
-    r = await mailer.sendMail({ to: order.email, ...M.orderEmail(ev, order, M.linkTo.order(token)) });
+    // Someone paid for these: their link goes even when the day's mail budget is nearly spent.
+    r = await mailer.sendMail({ to: order.email, ...M.orderEmail(ev, order, M.linkTo.order(token)), critical: true, pool: "market" });
   } catch (e) {
-    console.warn("[sm-market-public] order email failed:", e && e.message);
+    console.warn("[sm-market-public] order email failed:", mailer.errorCode(e));
     r = { sent: false, reason: "send_failed" };
   }
   if (!r || !r.sent) await sb.from("sm_market_orders").update({ emailed_at: null }).eq("id", order.id);
@@ -380,9 +381,9 @@ router.post("/confirm/:token", page(async (req, res, sb) => {
   const link = fam ? M.linkTo.family(fam.token) : null;
   if (link) {
     try {
-      mailed = !!(await mailer.sendMail({ to: found.c.email, ...M.familyEmail(found.ev, found.team.name, found.a.jersey, want.level, link) })).sent;
+      mailed = !!(await mailer.sendMail({ to: found.c.email, ...M.familyEmail(found.ev, found.team.name, found.a.jersey, want.level, link), pool: "market" })).sent;
     } catch (e) {
-      console.warn("[sm-market-public] family link email failed:", e && e.message);
+      console.warn("[sm-market-public] family link email failed:", mailer.errorCode(e));
     }
   }
   send(res, 200, (nonce) => P.confirmPage({ nonce, event: found.ev, team: found.team.name, jersey: found.a.jersey, level: want.level, ageBand: want.age_band, done: true, familyLink: link, mailed }));
@@ -651,9 +652,9 @@ router.post("/:code/consent", page(async (req, res, sb) => {
         : level === "out"
           ? M.keptOutEmail(ev, team.name, value.jersey)
           : M.changedEmail(ev, team.name, value.jersey, level, plan.write.age_band);
-      mailed = !!(await mailer.sendMail({ to: value.email, ...mail })).sent;
+      mailed = !!(await mailer.sendMail({ to: value.email, ...mail, pool: "market" })).sent;
     } catch (e) {
-      console.warn("[sm-market-public] consent email failed:", e && e.message);
+      console.warn("[sm-market-public] consent email failed:", mailer.errorCode(e));
     }
   }
   const k = plan.now ? (level === "out" ? "out" : "now") : "";

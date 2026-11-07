@@ -2,7 +2,8 @@
  * subjectmedias.com (the API is routes/sm-bookings.js). Staff only. Registers
  * screens for app.js's router:
  *
- *   #bookings          open bookings (#bookings/all for every one)
+ *   #bookings          open bookings (#bookings/all for every one), under
+ *                      the site's last 7 and 30 days (routes/sm-site.js)
  *   #booking/<id>      one booking: who to call, the creators in that region,
  *                      and its status, from new to delivered
  *
@@ -47,20 +48,55 @@
   function denied(e) {
     return e && (e.status === 401 || e.status === 403);
   }
+  // Bought straight from a payment link, and the buyer hasn't told us about
+  // the game yet (their thanks email has the link to do it).
+  function needsDetails(b) {
+    return b.source === "stripe" && !b.details_at && !b.event_date;
+  }
+
+  // subjectmedias.com's last 7 and 30 days: visits and taps (daily totals the
+  // site counts without cookies), then the requests, claims and payments that
+  // are bookings here. Nothing when the counts can't be read.
+  var SITE_ROWS = [
+    ["Homepage visits", "visit_home"],
+    ["Opened the booking form", "book_open"],
+    ["Sent a request", "requests"],
+    ["Saw the 10% offer", "offer_shown"],
+    ["Claimed the 10% offer", "claims"],
+    ["Tapped Buy", "buy_tap"],
+    ["Paid", "paid"],
+    ["Fellowship page visits", "visit_fellowship"],
+  ];
+  function siteCard(c) {
+    if (!c || !c.week || !c.month) return "";
+    var n = function (o, k) { return h(String(Number(o[k]) || 0)); };
+    return '<section class="card"><h2 class="sec-h">subjectmedias.com</h2>' +
+      '<div class="dtable-wrap"><table class="dtable compact"><thead><tr><th scope="col">On the site</th><th scope="col">7 days</th><th scope="col">30 days</th></tr></thead><tbody>' +
+      SITE_ROWS.map(function (r) { return '<tr><td class="l">' + h(r[0]) + "</td><td>" + n(c.week, r[1]) + "</td><td>" + n(c.month, r[1]) + "</td></tr>"; }).join("") +
+      "</tbody></table></div>" +
+      '<p class="sub" style="margin-top:8px">Visits and taps are daily totals, counted without cookies. Requests, claims and payments are the bookings themselves.</p></section>';
+  }
 
   // ── The list ───────────────────────────────────────────────────────────
   async function bookings(arg) {
     var t = T(), all = arg === "all";
     t.show("today", '<div class="screen">' + t.backBtn("#today", "Today") + '<h1 class="title">Bookings</h1><div class="spin"></div></div>');
-    var d;
-    try { d = await t.api("/api/sm/bookings" + (all ? "?all=1" : "")); }
+    var d, counts = null;
+    try {
+      var got = await Promise.all([
+        t.api("/api/sm/bookings" + (all ? "?all=1" : "")),
+        t.api("/api/sm/site/counts").catch(function () { return null; }),
+      ]);
+      d = got[0];
+      counts = got[1];
+    }
     catch (e) {
       if (e.stale) throw e;
       return t.show("today", '<div class="screen">' + t.backBtn("#today", "Today") + '<h1 class="title">Bookings</h1><p class="body err">' + h(denied(e) ? MSG.forbidden : say(e)) + "</p></div>");
     }
     var rows = (d.bookings || []).map(function (b) {
       return '<a class="li" href="#booking/' + h(b.id) + '"><div class="grow"><div class="name" style="font-size:15px">' + h(b.summary) + '</div><div class="sub">' +
-        h([b.event_name, b.paid ? "Paid " + money(b.amount_cents) : "Request", t.ago(b.created_at)].filter(Boolean).join(" · ")) +
+        h([b.event_name, b.paid ? "Paid " + money(b.amount_cents) : "Request", b.offer === "first10" ? "10% claimed" : null, needsDetails(b) ? "Waiting on details" : null, t.ago(b.created_at)].filter(Boolean).join(" · ")) +
         "</div></div>" + statusBadge(b.status) + t.I.chev + "</a>";
     }).join("");
     t.show("today",
@@ -68,6 +104,7 @@
       '<div class="head"><div><h1 class="title">Bookings</h1><p class="lede">From subjectmedias.com: requests and paid packages.</p></div></div>' +
       '<div class="btn-row" style="margin-bottom:12px"><a class="btn small' + (all ? " soft" : "") + '" href="#bookings">Open</a><a class="btn small' + (all ? "" : " soft") + '" href="#bookings/all">All</a></div>' +
       (rows ? '<div class="list">' + rows + "</div>" : '<p class="empty">' + (all ? "No bookings yet." : "Nothing open. New bookings land here and on your phone.") + "</p>") +
+      siteCard(counts) +
       "</div>");
   }
 
@@ -93,6 +130,9 @@
       ["Athletes", b.athletes],
       ["Team and jersey", b.team_jersey],
       ["Paid", b.paid ? money(b.amount_cents) + " on Stripe" + (b.source === "form" ? ", after the request" : "") : null],
+      ["Offer", b.offer === "first10" ? "Claimed 10% off the first package. Take it off when you confirm." : null],
+      ["Event details", needsDetails(b) ? "Not in yet. Their thanks email has a link to add them." : b.details_at ? "From the buyer, " + t.ago(b.details_at) : null],
+      ["Their note", b.booker_emailed_at ? "Emailed " + t.ago(b.booker_emailed_at) : null],
     ].filter(function (x) { return x[1]; }).map(function (x) {
       return '<div class="li" style="cursor:default"><div class="grow"><div class="sub">' + h(x[0]) + '</div><div class="name" style="font-size:15px">' + h(x[1]) + "</div></div></div>";
     }).join("");
