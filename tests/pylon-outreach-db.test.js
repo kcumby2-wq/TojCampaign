@@ -8,7 +8,7 @@
 // Works in its own schema (gfs_pylonout_test), which it DROPS and recreates.
 // Never point it at a real database.
 
-const { test, before, after, beforeEach } = require("node:test");
+const { test, before, after, beforeEach, afterEach } = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("fs");
 const path = require("path");
@@ -127,6 +127,8 @@ after(async () => {
   await pool.end();
 });
 beforeEach(() => { mails = []; pushes = []; mailOk = true; outreachRoutes._reset(); parent._reset(); pylon._reset(); });
+// Let each test's after-the-reply emails (alerts, receipts) land before the next starts.
+afterEach(() => wait(150));
 
 // ── The database's line ──────────────────────────────────────────────────
 test("a draft can't start decided, linked, approved, withdrawn or sent, and only a Concierge request has drafts", async () => {
@@ -311,6 +313,9 @@ test("the API roles can't use the tables or any of the functions", async () => {
 
 // ── Through the routes ──────────────────────────────────────────────────
 const tokenIn = (text) => (/parent-approval\.html#t=([0-9a-f]{64})/.exec(text) || [])[1];
+// The newest approval email to an address. Found by what it is, never by
+// position: a receipt from the test before can land late.
+const askMail = (to = "pat@example.com") => mails.filter((m) => /^Approve a message/.test(m.subject) && [].concat(m.to).includes(to)).pop();
 async function listFor(req) {
   return (await staff("GET", `/api/pylon/requests/${req}/outreach`)).data;
 }
@@ -380,7 +385,7 @@ test("a stale card can't wipe the family's decline", async () => {
   const o = await newDraft(req);
   await staff("POST", `/api/pylon/outreach/${o.id}/ask`, { seen: await seenOf(o.id) });
   const cardSaw = await seenOf(o.id);
-  const token = tokenIn(mails[0].text);
+  const token = tokenIn(askMail().text);
   assert.equal((await family("decide", { token, decision: "declined", parent_name: "Pat Ellis", confirm: true })).status, 200);
   // The card still shows "waiting" and offers "Send a new link".
   mails = [];
@@ -395,7 +400,7 @@ test("if the email can't go, the link is taken back, and the decline stays in th
   const req = await request();
   const o = await newDraft(req);
   await staff("POST", `/api/pylon/outreach/${o.id}/ask`, { seen: await seenOf(o.id) });
-  await family("decide", { token: tokenIn(mails[0].text), decision: "declined", parent_name: "Pat Ellis", confirm: true });
+  await family("decide", { token: tokenIn(askMail().text), decision: "declined", parent_name: "Pat Ellis", confirm: true });
   mailOk = false;
   const r = await staff("POST", `/api/pylon/outreach/${o.id}/ask`, { seen: await seenOf(o.id) });
   assert.equal(r.status, 502);
@@ -412,7 +417,7 @@ test("staff can cancel a link that's out; it stops working at once", async () =>
   const req = await request();
   const o = await newDraft(req);
   await staff("POST", `/api/pylon/outreach/${o.id}/ask`, { seen: await seenOf(o.id) });
-  const token = tokenIn(mails[0].text);
+  const token = tokenIn(askMail().text);
   assert.equal((await staff("POST", `/api/pylon/outreach/${o.id}/cancel-link`, { seen: await seenOf(o.id) })).status, 200);
   assert.equal((await family("view", { token })).status, 404);
   assert.equal((await staff("POST", `/api/pylon/outreach/${o.id}/cancel-link`, { seen: await seenOf(o.id) })).data.error, "no_link");
@@ -425,7 +430,7 @@ test("the family takes an approval back: it's never sent", async () => {
   const req = await request();
   const o = await newDraft(req);
   await staff("POST", `/api/pylon/outreach/${o.id}/ask`, { seen: await seenOf(o.id) });
-  await family("decide", { token: tokenIn(mails[0].text), decision: "approved", parent_name: "Pat Ellis", confirm: true });
+  await family("decide", { token: tokenIn(askMail().text), decision: "approved", parent_name: "Pat Ellis", confirm: true });
   assert.equal((await staff("POST", `/api/pylon/outreach/${o.id}/withdraw`, { seen: await seenOf(o.id) })).status, 200);
   assert.equal((await staff("POST", `/api/pylon/outreach/${o.id}/sent`, {})).data.error, "withdrawn");
   const listed = (await listFor(req)).outreach[0];
@@ -437,7 +442,7 @@ test("editing while a link is out cancels it, whatever the family is shown that 
   const req = await request();
   const o = await newDraft(req);
   await staff("POST", `/api/pylon/outreach/${o.id}/ask`, { seen: await seenOf(o.id) });
-  const token = tokenIn(mails[0].text);
+  const token = tokenIn(askMail().text);
   const r = await staff("PATCH", `/api/pylon/outreach/${o.id}`, { program_level: "juco", seen: await seenOf(o.id) });
   assert.equal(r.data.link_cancelled, true);
   assert.equal((await family("view", { token })).status, 404);
@@ -448,7 +453,7 @@ test("the family's page: JSON from the site only, a real name, one decision howe
   const req = await request();
   const o = await newDraft(req);
   await staff("POST", `/api/pylon/outreach/${o.id}/ask`, { seen: await seenOf(o.id) });
-  const token = tokenIn(mails[0].text);
+  const token = tokenIn(askMail().text);
   assert.equal((await call("GET", "/api/pylon-parent/approval/view")).status, 405);
   assert.equal((await call("POST", "/api/pylon-parent/approval/view", `token=${token}`, { "Content-Type": "application/x-www-form-urlencoded" })).status, 415);
   assert.equal((await family("view", { token }, { Origin: "https://evil.example" })).status, 403);
@@ -468,7 +473,7 @@ test("an athlete of 18+ approves their own: the page and the email say so", asyn
   const req = await request({ contact_role: "athlete", consent: "adult", contact_name: "Jordan Ellis", contact_email: "jordan@example.com" });
   const o = await newDraft(req);
   await staff("POST", `/api/pylon/outreach/${o.id}/ask`, { seen: await seenOf(o.id) });
-  const mail = mails[0];
+  const mail = askMail("jordan@example.com");
   assert.match(mail.text, /^Hi Jordan,/);
   assert.match(mail.text, /Example State for you\./);
   assert.equal((await family("view", { token: tokenIn(mail.text) })).data.approver, "athlete");
