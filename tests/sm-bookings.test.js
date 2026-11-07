@@ -859,3 +859,46 @@ test("one visitor on IPv6 is their /64 for the booker's limits", async () => {
   await wait();
   assert.equal(mails.filter((m) => !m.to.includes("kyron@toj.test")).length, 3);
 });
+
+// ── Pay now: a package's Buy button takes the request on to Stripe ───────
+test("pay now: the request lands quietly for the booker; the thanks note goes when the payment joins", async () => {
+  const made = await form(good({ event_date: "2027-01-16", package: "video", pay_now: true }));
+  assert.equal(made.status, 200);
+  await wait();
+  assert.equal(theirs("jamie@example.com").length, 0, "no \"nothing is charged until then\" to someone paying now");
+  assert.match(staffMails()[0].text, /went on to Stripe to pay for it/);
+  assert.ok(!("pay_now" in db.tables.sm_bookings[0]), "not a column");
+  mails = [];
+  pushes = [];
+  const r = await paidCall({ stripe_session_id: "cs_live_paynow123456", booking_id: made.data.id, package: "video", amount_cents: 9999, contact_email: "jamie@example.com" });
+  assert.equal(r.data.joined, true);
+  await wait();
+  const note = theirs("jamie@example.com");
+  assert.equal(note.length, 1);
+  assert.equal(note[0].subject, "Subject Medias: thanks for booking");
+  assert.match(note[0].text, /Your payment came through/);
+  assert.match(note[0].text, /Paid: \$99\.99/);
+  assert.match(note[0].text, /Game day: Sat, Jan 16, 2027/);
+  assert.ok(!note[0].text.includes("?paid="), "we know the game already");
+  assert.equal(pushes[0].payload.title, "Paid booking");
+  // A retry of the webhook sends nothing more.
+  await paidCall({ stripe_session_id: "cs_live_paynow123456", booking_id: made.data.id, package: "video", amount_cents: 9999, contact_email: "jamie@example.com" });
+  await wait();
+  assert.equal(theirs("jamie@example.com").length, 1);
+});
+
+test("pay now only for the three priced packages, and never with the 10% claim (that's confirmed by hand)", () => {
+  const v = (over) => B.normalize(good({ event_date: "2027-01-16", pay_now: true, ...over }), { now: NOW }).value.pay_now;
+  for (const p of ["photo", "video", "elite"]) assert.equal(v({ package: p }), true, p);
+  for (const p of ["transcript", "team", "event", "unsure"]) assert.equal(v({ package: p }), false, p);
+  assert.equal(v({ package: "elite", offer: "first10" }), false);
+  assert.equal(v({ package: "elite", pay_now: "true" }), false, "only a real true");
+});
+
+test("pay now, never paid: no note, and staff know to follow up", async () => {
+  await form(good({ event_date: "2027-01-16", package: "elite", pay_now: true }));
+  await wait();
+  assert.equal(theirs("jamie@example.com").length, 0);
+  assert.equal(db.tables.sm_bookings[0].booker_emailed_at || null, null);
+  assert.match(staffMails()[0].text, /if not, follow up like any request/);
+});

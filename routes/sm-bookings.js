@@ -176,13 +176,13 @@ async function findMatches(sb, booking) {
 // Push and email to staff, then note on the row when they went and who was
 // suggested. detailsIn: the buyer of a paid package just told us about their
 // game. Never throws.
-async function alertStaff(sb, row, { detailsIn = false } = {}) {
+async function alertStaff(sb, row, { detailsIn = false, payNow = false } = {}) {
   try {
     const matches = await findMatches(sb, row);
     const to = [...staffEmails()];
     push.notifySoon(to, B.pushPayload(row, matches.crew.length, { detailsIn }));
     if (emailAllowed()) {
-      const mail = B.emailText(row, matches, APP_BASE(), { detailsIn });
+      const mail = B.emailText(row, matches, APP_BASE(), { detailsIn, payNow });
       mailer
         .sendMail({ to, subject: mail.subject, text: mail.text, pool: "bookings" })
         .then((r) => { if (!r.sent) console.warn(`[sm-bookings] email not sent (${r.reason})`); })
@@ -199,8 +199,10 @@ async function alertStaff(sb, row, { detailsIn = false } = {}) {
 // message can carry.
 const mailError = mailer.errorCode;
 
-// The booker's own note, once. A request joined by its payment had its note
-// with the request; Stripe sends the receipt. Claimed on the row before it
+// The booker's own note, once. A request that went on to pay (its package's
+// Buy button) gets it when the payment joins it: thanks, it's paid. Any other
+// request had its note when it came in, and Stripe sends the receipt. Claimed
+// on the row before it
 // goes, so two deliveries of one webhook can't both send it; if it couldn't
 // go, the claim and its place in the limits are given back (nothing sends it
 // again by itself: staff see in the app whether it went). askDetails false:
@@ -208,7 +210,7 @@ const mailError = mailer.errorCode;
 // page won't ask). Never throws.
 async function emailBooker(sb, row, { who = null, askDetails = true } = {}) {
   try {
-    if (!row || !row.contact_email || (row.source === "form" && row.stripe_session_id)) return;
+    if (!row || !row.contact_email || row.booker_emailed_at) return;
     const giveBack = bookerMailAllowed(row.contact_email, who);
     if (!giveBack) return console.warn("[sm-bookings] booker note over its limits: not sent");
     const claimed = await sb.from("sm_bookings").update({ booker_emailed_at: new Date().toISOString() }).eq("id", row.id).is("booker_emailed_at", null).select("id");
@@ -267,6 +269,9 @@ router.post("/", safe(async (req, res) => {
   if (errors.length) return res.status(400).json({ error: "invalid", fields: errors });
   const row = { ...value, source: "form", status: "new" };
   if (!row.offer) delete row.offer;
+  // On its way to Stripe: the note waits for the payment (thanks, it's paid).
+  const payNow = row.pay_now === true;
+  delete row.pay_now;
   const who = visitor(req);
 
   const sb = getSupabase();
@@ -275,8 +280,8 @@ router.post("/", safe(async (req, res) => {
     if (!error && data) {
       res.json({ ok: true, id: data.id });
       setImmediate(() => {
-        alertStaff(sb, data);
-        emailBooker(sb, data, { who });
+        alertStaff(sb, data, { payNow });
+        if (!payNow) emailBooker(sb, data, { who });
       });
       return;
     }
@@ -364,7 +369,10 @@ router.post("/paid", safe(async (req, res) => {
       if (joined.duplicate) return res.json({ ok: true, duplicate: true });
       if (joined.row) {
         res.json({ ok: true, id: joined.row.id, joined: true });
-        setImmediate(() => alertStaff(sb, joined.row));
+        setImmediate(() => {
+          alertStaff(sb, joined.row);
+          emailBooker(sb, joined.row);
+        });
         return;
       }
       named = true;
