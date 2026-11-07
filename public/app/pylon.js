@@ -224,13 +224,15 @@
   // ── The Concierge's messages to coaches (routes/pylon-outreach.js) ─────
   // Each message is approved by the family through a one-time link we email
   // them; staff never see the link. Once approved it can't change, and staff
-  // send it from their own email, then mark it sent.
+  // send it from their own email, then mark it sent. Every change carries the
+  // updated_at this card showed, so a stale screen can't undo what happened.
   var O_STATE = {
     draft: ["Draft", ""],
     waiting: ["Waiting for the family", "warn"],
     expired: ["Link expired", "warn"],
     declined: ["Declined by the family", ""],
     approved: ["Approved", "ok"],
+    withdrawn: ["Taken back by the family", ""],
     sent: ["Sent", "ok"],
   };
   var O_MSG = {
@@ -238,25 +240,80 @@
     already_approved: "That message is already approved.",
     not_approved: "Only a message the family approved can be sent.",
     already_sent: "It's already marked sent.",
+    withdrawn: "The family took their approval back. It won't be sent.",
+    already_withdrawn: "It's already marked as taken back.",
     email_not_sent: "The email to the family didn't go, so no link is out. Check the app's email settings, then try again.",
     too_many_asks: "That's a lot of links today for this family. Try again tomorrow.",
     not_recruiting: "Only Concierge requests have coach messages.",
+    contact_unchecked: "Check who the contact is first (above), then ask.",
+    request_closed: "This request is done or closed: no new links.",
+    cannot_ask: "The database refused that link. Check the request is open and its contact checked, then try again.",
+    no_link: "There's no link out for that message.",
+    not_sent: "Replies are for messages that went out.",
+    changed_meanwhile: "It changed while you were looking (the family may have answered). It's up to date now: check it and try again.",
+    seen_required: "Open it again and retry.",
   };
   function oSay(e) { var c = e && e.data && e.data.error; return (c && O_MSG[c]) || say(e); }
+  var day = function (x) { return x ? new Date(x).toLocaleDateString("en-US", { month: "short", day: "numeric" }) : ""; };
+  var formN = 0;
+  // A form's fields are found inside its own box: two forms open at once
+  // can't read each other's.
   function draftForm(o, levels) {
     o = o || {};
+    var p = "of" + (++formN) + "-";
     var lv = Object.keys(levels || {}).map(function (k) { return '<option value="' + h(k) + '"' + (o.program_level === k ? " selected" : "") + ">" + h(levels[k]) + "</option>"; }).join("");
-    var f = function (id, label, value, attrs) { return '<label class="sub" for="' + id + '" style="display:block;margin-top:10px">' + h(label) + '</label><input id="' + id + '" value="' + h(value || "") + '" ' + attrs + ' style="width:100%;margin-top:4px">'; };
-    return f("oCoach", "Coach's name", o.coach_name, 'maxlength="80"') +
-      f("oEmail", "Coach's email", o.coach_email, 'type="email" maxlength="200"') +
-      f("oProgram", "Program", o.program_name, 'maxlength="120"') +
-      '<label class="sub" for="oLevel" style="display:block;margin-top:10px">Level</label><select id="oLevel" style="width:100%;margin-top:4px"><option value="">Not set</option>' + lv + "</select>" +
-      f("oSubject", "Subject", o.draft_subject, 'maxlength="200"') +
-      '<label class="sub" for="oBody" style="display:block;margin-top:10px">Message</label><textarea id="oBody" maxlength="5000" rows="8" style="width:100%;margin-top:4px">' + h(o.draft_body || "") + "</textarea>";
+    var f = function (key, label, value, attrs) { return '<label class="sub" for="' + p + key + '" style="display:block;margin-top:10px">' + h(label) + '</label><input id="' + p + key + '" data-f="' + key + '" value="' + h(value || "") + '" ' + attrs + ' style="width:100%;margin-top:4px">'; };
+    return f("coach_name", "Coach's name", o.coach_name, 'maxlength="80"') +
+      f("coach_email", "Coach's email", o.coach_email, 'type="email" maxlength="200"') +
+      f("program_name", "Program", o.program_name, 'maxlength="120"') +
+      '<label class="sub" for="' + p + 'program_level" style="display:block;margin-top:10px">Level</label><select id="' + p + 'program_level" data-f="program_level" style="width:100%;margin-top:4px"><option value="">Not set</option>' + lv + "</select>" +
+      f("draft_subject", "Subject", o.draft_subject, 'maxlength="200"') +
+      '<label class="sub" for="' + p + 'draft_body" style="display:block;margin-top:10px">Message</label><textarea id="' + p + 'draft_body" data-f="draft_body" maxlength="5000" rows="8" style="width:100%;margin-top:4px">' + h(o.draft_body || "") + "</textarea>";
   }
-  function readDraft() {
-    var v = function (id) { return document.getElementById(id).value; };
-    return { coach_name: v("oCoach"), coach_email: v("oEmail"), program_name: v("oProgram"), program_level: v("oLevel"), draft_subject: v("oSubject"), draft_body: v("oBody") };
+  function readDraft(holder) {
+    var v = function (k) { var el = holder.querySelector('[data-f="' + k + '"]'); return el ? el.value : ""; };
+    return { coach_name: v("coach_name"), coach_email: v("coach_email"), program_name: v("program_name"), program_level: v("program_level"), draft_subject: v("draft_subject"), draft_body: v("draft_body") };
+  }
+  var EVENT_WORDS = {
+    asked: function (e) { return "Link emailed to the family" + (e.by_staff ? " (" + e.by_staff + ")" : ""); },
+    approved: function (e) { return "Approved by " + (e.by_family || "the family"); },
+    declined: function (e) { return "Declined by " + (e.by_family || "the family"); },
+    link_cancelled: function (e) { return e.note || "Link cancelled" + (e.by_staff ? " (" + e.by_staff + ")" : ""); },
+    withdrawn: function (e) { return "Taken back by the family" + (e.by_staff ? " (recorded by " + e.by_staff + ")" : ""); },
+    sent: function (e) { return "Sent" + (e.by_staff ? " by " + e.by_staff : ""); },
+    reply: function (e) { return "Coach replied: " + e.note; },
+    note: function (e) { return e.note; },
+  };
+  // mailto links past about 1,800 characters get cut short by some mail apps.
+  var MAILTO_MAX = 1800;
+  function mailtoFor(address, subject, body) {
+    return "mailto:" + String(address).split("@").map(encodeURIComponent).join("@") + "?subject=" + encodeURIComponent(subject) + "&body=" + encodeURIComponent(body);
+  }
+  function copy(text, msg, done) {
+    (navigator.clipboard ? navigator.clipboard.writeText(text) : Promise.reject())
+      .then(function () { msg.textContent = done; })
+      .catch(function () { msg.textContent = "Couldn't copy here. Select the text and copy it."; });
+  }
+  // The family's weekly update: what went out, what came back, and what's
+  // waiting on them, from this request's messages and their history.
+  function weeklyUpdate(r, list, now) {
+    var since = now - 7 * 24 * 60 * 60 * 1000;
+    var recent = function (x) { return x && Date.parse(x) >= since; };
+    var line = function (o) { return o.coach_name + ", " + o.program_name; };
+    var sent = list.filter(function (o) { return recent(o.sent_at); });
+    var replies = [];
+    list.forEach(function (o) { (o.history || []).forEach(function (e) { if (e.event === "reply" && recent(e.at)) replies.push(line(o) + ": " + e.note); }); });
+    var waiting = list.filter(function (o) { return o.state === "waiting"; });
+    var declined = list.filter(function (o) { return o.state === "declined" && recent(o.parent_decided_at); });
+    var first = String(r.contact_name || "").split(" ")[0] || "there";
+    var part = function (title, rows) { return rows.length ? [title + " (" + rows.length + "):"].concat(rows.map(function (x) { return "- " + x; })).concat([""]) : []; };
+    return ["Hi " + first + ",", "", "Your Recruiting Concierge update for " + day(since) + " to " + day(now) + ".", ""]
+      .concat(part("Sent to coaches", sent.map(function (o) { return line(o) + " (" + day(o.sent_at) + ")"; })))
+      .concat(part("Replies from coaches", replies))
+      .concat(part("Waiting on you", waiting.map(function (o) { return line(o) + ": we emailed you a link to approve it on " + day(o.parent_approval_requested_at); })))
+      .concat(part("You declined", declined.map(line)))
+      .concat(sent.length || replies.length || waiting.length || declined.length ? [] : ["Nothing went out this week.", ""])
+      .concat(["Questions? Reply to this email.", "", "Pylon Football × Trail of Joy"]).join("\n");
   }
   async function outreach(r) {
     var t = T(), box = document.getElementById("plOutreach");
@@ -265,82 +322,151 @@
     try { d = await t.api("/api/pylon/requests/" + encodeURIComponent(r.id) + "/outreach"); }
     catch (e) { if (e.stale) return; box.innerHTML = '<h2 class="sec-h">Messages to coaches</h2><p class="body err">' + h(oSay(e)) + "</p>"; return; }
     var levels = d.levels || {};
-    var items = (d.outreach || []).map(function (o) {
+    var list = d.outreach || [];
+    var can = d.request || { checked: false, open: true };
+    var askBlocked = !can.checked ? O_MSG.contact_unchecked : !can.open ? O_MSG.request_closed : "";
+    var items = list.map(function (o) {
       var st = O_STATE[o.state] || [o.state, ""];
       var line = o.state === "waiting" ? "Link emailed " + t.ago(o.parent_approval_requested_at) + ". It works for 14 days."
-        : o.state === "approved" ? "Approved by " + o.parent_decided_name + ", " + t.ago(o.parent_decided_at) + ". Send it from your email exactly as it is, then mark it sent."
+        : o.state === "approved" ? "Approved by " + o.parent_decided_name + ", " + t.ago(o.parent_decided_at) + ". The family got a receipt; give it an hour before you send it. Send it from your email exactly as it is, then mark it sent."
+        : o.state === "withdrawn" ? "The family took their approval back. It won't be sent."
         : o.state === "declined" ? "Declined by " + o.parent_decided_name + ", " + t.ago(o.parent_decided_at) + "."
         : o.state === "sent" ? "Sent " + t.ago(o.sent_at) + (o.sent_by ? " by " + o.sent_by : "") + "."
         : o.state === "expired" ? "The link ran out unused. Ask again for a new one." : "Not sent to the family yet.";
-      var actions = "";
+      var id = h(o.id);
+      var actions = "", extra = "";
       if (o.state === "approved") {
-        var mailto = "mailto:" + String(o.coach_email).split("@").map(encodeURIComponent).join("@") + "?subject=" + encodeURIComponent(o.draft_subject) + "&body=" + encodeURIComponent(o.draft_body);
-        actions = '<a class="btn small" href="' + h(mailto) + '">Open in email</a><button type="button" class="btn small soft" data-o-copy="' + h(o.id) + '">Copy the message</button><button type="button" class="btn small soft" data-o-sent="' + h(o.id) + '">Mark sent</button>';
-      } else if (o.state !== "sent") {
-        actions = '<button type="button" class="btn small" data-o-ask="' + h(o.id) + '">' + (o.state === "waiting" ? "Send a new link" : "Ask the family to approve") + '</button><button type="button" class="btn small soft" data-o-edit="' + h(o.id) + '">Edit</button>';
+        var mailto = mailtoFor(o.coach_email, o.draft_subject, o.draft_body);
+        actions = (mailto.length <= MAILTO_MAX ? '<a class="btn small" href="' + h(mailto) + '">Open in email</a>' : "") +
+          '<button type="button" class="btn small soft" data-o-copy="' + id + '">Copy the message</button>' +
+          '<button type="button" class="btn small soft" data-o-sent="' + id + '">Mark sent</button>' +
+          '<button type="button" class="btn small soft" data-o-withdraw="' + id + '">The family took it back</button>';
+        extra = '<div class="sub" style="margin-top:8px">To: <span style="user-select:all">' + h(o.coach_email) + '</span> <button type="button" class="btn small soft" data-o-copy-to="' + id + '">Copy</button></div>' +
+          '<div class="sub" style="margin-top:4px">Subject: <span style="user-select:all">' + h(o.draft_subject) + '</span> <button type="button" class="btn small soft" data-o-copy-subject="' + id + '">Copy</button></div>' +
+          (mailto.length > MAILTO_MAX ? '<p class="sub" style="margin-top:6px">Too long to open in an email app reliably: copy the address, subject and message instead.</p>' : "");
+      } else if (o.state === "sent") {
+        actions = '<button type="button" class="btn small soft" data-o-reply="' + id + '">A coach replied</button>';
+      } else if (o.state !== "withdrawn") {
+        actions = '<button type="button" class="btn small" data-o-ask="' + id + '"' + (askBlocked ? " disabled" : "") + ">" + (o.state === "waiting" ? "Send a new link" : "Ask the family to approve") + "</button>" +
+          (o.state === "waiting" ? '<button type="button" class="btn small soft" data-o-cancel="' + id + '">Cancel the link</button>' : "") +
+          '<button type="button" class="btn small soft" data-o-edit="' + id + '">Edit</button>';
       }
-      return '<div class="li" style="cursor:default;display:block" data-o="' + h(o.id) + '"><div style="display:flex;gap:8px;align-items:center;justify-content:space-between"><div class="name" style="font-size:15px">' + h(o.coach_name + ", " + o.program_name) + "</div>" + badge(st[0], st[1]) + "</div>" +
+      var history = (o.history || []).map(function (e) {
+        var w = EVENT_WORDS[e.event];
+        return "<li>" + h(day(e.at) + " · " + (w ? w(e) : e.event)) + "</li>";
+      }).join("");
+      return '<div class="li" style="cursor:default;display:block" data-o="' + id + '"><div style="display:flex;gap:8px;align-items:center;justify-content:space-between"><div class="name" style="font-size:15px">' + h(o.coach_name + ", " + o.program_name) + "</div>" + badge(st[0], st[1]) + "</div>" +
         '<div class="sub">' + h(o.coach_email + (o.program_level ? " · " + (levels[o.program_level] || o.program_level) : "")) + "</div>" +
         '<p class="body" style="font-size:14px;font-weight:700;color:var(--ink);margin-top:8px">' + h(o.draft_subject) + "</p>" +
         '<p class="body" style="font-size:14px;white-space:pre-wrap">' + h(o.draft_body) + "</p>" +
-        '<p class="sub" style="margin-top:6px">' + h(line) + "</p>" +
-        (actions ? '<div class="btn-row" style="margin-top:8px">' + actions + "</div>" : "") + '<div class="o-edit"></div></div>';
+        '<p class="sub" style="margin-top:6px">' + h(line) + "</p>" + extra +
+        (actions ? '<div class="btn-row" style="margin-top:8px">' + actions + "</div>" : "") +
+        (history ? '<ul class="sub" style="margin:8px 0 0 18px;font-size:13px">' + history + "</ul>" : "") +
+        '<div class="o-form"></div></div>';
     }).join("");
     box.innerHTML = '<h2 class="sec-h">Messages to coaches</h2>' +
-      '<p class="sub" style="margin-bottom:10px">Nothing goes to a coach until the family approves that exact message. Asking emails them a one-time link at ' + h(r.contact_email) + ". You never see the link.</p>" +
+      '<p class="sub" style="margin-bottom:10px">Nothing goes to a coach until the family approves that exact message. Asking emails them a one-time link at ' + h(r.contact_email) + ". You never see the link, and their replies to it don't come to you.</p>" +
+      (askBlocked ? '<p class="sub err" style="margin-bottom:10px">' + h(askBlocked) + "</p>" : "") +
       (items ? '<div class="list">' + items + "</div>" : '<p class="empty">No messages yet.</p>') +
-      '<div class="btn-row" style="margin-top:10px"><button type="button" class="btn small" id="oNew">New message</button></div><div id="oNewForm"></div>' +
+      '<div class="btn-row" style="margin-top:10px"><button type="button" class="btn small" id="oNew">New message</button>' +
+      (list.length ? '<button type="button" class="btn small soft" id="oWeekly">Weekly update for the family</button>' : "") + '</div><div id="oNewForm" class="o-form"></div>' +
       '<p class="sub" id="oMsg" role="status" style="margin-top:8px"></p>';
     var msg = document.getElementById("oMsg");
-    var fail = function (e) { msg.innerHTML = '<span class="err">' + h(oSay(e)) + "</span>"; };
-    var byId = function (id) { return (d.outreach || []).filter(function (o) { return o.id === id; })[0]; };
+    var fail = function (e) {
+      msg.innerHTML = '<span class="err">' + h(oSay(e)) + "</span>";
+      // The card was stale: show what's there now.
+      if (e && e.data && e.data.error === "changed_meanwhile") setTimeout(function () { outreach(r).then(function () { var m = document.getElementById("oMsg"); if (m) m.innerHTML = '<span class="err">' + h(O_MSG.changed_meanwhile) + "</span>"; }); }, 0);
+    };
+    var byId = function (id) { return list.filter(function (o) { return o.id === id; })[0]; };
+    var post = function (path, body) { return T().post("/api/pylon/outreach/" + path, body); };
+    // One form open at a time.
+    var openForm = function (holder, html) {
+      Array.prototype.forEach.call(box.querySelectorAll(".o-form"), function (f) { if (f !== holder) f.innerHTML = ""; });
+      holder.innerHTML = html;
+      return holder;
+    };
     document.getElementById("oNew").addEventListener("click", function () {
-      var holder = document.getElementById("oNewForm");
-      holder.innerHTML = draftForm(null, levels) + '<div class="btn-row" style="margin-top:10px"><button type="button" class="btn small" id="oSave">Save the draft</button></div>';
-      document.getElementById("oSave").addEventListener("click", function () {
-        T().post("/api/pylon/requests/" + encodeURIComponent(r.id) + "/outreach", readDraft())
+      var holder = openForm(document.getElementById("oNewForm"), draftForm(null, levels) + '<div class="btn-row" style="margin-top:10px"><button type="button" class="btn small" data-o-save>Save the draft</button></div>');
+      holder.querySelector("[data-o-save]").addEventListener("click", function () {
+        T().post("/api/pylon/requests/" + encodeURIComponent(r.id) + "/outreach", readDraft(holder))
           .then(function () { T().toast("Draft saved."); outreach(r); })
           .catch(fail);
       });
     });
+    var weekly = document.getElementById("oWeekly");
+    if (weekly) weekly.addEventListener("click", function () {
+      var text = weeklyUpdate(r, list, Date.now());
+      var subject = "Your Recruiting Concierge update";
+      var mailto = mailtoFor(r.contact_email, subject, text);
+      var holder = openForm(document.getElementById("oNewForm"),
+        '<p class="sub" style="margin-top:10px">To ' + h(r.contact_email) + ". Read it over, then send it from your email.</p>" +
+        '<textarea data-o-weekly rows="12" style="width:100%;margin-top:6px">' + h(text) + "</textarea>" +
+        '<div class="btn-row" style="margin-top:8px">' + (mailto.length <= MAILTO_MAX ? '<a class="btn small" href="' + h(mailto) + '">Open in email</a>' : "") + '<button type="button" class="btn small soft" data-o-weekly-copy>Copy it</button></div>');
+      holder.querySelector("[data-o-weekly-copy]").addEventListener("click", function () { copy(holder.querySelector("[data-o-weekly]").value, msg, "Copied the update."); });
+    });
     Array.prototype.forEach.call(box.querySelectorAll("[data-o-edit]"), function (b) {
       b.addEventListener("click", function () {
         var o = byId(b.getAttribute("data-o-edit"));
-        var holder = box.querySelector('[data-o="' + o.id + '"] .o-edit');
-        holder.innerHTML = draftForm(o, levels) + '<div class="btn-row" style="margin-top:10px"><button type="button" class="btn small" data-o-save>Save the changes</button></div>' +
-          (o.state === "waiting" ? '<p class="sub" style="margin-top:6px">Saving a change cancels the link that\'s out. Ask the family again after.</p>' : "");
+        var holder = openForm(box.querySelector('[data-o="' + o.id + '"] .o-form'), draftForm(o, levels) + '<div class="btn-row" style="margin-top:10px"><button type="button" class="btn small" data-o-save>Save the changes</button></div>' +
+          (o.state === "waiting" ? '<p class="sub" style="margin-top:6px">Saving a change cancels the link that\'s out. Ask the family again after.</p>' : ""));
         holder.querySelector("[data-o-save]").addEventListener("click", function () {
-          T().post("/api/pylon/outreach/" + encodeURIComponent(o.id), readDraft(), "PATCH")
+          var body = readDraft(holder);
+          body.seen = o.updated_at;
+          T().post("/api/pylon/outreach/" + encodeURIComponent(o.id), body, "PATCH")
             .then(function (out) { T().toast(out && out.link_cancelled ? "Saved. The link that was out no longer works." : "Saved."); outreach(r); })
             .catch(fail);
         });
       });
     });
-    Array.prototype.forEach.call(box.querySelectorAll("[data-o-ask]"), function (b) {
+    var act = function (attr, path, done) {
+      Array.prototype.forEach.call(box.querySelectorAll("[" + attr + "]"), function (b) {
+        b.addEventListener("click", function () {
+          var o = byId(b.getAttribute(attr));
+          b.disabled = true;
+          post(encodeURIComponent(o.id) + "/" + path, { seen: o.updated_at })
+            .then(function (out) { T().toast(typeof done === "function" ? done(out) : done); outreach(r); })
+            .catch(function (e) { b.disabled = false; fail(e); });
+        });
+      });
+    };
+    act("data-o-ask", "ask", function (out) { return "Link emailed to " + ((out && out.sent_to) || "the family") + "."; });
+    act("data-o-cancel", "cancel-link", "The link no longer works.");
+    act("data-o-sent", "sent", "Marked sent.");
+    // Two taps: recording that the family took it back can't be undone.
+    Array.prototype.forEach.call(box.querySelectorAll("[data-o-withdraw]"), function (b) {
       b.addEventListener("click", function () {
+        if (!b.getAttribute("data-sure")) { b.setAttribute("data-sure", "1"); b.textContent = "Tap again: it will never be sent"; return; }
+        var o = byId(b.getAttribute("data-o-withdraw"));
         b.disabled = true;
-        T().post("/api/pylon/outreach/" + encodeURIComponent(b.getAttribute("data-o-ask")) + "/ask", {})
-          .then(function (out) { T().toast("Link emailed to " + ((out && out.sent_to) || "the family") + "."); outreach(r); })
+        post(encodeURIComponent(o.id) + "/withdraw", { seen: o.updated_at })
+          .then(function () { T().toast("Recorded: it won't be sent."); outreach(r); })
           .catch(function (e) { b.disabled = false; fail(e); });
       });
     });
-    Array.prototype.forEach.call(box.querySelectorAll("[data-o-sent]"), function (b) {
+    Array.prototype.forEach.call(box.querySelectorAll("[data-o-reply]"), function (b) {
       b.addEventListener("click", function () {
-        b.disabled = true;
-        T().post("/api/pylon/outreach/" + encodeURIComponent(b.getAttribute("data-o-sent")) + "/sent", {})
-          .then(function () { T().toast("Marked sent."); outreach(r); })
-          .catch(function (e) { b.disabled = false; fail(e); });
+        var o = byId(b.getAttribute("data-o-reply"));
+        var holder = openForm(box.querySelector('[data-o="' + o.id + '"] .o-form'),
+          '<label class="sub" style="display:block;margin-top:10px">What did the coach say? (a line for the family\'s update)</label>' +
+          '<textarea data-o-note maxlength="500" rows="3" style="width:100%;margin-top:4px"></textarea>' +
+          '<div class="btn-row" style="margin-top:8px"><button type="button" class="btn small" data-o-save>Save the reply</button></div>' +
+          '<p class="sub" style="margin-top:6px">Real interest (a camp invite, an offer)? Call the family too.</p>');
+        holder.querySelector("[data-o-save]").addEventListener("click", function () {
+          post(encodeURIComponent(o.id) + "/reply", { note: holder.querySelector("[data-o-note]").value })
+            .then(function () { T().toast("Reply saved."); outreach(r); })
+            .catch(fail);
+        });
       });
     });
-    Array.prototype.forEach.call(box.querySelectorAll("[data-o-copy]"), function (b) {
-      b.addEventListener("click", function () {
-        var o = byId(b.getAttribute("data-o-copy"));
-        var text = "To: " + o.coach_email + "\nSubject: " + o.draft_subject + "\n\n" + o.draft_body;
-        (navigator.clipboard ? navigator.clipboard.writeText(text) : Promise.reject())
-          .then(function () { msg.textContent = "Copied. Send it exactly as it is."; })
-          .catch(function () { msg.textContent = "Couldn't copy here. Select the message and copy it."; });
+    var copyBtn = function (attr, pick, done) {
+      Array.prototype.forEach.call(box.querySelectorAll("[" + attr + "]"), function (b) {
+        b.addEventListener("click", function () { copy(pick(byId(b.getAttribute(attr))), msg, done); });
       });
-    });
+    };
+    // The message alone: the address and subject go in their own fields.
+    copyBtn("data-o-copy", function (o) { return o.draft_body; }, "Copied the message. Send it exactly as it is.");
+    copyBtn("data-o-copy-to", function (o) { return o.coach_email; }, "Copied the coach's address.");
+    copyBtn("data-o-copy-subject", function (o) { return o.draft_subject; }, "Copied the subject.");
   }
 
   // ── The newsletter list ────────────────────────────────────────────────

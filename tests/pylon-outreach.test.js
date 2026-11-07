@@ -6,8 +6,12 @@
 
 const { test } = require("node:test");
 const assert = require("node:assert/strict");
+const express = require("express");
 const U = require("../utils/pylon");
 const H = require("../utils/pylon-http");
+const { setSupabase } = require("../utils/supabase");
+const mailer = require("../utils/mailer");
+const push = require("../utils/push");
 
 const good = { coach_name: " Coach  Example ", coach_email: "Coach@Example.EDU", program_name: "Example State", program_level: "ncaa_d2", draft_subject: "Film for your review", draft_body: "Coach,\r\nhere is the film.\u0000" };
 
@@ -38,20 +42,64 @@ test("where a message stands", () => {
   assert.equal(U.outreachState({ parent_approval_token_hash: "h", parent_approval_expires_at: earlier }, now), "expired");
   assert.equal(U.outreachState({ parent_decision: "declined" }, now), "declined");
   assert.equal(U.outreachState({ parent_approved: true, parent_decision: "approved" }, now), "approved");
+  assert.equal(U.outreachState({ parent_approved: true, withdrawn_at: earlier }, now), "withdrawn");
   assert.equal(U.outreachState({ parent_approved: true, sent_at: earlier }, now), "sent");
 });
 
 test("the family's email: the link, what it does, and nothing promised", () => {
   const req = { contact_name: "Pat Ellis", contact_role: "parent", athlete_name: "Jordan Ellis" };
   const o = { coach_name: "Coach Example", program_name: "Example State" };
-  const m = U.approvalEmail(req, o, { link: "https://tojcampaign.com/parent-approval.html?token=abc" });
+  const m = U.approvalEmail(req, o, { link: "https://tojcampaign.com/parent-approval.html#t=abc" });
   assert.equal(m.subject, "Approve a message to Coach Example at Example State");
   assert.match(m.text, /^Hi Pat,/);
   assert.match(m.text, /about Jordan\. Nothing goes to the coach until you approve it\./);
-  assert.match(m.text, /parent-approval\.html\?token=abc/);
-  assert.match(m.text, /works once, for 14 days/);
+  assert.match(m.text, /parent-approval\.html#t=abc/);
+  assert.match(m.text, /works once, for 14 days, and only for you: please don't forward this email or reply to it/);
+  assert.match(m.text, /in a new email \(replies to this one don't reach us\)/);
+  assert.ok(!/Reply to this email|Reply and tell us/i.test(m.text), "nothing invites a reply that would quote the link");
   assert.ok(!/offer|scholarship|guarantee|viral/i.test(m.text));
   assert.match(U.approvalEmail({ ...req, contact_role: "athlete", contact_name: "Jordan Ellis" }, o, { link: "x" }).text, /Example State for you\./);
+});
+
+test("the family's receipt: what they decided, and what to do if it wasn't them", () => {
+  const req = { contact_name: "Pat Ellis", contact_role: "parent", athlete_name: "Jordan Ellis" };
+  const o = { coach_name: "Coach Example", program_name: "Example State" };
+  const yes = U.decisionReceipt(req, o, "approved", { help: "hello@pylonfootball.com" });
+  assert.equal(yes.subject, "You approved the message to Example State");
+  assert.match(yes.text, /message about Jordan to Coach Example at Example State\. It goes out exactly as you read it\./);
+  assert.match(yes.text, /If you didn't approve it, or you've changed your mind, write to hello@pylonfootball\.com in a new email right away, so we can stop it\./);
+  assert.match(U.decisionReceipt(req, o, "declined").text, /It won't be sent\./);
+  assert.match(U.decisionReceipt({ ...req, contact_role: "athlete" }, o, "approved").text, /Concierge's message to Coach Example/);
+});
+
+test("the family's routes take the decision function's answer in either shape", async () => {
+  const id = "11111111-1111-4111-8111-111111111111";
+  const parent = require("../routes/pylon-parent");
+  const app = express();
+  app.use(express.json());
+  app.use("/api/pylon-parent", parent);
+  const server = await new Promise((r) => { const s = app.listen(0, () => r(s)); });
+  const base = `http://127.0.0.1:${server.address().port}`;
+  const decide = (token) => fetch(base + "/api/pylon-parent/approval/decide", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ token, decision: "declined", parent_name: "Pat Ellis", confirm: true }) });
+  const stub = (data) => ({ rpc: async () => ({ data, error: null }), from: () => ({ select: () => ({ eq: () => ({ maybeSingle: async () => ({ data: null, error: null }) }) }) }) });
+  mailer.setSender(async () => ({ sent: true }));
+  push.setSender(async () => ({}));
+  try {
+    for (const data of [[{ outreach_id: id }], id, [id], { outreach_id: id }]) {
+      setSupabase(stub(data));
+      parent._reset();
+      assert.equal((await decide("a".repeat(64))).status, 200, JSON.stringify(data));
+    }
+    for (const data of [[], null, [{}], "not-a-uuid"]) {
+      setSupabase(stub(data));
+      assert.equal((await decide("a".repeat(64))).status, 404, JSON.stringify(data));
+    }
+  } finally {
+    server.close();
+    setSupabase(null);
+    mailer.setSender(null);
+    push.setSender(null);
+  }
 });
 
 test("staff hear which message was decided, never the athlete", () => {

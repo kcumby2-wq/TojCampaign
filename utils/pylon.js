@@ -478,9 +478,11 @@ function normalizeDraft(raw, { partial = false } = {}) {
 }
 
 // Where a message stands, for staff: draft, waiting (a link is out), expired
-// (the link ran out unused), declined, approved, sent.
+// (the link ran out unused), declined, approved, withdrawn (the family took
+// their approval back), sent.
 function outreachState(o, now = Date.now()) {
   if (o.sent_at) return "sent";
+  if (o.withdrawn_at) return "withdrawn";
   if (o.parent_approved) return "approved";
   if (o.parent_approval_token_hash || o.parent_approval_expires_at) {
     return o.parent_approval_expires_at && Date.parse(o.parent_approval_expires_at) > now ? "waiting" : "expired";
@@ -490,7 +492,9 @@ function outreachState(o, now = Date.now()) {
 }
 
 // The family's email with the one-time link. r: the recruiting request; o:
-// the message. The link is the only way to approve, and it goes nowhere else.
+// the message. The link is the only way to approve, and it goes nowhere else:
+// replies to this email don't come to us (they'd carry the link), so the
+// email says where to write instead.
 function approvalEmail(r, o, { link, help = "hello@pylonfootball.com" }) {
   const about = r.contact_role === "athlete" ? "for you" : `about ${firstName(r.athlete_name)}`;
   return {
@@ -503,10 +507,32 @@ function approvalEmail(r, o, { link, help = "hello@pylonfootball.com" }) {
       "Read it exactly as it would be sent, then approve or decline it here:",
       link,
       "",
-      "The link works once, for 14 days. If the message changes, we'll send you a new one.",
+      "The link works once, for 14 days, and only for you: please don't forward this email or reply to it. If the message changes, we'll send you a new link.",
       "",
-      `Questions? Reply to this email or write to ${help}.`,
-      "Didn't sign up for the Recruiting Concierge? Reply and tell us, and don't use the link.",
+      `Questions, or didn't sign up for the Recruiting Concierge? Write to ${help} in a new email (replies to this one don't reach us), and don't use the link.`,
+      "",
+      SIGN_OFF,
+    ].join("\n"),
+  };
+}
+
+// The family's receipt for their decision: if someone else used their link,
+// they hear about it at once.
+function decisionReceipt(r, o, decision, { help = "hello@pylonfootball.com" } = {}) {
+  const approved = decision === "approved";
+  const about = r.contact_role === "athlete" ? "" : ` about ${firstName(r.athlete_name)}`;
+  return {
+    subject: approved ? `You approved the message to ${o.program_name}` : `You declined the message to ${o.program_name}`,
+    text: [
+      `Hi ${firstName(r.contact_name)},`,
+      "",
+      approved
+        ? `You approved the Recruiting Concierge's message${about} to ${o.coach_name} at ${o.program_name}. It goes out exactly as you read it.`
+        : `You declined the Recruiting Concierge's message${about} to ${o.coach_name} at ${o.program_name}. It won't be sent.`,
+      "",
+      approved
+        ? `If you didn't approve it, or you've changed your mind, write to ${help} in a new email right away, so we can stop it.`
+        : `If you didn't decline it, write to ${help} in a new email.`,
       "",
       SIGN_OFF,
     ].join("\n"),
@@ -535,6 +561,7 @@ module.exports = {
   normalizeDraft,
   outreachState,
   approvalEmail,
+  decisionReceipt,
   decisionAlert,
   KINDS,
   KIND_WORDS,
