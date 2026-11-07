@@ -123,9 +123,9 @@ async function alertStaff(sb, row) {
     if (emailAllowed()) {
       const mail = F.emailText(row, APP_BASE());
       mailer
-        .sendMail({ to, subject: mail.subject, text: mail.text })
+        .sendMail({ to, subject: mail.subject, text: mail.text, pool: "fellowship" })
         .then((r) => { if (!r.sent) console.warn(`[sm-fellowship] email not sent (${r.reason})`); })
-        .catch((e) => console.warn("[sm-fellowship] email failed:", e && e.message));
+        .catch((e) => console.warn("[sm-fellowship] email failed:", mailer.errorCode(e)));
     } else console.warn("[sm-fellowship] over the hourly email budget: push only");
     await sb.from(TABLE).update({ alerted_at: new Date().toISOString() }).eq("id", row.id);
   } catch (e) {
@@ -144,9 +144,9 @@ function alertRepeat(row) {
     if (!emailAllowed()) return console.warn("[sm-fellowship] over the hourly email budget: repeat by push only");
     const mail = F.emailText({ ...row, id: "repeat" }, APP_BASE(), { saved: false, repeat: true });
     mailer
-      .sendMail({ to, subject: `Repeat ${mail.subject.replace(/^New /, "")}`, text: mail.text })
+      .sendMail({ to, subject: `Repeat ${mail.subject.replace(/^New /, "")}`, text: mail.text, pool: "fellowship" })
       .then((r) => { if (!r.sent) console.warn(`[sm-fellowship] repeat email not sent (${r.reason})`); })
-      .catch((e) => console.warn("[sm-fellowship] repeat email failed:", e && e.message));
+      .catch((e) => console.warn("[sm-fellowship] repeat email failed:", mailer.errorCode(e)));
   } catch (e) {
     console.warn("[sm-fellowship] repeat alert failed:", e && e.message);
   }
@@ -158,10 +158,10 @@ async function emailUnsaved(row) {
   try {
     const mail = F.emailText({ ...row, id: "not-saved" }, APP_BASE(), { saved: false });
     emailAllowed();
-    const r = await mailer.sendMail({ to: [...staffEmails()], subject: `${mail.subject} (not saved: the app's database didn't take it)`, text: mail.text });
+    const r = await mailer.sendMail({ to: [...staffEmails()], subject: `${mail.subject} (not saved: the app's database didn't take it)`, text: mail.text, critical: true });
     return !!(r && r.sent);
   } catch (e) {
-    console.error("[sm-fellowship] fallback email failed:", e && e.message);
+    console.error("[sm-fellowship] fallback email failed:", mailer.errorCode(e));
     return false;
   }
 }
@@ -327,9 +327,9 @@ router.post("/:id/note", requireStaff, jsonOnly, safe(async (req, res) => {
 
   let sent;
   try {
-    sent = await mailer.sendMail({ to, subject: value.subject, text: value.text });
+    sent = await mailer.sendMail({ to, subject: value.subject, text: value.text, pool: "fellowship" });
   } catch (e) {
-    console.warn("[sm-fellowship] note failed:", e && e.message);
+    console.warn("[sm-fellowship] note failed:", mailer.errorCode(e));
     sent = { sent: false, reason: "send_failed" };
   }
   if (!sent || !sent.sent) {

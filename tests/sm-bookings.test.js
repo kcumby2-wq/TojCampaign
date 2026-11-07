@@ -832,3 +832,20 @@ test("every column the routes write is one the migrations make", async () => {
   await wait();
   for (const row of db.tables.sm_bookings) for (const k of Object.keys(row)) assert.ok(cols.has(k) || ["id", "created_at", "updated_at"].includes(k), `sm_bookings has no column ${k}`);
 });
+
+test("a short note isn't lost because the same words appear inside another", () => {
+  const p = B.fillPatch({ source: "stripe", package: "video", notes: "Lot B, field 3" }, { notes: "3" }, { from: "the event details form", override: true, checkoutNotes: "Lot B, field 3" });
+  assert.equal(p.notes, "Lot B, field 3\n\nFrom the event details form: 3");
+});
+
+test("the not-saved details email says the booking is in the app, and what to do", () => {
+  const m = B.emailText({ source: "stripe", package: "video", stripe_session_id: "cs_live_x12345678", id: "not-saved", contact_name: "Pat", contact_email: "p@example.com", team_jersey: "Elite #4" }, null, "https://tojcampaign.com", { saved: false, detailsFor: "cs_live_x12345678" });
+  assert.match(m.text, /The paid booking is in the app \(Stripe checkout cs_live_x12345678\), but these details aren't\. Add them there\./);
+  assert.doesNotMatch(m.text, /NOT in the app/);
+});
+
+test("one visitor on IPv6 is their /64 for the booker's limits", async () => {
+  for (let i = 0; i < 5; i++) await form(good({ event_date: "2027-01-16", contact_email: `v6person${i}@example.com` }), `2001:db8:1:2:${i}::${i + 1}`);
+  await wait();
+  assert.equal(mails.filter((m) => !m.to.includes("kyron@toj.test")).length, 3);
+});

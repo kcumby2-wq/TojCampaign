@@ -249,8 +249,11 @@ function fillPatch(b, inc, { from = "the checkout", override = false, checkoutNo
   if ((blank(b.contact_name) || b.contact_name === STRIPE_NAME) && !blank(inc.contact_name) && inc.contact_name !== STRIPE_NAME) patch.contact_name = inc.contact_name;
   if (inc.adult_confirmed === true && b.adult_confirmed !== true) patch.adult_confirmed = true;
   let notes = b.notes || "";
-  if (!blank(inc.notes) && !notes.includes(inc.notes)) notes = joinNotes(notes, `From ${from}: ${inc.notes}`) || "";
-  if (!blank(checkoutNotes) && !notes.includes(checkoutNotes)) notes = joinNotes(notes, `From the checkout: ${checkoutNotes}`) || "";
+  // A part is already there when it's one of the notes' own parts, as it is or
+  // under its label; a short note that only appears inside another isn't.
+  const hasPart = (part, label) => notes.split("\n\n").some((p) => p === part || p === `${label}: ${part}`);
+  if (!blank(inc.notes) && !hasPart(inc.notes, `From ${from}`)) notes = joinNotes(notes, `From ${from}: ${inc.notes}`) || "";
+  if (!blank(checkoutNotes) && !hasPart(checkoutNotes, "From the checkout")) notes = joinNotes(notes, `From the checkout: ${checkoutNotes}`) || "";
   if (notes !== (b.notes || "")) patch.notes = notes;
   return patch;
 }
@@ -349,7 +352,7 @@ function money(cents) {
 // matches null means nobody was looked up (the booking isn't stored). With
 // saved false the email is the only copy, so it carries the whole booking.
 // detailsIn: the buyer of a paid package just told us about their game.
-function emailText(b, matches, appBase, { saved = true, detailsIn = false } = {}) {
+function emailText(b, matches, appBase, { saved = true, detailsIn = false, detailsFor = null } = {}) {
   const base = String(appBase || "https://tojcampaign.com").replace(/\/+$/, "");
   const subject = `${detailsIn ? "Event details in" : paid(b) ? "Paid booking" : "New booking"}: ${[what(b), place(b), dateWords(b.event_date)].filter(Boolean).join(", ")}`;
   const lines = [];
@@ -390,6 +393,8 @@ function emailText(b, matches, appBase, { saved = true, detailsIn = false } = {}
   if (saved) {
     lines.push(`Open it in the TOJ app: ${base}/app/#booking/${b.id}`);
     lines.push("Notes and the athlete's team and jersey are in the app.");
+  } else if (detailsFor) {
+    lines.push(`The paid booking is in the app (Stripe checkout ${detailsFor}), but these details aren't. Add them there.`);
   } else {
     lines.push("This booking is NOT in the app. Reply to the booker from here.");
   }

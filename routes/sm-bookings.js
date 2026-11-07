@@ -110,6 +110,9 @@ function emailAllowed(now = Date.now()) {
   return true;
 }
 const visitor = (req) => String(req.headers["x-sm-visitor"] || "").split(",")[0].trim().slice(0, 100) || "unknown";
+// For the booker's limits, one visitor on IPv6 is their /64: a home or a
+// phone gets a whole /64 and can change addresses inside it at will.
+const visitorKey = (v) => (v.includes(":") ? v.toLowerCase().split(":").slice(0, 4).join(":") + "::/64" : v);
 
 // The booker's note goes to an address someone typed. At most 2 a day to one
 // mailbox (Gmail's dots and +tags count as the same one), 3 a day from one
@@ -132,7 +135,7 @@ function bookerMailAllowed(address, who, now = Date.now()) {
   if (bookerTimes.length >= MAX_BOOKER_PER_DAY) return null;
   if (bookerTimes.filter((t) => now - t < HOUR).length >= MAX_BOOKER_PER_HOUR) return null;
   const keys = [[keyOf("to", B.mailbox(address)), MAX_BOOKER_PER_MAILBOX]];
-  if (who) keys.push([keyOf("from", who), MAX_BOOKER_PER_VISITOR]);
+  if (who) keys.push([keyOf("from", visitorKey(who)), MAX_BOOKER_PER_VISITOR]);
   for (const [k, max] of keys) if ((bookerSent.get(k) || []).filter((t) => now - t < DAY_MS).length >= max) return null;
   for (const [k] of keys) bookerSent.set(k, [...(bookerSent.get(k) || []).filter((t) => now - t < DAY_MS), now]);
   bookerTimes.push(now);
@@ -167,7 +170,7 @@ async function alertStaff(sb, row, { detailsIn = false } = {}) {
     if (emailAllowed()) {
       const mail = B.emailText(row, matches, APP_BASE(), { detailsIn });
       mailer
-        .sendMail({ to, subject: mail.subject, text: mail.text })
+        .sendMail({ to, subject: mail.subject, text: mail.text, pool: "bookings" })
         .then((r) => { if (!r.sent) console.warn(`[sm-bookings] email not sent (${r.reason})`); })
         .catch((e) => console.warn("[sm-bookings] email failed:", mailError(e)));
     } else console.warn("[sm-bookings] over the email budget: push only");
@@ -180,7 +183,7 @@ async function alertStaff(sb, row, { detailsIn = false } = {}) {
 
 // What went wrong with an email, without the addresses a mail server's error
 // message can carry.
-const mailError = (e) => (e && (e.responseCode || e.code || e.name)) || "error";
+const mailError = mailer.errorCode;
 
 // The booker's own note, once. A request joined by its payment had its note
 // with the request; Stripe sends the receipt. Claimed on the row before it
@@ -200,7 +203,7 @@ async function emailBooker(sb, row, { who = null, askDetails = true } = {}) {
     const mail = B.bookerEmail(row, { detailsUrl: ask ? detailsLink(row.stripe_session_id) : null, help: helpEmail(), site: siteBase() });
     let r = null;
     try {
-      r = await mailer.sendMail({ to: row.contact_email, subject: mail.subject, text: mail.text, replyTo: helpEmail() });
+      r = await mailer.sendMail({ to: row.contact_email, subject: mail.subject, text: mail.text, replyTo: helpEmail(), pool: "bookings" });
     } catch (e) {
       console.warn("[sm-bookings] booker note failed:", mailError(e));
     }
@@ -220,7 +223,7 @@ async function emailBooker(sb, row, { who = null, askDetails = true } = {}) {
 // paid booking we have (by its checkout) but couldn't add them to.
 async function emailUnsaved(row, { detailsFor = null } = {}) {
   try {
-    const mail = B.emailText({ ...row, id: "not-saved" }, null, APP_BASE(), { saved: false });
+    const mail = B.emailText({ ...row, id: "not-saved" }, null, APP_BASE(), { saved: false, detailsFor });
     const subject = detailsFor
       ? `Event details for paid booking ${detailsFor} (not saved: add them in the app)`
       : `${mail.subject} (not saved: the app's database didn't take it)`;

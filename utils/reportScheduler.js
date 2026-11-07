@@ -59,7 +59,19 @@ async function sendReportEmail(userEmail, reportData, period) {
       text: `Your CreatorLand ${period} report is ready.\n\nTotal Clicks: ${reportData.stats.totalClicks}\nTop Source: ${reportData.stats.topSource}\n\nView your dashboard: http://localhost:3000/pages.html`,
     };
 
-    await transporter.sendMail(mailOptions);
+    // These count toward the same Gmail account's day as the app's other
+    // email (utils/mailer.js): past their share, a report waits for next time.
+    const giveBack = require("./mailer").reserve(1, { pool: "reports" });
+    if (!giveBack) {
+      console.warn("Report skipped: over the day's email budget");
+      return false;
+    }
+    try {
+      await transporter.sendMail(mailOptions);
+    } catch (e) {
+      giveBack();
+      throw e;
+    }
     console.log(`✅ ${period.toUpperCase()} report sent to ${userEmail}`);
 
     // Save report to database

@@ -36,6 +36,9 @@ create table if not exists public.sm_site_counts (
 -- once a minute per kind, so a busy day is a few writes, not one per visit. A
 -- day's count stops at a million, so a flood that gets past the server's
 -- limits can't run it up forever.
+-- (An early draft took only the name; if it was ever applied, it goes, so
+-- sm_site_count('x') has one meaning.)
+drop function if exists public.sm_site_count(text);
 create or replace function public.sm_site_count(p_name text, p_n integer default 1) returns void
 language sql volatile set search_path = '' as $$
   insert into public.sm_site_counts as c (day, name, n)

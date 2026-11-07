@@ -18,7 +18,11 @@
 // counts recipients over the last 24 hours (MAIL_DAILY_LIMIT, 400 on Gmail and
 // 5000 through a service unless set) and keeps the last sixth of it for mail
 // that must go (critical: true, like a booking the database couldn't take).
-// The count lives in memory, so a restart starts it again.
+// Ordinary mail also comes from a pool (bookings, market, fellowship,
+// reports, other), and no pool may use more than 45% of the ordinary budget,
+// so one busy public form can't stop everyone else's mail. A send that fails
+// gives its place back. The count lives in memory, so a restart starts it
+// again.
 //
 // EMAIL_REPLY_TO is where replies go when a message doesn't say. When nothing
 // is set, nothing is sent and the caller hears why, so a missing setting never
@@ -31,7 +35,8 @@ let injected = null; // or just the transport, to test what's around it
 const ADDRESS = /^[^\s@<>",;]+@[^\s@<>",;]+\.[a-z]{2,}$/i;
 const DAY_MS = 24 * 60 * 60 * 1000;
 const env = (k) => String(process.env[k] || "").trim();
-let sent = []; // [time, recipients]
+let sent = []; // [time, recipients, pool]
+const POOL_SHARE = 0.45;
 let warned = false;
 
 // SMTP counts only with a sender a service would take.
@@ -79,20 +84,29 @@ function dailyLimit() {
   if (Number.isInteger(set) && set > 0) return set;
   return smtp() ? 5000 : 400;
 }
-// Room for this many more recipients today? Ordinary mail stops when five
-// sixths of the day's budget is used; critical mail can use the rest.
-function underBudget(n, critical, now = Date.now()) {
+// Takes room for n more recipients today, or says no (null). Ordinary mail
+// stops when five sixths of the day's budget is used, and a pool at 45% of
+// that; critical mail can use the rest. Returns the way to give it back.
+function reserve(n, { pool = "other", critical = false } = {}, now = Date.now()) {
   sent = sent.filter(([t]) => now - t < DAY_MS);
   const used = sent.reduce((sum, [, k]) => sum + k, 0);
-  const cap = critical ? dailyLimit() : Math.floor((dailyLimit() * 5) / 6);
-  if (used + n > cap) return false;
-  sent.push([now, n]);
-  return true;
+  const ordinary = Math.floor((dailyLimit() * 5) / 6);
+  if (used + n > (critical ? dailyLimit() : ordinary)) return null;
+  if (!critical) {
+    const mine = sent.reduce((sum, [, k, p]) => sum + (p === pool ? k : 0), 0);
+    if (mine + n > Math.floor(ordinary * POOL_SHARE)) return null;
+  }
+  const entry = [now, n, critical ? "critical" : pool];
+  sent.push(entry);
+  return () => {
+    const i = sent.indexOf(entry);
+    if (i >= 0) sent.splice(i, 1);
+  };
 }
 
 const plain = (e) => String(e || "").trim().toLowerCase();
 
-async function sendMail({ to, subject, text, replyTo, critical = false }) {
+async function sendMail({ to, subject, text, replyTo, critical = false, pool = "other" }) {
   const list = [...new Set([].concat(to || []).filter(Boolean).map(plain))];
   if (!list.length) return { sent: false, reason: "no_recipients" };
   const reply = plain(replyTo || env("EMAIL_REPLY_TO"));
@@ -106,10 +120,22 @@ async function sendMail({ to, subject, text, replyTo, critical = false }) {
     }
     return { sent: false, reason: "email_not_configured" };
   }
-  if (!underBudget(list.length, critical)) return { sent: false, reason: "daily_limit" };
+  const giveBack = reserve(list.length, { pool, critical });
+  if (!giveBack) return { sent: false, reason: "daily_limit" };
   const t = injected || (transport = transport || require("nodemailer").createTransport(transportOptions()));
-  await t.sendMail({ from: fromAddress(), to: list.join(","), subject, text, ...(message.replyTo ? { replyTo: message.replyTo } : {}) });
+  try {
+    await t.sendMail({ from: fromAddress(), to: list.join(","), subject, text, ...(message.replyTo ? { replyTo: message.replyTo } : {}) });
+  } catch (e) {
+    giveBack();
+    throw e;
+  }
   return { sent: true };
+}
+
+// What went wrong with an email, for the logs, without the addresses a mail
+// server's error message can carry.
+function errorCode(e) {
+  return (e && (e.responseCode || e.code || e.name)) || "error";
 }
 
 function setSender(fn) {
@@ -120,4 +146,4 @@ function setTransport(t) {
   sent = [];
 }
 
-module.exports = { sendMail, configured, mode, setSender, setTransport, transportOptions, fromAddress, dailyLimit };
+module.exports = { sendMail, configured, mode, setSender, setTransport, transportOptions, fromAddress, dailyLimit, reserve, errorCode };
