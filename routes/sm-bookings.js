@@ -111,8 +111,22 @@ function emailAllowed(now = Date.now()) {
 }
 const visitor = (req) => String(req.headers["x-sm-visitor"] || "").split(",")[0].trim().slice(0, 100) || "unknown";
 // For the booker's limits, one visitor on IPv6 is their /64: a home or a
-// phone gets a whole /64 and can change addresses inside it at will.
-const visitorKey = (v) => (v.includes(":") ? v.toLowerCase().split(":").slice(0, 4).join(":") + "::/64" : v);
+// phone gets a whole /64 and can change addresses inside it at will. The
+// address is spelled out to its eight groups first, so "::" and leading
+// zeros can't make one /64 look like many.
+function visitorKey(v) {
+  const a = String(v).toLowerCase().split("%")[0];
+  if (!a.includes(":")) return a;
+  const mapped = /^::ffff:(\d{1,3}(?:\.\d{1,3}){3})$/.exec(a);
+  if (mapped) return mapped[1];
+  const parts = a.split("::");
+  if (parts.length > 2) return a;
+  const head = parts[0] ? parts[0].split(":") : [];
+  const tail = parts.length === 2 && parts[1] ? parts[1].split(":") : [];
+  const groups = parts.length === 2 ? [...head, ...Array(Math.max(0, 8 - head.length - tail.length)).fill("0"), ...tail] : head;
+  if (groups.length !== 8 || groups.some((g) => !/^[0-9a-f]{1,4}$/.test(g))) return a;
+  return groups.slice(0, 4).map((g) => parseInt(g, 16).toString(16)).join(":") + "::/64";
+}
 
 // The booker's note goes to an address someone typed. At most 2 a day to one
 // mailbox (Gmail's dots and +tags count as the same one), 3 a day from one
@@ -468,4 +482,5 @@ router.patch("/:id", requireStaff, safe(async (req, res) => {
 router._limited = limited;
 router._resetLimits = () => { hits.clear(); forms = []; emails = []; bookerSent.clear(); bookerTimes = []; };
 router._hits = hits;
+router._visitorKey = visitorKey;
 module.exports = router;

@@ -844,6 +844,16 @@ test("the not-saved details email says the booking is in the app, and what to do
   assert.doesNotMatch(m.text, /NOT in the app/);
 });
 
+test("an IPv6 visitor's /64 is the same however the address is written", () => {
+  const k = router._visitorKey;
+  for (const a of ["2001:db8::5:1:2:3", "2001:0db8:0000:0000:0005:0001:0002:0003", "2001:DB8:0:0:ffff::1", "2001:db8::"]) assert.equal(k(a), "2001:db8:0:0::/64", a);
+  assert.equal(k("2001:db8:1:2::9"), "2001:db8:1:2::/64");
+  assert.equal(k("::ffff:203.0.113.5"), "203.0.113.5");
+  assert.equal(k("203.0.113.5"), "203.0.113.5");
+  assert.equal(k("fe80::1%eth0"), "fe80:0:0:0::/64");
+  assert.equal(k("not:an:address::zz"), "not:an:address::zz", "anything odd stays as written");
+});
+
 test("one visitor on IPv6 is their /64 for the booker's limits", async () => {
   for (let i = 0; i < 5; i++) await form(good({ event_date: "2027-01-16", contact_email: `v6person${i}@example.com` }), `2001:db8:1:2:${i}::${i + 1}`);
   await wait();
