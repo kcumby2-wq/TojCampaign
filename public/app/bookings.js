@@ -53,6 +53,15 @@
   function needsDetails(b) {
     return b.source === "stripe" && !b.details_at && !b.event_date;
   }
+  // Sent from a package's Buy button: on its way to Stripe, or (an hour on,
+  // with no payment in the app: b.unfinished from the server) no payment yet.
+  // The app only knows what reached it: a payment can still be on its way, so
+  // this never says they didn't pay. The reminder, when it went, too.
+  function checkoutFact(b) {
+    if (!b.pay_now || b.paid) return null;
+    if (b.unfinished) return "No payment has reached the app yet. They went on to Stripe " + T().ago(b.created_at) + "." + (b.checkout_reminded_at ? " Reminder emailed " + T().ago(b.checkout_reminded_at) + "." : "");
+    return b.status === "new" ? "They went on to Stripe to pay, " + T().ago(b.created_at) + "." : null;
+  }
 
   // subjectmedias.com's last 7 and 30 days: visits and taps (daily totals the
   // site counts without cookies), then the requests, claims and payments that
@@ -96,7 +105,7 @@
     }
     var rows = (d.bookings || []).map(function (b) {
       return '<a class="li" href="#booking/' + h(b.id) + '"><div class="grow"><div class="name" style="font-size:15px">' + h(b.summary) + '</div><div class="sub">' +
-        h([b.event_name, b.paid ? "Paid " + money(b.amount_cents) : "Request", b.offer === "first10" ? "10% claimed" : null, needsDetails(b) ? "Waiting on details" : null, t.ago(b.created_at)].filter(Boolean).join(" · ")) +
+        h([b.event_name, b.paid ? "Paid " + money(b.amount_cents) : "Request", b.offer === "first10" ? "10% claimed" : null, needsDetails(b) ? "Waiting on details" : null, b.unfinished ? (b.checkout_reminded_at ? "No payment yet, reminded" : "No payment yet") : null, t.ago(b.created_at)].filter(Boolean).join(" · ")) +
         "</div></div>" + statusBadge(b.status) + t.I.chev + "</a>";
     }).join("");
     t.show("today",
@@ -132,6 +141,7 @@
       ["Paid", b.paid ? money(b.amount_cents) + " on Stripe" + (b.source === "form" ? ", after the request" : "") : null],
       ["Offer", b.offer === "first10" ? "Claimed 10% off the first package. Take it off when you confirm." : null],
       ["Event details", needsDetails(b) ? "Not in yet. Their thanks email has a link to add them." : b.details_at ? "From the buyer, " + t.ago(b.details_at) : null],
+      ["Checkout", checkoutFact(b)],
       ["Their note", b.booker_emailed_at ? "Emailed " + t.ago(b.booker_emailed_at) : null],
     ].filter(function (x) { return x[1]; }).map(function (x) {
       return '<div class="li" style="cursor:default"><div class="grow"><div class="sub">' + h(x[0]) + '</div><div class="name" style="font-size:15px">' + h(x[1]) + "</div></div></div>";

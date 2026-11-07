@@ -2,7 +2,7 @@
 // routes run against the real migrations and their triggers (the in-memory
 // fake in fake-supabase.js has no triggers). It covers the query-builder
 // subset the routes use: select/insert/update/upsert/delete with
-// eq/neq/in/is/gt/gte/lt/lte/order/limit/range, single/maybeSingle, and rpc.
+// eq/neq/in/is/not is/gt/gte/lt/lte/order/limit/range, single/maybeSingle, and rpc.
 // Each call is its own statement, as a PostgREST request is its own
 // transaction; a bulk insert or upsert runs in one transaction.
 //
@@ -74,6 +74,11 @@ function pgSupabase(pool, schema) {
     neq(c, v) { this.where.push(`${qi(c)} <> ${this.p(v)}`); return this; }
     in(c, vs) { this.where.push(`${qi(c)} = any(${this.p(vs)})`); return this; }
     is(c, v) { this.where.push(v === null ? `${qi(c)} is null` : `${qi(c)} is ${v ? "true" : "false"}`); return this; }
+    not(c, op, v) {
+      if (op !== "is") throw new Error(`pg supabase: not(${op}) isn't supported`);
+      this.where.push(v === null ? `${qi(c)} is not null` : `${qi(c)} is not ${v ? "true" : "false"}`);
+      return this;
+    }
     gt(c, v) { this.where.push(`${qi(c)} > ${this.p(v)}`); return this; }
     gte(c, v) { this.where.push(`${qi(c)} >= ${this.p(v)}`); return this; }
     lt(c, v) { this.where.push(`${qi(c)} < ${this.p(v)}`); return this; }

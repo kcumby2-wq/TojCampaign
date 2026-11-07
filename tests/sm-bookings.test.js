@@ -820,12 +820,21 @@ test("a checkout that names a request already paid: a booking of its own, flagge
 
 test("every column the routes write is one the migrations make", async () => {
   const fs = require("fs"), path = require("path");
-  const sql = ["030_sm_bookings.sql", "034_sm_bookings_more.sql"].map((f) => fs.readFileSync(path.join(__dirname, "..", "db", "migrations", f), "utf8")).join("\n");
+  const sql = ["030_sm_bookings.sql", "034_sm_bookings_more.sql", "035_sm_checkout_reminder.sql"].map((f) => fs.readFileSync(path.join(__dirname, "..", "db", "migrations", f), "utf8")).join("\n");
   const table = /create table if not exists public\.sm_bookings \(([\s\S]*?)\n\);/.exec(sql)[1];
   const cols = new Set([...table.matchAll(/^\s{2}([a-z_]+) [a-z]/gm)].map((m) => m[1]).filter((c) => c !== "constraint"));
   for (const m of sql.matchAll(/add column if not exists ([a-z_]+)/g)) cols.add(m[1]);
   await form(good({ event_date: "2027-01-16", offer: "first10" }));
   await form(good({ event_date: "2027-01-16" }), "198.51.100.40");
+  const payNow = await form(good({ event_date: "2027-01-16", package: "photo", pay_now: true, contact_email: "c@example.com" }), "198.51.100.42");
+  await paidCall({ stripe_session_id: "cs_live_columnsjoin1", booking_id: payNow.data.id, package: "photo", amount_cents: 4999, contact_email: "c@example.com" });
+  const unpaid = await form(good({ event_date: "2027-01-16", package: "video", pay_now: true, contact_email: "d@example.com" }), "198.51.100.43");
+  db.tables.sm_bookings.find((b) => b.id === unpaid.data.id).created_at = new Date(Date.now() - 2 * 3600e3).toISOString();
+  process.env.EMAIL_USER = "subjectmedias@gmail.com";
+  process.env.EMAIL_PASS = "app-password";
+  process.env.SM_STRIPE_READ_KEY = "rk_live_" + "a".repeat(24);
+  router._setStripe(() => ({ checkout: { sessions: { list: async () => ({ data: [], has_more: false }), retrieve: async (id) => ({ id }) } } }));
+  try { assert.deepEqual(await router._remind(db), { sent: 1 }); } finally { delete process.env.EMAIL_USER; delete process.env.EMAIL_PASS; delete process.env.SM_STRIPE_READ_KEY; router._setStripe(null); }
   await paidCall({ stripe_session_id: "cs_live_columns12345", package: "video", amount_cents: 9999, contact_email: "a@example.com", contact_phone: "555-010-0000", event_date: "2026-11-21", event_city: "Dallas", event_state: "TX", team_jersey: "x", notes: "n" });
   await detailsCall({ stripe_session_id: "cs_live_columns67890", package: "video", amount_cents: 9999, contact_email: "b@example.com", event_date: "2026-12-05", event_city: "Dallas", event_state: "TX", athletes: "2", checkout_notes: "c" });
   await detailsCall({ stripe_session_id: "cs_live_columns12345", event_date: "2026-12-05", event_city: "Dallas", event_state: "TX" }, "198.51.100.41");
@@ -867,7 +876,7 @@ test("pay now: the request lands quietly for the booker; the thanks note goes wh
   await wait();
   assert.equal(theirs("jamie@example.com").length, 0, "no \"nothing is charged until then\" to someone paying now");
   assert.match(staffMails()[0].text, /went on to Stripe to pay for it/);
-  assert.ok(!("pay_now" in db.tables.sm_bookings[0]), "not a column");
+  assert.equal(db.tables.sm_bookings[0].pay_now, true, "kept for the reminder (migration 035)");
   mails = [];
   pushes = [];
   const r = await paidCall({ stripe_session_id: "cs_live_paynow123456", booking_id: made.data.id, package: "video", amount_cents: 9999, contact_email: "jamie@example.com" });
@@ -902,3 +911,380 @@ test("pay now, never paid: no note, and staff know to follow up", async () => {
   assert.equal(db.tables.sm_bookings[0].booker_emailed_at || null, null);
   assert.match(staffMails()[0].text, /if not, follow up like any request/);
 });
+
+// ── The unfinished checkout: one reminder, after Stripe says nothing came ─
+const HOUR_MS = 60 * 60 * 1000;
+const crypto = require("crypto");
+const LIVE_KEY = "rk_live_" + "a".repeat(24);
+// Stripe as the reminder sees it: one account, the checkouts it knows (the
+// one the app already holds, made in withReminders), and the completed ones
+// since a moment.
+const ACCOUNT_SID = "cs_live_accountknown0001";
+let stripeSessions = [], stripeCalls = [], stripeFails = false, stripePages = 1, otherAccount = false;
+const fakeStripe = {
+  checkout: {
+    sessions: {
+      retrieve: async (id) => {
+        if (stripeFails) throw Object.assign(new Error("api down"), { type: "StripeConnectionError" });
+        if (!otherAccount && id === ACCOUNT_SID) return { id };
+        throw Object.assign(new Error("No such checkout.session: " + id), { code: "resource_missing", statusCode: 404 });
+      },
+      list: async (params) => {
+        stripeCalls.push(params);
+        if (stripeFails) throw Object.assign(new Error("api down"), { type: "StripeConnectionError" });
+        const since = params.created.gte;
+        const data = stripeSessions.filter((x) => x.status === "complete" && x.created >= since);
+        return { data, has_more: stripeCalls.length < stripePages };
+      },
+    },
+  },
+};
+const completed = (over = {}) => ({ id: "cs_live_" + crypto.randomBytes(6).toString("hex"), status: "complete", payment_status: "paid", created: Math.floor(Date.now() / 1000), payment_link: "plink_x", metadata: {}, ...over });
+async function withReminders(fn, { key = LIVE_KEY, known = true } = {}) {
+  process.env.EMAIL_USER = "subjectmedias@gmail.com";
+  process.env.EMAIL_PASS = "app-password";
+  if (key) process.env.SM_STRIPE_READ_KEY = key;
+  stripeSessions = [];
+  stripeCalls = [];
+  stripeFails = false;
+  stripePages = 1;
+  otherAccount = false;
+  router._setStripe(() => fakeStripe);
+  router._forgetKeyCheck();
+  // A package someone bought earlier: the live checkout the app holds, which
+  // shows the key is for the site's account.
+  if (known && !(db.tables.sm_bookings || []).some((b) => b.stripe_session_id === ACCOUNT_SID)) {
+    await paidCall({ stripe_session_id: ACCOUNT_SID, package: "photo", amount_cents: 4999, contact_email: "earlier-buyer@example.com" });
+    await wait();
+    mails = [];
+  }
+  try {
+    return await fn();
+  } finally {
+    delete process.env.EMAIL_USER;
+    delete process.env.EMAIL_PASS;
+    delete process.env.SM_STRIPE_READ_KEY;
+    router._setStripe(null);
+  }
+}
+const rowOf = (id) => db.tables.sm_bookings.find((b) => b.id === id);
+const age = (id, ms) => { rowOf(id).created_at = new Date(Date.now() - ms).toISOString(); };
+const reminders = () => mails.filter((m) => m.subject === "Subject Medias: finish your booking");
+let nextVisitor = 10;
+// A pay-now request, sent an hour and a minute ago, from its own visitor.
+async function due(over = {}, visitor = `198.51.100.${nextVisitor++ % 250}`) {
+  const r = await form(good({ event_date: "2027-01-16", package: "video", pay_now: true, ...over }), visitor);
+  assert.equal(r.status, 200);
+  age(r.data.id, HOUR_MS + 60000);
+  return r.data.id;
+}
+
+test("no payment an hour on: one reminder with the request's checkout, in fixed words", () => withReminders(async () => {
+  const r = await form(good({ event_date: "2027-01-16", package: "video", pay_now: true }));
+  await wait();
+  mails = [];
+  assert.deepEqual(await router._remind(db), { sent: 0 }, "not inside the hour");
+  age(r.data.id, HOUR_MS + 60000);
+  assert.deepEqual(await router._remind(db), { sent: 1 });
+  const m = reminders();
+  assert.equal(m.length, 1);
+  assert.deepEqual(m[0].to, ["jamie@example.com"]);
+  assert.equal(m[0].replyTo, "hello@subjectmedias.com");
+  assert.match(m[0].text, /^Your Subject Medias booking details are saved\. We haven't received a payment for it yet\.$/m);
+  assert.ok(m[0].text.includes(`https://buy.stripe.com/eVqfZidmP5TY70seoFebu05?client_reference_id=${r.data.id}\n`), "the package's checkout, joined to the request, nothing else in the link");
+  assert.match(m[0].text, /^What: Video coverage, \$99\.99$/m);
+  assert.match(m[0].text, /^Game day: Sat, Jan 16, 2027$/m);
+  assert.match(m[0].text, /^State: CA$/m);
+  assert.match(m[0].text, /Already paid\? Then you're all set\. A payment can take a little while to reach us/);
+  assert.match(m[0].text, /Didn't start this booking\? You can ignore this email\./);
+  for (const typed of ["Jamie", "jamie", "Los Angeles", "Lightning", "#11", "Pylon Girls Flag", "roster", "555", "locked in", "didn't go through"]) assert.ok(!m[0].text.includes(typed), `not in it: ${typed}`);
+  assert.ok(rowOf(r.data.id).checkout_reminded_at, "the row says when");
+  assert.equal(stripeCalls.length, 1, "Stripe was asked first");
+  assert.equal(stripeCalls[0].status, "complete");
+  assert.deepEqual(await router._remind(db), { sent: 0 }, "once");
+  assert.equal(reminders().length, 1);
+}));
+
+test("Stripe has it: a checkout for the request (paid, or a bank payment still clearing), or one from the same mailbox on a payment link", () => withReminders(async () => {
+  const clearing = await due({ contact_email: "bank@example.com" });
+  const paidLate = await due({ contact_email: "late@example.com" });
+  const otherLink = await due({ contact_email: "Same.Box+x@gmail.com" });
+  const market = await due({ contact_email: "clips@example.com" });
+  await wait();
+  stripeSessions = [
+    completed({ client_reference_id: clearing, payment_status: "unpaid", customer_details: { email: "someone-else@example.com" } }),
+    completed({ client_reference_id: paidLate.toUpperCase(), customer_details: { email: "late@example.com" } }),
+    completed({ client_reference_id: null, customer_details: { email: "samebox@gmail.com" } }),
+    // A marketplace order isn't a booking: it doesn't stand for one.
+    completed({ client_reference_id: "8f14e45f-ceea-467e-a1d0-6f1d4c6b2a99", payment_link: null, metadata: { kind: "sm_market" }, customer_details: { email: "clips@example.com" } }),
+    // An open checkout (left at Stripe) isn't a payment.
+    completed({ client_reference_id: market, status: "open" }),
+  ];
+  mails = [];
+  assert.deepEqual(await router._remind(db), { sent: 1 });
+  assert.deepEqual(reminders().map((m) => m.to), [["clips@example.com"]]);
+  for (const id of [clearing, paidLate, otherLink]) assert.equal(rowOf(id).checkout_reminded_at || null, null, id);
+}));
+
+test("no trusted Stripe answer, no reminders: no key, a test or full secret key, another account's, an error, or too many checkouts", async () => {
+  const id = await withReminders(async () => due());
+  await wait();
+  await withReminders(async () => assert.deepEqual(await router._remind(db), { off: "no_stripe_key" }), { key: null });
+  await withReminders(async () => assert.deepEqual(await router._remind(db), { off: "no_stripe_key" }), { key: "rk_test_" + "a".repeat(24) });
+  await withReminders(async () => assert.deepEqual(await router._remind(db), { off: "no_stripe_key" }), { key: "sk_live_" + "a".repeat(24) });
+  // A live key for another Stripe account: it doesn't know the app's checkout.
+  await withReminders(async () => {
+    otherAccount = true;
+    assert.deepEqual(await router._remind(db), { off: "stripe_key_unverified" });
+    assert.equal(stripeCalls.length, 0, "its list is never read");
+  });
+  await withReminders(async () => {
+    stripeFails = true;
+    assert.deepEqual(await router._remind(db), { off: "stripe_unavailable" });
+  });
+  await withReminders(async () => {
+    stripeSessions = [completed({ created: Math.floor(Date.now() / 1000) })];
+    stripePages = 99;
+    assert.deepEqual(await router._remind(db), { off: "stripe_too_many" });
+  });
+  assert.equal(rowOf(id).checkout_reminded_at || null, null);
+  assert.equal(reminders().length, 0);
+});
+
+test("no live checkout in the app yet (before the first payment), no reminders: the key can't be checked", () => withReminders(async () => {
+  const id = await due();
+  await wait();
+  assert.deepEqual(await router._remind(db), { off: "stripe_key_unverified" });
+  assert.equal(rowOf(id).checkout_reminded_at || null, null);
+}, { known: false }));
+
+test("Stripe looks back a week: a bank payment from days ago, or a checkout opened before the request, still counts", () => withReminders(async () => {
+  const days = await due({ contact_email: "bank-days@example.com" });
+  const tab = await due({ contact_email: "early-tab@example.com" });
+  const fine = await due({ contact_email: "nothing-paid@example.com" });
+  await wait();
+  const ago = (ms) => Math.floor((Date.now() - ms) / 1000);
+  stripeSessions = [
+    completed({ payment_status: "unpaid", created: ago(3 * 24 * HOUR_MS), customer_details: { email: "bank-days@example.com" } }),
+    completed({ created: ago(3 * HOUR_MS), customer_details: { email: "early-tab@example.com" } }),
+    completed({ created: ago(8 * 24 * HOUR_MS), customer_details: { email: "nothing-paid@example.com" } }),
+  ];
+  assert.deepEqual(await router._remind(db), { sent: 1 });
+  assert.deepEqual(reminders().map((m) => m.to), [["nothing-paid@example.com"]], "a checkout over a week old doesn't stand for this one");
+  assert.ok(stripeCalls[0].created.gte <= ago(7 * 24 * HOUR_MS) + 5);
+  for (const id of [days, tab]) assert.equal(rowOf(id).checkout_reminded_at || null, null, id);
+  assert.ok(rowOf(fine).checkout_reminded_at);
+}));
+
+test("one visitor's three a day are shared with their notes: a visitor whose requests sent three notes sends no reminder", () => withReminders(async () => {
+  for (let i = 0; i < 3; i++) await form(good({ event_date: "2027-01-16", contact_email: `asked${i}@example.com` }), "203.0.113.150");
+  const id = await due({ contact_email: "asked3@example.com" }, "203.0.113.150");
+  await wait();
+  assert.equal(mails.filter((m) => /we got your booking request/.test(m.subject)).length, 3);
+  assert.deepEqual(await router._remind(db), { sent: 0 });
+  assert.equal(rowOf(id).checkout_reminded_at || null, null);
+}));
+
+test("off with the setting, and without email set up: nothing claimed", () => withReminders(async () => {
+  const id = await due();
+  await wait();
+  process.env.SM_CHECKOUT_REMINDERS = "off";
+  try {
+    assert.deepEqual(await router._remind(db), { off: "setting" });
+  } finally {
+    delete process.env.SM_CHECKOUT_REMINDERS;
+  }
+  delete process.env.EMAIL_USER;
+  assert.deepEqual(await router._remind(db), { off: "no_email" });
+  assert.equal(rowOf(id).checkout_reminded_at || null, null);
+  assert.equal(stripeCalls.length, 0, "Stripe isn't asked when nothing can go");
+}));
+
+test("no reminder once it's paid, taken on, two days old, for a game today or past, or when the same mailbox paid or came back", () => withReminders(async () => {
+  const paidOne = await due({ contact_email: "paid@example.com" });
+  await paidCall({ stripe_session_id: "cs_live_paidlater0001", booking_id: paidOne, package: "video", amount_cents: 9999, contact_email: "paid@example.com" });
+  const taken = await due({ contact_email: "taken@example.com" });
+  rowOf(taken).status = "contacted";
+  const old = await due({ contact_email: "old@example.com" });
+  age(old, 2 * 24 * HOUR_MS + 60000);
+  const today = await due({ contact_email: "today@example.com" });
+  rowOf(today).event_date = B.nyDay();
+  const past = await due({ contact_email: "past@example.com" });
+  rowOf(past).event_date = "2026-10-01";
+  const plain = await due({ contact_email: "plain@example.com", pay_now: false });
+  // They came back: a newer request from the same inbox (Gmail ignores dots
+  // and +tags).
+  const came = await due({ contact_email: "Came.Back+gameday@gmail.com" });
+  await form(good({ package: "video", event_date: "2027-01-16", contact_email: "cameback@gmail.com" }), "198.51.100.251");
+  // Two pay-now requests from one inbox (two tabs, or sent again): the older
+  // one was paid, so the newer one isn't reminded either.
+  const first = await due({ contact_email: "twotabs@example.com" });
+  const second = await due({ contact_email: "twotabs@example.com" });
+  age(first, HOUR_MS + 120000);
+  await paidCall({ stripe_session_id: "cs_live_firsttab00001", booking_id: first, package: "video", amount_cents: 9999, contact_email: "twotabs@example.com" });
+  await wait();
+  mails = [];
+  assert.deepEqual(await router._remind(db), { sent: 0 });
+  assert.equal(reminders().length, 0);
+  for (const id of [taken, old, today, past, plain, came, second]) assert.equal(rowOf(id).checkout_reminded_at || null, null, id);
+}));
+
+test("a server that didn't see the request (a restart since) sends no reminder for it", () => withReminders(async () => {
+  const id = await due();
+  await wait();
+  router._forgetVisitors();
+  assert.deepEqual(await router._remind(db), { sent: 0 });
+  assert.equal(rowOf(id).checkout_reminded_at || null, null);
+}));
+
+test("reminders keep their own limits: three a day from one visitor, one a day to a mailbox, ten a run and an hour", () => withReminders(async () => {
+  // One visitor, five addresses.
+  for (let i = 0; i < 5; i++) await due({ contact_email: `stranger${i}@example.com` }, "203.0.113.99");
+  await wait();
+  mails = [];
+  assert.deepEqual(await router._remind(db), { sent: 3 });
+  // One mailbox: a second request after its reminder, from another visitor.
+  const a = await due({ contact_email: "once@example.com" }, "203.0.113.100");
+  await wait();
+  assert.deepEqual(await router._remind(db), { sent: 1 });
+  const b = await due({ contact_email: "once@example.com" }, "203.0.113.101");
+  await wait();
+  assert.deepEqual(await router._remind(db), { sent: 0 }, "one a day to a mailbox");
+  assert.ok(rowOf(a).checkout_reminded_at);
+  assert.equal(rowOf(b).checkout_reminded_at || null, null);
+  // Ten a run, and ten an hour in all.
+  router._resetLimits();
+  for (let i = 0; i < 14; i++) await due({ contact_email: `many${i}@example.com` });
+  await wait();
+  assert.deepEqual(await router._remind(db), { sent: 10 });
+  assert.deepEqual(await router._remind(db), { sent: 0 }, "the hour's ten are used");
+}));
+
+test("a reminder never takes the booker's own notes: the thanks note still goes", () => withReminders(async () => {
+  // A request this morning (its note is the inbox's first of the day), then
+  // a pay-now request later.
+  const plain = await form(good({ event_date: "2027-01-16" }), "198.51.100.200");
+  age(plain.data.id, 3 * HOUR_MS);
+  const id = await due({}, "198.51.100.201");
+  await wait();
+  assert.deepEqual(await router._remind(db), { sent: 1 });
+  mails = [];
+  await paidCall({ stripe_session_id: "cs_live_afterremind02", booking_id: id, package: "video", amount_cents: 9999, contact_email: "jamie@example.com" });
+  await wait();
+  assert.equal(theirs("jamie@example.com").filter((m) => m.subject === "Subject Medias: thanks for booking").length, 1);
+}));
+
+test("a mailer that can't send now ends the run, its claim given back: no churn through the rest", () => withReminders(async () => {
+  const one = await due({ contact_email: "one@example.com" });
+  const two = await due({ contact_email: "two@example.com" });
+  await wait();
+  let calls = 0;
+  try {
+    mailer.setSender(async () => { calls += 1; return { sent: false, reason: "daily_limit" }; });
+    assert.deepEqual(await router._remind(db), { sent: 0 });
+    assert.equal(calls, 1, "the run stops at the first");
+    assert.equal(rowOf(one).checkout_reminded_at, null, "its claim is given back");
+    assert.equal(rowOf(two).checkout_reminded_at || null, null, "the second wasn't claimed");
+  } finally {
+    mailer.setSender(async (m) => { mails.push(m); return { sent: true }; });
+  }
+  assert.deepEqual(await router._remind(db), { sent: 2 }, "a later run sends both");
+}));
+
+test("a send that throws is tried three times, the others still go", () => withReminders(async () => {
+  const bad = await due({ contact_email: "bounces@example.com" }, "198.51.100.210");
+  await wait();
+  let tries = 0;
+  try {
+    mailer.setSender(async () => { tries += 1; throw Object.assign(new Error("550 5.1.1 <bounces@example.com> no such user"), { responseCode: 550 }); });
+    for (let i = 0; i < 5; i++) await router._remind(db);
+    assert.equal(tries, 3, "three tries, then it stops");
+    assert.equal(rowOf(bad).checkout_reminded_at, null, "the app doesn't say it went");
+  } finally {
+    mailer.setSender(async (m) => { mails.push(m); return { sent: true }; });
+  }
+  const good2 = await due({ contact_email: "fine@example.com" }, "198.51.100.211");
+  await wait();
+  assert.deepEqual(await router._remind(db), { sent: 1 });
+  assert.ok(rowOf(good2).checkout_reminded_at);
+}));
+
+test("the app says no payment yet and when the reminder went; paying finishes it", () => withReminders(async () => {
+  const r = await form(good({ event_date: "2027-01-16", package: "photo", pay_now: true }));
+  await wait();
+  const cookie = await staffCookie();
+  const mine = async () => (await call("GET", "/api/sm/bookings", undefined, {}, cookie)).data.bookings.find((b) => b.id === r.data.id);
+  let b = await mine();
+  assert.equal(b.pay_now, true);
+  assert.equal(b.unfinished, false, "still on its way, inside the hour");
+  assert.ok(!("contact_email" in b) && !("notes" in b), "the list still carries no contact details or notes");
+  age(r.data.id, HOUR_MS + 60000);
+  b = await mine();
+  assert.equal(b.unfinished, true);
+  assert.equal(b.checkout_reminded_at, null);
+  await router._remind(db);
+  const one = await call("GET", "/api/sm/bookings/" + r.data.id, undefined, {}, cookie);
+  assert.equal(one.data.booking.unfinished, true);
+  assert.ok(one.data.booking.checkout_reminded_at);
+  mails = [];
+  await paidCall({ stripe_session_id: "cs_live_afterremind01", booking_id: r.data.id, package: "photo", amount_cents: 4999, contact_email: "jamie@example.com" });
+  await wait();
+  const after = await call("GET", "/api/sm/bookings/" + r.data.id, undefined, {}, cookie);
+  assert.equal(after.data.booking.paid, true);
+  assert.equal(after.data.booking.unfinished, false);
+  assert.equal(theirs("jamie@example.com").filter((m) => m.subject === "Subject Medias: thanks for booking").length, 1, "the thanks note still goes");
+}));
+
+test("the checkout link, the hour and the game day, by the rules", () => {
+  const id = "8f14e45f-ceea-467e-a1d0-6f1d4c6b2a01";
+  assert.equal(B.checkoutLink({ id, package: "elite", contact_email: "a+your.account.is.locked@example.com" }), `https://buy.stripe.com/dRm14o82vbeidoQ5S9ebu03?client_reference_id=${id}`, "no address (and no +tag words) in the link");
+  assert.equal(B.checkoutLink({ id: id.toUpperCase(), package: "photo" }), `https://buy.stripe.com/28E00kgz1dmqckMcgxebu04?client_reference_id=${id}`);
+  assert.equal(B.checkoutLink({ id, package: "transcript" }), null, "not a pay-now package");
+  assert.equal(B.checkoutLink({ id: "1 or 1=1", package: "photo" }), null);
+  const base = { pay_now: true, source: "form", status: "new", created_at: new Date(Date.now() - 2 * HOUR_MS).toISOString() };
+  assert.equal(B.checkoutUnfinished(base), true);
+  assert.equal(B.checkoutUnfinished({ ...base, stripe_session_id: "cs_live_x12345678" }), false);
+  assert.equal(B.checkoutUnfinished({ ...base, status: "staffed" }), false);
+  assert.equal(B.checkoutUnfinished({ ...base, pay_now: false }), false);
+  assert.equal(B.checkoutUnfinished({ ...base, source: "stripe" }), false);
+  assert.equal(B.checkoutUnfinished({ ...base, created_at: new Date().toISOString() }), false);
+  assert.equal(B.checkoutUnfinished({ ...base, created_at: "not a date" }), false);
+  // 23:00 UTC on Nov 7 is still Nov 7 in New York: a Nov 7 game is today.
+  const late = new Date("2026-11-07T23:00:00Z");
+  assert.equal(B.nyDay(late), "2026-11-07");
+  assert.equal(B.gameAfterToday({ event_date: "2026-11-06" }, late), false);
+  assert.equal(B.gameAfterToday({ event_date: "2026-11-07" }, late), false, "game day is too late for a reminder");
+  assert.equal(B.gameAfterToday({ event_date: "2026-11-08" }, late), true);
+  assert.equal(B.gameAfterToday({ event_date: "2026-11-08" }, new Date("2026-11-08T06:00:00Z")), false, "1 a.m. in New York is the next day");
+  assert.equal(B.gameAfterToday({ event_date: null }, late), false);
+  assert.deepEqual(Object.keys(B.PAY_NOW), ["photo", "video", "elite"]);
+});
+
+test("a database that returns fewer rows than asked still has every booking read: none is skipped", () => withReminders(async () => {
+  // The due request, then three others, then the same inbox again: they came
+  // back, so no reminder. Capped at three rows a request, a read that moved
+  // on by a fixed page would never see that last booking.
+  const id = await due({ contact_email: "capped@example.com" }, "198.51.100.230");
+  for (let i = 0; i < 3; i++) {
+    const other = await form(good({ event_date: "2027-01-16", contact_email: `between${i}@example.com` }), `198.51.100.${231 + i}`);
+    age(other.data.id, 50 * 60 * 1000 - i * 1000);
+  }
+  await form(good({ event_date: "2027-01-16", contact_email: "capped@example.com" }), "198.51.100.240");
+  await wait();
+  const from = db.from.bind(db);
+  db.from = (name) => {
+    const q = from(name);
+    const run = q.run.bind(q);
+    q.run = () => {
+      const r = run();
+      return r && Array.isArray(r.data) && q.op === "select" ? { ...r, data: r.data.slice(0, 3) } : r;
+    };
+    return q;
+  };
+  try {
+    assert.deepEqual(await router._remind(db), { sent: 0 });
+    assert.equal(rowOf(id).checkout_reminded_at || null, null);
+  } finally {
+    db.from = from;
+  }
+}));

@@ -3,7 +3,7 @@
  * /api always goes to the network, so data is never stale or stored here.
  * Push: shows the notification the server sends and opens the app on tap.
  */
-const VERSION = "toj-app-v12";
+const VERSION = "toj-app-v13";
 const SHELL = ["/app/", "/app/app.css", "/app/app.js", "/app/creators.js", "/app/os.js", "/app/gfs.js", "/app/bookings.js", "/app/fellowship.js", "/app/market.js", "/app/chat.js", "/app/shelf.js", "/app/push.js", "/app/manifest.webmanifest", "/app/icons/icon-192.png", "/app/icons/apple-touch-icon.png"];
 
 self.addEventListener("install", (e) => {

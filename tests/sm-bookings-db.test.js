@@ -1,6 +1,6 @@
-// Migrations 030 and 034 in a real Postgres: the rules the database enforces
-// for Subject Medias bookings and the site's counts, so no route bug can
-// break them.
+// Migrations 030, 034 and 035 in a real Postgres: the rules the database
+// enforces for Subject Medias bookings and the site's counts, so no route bug
+// can break them. (The routes on a real Postgres: sm-bookings-routes-db.test.js.)
 //
 // Needs a throwaway Postgres: TEST_DATABASE_URL=postgres://… node --test tests/
 // Works in its own schema (sm_db_test), which it DROPS and recreates. Never
@@ -47,7 +47,7 @@ before(async () => {
   // The one table 030 points at (migration 024 makes the real one).
   await q(`create table ${S}.gfs_creators (id uuid primary key default gen_random_uuid(), name text not null)`);
   creator = (await q(`insert into gfs_creators (name) values ('Amy Near') returning *`)).rows[0];
-  for (const f of ["030_sm_bookings.sql", "034_sm_bookings_more.sql"]) {
+  for (const f of ["030_sm_bookings.sql", "034_sm_bookings_more.sql", "035_sm_checkout_reminder.sql"]) {
     const sql = fs.readFileSync(path.join(__dirname, "..", "db", "migrations", f), "utf8").replace(/public\./g, `${S}.`);
     await q(sql);
     await q(sql); // safe to run twice
@@ -144,4 +144,15 @@ test("034: only the server counts; the API roles can't call it or read the count
   }
   assert.equal((await q(`select has_function_privilege('service_role', '${fn}', 'execute') as can`)).rows[0].can, true);
   assert.equal((await q(`select relrowsecurity from pg_class where oid = '${S}.sm_site_counts'::regclass`)).rows[0].relrowsecurity, true);
+});
+
+test("035: pay now is a form request's, and only a pay-now request is reminded", async () => {
+  const b = (await q(...form())).rows[0];
+  assert.equal(b.pay_now, false, "bookings without it are untouched");
+  assert.equal(b.checkout_reminded_at, null);
+  assert.equal((await q(...form({ pay_now: true }))).rows[0].pay_now, true);
+  await refused(...form({ source: "stripe", adult_confirmed: false, stripe_session_id: "cs_live_paynowstripe1", pay_now: true }), "sm_bookings_pay_now_form");
+  await refused(`update sm_bookings set checkout_reminded_at = now() where id = $1`, [b.id], "sm_bookings_reminder_pay_now");
+  const idx = await q(`select indexdef from pg_indexes where schemaname = $1 and indexname = 'sm_bookings_unfinished_checkout'`, [S]);
+  assert.match(idx.rows[0].indexdef, /WHERE \(pay_now AND \(stripe_session_id IS NULL\) AND \(checkout_reminded_at IS NULL\)\)/);
 });
