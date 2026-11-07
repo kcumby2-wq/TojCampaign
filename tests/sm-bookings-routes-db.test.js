@@ -111,7 +111,11 @@ test("after 035: one reminder, Stripe asked first, claimed once even with two se
   setSupabase(sb);
   router._resetLimits();
   const sessions = [];
-  router._setStripe(() => ({ checkout: { sessions: { list: async () => ({ data: sessions, has_more: false }) } } }));
+  // A package bought earlier: the live checkout the app holds, which Stripe
+  // knows, so the key is the site's.
+  await pool.query(`insert into sm_bookings (source, kind, package, contact_name, contact_email, adult_confirmed, stripe_session_id, amount_cents) values ('stripe', 'athlete', 'photo', 'Stripe customer', 'earlier@example.com', false, 'cs_live_knownpg000001', 4999)`);
+  const fake = () => ({ checkout: { sessions: { list: async () => ({ data: sessions, has_more: false }), retrieve: async (id) => { if (id === "cs_live_knownpg000001") return { id }; throw Object.assign(new Error("No such checkout.session"), { code: "resource_missing" }); } } } });
+  router._setStripe(fake);
   process.env.EMAIL_USER = "subjectmedias@gmail.com";
   process.env.EMAIL_PASS = "app-password";
   process.env.SM_STRIPE_READ_KEY = "rk_live_" + "a".repeat(24);
@@ -128,7 +132,7 @@ test("after 035: one reminder, Stripe asked first, claimed once even with two se
     const key = require.resolve("../routes/sm-bookings");
     delete require.cache[key];
     const other = require("../routes/sm-bookings");
-    other._setStripe(() => ({ checkout: { sessions: { list: async () => ({ data: sessions, has_more: false }) } } }));
+    other._setStripe(fake);
     other._notePayNowVisitor(due.data.id, "198.51.100.1");
     other._notePayNowVisitor(clearing.data.id, "198.51.100.2");
     const both = await Promise.all([router._remind(sb), other._remind(sb)]);

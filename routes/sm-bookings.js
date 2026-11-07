@@ -436,11 +436,14 @@ router.post("/paid", safe(async (req, res) => {
 //
 // The app only learns of a payment through the site's webhook, which can be
 // late, broken, or (for a bank payment still clearing) days away. So before
-// any reminder goes, it asks Stripe itself: a checkout completed since the
-// request (paid, or a payment still clearing) that names the request, or
+// any reminder goes, it asks Stripe itself: a checkout completed in the last
+// week (paid, or a bank payment still clearing) that names the request, or
 // comes from the same mailbox on one of the site's payment links, means no
-// reminder. No Stripe key (SM_STRIPE_READ_KEY, a live read-only key), or no
-// answer from Stripe: no reminders at all.
+// reminder. The key (SM_STRIPE_READ_KEY: a live restricted key, the same
+// kind as the site's) must be for the site's Stripe account: Stripe has to
+// know the newest live checkout the app holds, so until the app holds one
+// (the first payment), nothing goes. No key, another account's, or no answer
+// from Stripe: no reminders at all.
 //
 // Never for a request more than two days old, one staff have moved past new,
 // a game that's today or past, a request whose visitor this server didn't
@@ -448,25 +451,30 @@ router.post("/paid", safe(async (req, res) => {
 // after a restart those requests get none), or a booker with another booking
 // from the same mailbox that's paid, or newer.
 //
-// Reminders have limits of their own, apart from the booker's notes (so a
-// reminder never stops a "thanks for booking"): one a day to a mailbox,
-// three a day from one visitor, 10 an hour and 30 a day in all, at most 10 a
-// run. Runs every few minutes; SM_CHECKOUT_REMINDERS=off stops it.
+// Limits: one reminder a day to a mailbox, apart from the booker's notes (so a
+// reminder never stops a "thanks for booking"); one visitor's three a day are
+// shared with the notes their requests set off, so one visitor can make the
+// app email at most three people a day; 10 reminders an hour and 30 a day in
+// all, at most 10 a run. Runs every few minutes; SM_CHECKOUT_REMINDERS=off
+// stops it.
 const REMIND_EVERY_MS = 5 * 60 * 1000;
 const REMIND_WITHIN_MS = 2 * DAY_MS;
-const STRIPE_LOOKBACK_MS = 2 * HOUR;
+// A bank payment can take days to clear: a checkout completed this long ago
+// still stands for a payment on its way.
+const STRIPE_LOOKBACK_MS = 7 * DAY_MS;
+const KEY_CHECK_MS = HOUR;
 const MAX_REMIND_TRIES = 3;
 const MAX_REMIND_PER_RUN = 10;
 const MAX_REMIND_PER_MAILBOX = 1;
-const MAX_REMIND_PER_VISITOR = 3;
 const MAX_REMIND_PER_HOUR = 10;
 const MAX_REMIND_PER_DAY = 30;
 const PAGE_ROWS = 100;
 const MAX_PAGES = 10;
-const LIVE_KEY = /^(rk|sk)_live_[A-Za-z0-9]{10,}$/;
+// Restricted only: a full secret key can do far more than read checkouts.
+const LIVE_KEY = /^rk_live_[A-Za-z0-9]{10,}$/;
 const remindTries = new Map(); // booking id → sends that failed, in this process
 const payNowVisitors = new Map(); // booking id → { who, at }: who sent a pay-now request
-const remindSent = new Map(); // mailbox or visitor key → times
+const remindSent = new Map(); // mailbox key → reminder times
 let remindTimes = [];
 let reminding = false;
 const warned = new Set();
@@ -477,19 +485,25 @@ function notePayNowVisitor(id, who, now = Date.now()) {
   if (payNowVisitors.size > 5000) for (const [k, v] of payNowVisitors) if (now - v.at > REMIND_WITHIN_MS) payNowVisitors.delete(k);
 }
 
-// A place for one reminder, or no. Returns the way to give it back.
+// A place for one reminder, or no. The mailbox's count is the reminders'
+// own; the visitor's is the one the booker's notes use (bookerMailAllowed).
+// Returns the way to give it back.
 function reminderAllowed(address, who, now = Date.now()) {
   remindTimes = remindTimes.filter((t) => now - t < DAY_MS);
   if (remindTimes.length >= MAX_REMIND_PER_DAY || remindTimes.filter((t) => now - t < HOUR).length >= MAX_REMIND_PER_HOUR) return null;
-  const keys = [[keyOf("rto", B.mailbox(address)), MAX_REMIND_PER_MAILBOX], [keyOf("rfrom", visitorKey(who)), MAX_REMIND_PER_VISITOR]];
-  for (const [k, max] of keys) if ((remindSent.get(k) || []).filter((t) => now - t < DAY_MS).length >= max) return null;
-  for (const [k] of keys) remindSent.set(k, [...(remindSent.get(k) || []).filter((t) => now - t < DAY_MS), now]);
+  const box = keyOf("rto", B.mailbox(address)), from = keyOf("from", visitorKey(who));
+  const boxTimes = (remindSent.get(box) || []).filter((t) => now - t < DAY_MS);
+  const fromTimes = (bookerSent.get(from) || []).filter((t) => now - t < DAY_MS);
+  if (boxTimes.length >= MAX_REMIND_PER_MAILBOX || fromTimes.length >= MAX_BOOKER_PER_VISITOR) return null;
+  remindSent.set(box, [...boxTimes, now]);
+  bookerSent.set(from, [...fromTimes, now]);
   remindTimes.push(now);
   if (remindSent.size > 20000) for (const [k, v] of remindSent) if (!v.some((t) => now - t < DAY_MS)) remindSent.delete(k);
   const drop = (list) => { const i = list.lastIndexOf(now); if (i >= 0) list.splice(i, 1); };
   return () => {
     drop(remindTimes);
-    for (const [k] of keys) drop(remindSent.get(k) || []);
+    drop(remindSent.get(box) || []);
+    drop(bookerSent.get(from) || []);
   };
 }
 
@@ -497,6 +511,32 @@ let makeStripe = (key) => new (require("stripe"))(key, { appInfo: { name: "Subje
 function stripeKey() {
   const key = String(process.env.SM_STRIPE_READ_KEY || "").trim();
   return LIVE_KEY.test(key) ? key : null;
+}
+
+// The key is for the site's Stripe account: Stripe knows the newest live
+// checkout the app holds (only the site's webhook and details page write
+// one). Until the app holds one, or when Stripe says no, nothing can be
+// trusted. A clear answer is kept for an hour; no answer isn't kept.
+let keyCheck = { key: null, sid: null, at: 0, ok: false };
+async function keyIsTheSites(sb, stripe, key, now) {
+  const { data, error } = await sb.from("sm_bookings").select("stripe_session_id,created_at").not("stripe_session_id", "is", null)
+    .order("created_at", { ascending: false }).limit(50);
+  if (error) return false;
+  const known = (data || []).map((r) => String(r.stripe_session_id)).find((sid) => /^cs_live_/.test(sid));
+  if (!known) return false;
+  if (keyCheck.key === key && keyCheck.sid === known && now - keyCheck.at < KEY_CHECK_MS) return keyCheck.ok;
+  let ok;
+  try {
+    const s = await stripe.checkout.sessions.retrieve(known);
+    ok = !!s && s.id === known;
+  } catch (e) {
+    // Only "no such checkout" is an answer; anything else is no answer.
+    if (!(e && (e.code === "resource_missing" || e.statusCode === 404))) throw e;
+    ok = false;
+  }
+  keyCheck = { key, sid: known, at: now, ok };
+  if (!ok) warnOnce("key-" + key.slice(-6), "[sm-bookings] checkout reminders: SM_STRIPE_READ_KEY isn't for the site's Stripe account");
+  return ok;
 }
 
 // What Stripe knows since a moment: the requests named by a completed
@@ -536,6 +576,20 @@ async function dueRequests(sb, now) {
     if (!data || data.length < PAGE_ROWS) break;
   }
   return { rows };
+}
+
+// Every booking since a moment, a page at a time (Supabase stops a request at
+// 1,000 rows). Null past ten pages: too many to read, so nothing goes.
+async function bookingsSince(sb, fromIso) {
+  const rows = [];
+  for (let page = 0; page < MAX_PAGES; page++) {
+    const { data, error } = await sb.from("sm_bookings").select("id,contact_email,stripe_session_id,created_at").gte("created_at", fromIso)
+      .order("created_at", { ascending: true }).range(page * 1000, page * 1000 + 999);
+    if (error) return null;
+    rows.push(...(data || []));
+    if (!data || data.length < 1000) return rows;
+  }
+  return null;
 }
 
 // One reminder: a place in the reminders' limits, the claim on the row (only
@@ -588,34 +642,38 @@ async function remindUnfinished(sb = getSupabase(), now = Date.now()) {
       console.warn("[sm-bookings] checkout reminders: read failed:", got.error.code || "", got.error.message || "");
       return { error: true };
     }
-    let due = got.rows.filter((b) => B.checkoutUnfinished(b, now) && B.gameAfterToday(b, now) && B.isEmail(b.contact_email) && B.checkoutLink(b)
-      && (remindTries.get(b.id) || 0) < MAX_REMIND_TRIES && payNowVisitors.has(b.id));
+    // Who sent each one is taken now: an entry can be pruned mid-run.
+    let due = got.rows.map((b) => ({ b, seen: payNowVisitors.get(b.id) }))
+      .filter(({ b, seen }) => seen && B.checkoutUnfinished(b, now) && B.gameAfterToday(b, now) && B.isEmail(b.contact_email) && B.checkoutLink(b) && (remindTries.get(b.id) || 0) < MAX_REMIND_TRIES);
     if (!due.length) return { sent: 0 };
     // Another booking from the same mailbox that's paid, or newer (they sent
     // the request again, or paid some other way).
-    const from = new Date(Date.parse(due[0].created_at) - REMIND_WITHIN_MS).toISOString();
-    const { data: around, error: e2 } = await sb.from("sm_bookings").select("id,contact_email,stripe_session_id,created_at").gte("created_at", from).limit(5000);
-    if (e2) return { error: true };
-    due = due.filter((b) => {
+    const around = await bookingsSince(sb, new Date(Date.parse(due[0].b.created_at) - REMIND_WITHIN_MS).toISOString());
+    if (!around) return { error: true };
+    due = due.filter(({ b }) => {
       const box = B.mailbox(b.contact_email), t = Date.parse(b.created_at);
-      return !(around || []).some((x) => x.id !== b.id && B.mailbox(x.contact_email) === box && (x.stripe_session_id || Date.parse(x.created_at) > t));
+      return !around.some((x) => x.id !== b.id && B.mailbox(x.contact_email) === box && (x.stripe_session_id || Date.parse(x.created_at) > t));
     });
     if (!due.length) return { sent: 0 };
-    // What Stripe itself knows: a completed checkout for the request, or from
-    // the same mailbox on a payment link.
-    let seen;
+    // What Stripe itself knows, once it's clear the key is the site's: a
+    // checkout completed in the last week for the request, or from the same
+    // mailbox on a payment link.
+    let stripeSeen;
     try {
-      seen = await stripeCompleted(makeStripe(key), Date.parse(due[0].created_at) - STRIPE_LOOKBACK_MS);
+      const stripe = makeStripe(key);
+      if (!(await keyIsTheSites(sb, stripe, key, now))) return { off: "stripe_key_unverified" };
+      stripeSeen = await stripeCompleted(stripe, now - STRIPE_LOOKBACK_MS);
     } catch (e) {
-      console.warn("[sm-bookings] checkout reminders: Stripe didn't answer:", (e && (e.code || e.type)) || "error");
+      const code = (e && (e.code || e.type || e.statusCode)) || "error";
+      warnOnce("stripe-" + code, "[sm-bookings] checkout reminders: Stripe didn't answer:", code);
       return { off: "stripe_unavailable" };
     }
-    if (!seen) return { off: "stripe_too_many" };
+    if (!stripeSeen) return { off: "stripe_too_many" };
     let sent = 0;
-    for (const b of due) {
+    for (const { b, seen } of due) {
       if (sent >= MAX_REMIND_PER_RUN) break;
-      if (seen.ids.has(String(b.id).toLowerCase()) || seen.boxes.has(B.mailbox(b.contact_email))) continue;
-      const r = await remindOne(sb, b, payNowVisitors.get(b.id).who);
+      if (stripeSeen.ids.has(String(b.id).toLowerCase()) || stripeSeen.boxes.has(B.mailbox(b.contact_email))) continue;
+      const r = await remindOne(sb, b, seen.who);
       if (r === "sent") sent += 1;
       if (r === "stop") break;
     }
@@ -710,12 +768,13 @@ router.patch("/:id", requireStaff, safe(async (req, res) => {
 }));
 
 router._limited = limited;
-router._resetLimits = () => { hits.clear(); forms = []; emails = []; bookerSent.clear(); bookerTimes = []; remindTries.clear(); remindSent.clear(); remindTimes = []; payNowVisitors.clear(); };
+router._resetLimits = () => { hits.clear(); forms = []; emails = []; bookerSent.clear(); bookerTimes = []; remindTries.clear(); remindSent.clear(); remindTimes = []; payNowVisitors.clear(); keyCheck = { key: null, sid: null, at: 0, ok: false }; };
 router._remind = remindUnfinished;
 const defaultStripe = makeStripe;
 router._setStripe = (fn) => { makeStripe = fn || defaultStripe; };
 router._forgetVisitors = () => payNowVisitors.clear();
 router._notePayNowVisitor = notePayNowVisitor;
+router._forgetKeyCheck = () => { keyCheck = { key: null, sid: null, at: 0, ok: false }; };
 router._hits = hits;
 router._visitorKey = visitorKey;
 module.exports = router;
