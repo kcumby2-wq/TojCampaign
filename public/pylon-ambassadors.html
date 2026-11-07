@@ -10,6 +10,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Anton&family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect fill='%230A0A0A' width='100' height='100'/%3E%3Cpath fill='%23F4C82E' d='M20 20h60v60H20z'/%3E%3Cpath fill='%230A0A0A' d='M35 35h30v30H35z'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="/pylon-forms.css">
 <style>
 :root{--black:#0A0A0A;--near-black:#161616;--surface:#1A1A1A;--surface-2:#242424;--yellow:#F4C82E;--yellow-2:#FFE066;--white:#FFFFFF;--dim:rgba(255,255,255,.72);--dimmer:rgba(255,255,255,.5);--line:#2A2A2A;--green:#5FCF80}
 *{box-sizing:border-box;margin:0;padding:0}
@@ -180,100 +181,50 @@ footer a{color:var(--yellow)}
     <h2 class="chapter-h">Rolling review · <span class="accent">most decisions in 7 days.</span></h2>
     <p class="sec-lede">Applications are reviewed weekly. Tier assignment happens at acceptance based on your handles, audience, and content history. Not every applicant is accepted — the program is capped at 100 active ambassadors across all tiers.</p>
 
-    <form id="app-form" style="margin-top:32px">
-      <div class="form-row two">
-        <div>
-          <label>Full Name</label>
-          <input type="text" name="full_name" required>
-        </div>
-        <div>
-          <label>Position</label>
-          <select name="position" required>
-            <option value="">Select…</option>
-            <option>QB</option><option>WR</option><option>RB</option><option>TE</option>
-            <option>OL</option><option>DL</option><option>LB</option><option>DB</option>
-            <option>K/P</option><option>ATH</option>
-          </select>
-        </div>
-      </div>
-
-      <div class="form-row two">
-        <div>
-          <label>Class Year</label>
-          <select name="class_year" required>
-            <option value="">Select…</option>
-            <option>2026</option><option>2027</option><option>2028</option><option>2029</option><option>2030</option>
-          </select>
-        </div>
-        <div>
-          <label>Team / Program</label>
-          <input type="text" name="team_name" required>
-        </div>
-      </div>
-
-      <div class="form-row">
-        <label>Email</label>
-        <input type="email" name="email" required>
-      </div>
-
-      <div class="form-row">
-        <label>Parent / Guardian Email (required for minors)</label>
-        <input type="email" name="parent_email">
-      </div>
-
-      <div class="form-row two">
-        <div>
-          <label>Instagram Handle</label>
-          <input type="text" name="ig_handle" placeholder="@yourhandle">
-        </div>
-        <div>
-          <label>TikTok Handle</label>
-          <input type="text" name="tiktok_handle" placeholder="@yourhandle">
-        </div>
-      </div>
-
-      <div class="form-row two">
-        <div>
-          <label>Total Followers (all platforms)</label>
-          <input type="number" name="follower_count_total" min="0" placeholder="e.g. 5200">
-        </div>
-        <div>
-          <label>Tier Target</label>
-          <select name="tier_target">
-            <option value="standard">Standard ($50/mo)</option>
-            <option value="featured">Featured ($150/mo)</option>
-            <option value="flagship">Flagship ($500/mo)</option>
-          </select>
-        </div>
-      </div>
-
-      <div class="form-row">
-        <label>Why do you want to be a Pylon Ambassador?</label>
-        <textarea name="why" placeholder="A short paragraph — what you post about, what your audience responds to, what you want out of the program."></textarea>
-      </div>
-
-      <div class="form-row">
-        <label>Guardian Consent (required for minors)</label>
-        <select name="guardian_consent" required>
-          <option value="">Select…</option>
-          <option value="parent_yes">Parent — I consent + I will co-sign contract</option>
-          <option value="guardian_yes">Legal guardian — I consent + will co-sign</option>
-          <option value="adult">Athlete is 18+</option>
+    <form class="pf" data-kind="ambassador" style="margin-top:32px">
+      <div class="pf-row"><label for="am-who">Who's filling this in?</label>
+        <select id="am-who" name="who" required>
+          <option value="">Choose…</option>
+          <option value="adult">I'm the athlete, 18 or older</option>
+          <option value="parent">I'm the athlete's parent</option>
+          <option value="guardian">I'm the athlete's legal guardian</option>
+          <option value="minor">I'm the athlete, under 18</option>
         </select>
       </div>
-
-      <button type="submit" class="submit-btn" id="submit-btn">Submit Application</button>
+      <div class="pf-stop" data-minor-stop hidden>Ask your parent or guardian to fill this in with you. It has to come from them, and our emails go to them.</div>
+      <div class="pf-two">
+        <div class="pf-row"><label for="am-athlete">Athlete's full name</label><input id="am-athlete" name="athlete_name" required maxlength="80"></div>
+        <div class="pf-row"><label for="am-email">Athlete's email</label><input id="am-email" type="email" name="athlete_email" required maxlength="200"></div>
+      </div>
+      <div class="pf-two">
+        <div class="pf-row"><label for="am-pos">Position</label><select id="am-pos" name="position" required><option value="">Choose…</option><option>QB</option><option>WR</option><option>RB</option><option>TE</option><option>OL</option><option>DL</option><option>LB</option><option>DB</option><option>K/P</option><option>ATH</option></select></div>
+        <div class="pf-row"><label for="am-year">Class year</label><select id="am-year" name="class_year" required><option value="">Choose…</option><option>2027</option><option>2028</option><option>2029</option><option>2030</option><option>2031</option><option>2032</option></select></div>
+      </div>
+      <div class="pf-row"><label for="am-team">Team or program</label><input id="am-team" name="team_name" required maxlength="80"></div>
+      <div class="pf-two" data-family>
+        <div class="pf-row"><label for="am-pname">Parent or guardian's name</label><input id="am-pname" name="contact_name" data-req required maxlength="80" autocomplete="name"></div>
+        <div class="pf-row"><label for="am-pemail">Parent or guardian's email</label><input id="am-pemail" type="email" name="contact_email" data-req required maxlength="200" autocomplete="email"></div>
+      </div>
+      <div class="pf-two">
+        <div class="pf-row"><label for="am-ig">Instagram <span class="pf-opt">optional</span></label><input id="am-ig" name="ig_handle" maxlength="40" placeholder="@handle"></div>
+        <div class="pf-row"><label for="am-tt">TikTok <span class="pf-opt">optional</span></label><input id="am-tt" name="tiktok_handle" maxlength="40" placeholder="@handle"></div>
+      </div>
+      <div class="pf-two">
+        <div class="pf-row"><label for="am-f">Total followers <span class="pf-opt">optional</span></label><input id="am-f" type="number" name="follower_count" min="0" max="1000000000" inputmode="numeric" placeholder="e.g. 5200"></div>
+        <div class="pf-row"><label for="am-tier">Tier you're applying for</label><select id="am-tier" name="package" required><option value="standard">Standard ($50 a month)</option><option value="featured">Featured ($150 a month)</option><option value="flagship">Flagship ($500 a month)</option></select></div>
+      </div>
+      <div class="pf-row"><label for="am-why">Why do you want to be a Pylon Ambassador? <span class="pf-opt">optional</span></label><textarea id="am-why" name="why" maxlength="1000" placeholder="What you post about, what your audience responds to, what you want out of the program."></textarea></div>
+      <label class="pf-check"><input type="checkbox" name="consent_confirm" required><span data-consent-words>Choose who's filling this in to see what you're agreeing to.</span></label>
+      <div class="pf-hp" aria-hidden="true"><label for="am-trap">Leave this empty</label><input id="am-trap" name="pf_trap" tabindex="-1" autocomplete="off"></div>
+      <div class="pf-msg" role="status" aria-live="polite"></div>
+      <div class="pf-actions"><button type="submit" class="pf-primary">Send application</button></div>
 
       <div class="review-note">
-        <b>Applications are reviewed weekly</b>
-        Your application lands in <code>applied_pending_review</code> status. If accepted, you'll get an onboarding email within 7 days with contract, tier assignment, and first-month stipend timing. Applications are held until parent/guardian consent is documented for anyone under 18. NCAA-eligible athletes: we route to NIL compliance review before tier assignment.
+        <b>How review works</b>
+        Kyron and the Head of Social review applications every week. If we can offer you a spot, you'll get an email within 7 days with the agreement, the tier and when the first stipend is paid. For anyone under 18, a parent or guardian reviews and signs the agreement before anything starts. Athletes with college eligibility to protect go through an NIL compliance review before a tier is set.
       </div>
     </form>
-
-    <div class="thanks" id="thanks">
-      <h3>Application received.</h3>
-      <p>Kyron and the Head of Social review applications every Monday. If we can slot you in, you'll hear back with an onboarding email within 7 days. Thanks for applying to the program.</p>
-    </div>
+    <div class="pf-done" hidden></div>
   </div>
 </section>
 
@@ -282,9 +233,9 @@ footer a{color:var(--yellow)}
     <span class="chapter-tag">◆ Featured ambassadors</span>
     <h2 class="chapter-h">Some of the <span class="accent">roster.</span></h2>
     <div class="spotlight-grid" id="spotlight">
-      <div class="amb-card"><div class="name">Featured Slot</div><div class="position">Reserved for Program Launch</div><div class="followers">Program capped at 100 ambassadors · roster fills after Q1 2026 launch.</div></div>
-      <div class="amb-card"><div class="name">Featured Slot</div><div class="position">Reserved for Program Launch</div><div class="followers">Program capped at 100 ambassadors · roster fills after Q1 2026 launch.</div></div>
-      <div class="amb-card"><div class="name">Featured Slot</div><div class="position">Reserved for Program Launch</div><div class="followers">Program capped at 100 ambassadors · roster fills after Q1 2026 launch.</div></div>
+      <div class="amb-card"><div class="name">Featured Slot</div><div class="position">Reserved for Program Launch</div><div class="followers">Program capped at 100 ambassadors · the roster fills as athletes are accepted.</div></div>
+      <div class="amb-card"><div class="name">Featured Slot</div><div class="position">Reserved for Program Launch</div><div class="followers">Program capped at 100 ambassadors · the roster fills as athletes are accepted.</div></div>
+      <div class="amb-card"><div class="name">Featured Slot</div><div class="position">Reserved for Program Launch</div><div class="followers">Program capped at 100 ambassadors · the roster fills as athletes are accepted.</div></div>
     </div>
   </div>
 </section>
@@ -296,55 +247,7 @@ footer a{color:var(--yellow)}
   </div>
 </footer>
 
-<script>
-document.getElementById('app-form').addEventListener('submit', async (e) => {
-  e.preventDefault();
-  const btn = document.getElementById('submit-btn');
-  btn.disabled = true;
-  btn.textContent = 'Submitting…';
-  const formData = Object.fromEntries(new FormData(e.target));
-  try {
-    const res = await fetch('/api/pylon/ambassadors', {
-      method: 'POST',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({
-        // athlete_id is not known at application time · will be resolved on acceptance
-        athlete_id: null,
-        tier: formData.tier_target,
-        monthly_stipend_cents: formData.tier_target === 'flagship' ? 50000 : formData.tier_target === 'featured' ? 15000 : 5000,
-        posts_expected_weekly: formData.tier_target === 'flagship' ? 7 : formData.tier_target === 'featured' ? 5 : 3,
-        ig_handle: (formData.ig_handle || '').replace(/^@/, ''),
-        tiktok_handle: (formData.tiktok_handle || '').replace(/^@/, ''),
-        follower_count_total: parseInt(formData.follower_count_total, 10) || 0,
-        status: 'applied_pending_review',
-        metadata: {
-          full_name: formData.full_name,
-          position: formData.position,
-          class_year: formData.class_year,
-          team_name: formData.team_name,
-          email: formData.email,
-          parent_email: formData.parent_email,
-          why: formData.why,
-          guardian_consent: formData.guardian_consent,
-        },
-      }),
-    });
-    if (res.ok) {
-      document.getElementById('app-form').style.display = 'none';
-      document.getElementById('thanks').classList.add('show');
-      window.scrollTo({top: document.getElementById('thanks').offsetTop - 100, behavior: 'smooth'});
-    } else {
-      btn.disabled = false;
-      btn.textContent = 'Submit Application';
-      alert('Something went wrong. Please email hello@pylonfootball.com to apply directly.');
-    }
-  } catch (err) {
-    btn.disabled = false;
-    btn.textContent = 'Submit Application';
-    alert('Network error. Please try again.');
-  }
-});
-</script>
+<script src="/pylon-forms.js" defer></script>
 
 </body>
 </html>

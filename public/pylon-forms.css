@@ -1,0 +1,33 @@
+/* The Pylon pages' request forms (pylon-forms.js). Uses each page's own
+   colors (--yellow, --line, --dim, --black, --white). */
+/* The pages show and hide their own parts with display rules; hidden wins. */
+[hidden]{display:none!important}
+.pf-row{margin-bottom:16px}
+.pf-row label,.pf-legend{display:block;font-family:'JetBrains Mono',monospace;font-size:10.5px;color:var(--yellow);letter-spacing:.16em;text-transform:uppercase;font-weight:700;margin-bottom:6px}
+.pf-row .pf-opt{color:var(--dimmer,rgba(255,255,255,.5));font-weight:500;letter-spacing:.1em}
+.pf-row input,.pf-row select,.pf-row textarea{width:100%;padding:12px 14px;background:var(--black);border:1px solid var(--line);color:var(--white);font-family:'Inter',-apple-system,sans-serif;font-size:15px;border-radius:0}
+.pf-row textarea{min-height:96px;resize:vertical;line-height:1.5}
+.pf-row input:focus,.pf-row select:focus,.pf-row textarea:focus{outline:2px solid var(--yellow);outline-offset:-2px}
+.pf-row [aria-invalid="true"]{border-color:#FF6B6B}
+.pf-hint{font-size:12.5px;color:var(--dim);margin-top:6px;line-height:1.45}
+.pf-two{display:grid;grid-template-columns:1fr;gap:0 14px}
+@media(min-width:560px){.pf-two{grid-template-columns:1fr 1fr}}
+.pf-check{display:flex;gap:12px;align-items:flex-start;margin-bottom:14px;padding:12px 14px;border:1px solid var(--line);background:rgba(255,255,255,.02)}
+.pf-check input{width:20px;height:20px;flex:0 0 20px;margin-top:2px;accent-color:var(--yellow)}
+.pf-check span{font-size:14px;line-height:1.5;color:var(--white)}
+.pf-check.pf-bad{border-color:#FF6B6B}
+.pf-note{font-size:13px;color:var(--dim);line-height:1.5;margin:4px 0 14px}
+.pf-msg{font-size:14px;line-height:1.5;margin-top:12px;min-height:1px}
+.pf-msg.pf-err{color:#FF8A8A}
+.pf-stop{background:rgba(244,200,46,.08);border:1px solid var(--yellow);padding:14px 16px;font-size:14px;line-height:1.5;color:var(--white);margin-bottom:14px}
+.pf-hp{position:absolute!important;left:-10000px!important;width:1px!important;height:1px!important;overflow:hidden!important}
+.pf-done h4{font-family:'Anton',sans-serif;font-size:26px;text-transform:uppercase;color:var(--white);margin-bottom:10px;letter-spacing:0}
+.pf-done p{font-size:15px;color:var(--dim);line-height:1.55;margin-bottom:12px}
+.pf-banner{background:var(--yellow);color:var(--black);padding:14px 22px;font-size:14.5px;line-height:1.45;font-weight:600;text-align:center}
+.pf-banner.pf-calm{background:var(--surface-2,#222);color:var(--white);border-bottom:1px solid var(--line)}
+.pf-actions{display:flex;gap:12px;margin-top:20px;flex-wrap:wrap}
+.pf-actions button{flex:1 1 160px;padding:14px;font-family:'JetBrains Mono',monospace;font-size:11.5px;letter-spacing:.16em;text-transform:uppercase;font-weight:700;border:none;cursor:pointer}
+.pf-actions .pf-primary{background:var(--yellow);color:var(--black)}
+.pf-actions .pf-primary[disabled]{opacity:.55;cursor:default}
+.pf-actions .pf-secondary{background:transparent;color:var(--dim);border:1px solid var(--line)}
+.pf-actions button:focus-visible,.book:focus-visible{outline:2px solid var(--white);outline-offset:2px}

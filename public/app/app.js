@@ -313,6 +313,7 @@
 
     var tiles =
       (isOwner() ? '<a class="tile" href="#bookings">' + I.cal + "Bookings</a>" : "") +
+      (isOwner() ? '<a class="tile" href="#pylon">' + I.layers + "Pylon</a>" : "") +
       (isOwner() ? '<a class="tile" href="#applications">' + I.camera + "Fellowship</a>" : "") +
       (hasTool("market") ? '<a class="tile" href="#market">' + I.photo + "Marketplace</a>" : "") +
       (hasTool("gfs") ? '<a class="tile" href="#events">' + I.cal + "Events</a>" + '<a class="tile" href="#gfs-desk">' + I.desk + "Distribution desk</a>" : "") +
@@ -828,17 +829,10 @@
     "performance-agents": { name: "Performance Agents", path: "/admin/performance-agents.html" },
     campaign: { name: "Campaign Deal Graph", path: "/admin/campaign.html" },
     waitlist: { name: "Waitlist & Pilots", path: "/admin/waitlist.html" },
-    pylon: { name: "Pylon Admin", path: "/admin/pylon.html" },
-    "pylon-live": { name: "Pylon Live Console", path: "/admin/pylon-live-console.html" },
-    "pylon-calendar": { name: "Content Calendar", path: "/admin/pylon-content-calendar.html" },
-    "pylon-performance": { name: "Content Performance", path: "/admin/pylon-content-performance.html" },
-    "pylon-ambassadors": { name: "Pylon Ambassadors", path: "/admin/pylon-ambassadors.html" },
-    "pylon-newsletter": { name: "Pylon Newsletter", path: "/admin/pylon-newsletter.html" },
   };
   var TOOL_GROUPS = [
     ["Agents", ["toj-agents", "hooks-agents", "diagnostic-agents", "performance-agents", "campaign"]],
     ["CRMs and ops", ["intake-crm", "waitlist", "command-center"]],
-    ["Pylon", ["pylon", "pylon-live", "pylon-calendar", "pylon-performance", "pylon-ambassadors", "pylon-newsletter"]],
   ];
   function toolRow(key) {
     var t = TOOLS[key];
@@ -856,7 +850,10 @@
       '<a class="li" href="#events"><div class="ico" style="width:36px;height:36px;border-radius:9px">' + I.cal + '</div><div class="grow"><div class="name" style="font-size:15.5px">Events</div><div class="sub">Plans, crews, the roster, live, tags</div></div>' + I.chev + "</a>" +
       '<a class="li" href="#gfs-creators"><div class="ico" style="width:36px;height:36px;border-radius:9px">' + I.people + '</div><div class="grow"><div class="name" style="font-size:15.5px">Creator scorecards</div><div class="sub">The standard, by region</div></div>' + I.chev + "</a>" +
       "</div></section>" : "";
-    var rest = isOwner() ? TOOL_GROUPS.map(function (g) { return '<section class="sec"><h2 class="sec-h">' + h(g[0]) + '</h2><div class="list">' + g[1].map(toolRow).join("") + "</div></section>"; }).join("") :
+    var pylonSec = isOwner() ? '<section class="sec"><h2 class="sec-h">Pylon</h2><div class="list">' +
+      row("#pylon", I.layers, "Pylon requests", "Coverage, transcripts, the Concierge, Premium, ambassador applications") +
+      row("#pylon-newsletter", I.people, "Pylon newsletter", "The Off-Season Signal's confirmed list") + "</div></section>" : "";
+    var rest = isOwner() ? pylonSec + TOOL_GROUPS.map(function (g) { return '<section class="sec"><h2 class="sec-h">' + h(g[0]) + '</h2><div class="list">' + g[1].map(toolRow).join("") + "</div></section>"; }).join("") :
       '<p class="empty">More tools show up here as they move into the app. The CRMs and anything holding minors\' data stay with Kyron.</p>';
     // The team's tool shelf (shelf.js): links the owner adds, for the people they pick.
     var shelf = window.TOJShelf ? await window.TOJShelf.section() : "";

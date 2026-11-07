@@ -10,6 +10,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Anton&family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect fill='%230A0A0A' width='100' height='100'/%3E%3Cpath fill='%23F4C82E' d='M20 20h60v60H20z'/%3E%3Cpath fill='%230A0A0A' d='M35 35h30v30H35z'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="/pylon-forms.css">
 <style>
 :root{--black:#0A0A0A;--near-black:#161616;--surface:#1A1A1A;--surface-2:#222;--yellow:#F4C82E;--yellow-2:#FFE066;--white:#FFFFFF;--dim:rgba(255,255,255,.72);--dimmer:rgba(255,255,255,.5);--line:#2A2A2A;--green:#5FCF80;--hbcu:#E67052}
 *{box-sizing:border-box;margin:0;padding:0}
@@ -175,7 +176,7 @@ footer a{color:var(--yellow)}
             <li>Hot-reply escalation to you</li>
             <li>Weekly recruiting digest</li>
           </ul>
-          <button class="book" data-tier="standard" data-cadence="monthly" data-amount="9900" data-name="Standard · Monthly">Start Monthly</button>
+          <button class="book" data-package="standard_monthly" data-name="Standard · Monthly">Start Monthly</button>
         </div>
         <div class="tier featured">
           <div class="tier-name">Season</div>
@@ -188,7 +189,7 @@ footer a{color:var(--yellow)}
             <li>Camp invite tracking</li>
             <li>Season-end recruiting summary report</li>
           </ul>
-          <button class="book" data-tier="standard" data-cadence="season" data-amount="49900" data-name="Standard · Season">Start Season</button>
+          <button class="book" data-package="standard_season" data-name="Standard · Season">Start Season</button>
         </div>
       </div>
     </div>
@@ -211,7 +212,7 @@ footer a{color:var(--yellow)}
             <li>HBCU Showcase invitation pipeline</li>
             <li>HBCU alumni network access (mentorship)</li>
           </ul>
-          <button class="book hbcu-book" data-tier="hbcu_premium" data-cadence="monthly" data-amount="14900" data-name="HBCU Premium · Monthly">Start Monthly</button>
+          <button class="book hbcu-book" data-package="hbcu_monthly" data-name="HBCU Premium · Monthly">Start Monthly</button>
         </div>
         <div class="tier hbcu featured">
           <div class="tier-name">Season (HBCU)</div>
@@ -224,7 +225,7 @@ footer a{color:var(--yellow)}
             <li>HBCU Signature Series episode inclusion eligibility</li>
             <li>Season-end HBCU recruiting summary</li>
           </ul>
-          <button class="book hbcu-book" data-tier="hbcu_premium" data-cadence="season" data-amount="74900" data-name="HBCU Premium · Season">Start Season</button>
+          <button class="book hbcu-book" data-package="hbcu_season" data-name="HBCU Premium · Season">Start Season</button>
         </div>
       </div>
     </div>
@@ -289,50 +290,43 @@ footer a{color:var(--yellow)}
   </div>
 </section>
 
-<!-- Booking modal -->
+<!-- Booking: the form goes to /api/pylon/requests (public/pylon-forms.js) -->
 <div class="modal-backdrop" id="modal">
-  <div class="modal" id="modal-inner">
-    <h3 id="modal-title">Start Recruiting Concierge</h3>
-    <p id="modal-sub">Set up your athlete's Concierge — Stripe subscription, first outreach batch within 7 days.</p>
-    <form id="booking-form">
-      <div class="form-row">
-        <label>Athlete Name</label>
-        <input type="text" name="athlete_name" required>
-      </div>
-      <div class="form-row">
-        <label>Position · Class Year</label>
-        <input type="text" name="position_class" required placeholder="e.g. WR 2027">
-      </div>
-      <div class="form-row">
-        <label>Target Level</label>
-        <select name="target_level" required>
-          <option value="">Select target range…</option>
-          <option value="ncaa_d1">NCAA D1</option>
-          <option value="ncaa_d2">NCAA D2</option>
-          <option value="ncaa_d3">NCAA D3</option>
-          <option value="naia">NAIA</option>
-          <option value="juco">JUCO</option>
-          <option value="hbcu">HBCU (any level)</option>
-          <option value="mixed">Mixed / open</option>
+  <div class="modal" id="modal-inner" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+    <h3 id="modal-title">Start the Concierge</h3>
+    <p id="modal-sub">Tell us about your athlete. We get started with you within 24 hours.</p>
+    <form class="pf" data-kind="recruiting">
+      <input type="hidden" name="package" value="">
+      <div class="pf-row"><label for="re-who">Who's filling this in?</label>
+        <select id="re-who" name="who" required>
+          <option value="">Choose…</option>
+          <option value="parent">I'm the athlete's parent</option>
+          <option value="guardian">I'm the athlete's legal guardian</option>
+          <option value="adult">I'm the athlete, 18 or older</option>
+          <option value="minor">I'm the athlete, under 18</option>
         </select>
       </div>
-      <div class="form-row">
-        <label>Parent Name</label>
-        <input type="text" name="parent_name" required>
+      <div class="pf-stop" data-minor-stop hidden>Ask your parent or guardian to fill this in with you. It has to come from them, and our emails go to them.</div>
+      <div class="pf-row"><label for="re-athlete">Athlete's full name</label><input id="re-athlete" name="athlete_name" required maxlength="80" placeholder="e.g. Jordan Ellis"></div>
+      <div class="pf-two">
+        <div class="pf-row"><label for="re-pc">Position and class year</label><input id="re-pc" name="position_class" required maxlength="40" placeholder="e.g. WR 2027"></div>
+        <div class="pf-row"><label for="re-level">Target level</label><select id="re-level" name="target_level" required><option value="">Choose…</option><option value="ncaa_d1">NCAA D1</option><option value="ncaa_d2">NCAA D2</option><option value="ncaa_d3">NCAA D3</option><option value="naia">NAIA</option><option value="juco">JUCO</option><option value="hbcu">HBCU (any level)</option><option value="mixed">Mixed or open</option></select></div>
       </div>
-      <div class="form-row">
-        <label>Parent Email</label>
-        <input type="email" name="parent_email" required>
+      <div class="pf-row" data-family><label for="re-name">Your name</label><input id="re-name" name="contact_name" data-req required maxlength="80" autocomplete="name"></div>
+      <div class="pf-two">
+        <div class="pf-row"><label for="re-email">Your email</label><input id="re-email" type="email" name="contact_email" required maxlength="200" autocomplete="email"></div>
+        <div class="pf-row"><label for="re-phone">Phone</label><input id="re-phone" type="tel" name="contact_phone" required maxlength="30" autocomplete="tel"><p class="pf-hint">When a coach replies and it's urgent, we call.</p></div>
       </div>
-      <div class="form-row">
-        <label>Parent Phone (for hot-reply escalation)</label>
-        <input type="tel" name="parent_phone" required>
-      </div>
-      <div class="modal-actions">
-        <button type="button" class="secondary" onclick="closeModal()">Cancel</button>
-        <button type="submit" class="primary" id="submit-btn">Continue to Checkout</button>
+      <label class="pf-check"><input type="checkbox" name="consent_confirm" required><span data-consent-words>Choose who's filling this in to see what you're agreeing to.</span></label>
+      <div class="pf-row"><label for="re-notes">Anything else <span class="pf-opt">optional</span></label><textarea id="re-notes" name="notes" maxlength="1000" placeholder="Schools on your list, film links, questions."></textarea></div>
+      <div class="pf-hp" aria-hidden="true"><label for="re-trap">Leave this empty</label><input id="re-trap" name="pf_trap" tabindex="-1" autocomplete="off"></div>
+      <div class="pf-msg" role="status" aria-live="polite"></div>
+      <div class="pf-actions">
+        <button type="button" class="pf-secondary" data-close>Cancel</button>
+        <button type="submit" class="pf-primary" data-pay="Continue to payment" data-wait="Send request">Send request</button>
       </div>
     </form>
+    <div class="pf-done" hidden></div>
   </div>
 </div>
 
@@ -344,78 +338,17 @@ footer a{color:var(--yellow)}
 </footer>
 
 <script>
-// Tab switching
-document.querySelectorAll('.tier-tab').forEach(tab => {
-  tab.addEventListener('click', () => {
-    document.querySelectorAll('.tier-tab').forEach(t => t.classList.remove('active'));
-    document.querySelectorAll('.tier-content').forEach(c => c.classList.remove('active'));
+// The Standard and HBCU Premium tabs.
+document.querySelectorAll('.tier-tab').forEach(function (tab) {
+  tab.addEventListener('click', function () {
+    document.querySelectorAll('.tier-tab').forEach(function (t) { t.classList.remove('active'); });
+    document.querySelectorAll('.tier-content').forEach(function (c) { c.classList.remove('active'); });
     tab.classList.add('active');
-    document.getElementById(`tab-${tab.dataset.tab}`).classList.add('active');
+    document.getElementById('tab-' + tab.dataset.tab).classList.add('active');
   });
-});
-
-let currentBooking = null;
-
-document.querySelectorAll('.book').forEach(btn => {
-  btn.addEventListener('click', () => {
-    currentBooking = {
-      tier: btn.dataset.tier,
-      billing_cadence: btn.dataset.cadence,
-      amount: parseInt(btn.dataset.amount, 10),
-      name: btn.dataset.name,
-      is_hbcu: btn.classList.contains('hbcu-book'),
-    };
-    document.getElementById('modal-title').textContent = currentBooking.name;
-    document.getElementById('modal-inner').classList.toggle('hbcu-mode', currentBooking.is_hbcu);
-    document.getElementById('modal').classList.add('show');
-  });
-});
-
-function closeModal() {
-  document.getElementById('modal').classList.remove('show');
-}
-
-document.getElementById('modal').addEventListener('click', (e) => {
-  if (e.target.id === 'modal') closeModal();
-});
-
-document.getElementById('booking-form').addEventListener('submit', async (e) => {
-  e.preventDefault();
-  const formData = Object.fromEntries(new FormData(e.target));
-  const submitBtn = document.getElementById('submit-btn');
-  submitBtn.disabled = true;
-  submitBtn.textContent = 'Setting up…';
-  try {
-    const res = await fetch('/api/pylon/recruiting/subscribe', {
-      method: 'POST',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({
-        tier: currentBooking.tier,
-        billing_cadence: currentBooking.billing_cadence,
-        hbcu_focus: currentBooking.is_hbcu,
-        target_college_list: [],
-        metadata: formData,
-      }),
-    });
-    const data = await res.json();
-    if (data.stripe_checkout_url) {
-      window.location.href = data.stripe_checkout_url;
-    } else {
-      submitBtn.textContent = 'Subscription Recorded ✓';
-      setTimeout(() => {
-        alert('Recorded! We will follow up within 24 hours with payment link. First outreach batch drops within 7 days after payment.');
-        closeModal();
-        submitBtn.disabled = false;
-        submitBtn.textContent = 'Continue to Checkout';
-      }, 800);
-    }
-  } catch (err) {
-    submitBtn.disabled = false;
-    submitBtn.textContent = 'Continue to Checkout';
-    alert('Something went wrong. Please email hello@pylonfootball.com.');
-  }
 });
 </script>
+<script src="/pylon-forms.js" defer></script>
 
 </body>
 </html>

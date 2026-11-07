@@ -10,6 +10,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Anton&family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect fill='%230A0A0A' width='100' height='100'/%3E%3Cpath fill='%23F4C82E' d='M20 20h60v60H20z'/%3E%3Cpath fill='%230A0A0A' d='M35 35h30v30H35z'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="/pylon-forms.css">
 <style>
 :root{--black:#0A0A0A;--near-black:#161616;--surface:#1A1A1A;--surface-2:#222;--yellow:#F4C82E;--yellow-2:#FFE066;--white:#FFFFFF;--dim:rgba(255,255,255,.72);--dimmer:rgba(255,255,255,.5);--line:#2A2A2A;--green:#5FCF80}
 *{box-sizing:border-box;margin:0;padding:0}
@@ -102,8 +103,8 @@ footer a{color:var(--yellow)}
 </head>
 <body>
 
-<div class="referral-banner" id="referral-banner">
-  ◆ Referral discount applied: <b id="referral-code-display"></b> · <b>25% OFF</b>
+<div class="referral-banner show" data-ref-show hidden>
+  ◆ Creator code <b data-ref-code></b> · active codes take 25% off at checkout
 </div>
 
 <header class="nav">
@@ -126,9 +127,6 @@ footer a{color:var(--yellow)}
     <h1>Your athlete, edited to <span class="accent">college coach standard.</span></h1>
     <p class="hero-lede">Professional coverage of your athlete at Pylon events. Photo pack. Short reel. Full multi-piece. Delivered in 48 hours. You own everything. <b>No watermarks. No expiration.</b></p>
 
-    <div class="event-required" id="event-required">
-      ⚠ To book coverage, please select your event first · <a href="mailto:hello@pylonfootball.com" style="color:var(--yellow);text-decoration:underline">contact us if you need help</a>
-    </div>
   </div>
 </section>
 
@@ -137,7 +135,7 @@ footer a{color:var(--yellow)}
     <div class="tier-grid">
       <div class="tier">
         <div class="tier-name">Pylon Player Snapshot</div>
-        <div class="price" data-base="6900" data-discounted="5175">$69</div>
+        <div class="price">$69</div>
         <div class="price-detail">Per Event / Per Athlete</div>
         <ul>
           <li><b>10-15 photos</b> from one Pylon event</li>
@@ -145,12 +143,12 @@ footer a{color:var(--yellow)}
           <li>Full resolution · no watermarks</li>
           <li>48-hour delivery to your inbox</li>
         </ul>
-        <button class="book" data-sku="12" data-amount="6900" data-name="Player Snapshot">Book Snapshot</button>
+        <button class="book" data-package="12" data-name="Player Snapshot">Book Snapshot</button>
       </div>
 
       <div class="tier featured">
         <div class="tier-name">Pylon Player Story</div>
-        <div class="price" data-base="9900" data-discounted="7425">$99</div>
+        <div class="price">$99</div>
         <div class="price-detail">Per Event / Per Athlete</div>
         <ul>
           <li>Everything in Snapshot</li>
@@ -158,12 +156,12 @@ footer a{color:var(--yellow)}
           <li>Social-ready format (IG Reel + TikTok cuts)</li>
           <li>48-hour delivery</li>
         </ul>
-        <button class="book" data-sku="13" data-amount="9900" data-name="Player Story">Book Story</button>
+        <button class="book" data-package="13" data-name="Player Story">Book Story</button>
       </div>
 
       <div class="tier">
         <div class="tier-name">Pylon Player Feature</div>
-        <div class="price" data-base="19900" data-discounted="14925">$199</div>
+        <div class="price">$199</div>
         <div class="price-detail">Per Event / Per Athlete</div>
         <ul>
           <li>Everything in Story</li>
@@ -172,7 +170,7 @@ footer a{color:var(--yellow)}
           <li>Support pieces (single shots + individual focus)</li>
           <li>Cinematic realism · college-coach ready</li>
         </ul>
-        <button class="book" data-sku="14" data-amount="19900" data-name="Player Feature">Book Feature</button>
+        <button class="book" data-package="14" data-name="Player Feature">Book Feature</button>
       </div>
     </div>
   </div>
@@ -195,58 +193,48 @@ footer a{color:var(--yellow)}
   </div>
 </section>
 
-<!-- Booking modal -->
+<!-- Booking: the form goes to /api/pylon/requests (public/pylon-forms.js) -->
 <div class="modal-backdrop" id="modal">
-  <div class="modal">
-    <h3 id="modal-title">Book Coverage</h3>
-    <p id="modal-sub">Enter your athlete's info — Stripe checkout · confirmation email within 60 seconds.</p>
-
-    <div class="discount-callout" id="discount-callout">
-      ◆ Referral discount applied: 25% OFF
-    </div>
-
-    <form id="booking-form">
-      <div class="form-row">
-        <label>Athlete Name</label>
-        <input type="text" name="athlete_name" required placeholder="e.g. Kaydon Finley">
-      </div>
-      <div class="form-row">
-        <label>Athlete Position</label>
-        <select name="position" required>
-          <option value="">Select…</option>
-          <option>QB</option><option>WR</option><option>RB</option><option>TE</option>
-          <option>OL</option><option>DL</option><option>LB</option><option>DB</option>
-          <option>K/P</option><option>ATH</option>
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+    <h3 id="modal-title">Book coverage</h3>
+    <p id="modal-sub">Tell us about your athlete and the event. We confirm the details within 24 hours.</p>
+    <div class="discount-callout show" data-ref-show hidden>◆ Creator code <span data-ref-code></span> is on this request</div>
+    <form class="pf" data-kind="player_package">
+      <input type="hidden" name="package" value="">
+      <div class="pf-row"><label for="pl-who">Who's filling this in?</label>
+        <select id="pl-who" name="who" required>
+          <option value="">Choose…</option>
+          <option value="parent">I'm the athlete's parent</option>
+          <option value="guardian">I'm the athlete's legal guardian</option>
+          <option value="adult">I'm the athlete, 18 or older</option>
+          <option value="minor">I'm the athlete, under 18</option>
         </select>
       </div>
-      <div class="form-row">
-        <label>Class Year</label>
-        <select name="class_year" required>
-          <option value="">Select…</option>
-          <option>2026</option><option>2027</option><option>2028</option><option>2029</option><option>2030</option><option>2031</option>
-        </select>
+      <div class="pf-stop" data-minor-stop hidden>Ask your parent or guardian to fill this in with you. It has to come from them, and our emails go to them.</div>
+      <div class="pf-row"><label for="pl-athlete">Athlete's full name</label><input id="pl-athlete" name="athlete_name" required maxlength="80" placeholder="e.g. Jordan Ellis"></div>
+      <div class="pf-two">
+        <div class="pf-row"><label for="pl-pos">Position</label><select id="pl-pos" name="position" required><option value="">Choose…</option><option>QB</option><option>WR</option><option>RB</option><option>TE</option><option>OL</option><option>DL</option><option>LB</option><option>DB</option><option>K/P</option><option>ATH</option></select></div>
+        <div class="pf-row"><label for="pl-year">Class year</label><select id="pl-year" name="class_year" required><option value="">Choose…</option><option>2027</option><option>2028</option><option>2029</option><option>2030</option><option>2031</option><option>2032</option></select></div>
       </div>
-      <div class="form-row">
-        <label>Parent Name</label>
-        <input type="text" name="parent_name" required>
+      <div class="pf-row"><label for="pl-team">Team</label><input id="pl-team" name="team_name" required maxlength="80"></div>
+      <div class="pf-row"><label for="pl-event">Event</label><input id="pl-event" name="event" required maxlength="120" placeholder="Which Pylon event, e.g. Pylon Dallas Regional, Nov 21"></div>
+      <div class="pf-row" data-family><label for="pl-name">Your name</label><input id="pl-name" name="contact_name" data-req required maxlength="80" autocomplete="name"></div>
+      <div class="pf-two">
+        <div class="pf-row"><label for="pl-email">Your email</label><input id="pl-email" type="email" name="contact_email" required maxlength="200" autocomplete="email"></div>
+        <div class="pf-row"><label for="pl-phone">Phone <span class="pf-opt">optional</span></label><input id="pl-phone" type="tel" name="contact_phone" maxlength="30" autocomplete="tel"></div>
       </div>
-      <div class="form-row">
-        <label>Parent Email</label>
-        <input type="email" name="parent_email" required>
-      </div>
-      <div class="form-row">
-        <label>Team Name</label>
-        <input type="text" name="team_name" required>
-      </div>
-      <div class="form-row" style="display:none" id="event-row">
-        <label>Event ID</label>
-        <input type="text" name="event_id" readonly>
-      </div>
-      <div class="modal-actions">
-        <button type="button" class="secondary" onclick="closeModal()">Cancel</button>
-        <button type="submit" class="primary" id="submit-btn">Continue to Checkout</button>
+      <input type="hidden" name="referral_code" value="">
+      <label class="pf-check"><input type="checkbox" name="public_ok"><span>Pylon may also post the coverage on Pylon's own channels. Leave this unticked and it's for you only.</span></label>
+      <label class="pf-check"><input type="checkbox" name="consent_confirm" required><span data-consent-words>Choose who's filling this in to see what you're agreeing to.</span></label>
+      <div class="pf-row"><label for="pl-notes">Anything else <span class="pf-opt">optional</span></label><textarea id="pl-notes" name="notes" maxlength="1000" placeholder="Jersey number, the games you care about most, questions."></textarea></div>
+      <div class="pf-hp" aria-hidden="true"><label for="pl-trap">Leave this empty</label><input id="pl-trap" name="pf_trap" tabindex="-1" autocomplete="off"></div>
+      <div class="pf-msg" role="status" aria-live="polite"></div>
+      <div class="pf-actions">
+        <button type="button" class="pf-secondary" data-close>Cancel</button>
+        <button type="submit" class="pf-primary" data-pay="Continue to payment" data-wait="Send request">Send request</button>
       </div>
     </form>
+    <div class="pf-done" hidden></div>
   </div>
 </div>
 
@@ -257,109 +245,7 @@ footer a{color:var(--yellow)}
   </div>
 </footer>
 
-<script>
-const urlParams = new URLSearchParams(window.location.search);
-const eventId = urlParams.get('event_id');
-const referralCode = urlParams.get('ref');
-
-// V2.9 requirement: reject purchase without event_id
-if (!eventId) {
-  document.getElementById('event-required').classList.add('show');
-  // Still allow browsing but require event selection at checkout
-}
-
-if (eventId) {
-  document.getElementById('event-row').style.display = 'block';
-  document.querySelector('[name="event_id"]').value = eventId;
-}
-
-// V2.8 · 25% OFF referral code (auto-apply from URL)
-let discountPct = 0;
-if (referralCode) {
-  discountPct = 25;
-  document.getElementById('referral-banner').classList.add('show');
-  document.getElementById('referral-code-display').textContent = referralCode;
-  document.getElementById('discount-callout').classList.add('show');
-  document.querySelectorAll('.tier').forEach(tier => {
-    const priceEl = tier.querySelector('.price');
-    if (priceEl && priceEl.dataset.base && priceEl.dataset.discounted) {
-      const base = parseInt(priceEl.dataset.base, 10);
-      const disc = parseInt(priceEl.dataset.discounted, 10);
-      priceEl.innerHTML = `<span class="discounted">$${(base/100).toFixed(0)}</span><span class="price-final">$${(disc/100).toFixed(0)}</span>`;
-    }
-  });
-}
-
-let currentBooking = null;
-
-document.querySelectorAll('.book').forEach(btn => {
-  btn.addEventListener('click', () => {
-    const baseAmount = parseInt(btn.dataset.amount, 10);
-    const finalAmount = discountPct > 0 ? Math.round(baseAmount * (1 - discountPct/100)) : baseAmount;
-    currentBooking = {
-      sku: btn.dataset.sku,
-      amount: finalAmount,
-      base_amount: baseAmount,
-      referral_code: referralCode,
-      name: btn.dataset.name,
-    };
-    document.getElementById('modal-title').textContent = currentBooking.name;
-    document.getElementById('modal').classList.add('show');
-  });
-});
-
-function closeModal() {
-  document.getElementById('modal').classList.remove('show');
-}
-
-document.getElementById('modal').addEventListener('click', (e) => {
-  if (e.target.id === 'modal') closeModal();
-});
-
-document.getElementById('booking-form').addEventListener('submit', async (e) => {
-  e.preventDefault();
-  const formData = Object.fromEntries(new FormData(e.target));
-  if (!eventId && !formData.event_id) {
-    alert('Please select your event before booking. Contact hello@pylonfootball.com if you need help finding your event.');
-    return;
-  }
-  const submitBtn = document.getElementById('submit-btn');
-  submitBtn.disabled = true;
-  submitBtn.textContent = 'Creating order…';
-  try {
-    const orderRes = await fetch('/api/pylon/packages/order', {
-      method: 'POST',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({
-        sku: currentBooking.sku,
-        amount_cents: currentBooking.amount,
-        metadata: {
-          ...formData,
-          referral_code: currentBooking.referral_code,
-          base_amount_cents: currentBooking.base_amount,
-          event_id: eventId || formData.event_id,
-        },
-      }),
-    });
-    const orderData = await orderRes.json();
-    if (orderData.stripe_checkout_url) {
-      window.location.href = orderData.stripe_checkout_url;
-    } else {
-      submitBtn.textContent = 'Order Recorded ✓';
-      setTimeout(() => {
-        alert('Order recorded! We will follow up within 24 hours with payment details.');
-        closeModal();
-        submitBtn.disabled = false;
-        submitBtn.textContent = 'Continue to Checkout';
-      }, 800);
-    }
-  } catch (err) {
-    submitBtn.disabled = false;
-    submitBtn.textContent = 'Continue to Checkout';
-    alert('Something went wrong. Please email hello@pylonfootball.com to book.');
-  }
-});
-</script>
+<script src="/pylon-forms.js" defer></script>
 
 </body>
 </html>

@@ -10,6 +10,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Anton&family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect fill='%230A0A0A' width='100' height='100'/%3E%3Cpath fill='%23F4C82E' d='M20 20h60v60H20z'/%3E%3Cpath fill='%230A0A0A' d='M35 35h30v30H35z'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="/pylon-forms.css">
 <style>
 :root{--black:#0A0A0A;--near-black:#161616;--surface:#1A1A1A;--surface-2:#242424;--yellow:#F4C82E;--yellow-2:#FFE066;--white:#FFFFFF;--dim:rgba(255,255,255,.72);--dimmer:rgba(255,255,255,.5);--line:#2A2A2A;--green:#5FCF80}
 *{box-sizing:border-box;margin:0;padding:0}
@@ -111,6 +112,15 @@ footer a{color:var(--yellow)}
   </div>
 </section>
 
+<section class="token-panel" id="pf-token" hidden aria-live="polite">
+  <div class="shell" style="padding-top:32px;padding-bottom:8px">
+    <h2 class="chapter-h" style="margin-bottom:10px">Confirm your subscription</h2>
+    <p style="color:var(--dim);margin-bottom:14px"></p>
+    <div class="pf-actions" style="max-width:360px"><button type="button" class="pf-primary">Confirm</button></div>
+    <div class="pf-msg" role="status"></div>
+  </div>
+</section>
+
 <section class="tiers">
   <div class="shell">
     <div class="tier-grid">
@@ -125,12 +135,15 @@ footer a{color:var(--yellow)}
           <li>Coach quote of the week</li>
           <li>Sponsor slot per issue</li>
         </ul>
-        <form id="free-form">
-          <div class="form-row">
-            <input type="email" name="email" placeholder="you@email.com" required>
-          </div>
-          <button type="submit" class="sub-btn" id="free-btn">Subscribe Free</button>
+        <form class="pf" data-endpoint="/api/pylon/newsletter/subscribe">
+          <input type="hidden" name="source" value="newsletter_page">
+          <div class="pf-row"><label for="nl-email">Your email</label><input id="nl-email" type="email" name="email" placeholder="you@email.com" required maxlength="200" autocomplete="email"></div>
+          <div class="pf-hp" aria-hidden="true"><label for="nl-trap">Leave this empty</label><input id="nl-trap" name="pf_trap" tabindex="-1" autocomplete="off"></div>
+          <div class="pf-msg" role="status" aria-live="polite"></div>
+          <div class="pf-actions"><button type="submit" class="pf-primary sub-btn">Subscribe free</button></div>
+          <p class="pf-hint">We email you a link to confirm. Nothing comes until you do.</p>
         </form>
+        <div class="pf-done" hidden></div>
       </div>
 
       <div class="tier featured">
@@ -145,12 +158,15 @@ footer a{color:var(--yellow)}
           <li>Ad-free archive access</li>
           <li>Ambassador program early invite</li>
         </ul>
-        <form id="premium-form">
-          <div class="form-row">
-            <input type="email" name="email" placeholder="you@email.com" required>
-          </div>
-          <button type="submit" class="sub-btn" id="premium-btn">Upgrade to Premium</button>
+        <form class="pf" data-kind="newsletter_premium" data-package="premium">
+          <input type="hidden" name="package" value="premium">
+          <div class="pf-row"><label for="np-name">Your name</label><input id="np-name" name="contact_name" required maxlength="80" autocomplete="name"></div>
+          <div class="pf-row"><label for="np-email">Your email</label><input id="np-email" type="email" name="contact_email" placeholder="you@email.com" required maxlength="200" autocomplete="email"></div>
+          <div class="pf-hp" aria-hidden="true"><label for="np-trap">Leave this empty</label><input id="np-trap" name="pf_trap" tabindex="-1" autocomplete="off"></div>
+          <div class="pf-msg" role="status" aria-live="polite"></div>
+          <div class="pf-actions"><button type="submit" class="pf-primary sub-btn" data-pay="Continue to payment" data-wait="Request Premium">Request Premium</button></div>
         </form>
+        <div class="pf-done" hidden></div>
       </div>
     </div>
   </div>
@@ -158,23 +174,23 @@ footer a{color:var(--yellow)}
 
 <section class="archive">
   <div class="shell">
-    <span class="chapter-tag">◆ Recent issues</span>
-    <h2 class="chapter-h">The last three <span class="accent">drops.</span></h2>
-    <div class="issue-list" id="issue-list">
+    <span class="chapter-tag">◆ Every Tuesday</span>
+    <h2 class="chapter-h">What's in <span class="accent">each issue.</span></h2>
+    <div class="issue-list">
       <div class="issue">
-        <div class="num">Issue #08 · Tuesday July 15</div>
-        <h4>The Portland Pipeline</h4>
-        <p>Nike's new HBCU camp calendar dropped. Three unranked WRs jumped 12+ spots after last weekend's Pylon National regional. Weekly Momentum Movers list on the flip.</p>
+        <div class="num">Recruiting stories</div>
+        <h4>Six to eight a week</h4>
+        <p>Offers, commitments and camps, with the context behind them.</p>
       </div>
       <div class="issue">
-        <div class="num">Issue #07 · Tuesday July 8</div>
-        <h4>Why Every Head Coach Should Read the Combine Book</h4>
-        <p>A deep read on how Optimum grading is changing HS football recruiting velocity. Plus: five Q&As from the Family Night IG Live.</p>
+        <div class="num">Pylon Power Rankings</div>
+        <h4>What moved, and why</h4>
+        <p>The week's movement in the rankings, explained.</p>
       </div>
       <div class="issue">
-        <div class="num">Issue #06 · Tuesday July 1</div>
-        <h4>Rankings Drop · The July Reset</h4>
-        <p>Full commentary on the July Pylon Power Rankings + why the SEC teams didn't move despite the East Coast field. Plus: Coach Corner short with Coach Yancey.</p>
+        <div class="num">Camp calendar</div>
+        <h4>The week ahead</h4>
+        <p>Camps and showcases coming up, plus the coach quote of the week.</p>
       </div>
     </div>
   </div>
@@ -182,7 +198,7 @@ footer a{color:var(--yellow)}
 
 <section class="sponsor">
   <div class="shell sponsor-inner">
-    <div class="l">◆ This week's issue presented by</div>
+    <div class="l">◆ Presenting sponsor</div>
     <div class="brand">Sponsor Slot Available</div>
   </div>
 </section>
@@ -194,66 +210,7 @@ footer a{color:var(--yellow)}
   </div>
 </footer>
 
-<script>
-document.getElementById('free-form').addEventListener('submit', async (e) => {
-  e.preventDefault();
-  const email = e.target.email.value;
-  const btn = document.getElementById('free-btn');
-  btn.disabled = true;
-  btn.textContent = 'Subscribing…';
-  try {
-    const res = await fetch('/api/pylon/newsletter/subscribe', {
-      method: 'POST',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({ email, source: 'newsletter_page_free' }),
-    });
-    if (res.ok) {
-      btn.textContent = '✓ Subscribed';
-      e.target.email.value = '';
-      setTimeout(() => { btn.disabled = false; btn.textContent = 'Subscribe Free'; }, 3000);
-    } else {
-      btn.textContent = 'Try Again';
-      btn.disabled = false;
-    }
-  } catch (err) {
-    btn.textContent = 'Try Again';
-    btn.disabled = false;
-  }
-});
-
-document.getElementById('premium-form').addEventListener('submit', async (e) => {
-  e.preventDefault();
-  const email = e.target.email.value;
-  const btn = document.getElementById('premium-btn');
-  btn.disabled = true;
-  btn.textContent = 'Setting up…';
-  try {
-    // First: create free subscriber (so if Stripe checkout is abandoned, they're still on the list)
-    await fetch('/api/pylon/newsletter/subscribe', {
-      method: 'POST',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({ email, source: 'newsletter_page_premium_intent' }),
-    });
-    // Then: initiate premium upgrade
-    const res = await fetch('/api/pylon/newsletter/upgrade', {
-      method: 'POST',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({ email }),
-    });
-    const data = await res.json();
-    if (data.stripe_url) {
-      window.location.href = data.stripe_url;
-    } else {
-      btn.textContent = '✓ Recorded · Payment link coming';
-      alert('Recorded! We will follow up with a payment link within 24 hours.');
-      setTimeout(() => { btn.disabled = false; btn.textContent = 'Upgrade to Premium'; }, 3000);
-    }
-  } catch (err) {
-    btn.textContent = 'Try Again';
-    btn.disabled = false;
-  }
-});
-</script>
+<script src="/pylon-forms.js" defer></script>
 
 </body>
 </html>

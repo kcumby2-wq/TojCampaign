@@ -10,6 +10,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Anton&family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect fill='%230A0A0A' width='100' height='100'/%3E%3Cpath fill='%23F4C82E' d='M20 20h60v60H20z'/%3E%3Cpath fill='%230A0A0A' d='M35 35h30v30H35z'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="/pylon-forms.css">
 <style>
 :root{--black:#0A0A0A;--near-black:#161616;--surface:#1A1A1A;--surface-2:#222;--yellow:#F4C82E;--yellow-2:#FFE066;--white:#FFFFFF;--dim:rgba(255,255,255,.72);--dimmer:rgba(255,255,255,.5);--line:#2A2A2A;--green:#5FCF80}
 *{box-sizing:border-box;margin:0;padding:0}
@@ -135,7 +136,7 @@ footer a{color:var(--yellow)}
           <li><b>48-hour delivery</b> · no watermarks · you own everything</li>
           <li>Coverage from the Pylon media crew</li>
         </ul>
-        <button class="book" data-sku="1a" data-amount="29900" data-name="Pylon Team Recap">Book Coverage</button>
+        <button class="book" data-package="1a" data-name="Pylon Team Recap">Book Coverage</button>
       </div>
 
       <div class="tier featured">
@@ -149,7 +150,7 @@ footer a{color:var(--yellow)}
           <li>Bundled <b>Live Event Posting</b> (real-time content during games)</li>
           <li>Coverage from the Pylon media crew</li>
         </ul>
-        <button class="book" data-sku="1b" data-amount="149900" data-name="Pylon Team Season Pack">Book Season Pack</button>
+        <button class="book" data-package="1b" data-name="Pylon Team Season Pack">Book Season Pack</button>
       </div>
 
       <div class="tier">
@@ -163,7 +164,7 @@ footer a{color:var(--yellow)}
           <li>Coaches Directory outreach on every athlete</li>
           <li>Contract crew coverage (premium tier)</li>
         </ul>
-        <button class="book" data-sku="1c" data-amount="299900" data-name="Pylon Combine Book">Book Combine Book</button>
+        <button class="book" data-package="1c" data-name="Pylon Combine Book">Book Combine Book</button>
       </div>
     </div>
   </div>
@@ -212,44 +213,31 @@ footer a{color:var(--yellow)}
   </div>
 </section>
 
-<!-- Booking modal -->
+<!-- Booking: the form goes to /api/pylon/requests (public/pylon-forms.js) -->
 <div class="modal-backdrop" id="modal">
-  <div class="modal">
-    <h3 id="modal-title">Book Coverage</h3>
-    <p id="modal-sub">Enter your team info — checkout via Stripe · confirmation email within 60 seconds.</p>
-    <form id="booking-form">
-      <div class="form-row">
-        <label>Team Name</label>
-        <input type="text" name="team_name" required placeholder="e.g. Dallas Elite 15U">
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+    <h3 id="modal-title">Book coverage</h3>
+    <p id="modal-sub">Tell us about your team. We confirm the event and the details with you within 24 hours.</p>
+    <form class="pf" data-kind="team_package">
+      <input type="hidden" name="package" value="">
+      <div class="pf-row"><label for="te-team">Team name</label><input id="te-team" name="team_name" required maxlength="80" placeholder="e.g. Dallas Elite 15U" autocomplete="organization"></div>
+      <div class="pf-row"><label for="te-name">Head coach's name</label><input id="te-name" name="contact_name" required maxlength="80" autocomplete="name"></div>
+      <div class="pf-two">
+        <div class="pf-row"><label for="te-email">Head coach's email</label><input id="te-email" type="email" name="contact_email" required maxlength="200" autocomplete="email"></div>
+        <div class="pf-row"><label for="te-phone">Phone <span class="pf-opt">optional</span></label><input id="te-phone" type="tel" name="contact_phone" maxlength="30" autocomplete="tel"></div>
       </div>
-      <div class="form-row">
-        <label>Head Coach Name</label>
-        <input type="text" name="coach_name" required>
-      </div>
-      <div class="form-row">
-        <label>Head Coach Email</label>
-        <input type="email" name="coach_email" required>
-      </div>
-      <div class="form-row">
-        <label>Region</label>
-        <select name="region" required>
-          <option value="">Select region…</option>
-          <option value="west">West</option>
-          <option value="south_central">South Central</option>
-          <option value="northeast">Northeast</option>
-          <option value="southeast">Southeast</option>
-          <option value="midwest">Midwest</option>
-        </select>
-      </div>
-      <div class="form-row" id="event-row" style="display:none">
-        <label>Event ID (if pre-selected)</label>
-        <input type="text" name="event_id" readonly>
-      </div>
-      <div class="modal-actions">
-        <button type="button" class="secondary" onclick="closeModal()">Cancel</button>
-        <button type="submit" class="primary" id="submit-btn">Continue to Checkout</button>
+      <div class="pf-row"><label for="te-region">Region</label><select id="te-region" name="region" required><option value="">Choose…</option><option value="west">West</option><option value="south_central">South Central</option><option value="northeast">Northeast</option><option value="southeast">Southeast</option><option value="midwest">Midwest</option></select></div>
+      <div class="pf-row"><label for="te-event">Event <span class="pf-opt">if you know it</span></label><input id="te-event" name="event" maxlength="120" placeholder="e.g. Pylon Dallas Regional, Nov 21"></div>
+      <div class="pf-row"><label for="te-notes">Anything else <span class="pf-opt">optional</span></label><textarea id="te-notes" name="notes" maxlength="1000" placeholder="Add-ons you want (Team Analytics, Live Event Posting), dates, questions."></textarea></div>
+      <p class="pf-note">We only post an athlete's footage publicly once their parent or guardian has said yes.</p>
+      <div class="pf-hp" aria-hidden="true"><label for="te-trap">Leave this empty</label><input id="te-trap" name="pf_trap" tabindex="-1" autocomplete="off"></div>
+      <div class="pf-msg" role="status" aria-live="polite"></div>
+      <div class="pf-actions">
+        <button type="button" class="pf-secondary" data-close>Cancel</button>
+        <button type="submit" class="pf-primary" data-pay="Continue to payment" data-wait="Send request">Send request</button>
       </div>
     </form>
+    <div class="pf-done" hidden></div>
   </div>
 </div>
 
@@ -260,79 +248,7 @@ footer a{color:var(--yellow)}
   </div>
 </footer>
 
-<script>
-const urlParams = new URLSearchParams(window.location.search);
-const eventId = urlParams.get('event_id');
-const preSku = urlParams.get('sku');
-
-if (eventId) {
-  document.getElementById('event-row').style.display = 'block';
-  document.querySelector('[name="event_id"]').value = eventId;
-}
-
-let currentBooking = null;
-
-document.querySelectorAll('.book').forEach(btn => {
-  btn.addEventListener('click', () => {
-    currentBooking = {
-      sku: btn.dataset.sku,
-      amount: parseInt(btn.dataset.amount, 10),
-      name: btn.dataset.name,
-    };
-    document.getElementById('modal-title').textContent = currentBooking.name;
-    document.getElementById('modal').classList.add('show');
-  });
-});
-
-function closeModal() {
-  document.getElementById('modal').classList.remove('show');
-}
-
-document.getElementById('modal').addEventListener('click', (e) => {
-  if (e.target.id === 'modal') closeModal();
-});
-
-document.getElementById('booking-form').addEventListener('submit', async (e) => {
-  e.preventDefault();
-  const formData = Object.fromEntries(new FormData(e.target));
-  const submitBtn = document.getElementById('submit-btn');
-  submitBtn.disabled = true;
-  submitBtn.textContent = 'Creating order…';
-  try {
-    const orderRes = await fetch('/api/pylon/packages/order', {
-      method: 'POST',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({
-        sku: currentBooking.sku,
-        amount_cents: currentBooking.amount,
-        metadata: formData,
-      }),
-    });
-    const orderData = await orderRes.json();
-    if (orderData.stripe_checkout_url) {
-      window.location.href = orderData.stripe_checkout_url;
-    } else {
-      submitBtn.textContent = 'Order Recorded ✓';
-      setTimeout(() => {
-        alert('Your order is recorded. Coach ' + formData.coach_name + ', we will follow up within 24 hours with payment details.');
-        closeModal();
-        submitBtn.disabled = false;
-        submitBtn.textContent = 'Continue to Checkout';
-      }, 800);
-    }
-  } catch (err) {
-    submitBtn.disabled = false;
-    submitBtn.textContent = 'Continue to Checkout';
-    alert('Something went wrong. Please email hello@pylonfootball.com to book.');
-  }
-});
-
-// Auto-open modal if preSku present
-if (preSku) {
-  const btn = document.querySelector(`.book[data-sku="${preSku}"]`);
-  if (btn) btn.click();
-}
-</script>
+<script src="/pylon-forms.js" defer></script>
 
 </body>
 </html>
