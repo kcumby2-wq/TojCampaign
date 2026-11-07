@@ -24,6 +24,18 @@ const PACKAGES = Object.freeze({
   team: "Team package",
   event: "Event coverage",
 });
+// The packages a request can be paid for at once (pay now), each with the
+// site's payment link and its price. The links must match the site's
+// (subjectmedias-site js/site.js, PAY); the unfinished-checkout reminder
+// sends the booker back to the same checkout.
+const PAY_NOW = Object.freeze({
+  photo: Object.freeze({ link: "https://buy.stripe.com/28E00kgz1dmqckMcgxebu04", cents: 4999 }),
+  video: Object.freeze({ link: "https://buy.stripe.com/eVqfZidmP5TY70seoFebu05", cents: 9999 }),
+  elite: Object.freeze({ link: "https://buy.stripe.com/dRm14o82vbeidoQ5S9ebu03", cents: 13999 }),
+});
+// A pay-now request with no payment this long after it was sent is an
+// unfinished checkout: the booker left Stripe without paying.
+const REMIND_AFTER_MS = 60 * 60 * 1000;
 // The booking form's sport list (subjectmedias.com). Anything else is "Other".
 const SPORTS = Object.freeze(["7v7 Football", "Football", "Girls Flag Football", "Basketball", "Volleyball", "Soccer", "Lacrosse", "Track & Field", "Baseball", "Softball", "Wrestling", "Other"]);
 const STATUSES = Object.freeze(["new", "contacted", "offered", "staffed", "delivered", "cancelled"]);
@@ -162,9 +174,9 @@ function normalize(raw, { now = new Date() } = {}) {
   // The homepage's 10% first-package offer, claimed with this request.
   v.offer = OFFERS.includes(r.offer) ? r.offer : null;
   // Sent from a package's Buy button: the site takes them on to that package's
-  // Stripe checkout with this request's id. Not a column: it only changes
-  // which notes go out now (utils route).
-  v.pay_now = r.pay_now === true && ["photo", "video", "elite"].includes(v.package) && !v.offer;
+  // Stripe checkout with this request's id. Kept on the row (migration 035),
+  // so a checkout that isn't finished gets its one reminder.
+  v.pay_now = r.pay_now === true && has(PAY_NOW, v.package) && !v.offer;
 
   return { errors, value: v };
 }
@@ -317,6 +329,28 @@ function rankCreators(booking, crewPool, clubCreators) {
 }
 
 const paid = (b) => Boolean(b && (b.paid === true || b.stripe_session_id));
+// A pay-now request still open and unpaid an hour after it was sent.
+function checkoutUnfinished(b, now = Date.now()) {
+  if (!b || b.pay_now !== true || b.source !== "form" || paid(b) || !OPEN.includes(b.status)) return false;
+  const at = Date.parse(b.created_at);
+  return Number.isFinite(at) && +now - at >= REMIND_AFTER_MS;
+}
+// The game is today or later (a day's grace for time zones behind UTC), or
+// its day isn't known.
+function gameNotPast(b, now = Date.now()) {
+  const day = dayValue(b && b.event_date);
+  return day === null || day >= todayValue(new Date(+now)) - DAY;
+}
+// The checkout a pay-now request went on to, as the site opened it: the
+// package's payment link with the request's id (so the payment joins the
+// request) and the booker's email filled in. Null when there's no such link.
+function checkoutLink(b) {
+  const p = b && has(PAY_NOW, b.package) ? PAY_NOW[b.package] : null;
+  if (!p || !UUID.test(String(b.id || ""))) return null;
+  const q = [`client_reference_id=${encodeURIComponent(String(b.id).toLowerCase())}`];
+  if (isEmail(b.contact_email)) q.push(`prefilled_email=${encodeURIComponent(b.contact_email)}`);
+  return `${p.link}?${q.join("&")}`;
+}
 function what(b) {
   return b.package && b.package !== "unsure" ? PACKAGES[b.package] || "Coverage" : KIND_WORDS[b.kind] || "Coverage";
 }
@@ -447,6 +481,35 @@ function bookerEmail(b, { detailsUrl = null, help = "hello@subjectmedias.com", s
   return { subject: bought ? "Subject Medias: thanks for booking" : "Subject Medias: we got your booking request", text: lines.join("\n") };
 }
 
+// The one reminder for an unfinished checkout: their details are saved, the
+// payment didn't come, and here's the same checkout again. Fixed words only,
+// like the booker's note (the package and its price, a sport from the list,
+// the date, the state code): nothing anyone typed.
+function checkoutReminderEmail(b, { payUrl, help = "hello@subjectmedias.com", site = "https://www.subjectmedias.com" } = {}) {
+  const p = has(PAY_NOW, b.package) ? PAY_NOW[b.package] : null;
+  const lines = ["You started booking with Subject Medias and your details are saved, but the payment didn't go through, so your creator isn't locked in yet.", ""];
+  const facts = [
+    ["What", p ? `${what(b)}, ${money(p.cents)}` : what(b)],
+    ["Sport", SPORTS.includes(b.sport) && b.sport !== "Other" ? b.sport : null],
+    ["Game day", dateWords(b.event_date, { weekday: true })],
+    ["State", STATE_REGION[b.event_state] ? b.event_state : null],
+  ];
+  for (const [k, v] of facts) if (v) lines.push(`${k}: ${v}`);
+  lines.push("");
+  lines.push("Finish booking on Stripe's secure checkout:");
+  lines.push(String(payUrl));
+  lines.push("");
+  lines.push("Already paid? Then you're all set, and we'll be in touch within 24 hours.");
+  lines.push("Rather talk first? Reply to this email.");
+  lines.push("Didn't start this booking? You can ignore this email.");
+  lines.push("");
+  lines.push(`Questions? Reply to this email, write to ${help}, or DM @subjectmedias on Instagram.`);
+  lines.push("");
+  lines.push("Subject Medias");
+  lines.push(String(site).replace(/\/+$/, ""));
+  return { subject: `Subject Medias: your ${what(b).toLowerCase()} isn't booked yet`, text: lines.join("\n") };
+}
+
 module.exports = {
   KINDS,
   PACKAGES,
@@ -476,4 +539,10 @@ module.exports = {
   emailText,
   bookerEmail,
   dateWords,
+  PAY_NOW,
+  REMIND_AFTER_MS,
+  checkoutUnfinished,
+  gameNotPast,
+  checkoutLink,
+  checkoutReminderEmail,
 };

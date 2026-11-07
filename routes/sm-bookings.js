@@ -24,6 +24,10 @@
 // request, or thanks for booking with a link to tell us about the game. It
 // carries fixed words only (utils/sm-bookings.js, bookerEmail) and has its
 // own limits, per address and in all.
+//
+// A request sent from a package's Buy button (pay now) that isn't paid an
+// hour on gets one reminder with its checkout, once the site's webhook is
+// known to work (remindUnfinished, below; migration 035).
 
 const express = require("express");
 const crypto = require("crypto");
@@ -269,9 +273,10 @@ router.post("/", safe(async (req, res) => {
   if (errors.length) return res.status(400).json({ error: "invalid", fields: errors });
   const row = { ...value, source: "form", status: "new" };
   if (!row.offer) delete row.offer;
-  // On its way to Stripe: the note waits for the payment (thanks, it's paid).
+  // On its way to Stripe: the note waits for the payment (thanks, it's paid),
+  // and the row says so (migration 035), for the reminder if it doesn't come.
   const payNow = row.pay_now === true;
-  delete row.pay_now;
+  if (!payNow) delete row.pay_now;
   const who = visitor(req);
 
   const sb = getSupabase();
@@ -415,11 +420,107 @@ router.post("/paid", safe(async (req, res) => {
   return res.status(503).json({ error: "storage_unavailable" });
 }));
 
+// ── The unfinished checkout ──────────────────────────────────────────
+// A pay-now request still unpaid an hour on: the booker left Stripe without
+// paying. They get one reminder with their checkout (fixed words, like their
+// note, and within their note's limits), and the app says "Checkout not
+// finished". Only once the site's webhook has joined a payment to a request
+// in the last 60 days: until then the app can't tell who paid, and nobody who
+// paid may be told they didn't. Never for a request more than two days old,
+// one staff have taken on (not new any more), a game that's passed, or a
+// booker who came back since (a newer booking from the same mailbox). Runs
+// every few minutes; SM_CHECKOUT_REMINDERS=off on Render stops it.
+const REMIND_EVERY_MS = 5 * 60 * 1000;
+const REMIND_WITHIN_MS = 2 * DAY_MS;
+const WEBHOOK_SEEN_MS = 60 * DAY_MS;
+const MAX_REMIND_TRIES = 3;
+const remindTries = new Map(); // booking id → sends that failed, in this process
+let reminding = false;
+
+// The site's webhook works: a payment joined a form request lately (only the
+// webhook joins one; the details page never does).
+async function webhookJoins(sb, now) {
+  const { data, error } = await sb.from("sm_bookings").select("id").eq("source", "form").not("stripe_session_id", "is", null)
+    .gte("created_at", new Date(now - WEBHOOK_SEEN_MS).toISOString()).limit(1);
+  return !error && (data || []).length > 0;
+}
+
+// One reminder: a place in the booker's limits, then the claim on the row
+// (only while it's still unpaid, new and not reminded), then the email. Not
+// sent: the place and the claim go back, so a later run can try while it's
+// due; a send that failed counts toward three tries.
+async function remindOne(sb, b) {
+  const giveBack = bookerMailAllowed(b.contact_email, null);
+  if (!giveBack) return false;
+  const at = new Date().toISOString();
+  const claimed = await sb.from("sm_bookings").update({ checkout_reminded_at: at })
+    .eq("id", b.id).is("checkout_reminded_at", null).is("stripe_session_id", null).eq("status", "new").select("id");
+  if (claimed.error || !(claimed.data || []).length) {
+    giveBack();
+    return false;
+  }
+  const mail = B.checkoutReminderEmail(b, { payUrl: B.checkoutLink(b), help: helpEmail(), site: siteBase() });
+  let r = null;
+  try {
+    r = await mailer.sendMail({ to: b.contact_email, subject: mail.subject, text: mail.text, replyTo: helpEmail(), pool: "bookings" });
+  } catch (e) {
+    remindTries.set(b.id, (remindTries.get(b.id) || 0) + 1);
+    console.warn("[sm-bookings] checkout reminder failed:", mailError(e));
+  }
+  if (r && r.sent) return true;
+  if (r) console.warn(`[sm-bookings] checkout reminder not sent (${r.reason})`);
+  giveBack();
+  await sb.from("sm_bookings").update({ checkout_reminded_at: null }).eq("id", b.id).eq("checkout_reminded_at", at);
+  return false;
+}
+
+async function remindUnfinished(sb = getSupabase(), now = Date.now()) {
+  if (String(process.env.SM_CHECKOUT_REMINDERS || "").trim().toLowerCase() === "off") return { off: "setting" };
+  if (!sb) return { off: "no_database" };
+  if (!mailer.configured()) return { off: "no_email" };
+  if (reminding) return { off: "running" };
+  reminding = true;
+  try {
+    if (!(await webhookJoins(sb, now))) return { off: "no_webhook_yet" };
+    const { data, error } = await sb.from("sm_bookings")
+      .select("id,source,status,package,sport,event_date,event_state,contact_email,pay_now,stripe_session_id,checkout_reminded_at,created_at")
+      .eq("pay_now", true).is("stripe_session_id", null).is("checkout_reminded_at", null).eq("status", "new")
+      .lte("created_at", new Date(now - B.REMIND_AFTER_MS).toISOString())
+      .gte("created_at", new Date(now - REMIND_WITHIN_MS).toISOString())
+      .order("created_at", { ascending: true }).limit(20);
+    if (error) {
+      console.warn("[sm-bookings] checkout reminders: read failed:", error.code || "", error.message || "");
+      return { error: true };
+    }
+    const due = (data || []).filter((b) => B.checkoutUnfinished(b, now) && B.gameNotPast(b, now) && B.isEmail(b.contact_email) && B.checkoutLink(b) && (remindTries.get(b.id) || 0) < MAX_REMIND_TRIES);
+    if (!due.length) return { sent: 0 };
+    // Came back since: a newer booking from the same mailbox, a request sent
+    // again or a payment of its own.
+    const { data: later, error: e2 } = await sb.from("sm_bookings").select("id,contact_email,created_at").gt("created_at", due[0].created_at).limit(1000);
+    if (e2) return { error: true };
+    let sent = 0;
+    for (const b of due) {
+      const box = B.mailbox(b.contact_email), t = Date.parse(b.created_at);
+      if ((later || []).some((x) => x.id !== b.id && Date.parse(x.created_at) > t && B.mailbox(x.contact_email) === box)) continue;
+      if (await remindOne(sb, b)) sent += 1;
+    }
+    return { sent };
+  } catch (e) {
+    console.warn("[sm-bookings] checkout reminders failed:", e && e.message);
+    return { error: true };
+  } finally {
+    reminding = false;
+  }
+}
+const remindTimer = setInterval(() => { remindUnfinished().catch(() => {}); }, REMIND_EVERY_MS);
+if (remindTimer.unref) remindTimer.unref();
+
 // ── Staff: the list, one booking, its status ──────────────────────────
-const LIST_FIELDS = ["id", "source", "kind", "package", "sport", "event_name", "event_date", "event_city", "event_state", "region", "athletes", "amount_cents", "offer", "details_at", "status", "staffed_creator_id", "created_at"];
+const LIST_FIELDS = ["id", "source", "kind", "package", "sport", "event_name", "event_date", "event_city", "event_state", "region", "athletes", "amount_cents", "offer", "details_at", "pay_now", "checkout_reminded_at", "status", "staffed_creator_id", "created_at"];
 const LIST_COLUMNS = [...LIST_FIELDS, "stripe_session_id"].join(",");
 // The list never carries contact details or notes, whatever the query returns.
-const listRow = (b) => ({ ...Object.fromEntries(LIST_FIELDS.map((k) => [k, b[k] === undefined ? null : b[k]])), paid: B.paid(b) });
+const listRow = (b) => ({ ...Object.fromEntries(LIST_FIELDS.map((k) => [k, b[k] === undefined ? null : b[k]])), paid: B.paid(b), unfinished: B.checkoutUnfinished(b) });
+const fullRow = (b) => ({ ...b, summary: B.summary(b), paid: B.paid(b), unfinished: B.checkoutUnfinished(b) });
 
 router.get("/", requireStaff, safe(async (req, res) => {
   const sb = getSupabase();
@@ -444,7 +545,7 @@ router.get("/:id", requireStaff, safe(async (req, res) => {
     const { data } = await sb.from("gfs_creators").select("id,name,home_city,tier").eq("id", b.staffed_creator_id).maybeSingle();
     staffed = data || null;
   }
-  res.json({ booking: { ...b, summary: B.summary(b), paid: B.paid(b) }, matches, staffed, statuses: B.STATUSES, packages: B.PACKAGES, regions: B.REGION_WORDS });
+  res.json({ booking: fullRow(b), matches, staffed, statuses: B.STATUSES, packages: B.PACKAGES, regions: B.REGION_WORDS });
 }));
 
 router.patch("/:id", requireStaff, safe(async (req, res) => {
@@ -484,11 +585,12 @@ router.patch("/:id", requireStaff, safe(async (req, res) => {
   patch.updated_at = new Date().toISOString();
   const { data, error } = await sb.from("sm_bookings").update(patch).eq("id", b.id).select().single();
   if (error) return res.status(500).json({ error: "storage_error" });
-  res.json({ booking: { ...data, summary: B.summary(data), paid: B.paid(data) } });
+  res.json({ booking: fullRow(data) });
 }));
 
 router._limited = limited;
-router._resetLimits = () => { hits.clear(); forms = []; emails = []; bookerSent.clear(); bookerTimes = []; };
+router._resetLimits = () => { hits.clear(); forms = []; emails = []; bookerSent.clear(); bookerTimes = []; remindTries.clear(); };
+router._remind = remindUnfinished;
 router._hits = hits;
 router._visitorKey = visitorKey;
 module.exports = router;

@@ -1,6 +1,6 @@
-// Migrations 030 and 034 in a real Postgres: the rules the database enforces
-// for Subject Medias bookings and the site's counts, so no route bug can
-// break them.
+// Migrations 030, 034 and 035 in a real Postgres: the rules the database
+// enforces for Subject Medias bookings and the site's counts, so no route bug
+// can break them, and the unfinished-checkout reminder's queries run here.
 //
 // Needs a throwaway Postgres: TEST_DATABASE_URL=postgres://… node --test tests/
 // Works in its own schema (sm_db_test), which it DROPS and recreates. Never
@@ -47,7 +47,7 @@ before(async () => {
   // The one table 030 points at (migration 024 makes the real one).
   await q(`create table ${S}.gfs_creators (id uuid primary key default gen_random_uuid(), name text not null)`);
   creator = (await q(`insert into gfs_creators (name) values ('Amy Near') returning *`)).rows[0];
-  for (const f of ["030_sm_bookings.sql", "034_sm_bookings_more.sql"]) {
+  for (const f of ["030_sm_bookings.sql", "034_sm_bookings_more.sql", "035_sm_checkout_reminder.sql"]) {
     const sql = fs.readFileSync(path.join(__dirname, "..", "db", "migrations", f), "utf8").replace(/public\./g, `${S}.`);
     await q(sql);
     await q(sql); // safe to run twice
@@ -144,4 +144,68 @@ test("034: only the server counts; the API roles can't call it or read the count
   }
   assert.equal((await q(`select has_function_privilege('service_role', '${fn}', 'execute') as can`)).rows[0].can, true);
   assert.equal((await q(`select relrowsecurity from pg_class where oid = '${S}.sm_site_counts'::regclass`)).rows[0].relrowsecurity, true);
+});
+
+test("035: pay now is a form request's, and only a pay-now request is reminded", async () => {
+  const b = (await q(...form())).rows[0];
+  assert.equal(b.pay_now, false, "bookings without it are untouched");
+  assert.equal(b.checkout_reminded_at, null);
+  assert.equal((await q(...form({ pay_now: true }))).rows[0].pay_now, true);
+  await refused(...form({ source: "stripe", adult_confirmed: false, stripe_session_id: "cs_live_paynowstripe1", pay_now: true }), "sm_bookings_pay_now_form");
+  await refused(`update sm_bookings set checkout_reminded_at = now() where id = $1`, [b.id], "sm_bookings_reminder_pay_now");
+  const idx = await q(`select indexdef from pg_indexes where schemaname = $1 and indexname = 'sm_bookings_unfinished_checkout'`, [S]);
+  assert.match(idx.rows[0].indexdef, /WHERE \(pay_now AND \(stripe_session_id IS NULL\) AND \(checkout_reminded_at IS NULL\)\)/);
+});
+
+test("035: the reminder's queries on real Postgres: one email, claimed once, the claim given back when it can't go", async () => {
+  const { pgSupabase } = require("./helpers/pg-supabase");
+  const mailer = require("../utils/mailer");
+  const router = require("../routes/sm-bookings");
+  const sb = pgSupabase(pool, S);
+  const sent = [];
+  process.env.EMAIL_USER = "subjectmedias@gmail.com";
+  process.env.EMAIL_PASS = "app-password";
+  mailer.setSender(async (m) => { sent.push(m); return { sent: true }; });
+  try {
+    router._resetLimits();
+    await q(`delete from sm_bookings`);
+    const day = (await q(`select (current_date + 30)::text as d`)).rows[0].d;
+    const add = async (over) => (await q(...form({ package: "video", event_date: day, pay_now: true, ...over }))).rows[0];
+    // Due: a pay-now request from 90 minutes ago, unpaid.
+    const due = await add({ contact_email: "due@example.com" });
+    await q(`update sm_bookings set created_at = now() - interval '90 minutes' where id = $1`, [due.id]);
+    assert.deepEqual(await router._remind(sb), { off: "no_webhook_yet" });
+    // The webhook joined a payment to a request: reminders are on.
+    await add({ contact_email: "joined@example.com", stripe_session_id: "cs_live_joinedpg0001", amount_cents: 9999 });
+    // Not due: inside the hour, and three days old.
+    const fresh = await add({ contact_email: "fresh@example.com" });
+    const stale = await add({ contact_email: "stale@example.com" });
+    await q(`update sm_bookings set created_at = now() - interval '3 days' where id = $1`, [stale.id]);
+    mailer.setSender(async () => ({ sent: false, reason: "daily_limit" }));
+    assert.deepEqual(await router._remind(sb), { sent: 0 });
+    assert.equal((await q(`select checkout_reminded_at from sm_bookings where id = $1`, [due.id])).rows[0].checkout_reminded_at, null, "given back");
+    mailer.setSender(async (m) => { sent.push(m); return { sent: true }; });
+    assert.deepEqual(await router._remind(sb), { sent: 1 });
+    assert.deepEqual(sent.map((m) => m.to), [["due@example.com"]]);
+    assert.ok(sent[0].text.includes(`client_reference_id=${due.id}`));
+    const rows = (await q(`select id, checkout_reminded_at from sm_bookings where id = any($1)`, [[due.id, fresh.id, stale.id]])).rows;
+    assert.deepEqual(rows.filter((r) => r.checkout_reminded_at).map((r) => r.id), [due.id]);
+    assert.deepEqual(await router._remind(sb), { sent: 0 }, "once");
+    // Two servers at once (a second copy of the module: its own run guard
+    // and limits), on the same database: the claim lets one email through.
+    await q(`update sm_bookings set checkout_reminded_at = null where id = $1`, [due.id]);
+    router._resetLimits();
+    sent.length = 0;
+    const key = require.resolve("../routes/sm-bookings");
+    delete require.cache[key];
+    const other = require("../routes/sm-bookings");
+    assert.notEqual(other, router);
+    const both = await Promise.all([router._remind(sb), other._remind(sb)]);
+    assert.equal(sent.length, 1, JSON.stringify(both));
+    assert.deepEqual(both.map((r) => r.sent).sort(), [0, 1]);
+  } finally {
+    delete process.env.EMAIL_USER;
+    delete process.env.EMAIL_PASS;
+    mailer.setSender(null);
+  }
 });

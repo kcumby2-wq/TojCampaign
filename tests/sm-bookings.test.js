@@ -820,12 +820,19 @@ test("a checkout that names a request already paid: a booking of its own, flagge
 
 test("every column the routes write is one the migrations make", async () => {
   const fs = require("fs"), path = require("path");
-  const sql = ["030_sm_bookings.sql", "034_sm_bookings_more.sql"].map((f) => fs.readFileSync(path.join(__dirname, "..", "db", "migrations", f), "utf8")).join("\n");
+  const sql = ["030_sm_bookings.sql", "034_sm_bookings_more.sql", "035_sm_checkout_reminder.sql"].map((f) => fs.readFileSync(path.join(__dirname, "..", "db", "migrations", f), "utf8")).join("\n");
   const table = /create table if not exists public\.sm_bookings \(([\s\S]*?)\n\);/.exec(sql)[1];
   const cols = new Set([...table.matchAll(/^\s{2}([a-z_]+) [a-z]/gm)].map((m) => m[1]).filter((c) => c !== "constraint"));
   for (const m of sql.matchAll(/add column if not exists ([a-z_]+)/g)) cols.add(m[1]);
   await form(good({ event_date: "2027-01-16", offer: "first10" }));
   await form(good({ event_date: "2027-01-16" }), "198.51.100.40");
+  const payNow = await form(good({ event_date: "2027-01-16", package: "photo", pay_now: true, contact_email: "c@example.com" }), "198.51.100.42");
+  await paidCall({ stripe_session_id: "cs_live_columnsjoin1", booking_id: payNow.data.id, package: "photo", amount_cents: 4999, contact_email: "c@example.com" });
+  const unpaid = await form(good({ event_date: "2027-01-16", package: "video", pay_now: true, contact_email: "d@example.com" }), "198.51.100.43");
+  db.tables.sm_bookings.find((b) => b.id === unpaid.data.id).created_at = new Date(Date.now() - 2 * 3600e3).toISOString();
+  process.env.EMAIL_USER = "subjectmedias@gmail.com";
+  process.env.EMAIL_PASS = "app-password";
+  try { assert.deepEqual(await router._remind(db), { sent: 1 }); } finally { delete process.env.EMAIL_USER; delete process.env.EMAIL_PASS; }
   await paidCall({ stripe_session_id: "cs_live_columns12345", package: "video", amount_cents: 9999, contact_email: "a@example.com", contact_phone: "555-010-0000", event_date: "2026-11-21", event_city: "Dallas", event_state: "TX", team_jersey: "x", notes: "n" });
   await detailsCall({ stripe_session_id: "cs_live_columns67890", package: "video", amount_cents: 9999, contact_email: "b@example.com", event_date: "2026-12-05", event_city: "Dallas", event_state: "TX", athletes: "2", checkout_notes: "c" });
   await detailsCall({ stripe_session_id: "cs_live_columns12345", event_date: "2026-12-05", event_city: "Dallas", event_state: "TX" }, "198.51.100.41");
@@ -867,7 +874,7 @@ test("pay now: the request lands quietly for the booker; the thanks note goes wh
   await wait();
   assert.equal(theirs("jamie@example.com").length, 0, "no \"nothing is charged until then\" to someone paying now");
   assert.match(staffMails()[0].text, /went on to Stripe to pay for it/);
-  assert.ok(!("pay_now" in db.tables.sm_bookings[0]), "not a column");
+  assert.equal(db.tables.sm_bookings[0].pay_now, true, "kept for the reminder (migration 035)");
   mails = [];
   pushes = [];
   const r = await paidCall({ stripe_session_id: "cs_live_paynow123456", booking_id: made.data.id, package: "video", amount_cents: 9999, contact_email: "jamie@example.com" });
@@ -901,4 +908,190 @@ test("pay now, never paid: no note, and staff know to follow up", async () => {
   assert.equal(theirs("jamie@example.com").length, 0);
   assert.equal(db.tables.sm_bookings[0].booker_emailed_at || null, null);
   assert.match(staffMails()[0].text, /if not, follow up like any request/);
+});
+
+// ── The unfinished checkout: one reminder, once the webhook is known ─────
+const HOUR_MS = 60 * 60 * 1000;
+async function withEmail(fn) {
+  process.env.EMAIL_USER = "subjectmedias@gmail.com";
+  process.env.EMAIL_PASS = "app-password";
+  try {
+    return await fn();
+  } finally {
+    delete process.env.EMAIL_USER;
+    delete process.env.EMAIL_PASS;
+  }
+}
+// The site's webhook has joined a payment to a request: what turns reminders on.
+async function webhookWorks(email = "earlier@example.com") {
+  const r = await form(good({ event_date: "2027-01-16", package: "photo", pay_now: true, contact_email: email }), "198.51.100.60");
+  await paidCall({ stripe_session_id: "cs_live_joined" + crypto.randomBytes(5).toString("hex"), booking_id: r.data.id, package: "photo", amount_cents: 4999, contact_email: email });
+  await wait();
+  return r.data.id;
+}
+const rowOf = (id) => db.tables.sm_bookings.find((b) => b.id === id);
+const age = (id, ms) => { rowOf(id).created_at = new Date(Date.now() - ms).toISOString(); };
+const reminders = () => mails.filter((m) => /isn't booked yet$/.test(m.subject));
+const crypto = require("crypto");
+
+test("an unfinished checkout: one reminder an hour on, with the same checkout, in fixed words", () => withEmail(async () => {
+  await webhookWorks();
+  const r = await form(good({ event_date: "2027-01-16", package: "video", pay_now: true }));
+  await wait();
+  mails = [];
+  assert.deepEqual(await router._remind(db), { sent: 0 }, "not inside the hour");
+  age(r.data.id, HOUR_MS + 60000);
+  assert.deepEqual(await router._remind(db), { sent: 1 });
+  const m = reminders();
+  assert.equal(m.length, 1);
+  assert.deepEqual(m[0].to, ["jamie@example.com"]);
+  assert.equal(m[0].subject, "Subject Medias: your video coverage isn't booked yet");
+  assert.equal(m[0].replyTo, "hello@subjectmedias.com");
+  assert.ok(m[0].text.includes(`https://buy.stripe.com/eVqfZidmP5TY70seoFebu05?client_reference_id=${r.data.id}&prefilled_email=jamie%40example.com`), "the same checkout, joined to the request");
+  assert.match(m[0].text, /^What: Video coverage, \$99\.99$/m);
+  assert.match(m[0].text, /^Game day: Sat, Jan 16, 2027$/m);
+  assert.match(m[0].text, /^State: CA$/m);
+  assert.match(m[0].text, /Already paid\? Then you're all set/);
+  assert.match(m[0].text, /Didn't start this booking\? You can ignore this email\./);
+  for (const typed of ["Jamie", "Los Angeles", "Lightning", "#11", "Pylon Girls Flag", "roster", "555"]) assert.ok(!m[0].text.includes(typed), `nothing anyone typed: ${typed}`);
+  assert.ok(rowOf(r.data.id).checkout_reminded_at, "the row says when");
+  assert.deepEqual(await router._remind(db), { sent: 0 }, "once");
+  assert.equal(reminders().length, 1);
+}));
+
+test("no reminder until the site's webhook has joined a payment to a request lately, or with the setting off", () => withEmail(async () => {
+  const r = await form(good({ event_date: "2027-01-16", package: "elite", pay_now: true }));
+  await wait();
+  age(r.data.id, HOUR_MS + 60000);
+  mails = [];
+  assert.deepEqual(await router._remind(db), { off: "no_webhook_yet" });
+  // A package bought straight from a payment link isn't a join: the details
+  // page can make one of those without the webhook working.
+  await paidCall({ stripe_session_id: "cs_live_direct000001", package: "photo", amount_cents: 4999, contact_email: "direct@example.com" });
+  assert.deepEqual(await router._remind(db), { off: "no_webhook_yet" });
+  // A join two months ago says nothing about the webhook now.
+  const joined = await webhookWorks();
+  age(joined, 61 * 24 * HOUR_MS);
+  assert.deepEqual(await router._remind(db), { off: "no_webhook_yet" });
+  await webhookWorks("recent@example.com");
+  process.env.SM_CHECKOUT_REMINDERS = "off";
+  try {
+    assert.deepEqual(await router._remind(db), { off: "setting" });
+  } finally {
+    delete process.env.SM_CHECKOUT_REMINDERS;
+  }
+  assert.equal(reminders().length, 0);
+  assert.deepEqual(await router._remind(db), { sent: 1 });
+}));
+
+test("no reminder without email set up: nothing to churn through", async () => {
+  await webhookWorks();
+  const r = await form(good({ event_date: "2027-01-16", package: "photo", pay_now: true }));
+  await wait();
+  age(r.data.id, HOUR_MS + 60000);
+  assert.deepEqual(await router._remind(db), { off: "no_email" });
+  assert.equal(rowOf(r.data.id).checkout_reminded_at || null, null);
+});
+
+test("no reminder once it's paid, taken on, two days old, past its game, a plain request, or they came back", () => withEmail(async () => {
+  await webhookWorks();
+  const mk = async (over, visitor) => (await form(good({ package: "photo", pay_now: true, event_date: "2027-01-16", ...over }), visitor)).data.id;
+  const paidOne = await mk({ contact_email: "paid@example.com" }, "198.51.100.61");
+  await paidCall({ stripe_session_id: "cs_live_paidlater0001", booking_id: paidOne, package: "photo", amount_cents: 4999, contact_email: "paid@example.com" });
+  const taken = await mk({ contact_email: "taken@example.com" }, "198.51.100.62");
+  rowOf(taken).status = "contacted";
+  const old = await mk({ contact_email: "old@example.com" }, "198.51.100.63");
+  const past = await mk({ contact_email: "past@example.com" }, "198.51.100.64");
+  rowOf(past).event_date = "2026-10-01";
+  const plain = await mk({ contact_email: "plain@example.com", pay_now: false }, "198.51.100.65");
+  const came = await mk({ contact_email: "Came.Back+gameday@gmail.com" }, "198.51.100.66");
+  for (const id of [paidOne, taken, past, plain, came]) age(id, HOUR_MS + 60000);
+  age(old, 2 * 24 * HOUR_MS + 60000);
+  // Came back since: a newer request from the same inbox (Gmail ignores dots
+  // and +tags).
+  await form(good({ package: "video", event_date: "2027-01-16", contact_email: "cameback@gmail.com" }), "198.51.100.67");
+  await wait();
+  mails = [];
+  assert.deepEqual(await router._remind(db), { sent: 0 });
+  assert.equal(reminders().length, 0);
+  for (const id of [paidOne, taken, old, past, plain, came]) assert.equal(rowOf(id).checkout_reminded_at || null, null, id);
+}));
+
+test("a reminder that couldn't go gives its claim back; one that keeps failing stops after three tries", () => withEmail(async () => {
+  await webhookWorks();
+  const r = await form(good({ event_date: "2027-01-16", package: "video", pay_now: true }));
+  await wait();
+  age(r.data.id, HOUR_MS + 60000);
+  try {
+    mailer.setSender(async () => ({ sent: false, reason: "daily_limit" }));
+    assert.deepEqual(await router._remind(db), { sent: 0 });
+    assert.equal(rowOf(r.data.id).checkout_reminded_at, null, "the claim comes back, for a later run");
+    let tries = 0;
+    mailer.setSender(async () => { tries += 1; throw Object.assign(new Error("550 5.1.1 <jamie@example.com> no such user"), { responseCode: 550 }); });
+    for (let i = 0; i < 5; i++) await router._remind(db);
+    assert.equal(tries, 3, "three tries, then it stops");
+    assert.equal(rowOf(r.data.id).checkout_reminded_at, null, "the app doesn't say it went");
+  } finally {
+    mailer.setSender(async (m) => { mails.push(m); return { sent: true }; });
+  }
+}));
+
+test("the reminder keeps to the booker's limits: two notes a day to one mailbox", () => withEmail(async () => {
+  await webhookWorks();
+  await form(good({ event_date: "2027-01-16" }), "198.51.100.70");
+  await form(good({ event_date: "2027-01-17" }), "198.51.100.71");
+  const r = await form(good({ event_date: "2027-01-18", package: "elite", pay_now: true }), "198.51.100.72");
+  await wait();
+  assert.equal(theirs("jamie@example.com").length, 2, "two notes to that inbox today already");
+  age(r.data.id, HOUR_MS + 60000);
+  assert.deepEqual(await router._remind(db), { sent: 0 });
+  assert.equal(reminders().length, 0);
+  assert.equal(rowOf(r.data.id).checkout_reminded_at || null, null, "never claimed");
+}));
+
+test("the app says when a checkout isn't finished and when the reminder went; paying finishes it", () => withEmail(async () => {
+  await webhookWorks();
+  const r = await form(good({ event_date: "2027-01-16", package: "photo", pay_now: true }));
+  await wait();
+  const cookie = await staffCookie();
+  const mine = async () => (await call("GET", "/api/sm/bookings", undefined, {}, cookie)).data.bookings.find((b) => b.id === r.data.id);
+  let b = await mine();
+  assert.equal(b.pay_now, true);
+  assert.equal(b.unfinished, false, "still on its way, inside the hour");
+  assert.ok(!("contact_email" in b), "the list still carries no contact details");
+  age(r.data.id, HOUR_MS + 60000);
+  b = await mine();
+  assert.equal(b.unfinished, true);
+  assert.equal(b.checkout_reminded_at, null);
+  await router._remind(db);
+  const one = await call("GET", "/api/sm/bookings/" + r.data.id, undefined, {}, cookie);
+  assert.equal(one.data.booking.unfinished, true);
+  assert.ok(one.data.booking.checkout_reminded_at);
+  mails = [];
+  await paidCall({ stripe_session_id: "cs_live_afterremind01", booking_id: r.data.id, package: "photo", amount_cents: 4999, contact_email: "jamie@example.com" });
+  await wait();
+  const after = await call("GET", "/api/sm/bookings/" + r.data.id, undefined, {}, cookie);
+  assert.equal(after.data.booking.paid, true);
+  assert.equal(after.data.booking.unfinished, false);
+  assert.equal(theirs("jamie@example.com").filter((m) => m.subject === "Subject Medias: thanks for booking").length, 1, "the thanks note still goes");
+}));
+
+test("the checkout link and the hour, by the rules", () => {
+  const id = "8f14e45f-ceea-467e-a1d0-6f1d4c6b2a01";
+  assert.equal(B.checkoutLink({ id, package: "elite", contact_email: "a+b@example.com" }), `https://buy.stripe.com/dRm14o82vbeidoQ5S9ebu03?client_reference_id=${id}&prefilled_email=a%2Bb%40example.com`);
+  assert.equal(B.checkoutLink({ id: id.toUpperCase(), package: "photo", contact_email: "nope" }), `https://buy.stripe.com/28E00kgz1dmqckMcgxebu04?client_reference_id=${id}`, "no odd address in the link");
+  assert.equal(B.checkoutLink({ id, package: "transcript", contact_email: "a@example.com" }), null, "not a pay-now package");
+  assert.equal(B.checkoutLink({ id: "1 or 1=1", package: "photo" }), null);
+  const base = { pay_now: true, source: "form", status: "new", created_at: new Date(Date.now() - 2 * HOUR_MS).toISOString() };
+  assert.equal(B.checkoutUnfinished(base), true);
+  assert.equal(B.checkoutUnfinished({ ...base, stripe_session_id: "cs_live_x12345678" }), false);
+  assert.equal(B.checkoutUnfinished({ ...base, status: "staffed" }), false);
+  assert.equal(B.checkoutUnfinished({ ...base, pay_now: false }), false);
+  assert.equal(B.checkoutUnfinished({ ...base, source: "stripe" }), false);
+  assert.equal(B.checkoutUnfinished({ ...base, created_at: new Date().toISOString() }), false);
+  assert.equal(B.checkoutUnfinished({ ...base, created_at: "not a date" }), false);
+  assert.equal(B.gameNotPast({ event_date: "2026-10-01" }, new Date("2026-11-07T12:00:00Z")), false);
+  assert.equal(B.gameNotPast({ event_date: "2026-11-06" }, new Date("2026-11-07T12:00:00Z")), true, "a day's grace");
+  assert.equal(B.gameNotPast({ event_date: null }, new Date("2026-11-07T12:00:00Z")), true);
+  assert.deepEqual(Object.keys(B.PAY_NOW), ["photo", "video", "elite"]);
 });
