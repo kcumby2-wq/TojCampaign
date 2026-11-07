@@ -118,15 +118,16 @@ Every card change carries what the card showed: if the family answered (or someo
 The link is safe from the places links usually leak:
 - it carries the token after `#t=`, which browsers never send to a server, so no request log holds it; the page keeps it for that tab only (a phone that reloads the page still works) and says "try again in a minute" when the server is busy or down, rather than calling a live link dead;
 - replies to the approval email don't come to staff (a reply quotes the link): they go to `PYLON_APPROVAL_REPLY_TO` if it's set (an address nobody reads), or back to the family's own address, and the email says to write to the help address in a new email;
-- with Gmail as the app's mail account, the Sent folder keeps a copy of every approval email, links included: whoever can open that account can see live links. A sending service (the SMTP settings) keeps no such copy. Approval emails have their own share of the day's email budget, so busy public forms can't hold them up.
+- with Gmail as the app's mail account, the Sent folder keeps a copy of every approval email, links included: whoever can open that account can see live links. Some sending services keep message bodies for days too (Postmark and Mailgun do): check yours, and keep whichever account sends to Kyron. Approval emails have their own share of the day's email budget, so busy public forms can't hold them up;
+- a bounced approval email usually comes back whole, link included, to the sending account. The family never got it: **Cancel the link** on that message, check the address with them, and ask again.
 
 The database holds the same line (migration `037_pylon_outreach.sql`):
 - the link's token is turned into a proof (its hash) by the server, and the table keeps only the proof's hash: nothing that can read the table can decide, and the trigger checks the proof against the link it burns;
 - an approval carries the fingerprint of everything the family was shown when the link went out, and nothing they were shown can change in the same update;
-- links go out only on an open request whose contact is checked, and stop working if that changes;
+- links go out only on an open request whose contact is checked; taking the check back, or marking the request Done or Closed, cancels its live links for good (with the reason in the history);
 - nothing changes after approval; a decline stays as recorded until the family is asked again;
 - nothing is marked sent without approval, after the family took it back, or twice;
-- every link, decision, cancellation, withdrawal and send is written to `pylon_outreach_events`, which is never changed; a message with any of that on record is never deleted.
+- every link, decision, cancellation, withdrawal and send is written to `pylon_outreach_events` by a function running as the table's owner, which the server's own service role can't imitate; the history is never changed, and a message with any of that on record is never deleted.
 
 The family's page uses two database functions that only the server can call. The code: `routes/pylon-outreach.js` (staff), `routes/pylon-parent.js` (the family's link), `public/parent-approval.html`.
 

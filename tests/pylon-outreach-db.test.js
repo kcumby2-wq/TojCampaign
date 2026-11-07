@@ -104,6 +104,9 @@ before(async () => {
   for (const f of ["036_pylon_requests.sql", "037_pylon_outreach.sql", "037_pylon_outreach.sql"]) {
     await pool.query(fs.readFileSync(path.join(__dirname, "..", "db", "migrations", f), "utf8").replace(/public\./g, `${NAME}.`));
   }
+  // Supabase's service_role skips row security; this cluster's doesn't, so it
+  // gets an allow-all policy here instead (for the tests that act as it).
+  for (const t of ["pylon_outreach", "pylon_outreach_events", "pylon_requests"]) await pool.query(`create policy t_service_role on ${NAME}.${t} for all to service_role using (true) with check (true)`);
   setSupabase(pgSupabase(pool, NAME));
   const app = express();
   app.use(express.json());
@@ -193,13 +196,28 @@ test("a link goes out only on an open request whose contact staff checked, and s
   const id = await draft(req);
   const token = await link(id);
   assert.equal((await shown(token)).rows.length, 1);
-  await pool.query("update pylon_requests set contact_verified_at = null, contact_verified_by = null where id = $1", [req]);
+  await pool.query("update pylon_requests set contact_verified_at = null, contact_verified_by = null, status_by = 'kyron@toj.test' where id = $1", [req]);
   assert.equal((await shown(token)).rows.length, 0, "the check taken back: the link stops");
   assert.equal((await decide(token)).rows.length, 0);
-  await pool.query("update pylon_requests set contact_verified_at = now(), contact_verified_by = 'kyron@toj.test', status = 'done' where id = $1", [req]);
-  assert.equal((await shown(token)).rows.length, 0, "a done request: the link stops");
+  assert.equal((await row(id)).parent_approval_token_hash, null, "cancelled, not just hidden");
+  await pool.query("update pylon_requests set contact_verified_at = now(), contact_verified_by = 'kyron@toj.test' where id = $1", [req]);
+  assert.equal((await shown(token)).rows.length, 0, "checking again doesn't bring it back");
+  const ev = await events(id);
+  assert.deepEqual(ev.slice(-2).map((e) => e.event), ["link_cancelled", "note"]);
+  assert.equal(ev[ev.length - 2].by_staff, "kyron@toj.test");
+  assert.match(ev[ev.length - 1].note, /check of who the contact is was taken back/);
+  // Done (or closed) cancels too, and reopening doesn't bring it back.
+  const again = await link(id);
+  await pool.query("update pylon_requests set status = 'done' where id = $1", [req]);
+  assert.equal((await row(id)).parent_approval_token_hash, null);
   await pool.query("update pylon_requests set status = 'confirmed' where id = $1", [req]);
-  assert.equal((await decide(token, "declined")).rows.length, 1);
+  assert.equal((await shown(again)).rows.length, 0);
+  assert.match((await events(id)).pop().note, /marked done/);
+  // Other requests' links are left alone.
+  const other = await draft(await request());
+  const t2 = await link(other);
+  await pool.query("update pylon_requests set status = 'closed' where id = $1", [req]);
+  assert.equal((await shown(t2)).rows.length, 1);
 });
 
 test("an expired link shows and decides nothing; a live link keeps its expiry; a new one lasts 14 days at most", async () => {
@@ -273,13 +291,35 @@ test("the history: written by the database, kept as written", async () => {
   assert.ok(await refused(pool.query("update pylon_outreach_events set by_family = 'Someone Else' where outreach_id = $1", [id]), /kept as it was written/));
   assert.ok(await refused(pool.query("delete from pylon_outreach_events where outreach_id = $1", [id]), /kept as it was written/));
   assert.ok(await refused(pool.query("truncate pylon_outreach_events"), /kept as it was written/));
-  assert.ok(await refused(pool.query("insert into pylon_outreach_events (outreach_id, event, by_family) values ($1, 'approved', 'Pat Ellis')", [id]), /written by the database/));
+  assert.ok(await refused(pool.query("insert into pylon_outreach_events (outreach_id, event, by_family) values ($1, 'approved', 'Pat Ellis')", [id]), /written by the database/), "not even the owner, by hand");
   assert.ok(await refused(pool.query("insert into pylon_outreach_events (outreach_id, event, note) values ($1, 'reply', 'No staff name')", [id]), /staff member/));
   await pool.query("insert into pylon_outreach_events (outreach_id, event, by_staff, note, at) values ($1, 'reply', 'kyron@toj.test', 'Wants more film.', '2020-01-01')", [id]);
   const reply = (await pool.query("select at from pylon_outreach_events where outreach_id = $1 and event = 'reply'", [id])).rows[0];
   assert.ok(new Date(reply.at).getFullYear() >= 2026, "nobody backdates the history");
   const unsent = await draft(await request());
   assert.ok(await refused(pool.query("insert into pylon_outreach_events (outreach_id, event, by_staff, note) values ($1, 'reply', 'kyron@toj.test', 'x')", [unsent]), /message that was sent/));
+  // As the server's own role (what the API key is): no forging, whatever it sets.
+  await link(unsent);
+  const c = await pool.connect();
+  try {
+    await c.query("begin");
+    await c.query("set local role service_role");
+    await c.query("select set_config('pylon.outreach_logging', 'on', true)");
+    await assert.rejects(c.query("insert into pylon_outreach_events (outreach_id, event, by_family) values ($1, 'approved', 'Pat Ellis')", [unsent]), /written by the database/);
+    await c.query("rollback");
+    await c.query("begin");
+    await c.query("set local role service_role");
+    await c.query("insert into pylon_outreach_events (outreach_id, event, by_staff, note) values ($1, 'note', 'kyron@toj.test', 'Called the family.')", [unsent]);
+    // The database's own entries still land when the service role makes the change.
+    await c.query("update pylon_outreach set draft_body = 'Changed by the service role.' where id = $1", [unsent]);
+    await c.query("commit");
+  } catch (e) {
+    await c.query("rollback").catch(() => {});
+    throw e;
+  } finally {
+    c.release();
+  }
+  assert.deepEqual((await events(unsent)).map((e) => e.event), ["asked", "note", "link_cancelled"]);
 });
 
 test("deleting: a plain draft can go; one with history stays; a request with messages stays", async () => {
@@ -294,7 +334,7 @@ test("deleting: a plain draft can go; one with history stays; a request with mes
 });
 
 test("the API roles can't use the tables or any of the functions", async () => {
-  const fns = ["pylon_outreach_for_family(text)", "pylon_outreach_decide(text, text, text)", "pylon_outreach_fingerprint(text, text, text, text, text, text)", "pylon_outreach_gate()", "pylon_outreach_log()", "pylon_outreach_events_gate()"];
+  const fns = ["pylon_outreach_for_family(text)", "pylon_outreach_decide(text, text, text)", "pylon_outreach_fingerprint(text, text, text, text, text, text)", "pylon_outreach_gate()", "pylon_outreach_log()", "pylon_outreach_events_gate()", "pylon_requests_stop_links()"];
   for (const role of ["anon", "authenticated"]) {
     for (const t of ["pylon_outreach", "pylon_outreach_events"]) {
       const { rows } = await pool.query("select has_table_privilege($1, $2, 'select, insert, update, delete') as ok", [role, `${NAME}.${t}`]);
@@ -426,6 +466,39 @@ test("staff can cancel a link that's out; it stops working at once", async () =>
   assert.equal(h[h.length - 1].by_staff, "kyron@toj.test");
 });
 
+test("taking the check back through the app cancels the link for good", async () => {
+  const req = await request();
+  const o = await newDraft(req);
+  await staff("POST", `/api/pylon/outreach/${o.id}/ask`, { seen: await seenOf(o.id) });
+  const token = tokenIn(askMail().text);
+  assert.equal((await staff("PATCH", `/api/pylon/requests/${req}`, { verified: false })).status, 200);
+  assert.equal((await family("view", { token })).status, 404);
+  assert.equal((await staff("PATCH", `/api/pylon/requests/${req}`, { verified: true })).status, 200);
+  assert.equal((await family("view", { token })).status, 404, "a later check doesn't hand the old link back");
+  const h = (await listFor(req)).outreach[0].history;
+  assert.deepEqual(h.slice(-2).map((e) => e.event), ["link_cancelled", "note"]);
+});
+
+test("the family's receipt goes even if the staff alert can't", async () => {
+  const req = await request();
+  const o = await newDraft(req);
+  await staff("POST", `/api/pylon/outreach/${o.id}/ask`, { seen: await seenOf(o.id) });
+  const token = tokenIn(askMail().text);
+  mailer.setSender(async (m) => {
+    if ([].concat(m.to).includes("kyron@toj.test")) throw Object.assign(new Error("550 mailbox unavailable"), { responseCode: 550 });
+    mails.push(m);
+    return { sent: true };
+  });
+  try {
+    mails = [];
+    assert.equal((await family("decide", { token, decision: "approved", parent_name: "Pat Ellis", confirm: true })).status, 200);
+    await wait(200);
+    assert.ok(mails.some((m) => m.subject === "You approved the message to Example State"));
+  } finally {
+    mailer.setSender(async (m) => { mails.push(m); return mailOk ? { sent: true } : { sent: false, reason: "send_failed" }; });
+  }
+});
+
 test("the family takes an approval back: it's never sent", async () => {
   const req = await request();
   const o = await newDraft(req);
@@ -502,6 +575,6 @@ test("guessing at links is slowed down", async () => {
   assert.equal(limited, 5, "30 tries per visitor per 10 minutes");
   parent._reset();
   let ok = 0;
-  for (let i = 0; i < 605; i++) if ((await family("view", { token: crypto.randomBytes(32).toString("hex") }, { "X-Forwarded-For": `192.0.${Math.floor(i / 200)}.${i % 200}` })).status !== 429) ok += 1;
-  assert.equal(ok, 600, "made-up visitor addresses still meet the connection's breaker");
+  for (let i = 0; i < 300; i++) if ((await family("view", { token: crypto.randomBytes(32).toString("hex") }, { "X-Forwarded-For": `192.0.${Math.floor(i / 200)}.${i % 200}` })).status !== 429) ok += 1;
+  assert.equal(ok, 300, "the shared breaker is for floods: hundreds of visitors don't reach it");
 });

@@ -35,10 +35,10 @@ const helpEmail = () => U.email(env("PYLON_HELP_EMAIL")) || "hello@pylonfootball
 // Guessing at links: 30 tries per visitor per 10 minutes; the 256-bit token
 // is what stops a guess. Per connection (the hop Render saw, which made-up
 // X-Forwarded-For headers can't change; through Vercel, shared by every
-// family), 600 per 10 minutes: a breaker for floods only, and the page says
-// "try again in a minute" if it trips.
+// family), 5,000 per 10 minutes: only a flood reaches it, and it protects the
+// database, not the links. The page says "try again in a minute" if it trips.
 const perVisitor = H.windowLimiter(30, 10 * 60 * 1000);
-const perPeer = H.windowLimiter(600, 10 * 60 * 1000);
+const perPeer = H.windowLimiter(5000, 10 * 60 * 1000);
 const proofOf = (token) => crypto.createHash("sha256").update(String(token), "utf8").digest("hex");
 const wellFormed = (t) => typeof t === "string" && /^[0-9a-f]{64}$/.test(t);
 // The function's one column comes back as rows of { outreach_id }; a bare
@@ -110,25 +110,36 @@ router.post("/approval/decide", safe(async (req, res) => {
   console.log(`[pylon-parent] outreach ${id} ${decision} through the family's link`);
   res.json({ ok: true, decision });
 
-  // Staff hear which message was decided (never the athlete); the family
-  // gets a receipt. Never throws.
+  // The family gets a receipt first (it's how they'd learn someone else
+  // used their link), then staff hear which message was decided (never the
+  // athlete). Each on its own, so one failing can't stop the other. Never throws.
   setImmediate(async () => {
+    let o = null;
     try {
-      const { data: o } = await sb.from("pylon_outreach").select("id,request_id,coach_name,program_name,parent_decided_at").eq("id", id).maybeSingle();
-      if (!o) return;
+      ({ data: o } = await sb.from("pylon_outreach").select("id,request_id,coach_name,program_name").eq("id", id).maybeSingle());
+    } catch (e) {
+      console.warn("[pylon-parent] after-decision read failed:", e && e.message);
+    }
+    if (!o) return;
+    try {
+      const { data: rq } = await sb.from("pylon_requests").select("contact_name,contact_email,contact_role,athlete_name").eq("id", o.request_id).maybeSingle();
+      if (rq && rq.contact_email) {
+        const receipt = U.decisionReceipt(rq, o, decision, { help: helpEmail() });
+        const replyTo = U.email(env("PYLON_APPROVAL_REPLY_TO")) || rq.contact_email;
+        const r = await mailer.sendMail({ to: rq.contact_email, subject: receipt.subject, text: receipt.text, replyTo, pool: "pylon_approval" });
+        if (!r.sent) console.warn(`[pylon-parent] receipt not sent (${r.reason})`);
+      }
+    } catch (e) {
+      console.warn("[pylon-parent] receipt failed:", mailer.errorCode(e));
+    }
+    try {
       const a = U.decisionAlert(o, decision, APP_BASE());
       const to = [...staffEmails()];
       push.notifySoon(to, a.push);
       const r = await mailer.sendMail({ to, subject: a.email.subject, text: a.email.text, pool: "pylon_approval" });
       if (!r.sent) console.warn(`[pylon-parent] staff email not sent (${r.reason})`);
-      const { data: rq } = await sb.from("pylon_requests").select("contact_name,contact_email,contact_role,athlete_name").eq("id", o.request_id).maybeSingle();
-      if (!rq || !rq.contact_email) return;
-      const receipt = U.decisionReceipt(rq, o, decision, { help: helpEmail() });
-      const replyTo = U.email(env("PYLON_APPROVAL_REPLY_TO")) || rq.contact_email;
-      const r2 = await mailer.sendMail({ to: rq.contact_email, subject: receipt.subject, text: receipt.text, replyTo, pool: "pylon_approval" });
-      if (!r2.sent) console.warn(`[pylon-parent] receipt not sent (${r2.reason})`);
     } catch (e) {
-      console.warn("[pylon-parent] after-decision emails failed:", mailer.errorCode(e));
+      console.warn("[pylon-parent] staff alert failed:", mailer.errorCode(e));
     }
   });
 }));

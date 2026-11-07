@@ -397,12 +397,18 @@
     if (weekly) weekly.addEventListener("click", function () {
       var text = weeklyUpdate(r, list, Date.now());
       var subject = "Your Recruiting Concierge update";
-      var mailto = mailtoFor(r.contact_email, subject, text);
       var holder = openForm(document.getElementById("oNewForm"),
         '<p class="sub" style="margin-top:10px">To ' + h(r.contact_email) + ". Read it over, then send it from your email.</p>" +
         '<textarea data-o-weekly rows="12" style="width:100%;margin-top:6px">' + h(text) + "</textarea>" +
-        '<div class="btn-row" style="margin-top:8px">' + (mailto.length <= MAILTO_MAX ? '<a class="btn small" href="' + h(mailto) + '">Open in email</a>' : "") + '<button type="button" class="btn small soft" data-o-weekly-copy>Copy it</button></div>');
-      holder.querySelector("[data-o-weekly-copy]").addEventListener("click", function () { copy(holder.querySelector("[data-o-weekly]").value, msg, "Copied the update."); });
+        '<div class="btn-row" style="margin-top:8px"><button type="button" class="btn small" data-o-weekly-open>Open in email</button><button type="button" class="btn small soft" data-o-weekly-copy>Copy it</button></div>');
+      var current = function () { return holder.querySelector("[data-o-weekly]").value; };
+      // Built from the text as it is when tapped, so edits go with it.
+      holder.querySelector("[data-o-weekly-open]").addEventListener("click", function () {
+        var mailto = mailtoFor(r.contact_email, subject, current());
+        if (mailto.length > MAILTO_MAX) { msg.textContent = "Too long to open in an email app reliably: copy it instead."; return; }
+        location.href = mailto;
+      });
+      holder.querySelector("[data-o-weekly-copy]").addEventListener("click", function () { copy(current(), msg, "Copied the update."); });
     });
     Array.prototype.forEach.call(box.querySelectorAll("[data-o-edit]"), function (b) {
       b.addEventListener("click", function () {

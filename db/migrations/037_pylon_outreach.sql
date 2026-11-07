@@ -16,7 +16,8 @@
 --     not a direct UPDATE (the trigger checks the proof the decide function
 --     passes it).
 --   * Links go out only while the request is open and its contact checked
---     (pylon_requests.contact_verified_at), and stop working if that changes.
+--     (pylon_requests.contact_verified_at). If the check is taken back or the
+--     request is done or closed, its live links are cancelled for good.
 --   * The family reads the message as it will be sent (the coach, the
 --     program, its level, the subject and the words) and approves or
 --     declines it. The approval carries the fingerprint of everything they
@@ -27,8 +28,9 @@
 --     sent; rewriting who declined and when; deleting a message with a link,
 --     a decision or a send on record.
 --   * Every link, decision, cancellation, withdrawal and send is written to
---     pylon_outreach_events by the database itself, and that history is
---     never changed. Staff add coach replies and notes to it.
+--     pylon_outreach_events by the database itself (a function running as the
+--     table's owner, which no API session can be), and that history is never
+--     changed. Staff add coach replies and notes to it.
 --   * Service role only: RLS on, no policies, nothing granted to anon or
 --     authenticated; the functions the public page uses are the server's.
 
@@ -298,7 +300,10 @@ create trigger pylon_outreach_log
   for each row execute function public.pylon_outreach_log();
 
 -- The history is append-only. What the database writes (links, decisions,
--- cancellations, withdrawals, sends) only it writes; a coach reply is for a
+-- cancellations, withdrawals, sends) only it writes: those come from
+-- pylon_outreach_log(), which runs as its owner (no other session is that
+-- owner, not the server's service role) and marks its own inserts, so even
+-- the owner doesn't add one by hand by accident. A coach reply is for a
 -- message that went out; nobody backdates anything.
 create or replace function public.pylon_outreach_events_gate() returns trigger
 language plpgsql set search_path = '' as $$
@@ -307,7 +312,8 @@ begin
     raise exception 'the outreach history is kept as it was written';
   end if;
   if new.event in ('asked', 'approved', 'declined', 'link_cancelled', 'withdrawn', 'sent')
-     and current_setting('pylon.outreach_logging', true) is distinct from 'on' then
+     and (current_user is distinct from (select pg_get_userbyid(p.proowner) from pg_proc p where p.oid = 'public.pylon_outreach_log()'::regprocedure)
+          or current_setting('pylon.outreach_logging', true) is distinct from 'on') then
     raise exception 'outreach history: % is written by the database', new.event;
   end if;
   if new.event in ('reply', 'note') and (new.by_staff is null or new.note is null or new.by_family is not null or new.text_sha256 is not null) then
@@ -328,6 +334,41 @@ drop trigger if exists pylon_outreach_events_keep on public.pylon_outreach_event
 create trigger pylon_outreach_events_keep
   before truncate on public.pylon_outreach_events
   for each statement execute function public.pylon_outreach_events_gate();
+
+-- A request whose contact check is taken back, or that's done or closed:
+-- its live links are cancelled for good (checking again or reopening
+-- doesn't bring them back), with the reason in each message's history.
+-- Runs as the owner, like the history, so it can't be stopped halfway.
+create or replace function public.pylon_requests_stop_links() returns trigger
+language plpgsql security definer set search_path = '' as $$
+declare
+  why text;
+  o record;
+begin
+  if old.contact_verified_at is not null and new.contact_verified_at is null then
+    why := 'The check of who the contact is was taken back, so the link stopped working.';
+  elsif old.status not in ('done', 'closed') and new.status in ('done', 'closed') then
+    why := 'The request was marked ' || new.status || ', so the link stopped working.';
+  else
+    return null;
+  end if;
+  for o in select id from public.pylon_outreach where request_id = new.id and parent_approval_token_hash is not null loop
+    update public.pylon_outreach
+       set parent_approval_token_hash = null,
+           parent_approval_expires_at = null,
+           changed_by = coalesce(new.status_by, changed_by),
+           updated_at = now()
+     where id = o.id;
+    insert into public.pylon_outreach_events (outreach_id, event, by_staff, note)
+      values (o.id, 'note', coalesce(new.status_by, 'the app'), why);
+  end loop;
+  return null;
+end $$;
+
+drop trigger if exists pylon_requests_stop_links on public.pylon_requests;
+create trigger pylon_requests_stop_links
+  after update of contact_verified_at, status on public.pylon_requests
+  for each row execute function public.pylon_requests_stop_links();
 
 -- What the family's link shows: the message as it will go out, the athlete's
 -- first name, and who the link was sent to (so the page can say "parent or
@@ -389,6 +430,7 @@ begin
   revoke all on function public.pylon_outreach_gate() from public;
   revoke all on function public.pylon_outreach_log() from public;
   revoke all on function public.pylon_outreach_events_gate() from public;
+  revoke all on function public.pylon_requests_stop_links() from public;
   foreach r in array array['anon', 'authenticated'] loop
     if exists (select 1 from pg_roles where rolname = r) then
       execute format('revoke all on public.pylon_outreach, public.pylon_outreach_events from %I', r);
@@ -399,6 +441,7 @@ begin
       execute format('revoke all on function public.pylon_outreach_gate() from %I', r);
       execute format('revoke all on function public.pylon_outreach_log() from %I', r);
       execute format('revoke all on function public.pylon_outreach_events_gate() from %I', r);
+      execute format('revoke all on function public.pylon_requests_stop_links() from %I', r);
     end if;
   end loop;
   if exists (select 1 from pg_roles where rolname = 'service_role') then
