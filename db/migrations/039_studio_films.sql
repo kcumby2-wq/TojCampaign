@@ -543,9 +543,11 @@ begin
   return new;
 end $$;
 
--- A card added or renamed: the film's title and story are read against it
--- (the card's gate took the film's row lock, so a title saved in the same
--- instant waits, and is read against the card in turn).
+-- A card added or renamed: the film's title and story are read against the
+-- cards, this one with them (the card's gate took the film's row lock, so a
+-- title saved in the same instant waits, and is read against the card in
+-- turn). The message speaks of the film's cards: a title from before a rule
+-- changed could hold another card's name.
 create or replace function public.studio_people_title_names() returns trigger
 language plpgsql set search_path = '' as $$
 declare
@@ -556,10 +558,10 @@ begin
   end if;
   select * into f from public.studio_films where id = new.film_id;
   if public.studio_names_in(new.film_id, f.title) then
-    raise exception 'the film''s title has a name on this card: change the title first';
+    raise exception 'the film''s title has a name from its cards in it: change the title first';
   end if;
   if f.one_sentence is not null and public.studio_names_in(new.film_id, f.one_sentence) then
-    raise exception 'the film''s story has a name on this card: change the story first';
+    raise exception 'the film''s story has a name from its cards in it: change the story first';
   end if;
   return null;
 end $$;
