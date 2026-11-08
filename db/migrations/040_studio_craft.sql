@@ -219,13 +219,14 @@ begin
   return null;
 end $$;
 
--- Turn a tool on or off (the route's one way to): turning the graphics
--- system off takes the films with its live links first, in id order, the
--- order a link or a decision for one of its sets takes them (the film, then
--- the switch, studio_reviews_graphics), so the two never deadlock.
+-- Turn a tool on or off: the server's one way to (it can't update the
+-- switches itself). Turning the graphics system off takes the films with
+-- its live links first, in id order, the order a link or a decision for one
+-- of its sets takes them (the film, then the switch, studio_reviews_graphics),
+-- so the two never deadlock.
 create or replace function public.studio_tool_switch(p_tool text, p_on boolean, p_note text, p_by text)
 returns setof public.studio_tool_approvals
-language plpgsql volatile set search_path = '' as $$
+language plpgsql volatile security definer set search_path = '' as $$
 begin
   if p_tool = 'graphics_system' and not p_on then
     perform 1 from public.studio_films f
@@ -292,5 +293,7 @@ begin
     -- Rows only, as for 039's tables.
     execute 'revoke truncate, trigger, references on public.studio_notes, public.studio_delivery_checks from service_role';
     execute 'grant execute on function public.studio_names_in_any(text), public.studio_cut_remove(uuid), public.studio_tool_switch(text, boolean, text, text) to service_role';
+    -- The switches change only through studio_tool_switch, in its lock order.
+    execute 'revoke insert, update, delete on public.studio_tool_approvals from service_role';
   end if;
 end $$;
