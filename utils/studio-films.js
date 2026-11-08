@@ -73,14 +73,15 @@ function nameWords(people) {
 function namesIn(textValue, people, { strong = false } = {}) {
   // Apostrophes split words too, so a possessive ("Jamie's") is caught.
   const hay = " " + String(textValue || "").toLowerCase().replace(/[^\p{L}\p{M}]+/gu, " ") + " ";
-  const letters = hay.replace(/ /g, "");
   const found = new Set(strong ? [] : nameWords(people).filter((w) => hay.includes(" " + w + " ")));
   for (const p of people || []) {
     for (const full of [p.name, p.reviewer_name]) {
       const parts = nameParts(full);
       if (parts.length > 1 && hay.includes(" " + parts.join(" ") + " ")) found.add(parts.join(" "));
+      // Run together as one word ("JamieRivers", "#jamierivers"): the whole
+      // word, so "speed limits" is never "Ed Li".
       const joined = parts.join("");
-      if ((parts.length > 1 || !strong) && Array.from(joined).length >= 5 && letters.includes(joined)) found.add(joined);
+      if (parts.length > 1 && Array.from(joined).length >= 5 && hay.includes(" " + joined + " ")) found.add(joined);
     }
   }
   return [...found];
@@ -104,28 +105,72 @@ function capitalizedMidSentence(raw, w) {
   }
   return false;
 }
-// The words of a minor's name that a text has (two letters or more), and
-// the name run together. A note never keeps one, whatever its writer says:
-// there's no "it isn't a name here" for a child's name (the database refuses
-// it too, migration 039's studio_names_in).
-function minorWords(textValue, people) {
+// Words of three letters or more that are everyday words and names too
+// ("will", "hope", "field", "young"): like the two-letter ones, a minor's
+// counts only with a capital in the middle of a sentence ("talked to Will
+// after"), and is asked about at the start of one ("Will you send it?").
+// Lower case, it's the everyday word. The database leaves these to the app
+// (migration 039's studio_names_in has the same list).
+const EVERYDAY_NAMES = new Set(("ace april archer art ash august autumn baker bear bell best bill bird bishop black bliss blue bond booth brook brooks " +
+  "brown buck buddy bush butler carter case cash chance chase church clay cliff colt cook cooper crow dale dash dawn day deal dean don dot dove drew duke " +
+  "dusty early earl echo eve fair faith fern field fields fisher flint ford forest fox frank free frost gale gene gold golden grace grant gray green grey " +
+  "guy hall hardy hart haven hawk hazel heath hero hill hills holly honey honor hood hope house hunt hunter ivy jack jade jay jet jewel joy judge june " +
+  "justice kind king kit knight lake lance lane lark laurel legend liberty light lily link long lord love lucky major march mark marsh mason max may " +
+  "meadow mercy miles misty moon noble north ocean page park pat patience peace pearl penny pepper pierce piper pope porter power price pride prince " +
+  "queen rain ranger raven ray read rebel reed rice rich ridge river rob rock rocky rose royal ruby rush rusty sage saint sandy scout shade shadow " +
+  "shepherd shore short silver sky small smith snow sonny south spring star steel sterling stone storm stormy strong sue summer sunday sunny sweet " +
+  "swift tad tank true trust tucker valor violet wade walker ward warren waters way wells west white will willow winter wise wolf wood woods worth wren young").split(" "));
+const everyday = (w) => EVERYDAY_2.has(w) || EVERYDAY_NAMES.has(w);
+function capitalizedAtStart(raw, w) {
+  const re = /[\p{L}\p{M}]+/gu;
+  let m;
+  while ((m = re.exec(raw))) {
+    if (m[0].toLowerCase() !== w || m[0][0] === m[0][0].toLowerCase()) continue;
+    const before = raw.slice(0, m.index);
+    const gap = /\s*$/.exec(before)[0];
+    const prev = before.slice(0, before.length - gap.length);
+    if (!prev || gap.includes("\n") || /[.!?:;"“(\[—–-]$/.test(prev)) return true;
+  }
+  return false;
+}
+// Where a text names a person, for certain or maybe: their whole name; the
+// name run together as one word ("#TyNg", "JamieRivers": the whole token,
+// from minRun letters); a word of their name that's no everyday word, in any
+// case; an everyday one with a capital mid-sentence. "maybe": an everyday one
+// of three letters or more with a capital at the start of a sentence.
+function nameHits(textValue, person, { minRun = 5, minWord = 3 } = {}) {
   const raw = String(textValue || "");
   const hay = " " + raw.toLowerCase().replace(/[^\p{L}\p{M}]+/gu, " ") + " ";
-  const letters = hay.replace(/ /g, "");
-  const found = new Set();
-  for (const p of people || []) {
-    if (!p || !p.is_minor) continue;
-    const parts = nameParts(p.name);
-    for (const w of parts) {
-      if (Array.from(w).length < 2) continue;
-      if (EVERYDAY_2.has(w)) {
-        if (capitalizedMidSentence(raw, w)) found.add(w);
-      } else if (hay.includes(" " + w + " ")) found.add(w);
-    }
-    const joined = parts.join("");
-    if (parts.length > 1 && Array.from(joined).length >= 5 && letters.includes(joined)) found.add(joined);
+  const tokens = new Set(raw.toLowerCase().split(/[^\p{L}\p{M}]+/u).filter(Boolean));
+  const sure = new Set();
+  const maybe = new Set();
+  const parts = nameParts(person && person.name);
+  if (parts.length > 1 && hay.includes(" " + parts.join(" ") + " ")) sure.add(parts.join(" "));
+  const joined = parts.join("");
+  if (parts.length > 1 && Array.from(joined).length >= minRun && tokens.has(joined)) sure.add(joined);
+  for (const w of parts) {
+    if (Array.from(w).length < minWord || !hay.includes(" " + w + " ")) continue;
+    if (!everyday(w)) sure.add(w);
+    else if (capitalizedMidSentence(raw, w)) sure.add(w);
+    // "He was great": a two-letter everyday word starts sentences all the time.
+    else if (!EVERYDAY_2.has(w) && capitalizedAtStart(raw, w)) maybe.add(w);
   }
-  return [...found];
+  return { sure: [...sure], maybe: [...maybe] };
+}
+// The words of a minor's name a text has for certain (two letters or more;
+// run together from four). A note never keeps one, whatever its writer says:
+// there's no "it isn't a name here" for a child's name (the database refuses
+// the same, migration 039's studio_names_in). minorMaybe: the ones to ask
+// about (an everyday word with a capital at the start of a sentence).
+function minorWords(textValue, people) {
+  const out = new Set();
+  for (const p of people || []) if (p && p.is_minor) for (const w of nameHits(textValue, p, { minRun: 4, minWord: 2 }).sure) out.add(w);
+  return [...out];
+}
+function minorMaybe(textValue, people) {
+  const out = new Set();
+  for (const p of people || []) if (p && p.is_minor) for (const w of nameHits(textValue, p, { minRun: 4, minWord: 2 }).maybe) out.add(w);
+  return [...out];
 }
 // The strict screen, for what's shown or sent beyond the cards (a title, the
 // one-sentence story the speaker's page shows, a file name): any word of a
@@ -414,8 +459,11 @@ module.exports = {
   nameWords,
   namesIn,
   minorWords,
+  minorMaybe,
+  nameHits,
   strictNames,
   EVERYDAY_2,
+  EVERYDAY_NAMES,
   namesOkWords,
   planInput,
   filmInput,

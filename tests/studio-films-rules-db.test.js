@@ -204,6 +204,27 @@ test("a minor's two-letter name is kept out of titles, stories and file names; a
   assert.equal((await films("PATCH", `/films/${film.id}/people/${q.id}`, { seen: q.updated_at, name: "Ty Roe" }, "lead")).data.error, "title_has_name");
 });
 
+test("a minor's name that's an everyday word counts only as a name: a capital mid-sentence, asked about at a sentence start", async () => {
+  const code = "Y" + String(7000 + ++n);
+  const film = ok(await films("POST", "/films", { kit_slug: "same-work", title: `${code} hero`, lane: "youth", athlete_id: code, format: "hero" }, "lead"), "start").film;
+  for (const [c, name] of [[code, "Will Young"], [code + "-2", "Ed Li"]]) {
+    ok(await films("POST", `/films/${film.id}/people`, { person_code: c, name, role: "athlete", is_minor: true, release_on_file: true, covers: { voice: true } }, "lead"), "card");
+  }
+  const note = (text, extra = {}) => films("POST", `/films/${film.id}/notes`, { note: text, ...extra }, "lead");
+  // Lower case, it's the everyday word; across words it's never a name run together.
+  assert.deepEqual((await note("Coach will rerun it, young and old")).data.words, ["will", "young"], "asked, like an adult's");
+  ok(await note("Coach will rerun it, young and old", { names_ok: ["will", "young"] }), "kept");
+  ok(await note("Speed limits on the drive in, we need light"), "no Ed Li in there");
+  // A capital mid-sentence is a name: refused, with no asking.
+  assert.deepEqual((await note("Talked to Will after practice")).data.fields, ["note_has_minor_name"]);
+  // At the start of a sentence it's asked about.
+  assert.deepEqual((await note("Will you send the selects?")).data.words, ["will"]);
+  // The database leaves the everyday words to the app, and still refuses the rest.
+  await pool.query("insert into studio_events (film_id, kind, by_staff, note) values ($1, 'note', 'lead@toj.test', 'coach will rerun it')", [film.id]);
+  await assert.rejects(pool.query("insert into studio_events (film_id, kind, by_staff, note) values ($1, 'note', 'lead@toj.test', 'Will Young was there')", [film.id]), /keeps no names/);
+  await assert.rejects(pool.query("insert into studio_events (film_id, kind, by_staff, note) values ($1, 'note', 'lead@toj.test', 'ed li too')", [film.id]), /keeps no names/);
+});
+
 test("an approval comes from the reviewer the card names now; a card change stops its links", async () => {
   const { film, p } = await aFilm();
   const cut = await aCut(film, [p.id]);
