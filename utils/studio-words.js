@@ -182,8 +182,10 @@ function ownWords(text, max, where, ctx, issues) {
   if (t && t.length > max) issues.push({ where, issue: `${max} characters at most` });
   if (t) {
     const nw = nameWords(t, ctx.people);
-    if (namesTrouble(t, ctx.people) || nw.sure.length) issues.push({ where, issue: "no names here: the code or the role instead" });
-    else askOrRefuse(nw.maybe, ctx, where, issues, "this");
+    // A word of a minor's name run into a hashtag or a word counts too ("#jordanstrong").
+    const runIn = U.minorRunIns(t, ctx.people);
+    if (namesTrouble(t, ctx.people) || nw.sure.length || runIn.sure.length) issues.push({ where, issue: "no names here: the code or the role instead" });
+    else askOrRefuse([...nw.maybe, ...runIn.maybe], ctx, where, issues, "this");
     for (const q of writtenLines(t)) {
       issues.push({ where, issue: `"${q.slice(0, 60)}" reads as a line written for someone. Real words only: quote the transcript (pick it as a line), or describe the kind of line` });
       break;

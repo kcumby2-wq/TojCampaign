@@ -253,6 +253,9 @@ test("our own words: no promise of reach, no emoji chain, no line written for an
   // A caption with a second, made-up quote after the real one; a caption that opens on a promise.
   const cap = (after, line = 2) => W.checkWords({ captions: [{ lead: { transcript: "T1", from_cue: line, to_cue: line, quote: line === 2 ? "I do it all for my mom" : "Darnell taught me everything" }, after }], structures: [] }, { transcripts: [tr], people, asks: new Set(), namesOk: new Set(["darnell"]) }).issues.filter((i) => i.where !== "structures");
   assert.ok(cap("He told us “It made me who I am.”").length);
+  // A minor's name run into a hashtag in our words.
+  const kidd = [...people, { name: "Jordan Kidd", person_code: "JK1", is_minor: true }];
+  assert.ok(W.checkWords({ captions: [{ lead: { transcript: "T1", from_cue: 2, to_cue: 2, quote: "I do it all for my mom" }, after: "#jordanstrong every Sunday" }], structures: [] }, { transcripts: [tr], people: kidd, asks: new Set() }).issues.some((i) => /no names/.test(i.issue)));
   assert.deepEqual(cap("Sundays, every week."), []);
   const promise = { ...tr, cues: [{ n: 1, s: 0, e: 4000, t: "This will get me exposure and followers." }] };
   assert.ok(W.checkWords({ captions: [{ lead: { transcript: "T1", from_cue: 1, to_cue: 1, quote: "This will get me exposure and followers" } }], structures: [] }, { transcripts: [promise], people, asks: new Set() }).issues.some((i) => /promises/.test(i.issue)));
