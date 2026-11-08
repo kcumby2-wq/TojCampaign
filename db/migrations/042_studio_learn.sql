@@ -247,9 +247,13 @@ begin
     raise exception 'a rule decision is kept as it was made: decide again instead';
   end if;
   -- No names in a decision's reason, nor in the label of a rule folded into
-  -- a kit (a declined one, or one open again, stays out of every kit: one
-  -- that names someone on a card added since can still be declined).
-  if public.studio_names_in_any(new.note) or (new.status = 'folded' and public.studio_names_in_any(new.label)) then
+  -- a kit. A declined one, or one open again, stays out of every kit: one
+  -- that's a rule in the making on the kit's notes now, naming someone on a
+  -- card added since, can still be declined (its label is in those notes).
+  if public.studio_names_in_any(new.note)
+     or (new.status = 'folded' and public.studio_names_in_any(new.label))
+     or (new.status = 'declined' and public.studio_names_in_any(new.label)
+         and not exists (select 1 from public.studio_rule_candidates(new.kit_slug) c where c.label = new.label)) then
     raise exception 'a rule decision keeps no names';
   end if;
   -- Declined by a person; folded only into a refresh of the kit that was
@@ -507,13 +511,16 @@ begin
   end if;
   update public.studio_refresh_marks set outcome = p_outcome where run_id = p_run;
   -- Its draft discarded before it ended (studio_refresh_unfold found it
-  -- still running): undone now, and nothing is folded in.
-  if p_outcome = 'drafted' and exists (select 1 from public.studio_kits k where k.source_run_id = p_run and k.status = 'discarded') then
-    perform set_config('studio.unfolding', p_run::text, true);
-    update public.studio_refresh_marks set undone_at = now() where run_id = p_run;
-    perform set_config('studio.unfolding', '', true);
-    return query select 0, 0;
-    return;
+  -- still running): undone now, and nothing is folded in. (Kits are 018's;
+  -- without them there's no draft to discard.)
+  if p_outcome = 'drafted' and to_regclass('public.studio_kits') is not null then
+    if exists (select 1 from public.studio_kits k where k.source_run_id = p_run and k.status = 'discarded') then
+      perform set_config('studio.unfolding', p_run::text, true);
+      update public.studio_refresh_marks set undone_at = now() where run_id = p_run;
+      perform set_config('studio.unfolding', '', true);
+      return query select 0, 0;
+      return;
+    end if;
   end if;
   if m.kind = 'monthly' and p_outcome = 'drafted' then
     for x in select s.ref_id from public.studio_refresh_sources s where s.run_id = p_run and s.kind = 'wrap' order by s.ref_id loop
@@ -606,8 +613,14 @@ begin
   end if;
   return null;
 end $$;
-create or replace trigger studio_kits_discarded after update of status on public.studio_kits
-  for each row execute function public.studio_kits_discarded();
+do $$
+begin
+  -- On 018's kits (a database without them has no drafts to discard).
+  if to_regclass('public.studio_kits') is not null then
+    create or replace trigger studio_kits_discarded after update of status on public.studio_kits
+      for each row execute function public.studio_kits_discarded();
+  end if;
+end $$;
 
 -- An approver declines a rule in the making for a kit, with a reason: a new
 -- decision (the earlier ones are kept). Not while a running refresh has it.

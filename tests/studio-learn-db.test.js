@@ -569,3 +569,19 @@ test("what a refresh draws on is given only as it starts", async () => {
   // So a wrap-up can't be folded into a refresh that never had it.
   await assert.rejects(pool.query("update studio_film_wraps set folded_run_id = $2, folded_at = now() where id = $1", [w.id, r]), /folded into a refresh it was given to/);
 });
+
+test("042 goes on a database without 018's kits, and a declined rule names someone only while it's a rule in the making", async () => {
+  const { makeSchema: mk } = require("./helpers/pg-supabase");
+  const bare = await mk(URL_, "gfs_studio_learn_bare_test", ["019_team.sql", "039_studio_films.sql", "040_studio_craft.sql", "041_studio_words.sql", "042_studio_learn.sql", "042_studio_learn.sql"]);
+  try {
+    assert.equal((await bare.query("select to_regclass('studio_kits') as k")).rows[0].k, null);
+    const r = (await bare.query("insert into agent_runs default values returning id")).rows[0].id;
+    await bare.query("select * from studio_refresh_start($1, 'same-work', 'gear', 'lead@toj.test', '{}', '{}', '{}', false)", [r]);
+    assert.deepEqual((await bare.query("select * from studio_refresh_end($1, 'drafted')", [r])).rows[0], { folded: 0, skipped: 0 });
+  } finally {
+    await bare.query("drop schema if exists gfs_studio_learn_bare_test cascade");
+    await bare.end();
+  }
+  // A label that names someone, declined: only a rule in the making on the kit's notes.
+  await assert.rejects(pool.query("insert into studio_label_marks (kit_slug, label, status, uses_at, note, decided_by) values ('same-work', 'ask ty ng first', 'declined', 3, 'Not for the kit', 'lead@toj.test')"), /keeps no names/);
+});
