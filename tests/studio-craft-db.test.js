@@ -545,6 +545,17 @@ test("a tag or a Title Case line reads each word as a sentence start; a whole na
   assert.equal(judge("#SpeedLimit", whole), "asked #speedlimit");
   assert.equal(judge("#WalkOff", whole), "asked #walkoff");
   assert.equal(judge("#WalkOff", whole, new Set(["#walkoff"])), "passes");
+  // A three-letter name run into a word of a tag, at its start or end: asked, never refused.
+  const three = [{ person_code: "SO1", name: "Sam Ortiz", is_minor: true }, { person_code: "ML1", name: "Mia Lee", is_minor: true }, { person_code: "MC1", name: "Max Cole", is_minor: true }];
+  for (const [t, want] of [["#samstrong", "asked sam"], ["#teamsam", "asked sam"], ["#prayformia", "asked mia"], ["#maxstrong", "asked max"], ["#samedrill", "asked sam"]]) assert.equal(judge(t, three), want, t);
+  assert.equal(judge("#samstrong", three, new Set(["sam"])), "passes");
+  // A shout-out written as a tag: refused; one with no shout-out word stays a question.
+  const shout = [{ person_code: "HF2", name: "Hope Field", is_minor: true }, { person_code: "GK1", name: "Grace Kim", is_minor: true },
+    { person_code: "CY2", name: "Chase Young", is_minor: true }, { person_code: "WY1", name: "Will Young", is_minor: true }];
+  for (const t of ["#WayToGoHope", "#HappyBirthdayGrace", "#GoHopeGo", "#WeLoveYouGrace", "#ProudOfYouChase", "#ThankYouCoachWill"]) assert.equal(judge(t, shout), "refused", t);
+  for (const [t, want] of [["#NeverLoseHope", "asked hope"], ["#GoChaseYourDreams", "asked chase"]]) assert.equal(judge(t, shout), want, t);
+  // "you", "love" and a "go" before more words aren't shout-outs alone: asked.
+  for (const [t, want] of [["You Will Never Walk Alone", "asked will"], ["Love Will Find A Way", "asked will"], ["Go Chase Your Dreams", "asked chase"]]) assert.equal(judge(t, shout), want, t);
 });
 
 test("the phone keeps an ordinary shot line, and a place's own name stays online", () => {
@@ -558,10 +569,15 @@ test("the phone keeps an ordinary shot line, and a place's own name stays online
   for (const line of ["westlake gym at dawn", "Riverside run at dawn", "pickup on oak, then the drive", "the rowe driveway", "kidd laces up", "Dana brings the sled", "jordanstrong at dawn"]) {
     assert.equal(U.offlineSafe(line, people, { places }), false, line);
   }
-  // A place that's only ordinary words keeps them all.
+  // A place that's only ordinary words, typed with its capitals, keeps them all.
   for (const [place, line] of [["Park High School", "park high school at dawn"], ["Court Street Park", "court street park, wide"], ["Home Field", "home field lights"],
-    ["The Rowe house on High Street", "the bus down high street"], ["Home Field, Riverside", "home field lights at dawn"]]) {
+    ["The Rowe house on High Street", "the bus down high street"], ["Home Field, Riverside", "home field lights at dawn"], ["park high school gym", "after the gym, warm-up"]]) {
     assert.equal(U.offlineSafe(line, people, { places: [place] }), false, place);
+  }
+  // Ordinary words that describe a place (lower case, or one alone) don't keep a line off the phone.
+  for (const [place, line] of [["Westlake High School, practice field behind the gym", "after practice, on the field"], ["Riverside Park, by the track", "laps on the track"],
+    ["Home, then the bus at the high school", "then the bus to the field"]]) {
+    assert.equal(U.offlineSafe(line, people, { places: [place] }), true, place);
   }
 });
 
