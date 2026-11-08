@@ -512,6 +512,48 @@ test("a graphic asks about an everyday word that's also a name it can't carry, a
   for (const t of ["#edlineverquits", "#GoEdLi", "@edli7"]) assert.match((await check({ texts: [t] })).data.problems[0] || "", /Q0005/, t);
 });
 
+test("a tag or a Title Case line reads each word as a sentence start; a whole name run together is refused wherever it sits", () => {
+  const judge = (t, people, ok) => {
+    const problems = U.graphicsProblems([t], people, { format: "quote_card" });
+    const asks = U.graphicsAsks([t], people, { format: "quote_card", ok: ok || new Set() });
+    return problems.length ? "refused" : asks.length ? "asked " + asks.join(",") : "passes";
+  };
+  // Minors whose names are everyday words, after a tag's first word or in
+  // Title Case: asked, as at the start of a sentence (and lower case passes).
+  const mids = [{ person_code: "DD1", name: "Dan Day", is_minor: true }, { person_code: "RH1", name: "Ray Hill", is_minor: true },
+    { person_code: "CY1", name: "Chase Young", is_minor: true }, { person_code: "FM1", name: "Faith Moore", is_minor: true }];
+  for (const [t, want] of [["#GameDayGrind", "asked day"], ["#UpTheHill", "asked hill"], ["#StayYoung", "asked young"], ["#KeepTheFaith", "asked faith"],
+    ["Game Day Grind", "asked day"], ["Keep the Faith", "asked faith"], ["GAME DAY GRIND", "asked day"], ["game day grind", "passes"],
+    // A short line, a capital mid-sentence and a whole name keep their reading.
+    ["Thanks Ray", "refused"], ["We ran it with Faith", "refused"], ["#RayHillStrong", "refused"], ["Go Ray Hill Go", "refused"]]) {
+    assert.equal(judge(t, mids), want, t);
+  }
+  // A minor's whole name run together in a lower-case tag: refused when it's
+  // seven letters or more, or ends where the tag ends; a short one inside a
+  // word is asked about.
+  const whole = [{ person_code: "JK1", name: "Jordan Kidd", is_minor: true }, { person_code: "HF1", name: "Hope Field", is_minor: true, texas_youth: true },
+    { person_code: "TY1", name: "Ty Ng", is_minor: true }, { person_code: "EL1", name: "Ed Li", is_minor: true }, { person_code: "AK1", name: "Al Ko", is_minor: true }];
+  for (const t of ["#gojordankidd", "#believeinjordankidd", "#gohopefield", "#letsgohopefield", "#teamtyng"]) {
+    assert.equal(judge(t, whole, new Set([t])), "refused", t);
+  }
+  assert.equal(judge("#SpeedLimit", whole), "asked #speedlimit");
+  assert.equal(judge("#WalkOff", whole), "asked #walkoff");
+  assert.equal(judge("#WalkOff", whole, new Set(["#walkoff"])), "passes");
+});
+
+test("the phone keeps an ordinary shot line, and a place's own name stays online", () => {
+  const people = [{ name: "Sam Rowe", is_minor: false, reviewer_name: "Sam Rowe" }, { name: "Jordan Kidd", is_minor: true, reviewer_name: "Maria Lopez" }];
+  const places = ["Westlake High School practice field", "The Rowe family's driveway, 12 Oak St", "Riverside Park track"];
+  for (const line of ["Laces pulled tight in the locker room", "Dad's truck in the parking lot", "Steam rising off the turf", "Ladder drill, feet only",
+    "Kneeling after the last rep", "Footwork in the rain", "Chalk on the hands, close", "Bus ride, head against the window", "Handshake with the coach after practice",
+    "Medal around the neck", "Ice bath after practice", "Weight room, the bar loading", "Running the stadium stairs", "Wide on the empty field at sunrise"]) {
+    assert.equal(U.offlineSafe(line, people, { places }), true, line);
+  }
+  for (const line of ["westlake gym at dawn", "Riverside run at dawn", "pickup on oak, then the drive", "the rowe driveway", "kidd laces up", "Dana brings the sled"]) {
+    assert.equal(U.offlineSafe(line, people, { places }), false, line);
+  }
+});
+
 test("the words on a graphic pass the server's name rules, and the credit goes only as far as the release", async () => {
   const { film, p } = await aFilm("Q0001", "quote_card");
   const kid = ok(await films("POST", `/films/${film.id}/people`, { person_code: "Q0002", name: "Ty Ng", role: "athlete", is_minor: true, release_on_file: true, covers: { voice: true }, reviewer_relation: "parent", reviewer_name: "Lin Ng", reviewer_email: "lin@x.test", speaker: true }, "lead"), "kid").person;

@@ -334,7 +334,11 @@ function contactIn(text) {
 // 12 Oak St": rivers, family, driveway, oak, st), in any case, but the
 // ordinary small ones ("the", "at") and three letters or fewer typed in
 // lower case.
-const PLACE_SKIP = new Set(["the", "a", "an", "at", "of", "on", "in", "by", "and", "to", "for", "from", "near", "with", "s"]);
+// Words a place's name has that don't say which place ("Westlake High School
+// practice field" is Westlake's): a line with "after practice" or "on the
+// field" stays on the phone; "westlake gym" doesn't.
+const PLACE_SKIP = new Set(("the a an at of on in by and to for from near with s st street road rd ave avenue " +
+  "high middle school practice field fields track gym court courts park family home").split(" "));
 function placeWords(locations) {
   const out = new Set();
   for (const l of Array.isArray(locations) ? locations : []) {
@@ -355,7 +359,22 @@ const COMMON_FIRST = new Set(("i we he she they it the a an his her their our my
   "kids players team coach coaches parents crowd fans ball cones sled bench stands bleachers scoreboard whistle helmet cleats gloves tape " +
   "hands feet eyes shoulders breath sweat rain snow mud sun shadow shadows light lights silhouette reflection archive photo phone " +
   "drill drills rep reps sprint sprints run runs walk walks warmup warm stretch huddle practice game field court track gym gate door " +
-  "b broll insert inserts cutaway cutaways establishing aerial overhead handheld locked static push pull pan tilt dolly track tracking").split(/\s+/));
+  "b broll insert inserts cutaway cutaways establishing aerial overhead handheld locked static push pull pan tilt dolly track tracking " +
+  // Family, crew and the things a shot list starts with (none of them a
+  // common name: those stay out, so a line that starts with one is kept online).
+  "dad dads mom moms mother father mothers fathers grandma grandpa grandmother grandfather uncle aunt brother brothers sister sisters son daughter " +
+  "cousin cousins teammate teammates captain captains trainer trainers ref refs referee referees official officials " +
+  "laces lace shoe shoes sneakers socks jersey jerseys uniform uniforms hat helmets mouthguard pads shoulder knee knees wrist wrists ankle ankles " +
+  "headphones earbuds water bottle bottles towel towels bag bags backpack car truck van keys bus locker lockers hallway stairs steps stadium " +
+  "fence net nets goal goals hoop rim bat bats glove mitt base bases plate plates mound dugout sideline sidelines endzone yard yards line lines " +
+  "chains pylon pylons hurdle hurdles ladder ladders rope ropes tire tires band bands dumbbell dumbbells barbell rack bar mat mats chalk " +
+  "clock timer stopwatch flag flags banner trophy trophies medal medals letter letters envelope notebook playbook clipboard whiteboard " +
+  "screen laptop tablet camera mic microphone slate turf grass dirt sand pool steam fog wind clouds ice weight weights handshake handshakes " +
+  "hug hugs footwork lap laps warmups cooldown stance snap snaps kickoff whistles timeout halftime overtime pregame postgame victory win wins " +
+  "tears smile smiles laughter silence noise closeup timelapse macro detail details " +
+  "kneeling running jogging sprinting lifting stretching throwing catching kicking jumping walking standing sitting waiting breathing tying " +
+  "lacing praying laughing talking listening watching cheering clapping hugging dribbling shooting passing tackling blocking spinning " +
+  "bouncing loading pushing pulling dripping rising falling").split(/\s+/));
 function offlineSafe(text, people, { places = [], vocab = null } = {}) {
   const t = String(text || "").trim();
   if (!t || t.includes("@") || /\d/.test(t) || contactIn(t) || idNames(t, people).length) return false;
@@ -404,17 +423,45 @@ function graphicsCredit(p, as, format) {
 // (#TyNgNeverQuit, @tyng23): its words are also read with the capitals in a
 // run split apart, and a name run together counts anywhere inside a hashtag
 // or a handle.
-// A hashtag or handle starts a sentence of its own ("#HopeIsAPlan" reads
-// "Hope Is A Plan", asked about like any sentence start).
+// Every word of a hashtag or a handle has its capital, and so does every
+// word of a line of three words or more in Title Case or capitals ("Never
+// Lose Hope", "GAME DAY GRIND"): a capital there says nothing, so each of
+// those words reads as the start of a sentence ("#NeverLoseHope" asks about
+// "hope", as "Hope never quits" does). A whole name is still a whole name
+// ("#HopeFieldStrong"), and a short line keeps its reading ("Thanks Will").
+const TAG = /[#@][\p{L}\p{M}\p{N}_.]+/gu;
+// The small words a title leaves in lower case ("Keep the Faith").
+const TITLE_SMALL = new Set("a an and as at but by for from in into nor of off on or over per the to up vs via with".split(" "));
+function titleCaseLine(line) {
+  const words = line.replace(TAG, " ").match(/[\p{L}\p{M}][\p{L}\p{M}'’]*/gu) || [];
+  const caps = words.filter((w) => /^\p{Lu}/u.test(w));
+  return words.length >= 3 && caps.length >= 2 && words.every((w) => /^\p{Lu}/u.test(w) || TITLE_SMALL.has(w.toLowerCase()));
+}
+function tagWords(tag) {
+  return tag
+    .slice(1)
+    .replace(/(\p{Ll})(\p{Lu})/gu, "$1\n$2")
+    .replace(/(\p{Lu})(\p{Lu}\p{Ll})/gu, "$1\n$2")
+    .replace(/(\p{L})(\p{N})|(\p{N})(\p{L})/gu, "$1$3\n$2$4")
+    .replace(/[_.]+/g, "\n");
+}
 function publicText(all) {
-  const split = all.replace(/[#@]/g, "\n").replace(/(\p{Ll})(\p{Lu})/gu, "$1 $2").replace(/(\p{Lu})(\p{Lu}\p{Ll})/gu, "$1 $2").replace(/(\p{L})(\p{N})|(\p{N})(\p{L})/gu, "$1$3 $2$4");
-  return all + "\n" + split;
+  // Lines in Title Case: a word to a line. Tags: read from the split copy only.
+  const lines = String(all || "").split(/\r?\n/).map((l) => (titleCaseLine(l) ? l.replace(/[^\S\n]+/g, "\n") : l)).join("\n");
+  const split = lines
+    .replace(TAG, (t) => "\n" + tagWords(t))
+    .replace(/(\p{Ll})(\p{Lu})/gu, "$1 $2")
+    .replace(/(\p{Lu})(\p{Lu}\p{Ll})/gu, "$1 $2")
+    .replace(/(\p{L})(\p{N})|(\p{N})(\p{L})/gu, "$1$3 $2$4");
+  return lines.replace(TAG, " ") + "\n" + split;
 }
 // A name run together inside a hashtag or handle: { sure } when it starts
 // where a word of the tag starts (its first letter, a capital after a small
 // letter, a letter after a digit or "_": "#tyngneverquit", "@tyng23",
-// "#GoTyNg"), { ask } (the tag) when it's inside a word ("edli" in
-// "#SpeedLimit"), or nothing.
+// "#GoTyNg"), when it ends where the tag or a word of it ends ("#teamtyng"),
+// or when it's seven letters or more, too long to be chance
+// ("#gojordankidd"); { ask } (the tag) when it's a short one inside a word
+// ("edli" in "#SpeedLimit", "alko" in "#WalkOff"); or nothing.
 function inTags(all, name, minRun) {
   const parts = nameParts(name);
   const joined = parts.join("");
@@ -432,8 +479,10 @@ function inTags(all, name, minRun) {
       }
       prev = ch;
     }
+    const len = joined.length;
     for (let i = letters.indexOf(joined); i >= 0; i = letters.indexOf(joined, i + 1)) {
-      if (starts.has(i)) sure = true;
+      // A word of the tag ends where the next one starts, or at its end.
+      if (starts.has(i) || starts.has(i + len) || i + len === letters.length || Array.from(joined).length >= 7) sure = true;
       else ask.push(tag.toLowerCase());
     }
   }
