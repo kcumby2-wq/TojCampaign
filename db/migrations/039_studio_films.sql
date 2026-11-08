@@ -407,13 +407,20 @@ language sql stable set search_path = '' as $$
     or exists (select 1 from minor_words, hay where hay.words like '% ' || minor_words.w || ' %'))
 $$;
 
--- Every file a cut keeps in storage, made or not yet.
+-- Every file a cut keeps in storage, made or not yet, each once: the
+-- upload, its review copy and poster, and for a set of slides (migration
+-- 040) each slide and each slide's copy, kept in the copies' own folder
+-- (preview_key ends in "/"; the poster is copy 1). The one definition, so
+-- running this file again never loses the slides.
 create or replace function public.studio_cut_files(c public.studio_film_cuts) returns setof text
 language sql stable set search_path = '' as $$
-  select k from (
+  select distinct k from (
     select c.object_key as k union all select c.preview_key union all select c.poster_key
     union all select unnest(coalesce(c.slide_keys, '{}'::text[]))
-  ) as x where k is not null
+    union all select c.preview_key || g.n || '.jpg'
+      from generate_series(1, coalesce(cardinality(c.slide_keys), 0)) as g(n)
+     where c.kind = 'slides' and c.preview_key like '%/'
+  ) as x where k is not null and k not like '%/'
 $$;
 
 create or replace function public.studio_tool_on(p_tool text) returns boolean
@@ -1661,6 +1668,22 @@ begin
   returning i.*;
 end $$;
 
+-- The files due for removal, oldest first. A left-over that a ready cut of
+-- an open film lists is kept, and marked done: copies are named by their
+-- content, so an attempt that failed can leave the very keys the next
+-- attempt made ready. A pull's and a deleted cut's are never kept back.
+create or replace function public.studio_removals_due(p_limit int)
+returns setof public.studio_storage_removals
+language plpgsql volatile set search_path = '' as $$
+begin
+  update public.studio_storage_removals r set done_at = now(), last_error = 'kept: a ready cut uses it'
+   where r.done_at is null and r.reason = 'left_over'
+     and exists (select 1 from public.studio_film_cuts c join public.studio_films f on f.id = c.film_id
+                  where c.status = 'ready' and f.pulled_at is null and r.key in (select public.studio_cut_files(c)));
+  return query select r.* from public.studio_storage_removals r where r.done_at is null
+                order by r.requested_at limit least(greatest(coalesce(p_limit, 500), 1), 1000);
+end $$;
+
 -- A takedown with nothing left to do closes (the last line usually closes it;
 -- this is the worker's safety net). Returns how many it closed.
 create or replace function public.studio_close_finished_takedowns()
@@ -1707,7 +1730,7 @@ begin
     'public.studio_card_remove(uuid)', 'public.studio_step_done(uuid, text, text, text, uuid[])',
     'public.studio_second_yes(uuid, text, text)', 'public.studio_review_cancel(uuid, text)',
     'public.studio_review_withdraw(uuid, text)', 'public.studio_post_remove(uuid, text)',
-    'public.studio_takedown_item_done(uuid, text, text)', 'public.studio_close_finished_takedowns()',
+    'public.studio_takedown_item_done(uuid, text, text)', 'public.studio_close_finished_takedowns()', 'public.studio_removals_due(int)',
     'public.studio_review_for_reviewer(text)', 'public.studio_review_decide(text, text, text, text)',
     'public.studio_pull_consent(text, text, text, text)', 'public.studio_film_reopen(uuid, text, text, text)'] loop
     execute format('revoke all on function %s from public', fn);
@@ -1743,7 +1766,7 @@ begin
     execute 'grant execute on function public.studio_card_save(uuid, timestamptz, jsonb, text), public.studio_card_clear(uuid, timestamptz, text), '
       'public.studio_card_remove(uuid), public.studio_step_done(uuid, text, text, text, uuid[]), public.studio_second_yes(uuid, text, text), '
       'public.studio_review_cancel(uuid, text), public.studio_review_withdraw(uuid, text), public.studio_post_remove(uuid, text), '
-      'public.studio_takedown_item_done(uuid, text, text), public.studio_close_finished_takedowns() to service_role';
+      'public.studio_takedown_item_done(uuid, text, text), public.studio_close_finished_takedowns(), public.studio_removals_due(int) to service_role';
   end if;
 end $$;
 
