@@ -299,7 +299,8 @@ test("the shoot sheet: what the phone keeps for a dead signal has no names, cont
   assert.deepEqual(again.offline.schedule, [{ time: "08:00", what: null }, { time: "09:00", what: null }]);
   assert.deepEqual(again.offline.must_have, [null, null, "hands on the sled"]);
   assert.deepEqual(again.offline.frame_pair, { opening: null, closing: null });
-  const kept2 = JSON.stringify(again.offline);
+  // The text the phone keeps (ids and times have digits of their own).
+  const kept2 = JSON.stringify([again.offline.title, again.offline.schedule, again.offline.must_have, again.offline.frame_pair, again.offline.people.map((x) => [x.code, x.role])]);
   for (const word of ["Maria", "Lopez", "Westlake", "Oak St", "512", "Jordan"]) assert.equal(kept2.includes(word), false, word);
   // Online, the board as written.
   assert.deepEqual(again.details.schedule.map((x) => x.what), ["Pick up Jordan at 12 Oak St", "The drill, wide"]);
