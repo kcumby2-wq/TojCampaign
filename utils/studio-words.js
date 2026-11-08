@@ -83,7 +83,10 @@ function transcriptInput(raw) {
   value.fps = value.frames ? Number(r.fps) : null;
   if (value.frames && !TP.FPS.includes(value.fps)) errors.push("fps");
   // Drop-frame (";"), only at the rates that have it.
-  value.drop_frame = value.frames && r.drop === true && (value.fps === 29.97 || value.fps === 59.94);
+  value.df_timecode = value.frames && r.drop === true && (value.fps === 29.97 || value.fps === 59.94);
+  // A file with speaker labels: its questions are other voices' lines, so a
+  // pause alone isn't a gap there (public/app/transcript-parse.js only).
+  value.labelled = r.labelled === true;
   const list = Array.isArray(r.cues) ? r.cues : null;
   if (!list || !list.length) errors.push("cues");
   else if (list.length > TP.MAX_CUES) errors.push("too_many_cues");
@@ -100,9 +103,10 @@ function transcriptInput(raw) {
       }
       total += t.length;
       // A cue after someone else's words (the browser marks it: a question
-      // left out), or after a long pause: a line doesn't reach back across it.
+      // left out), or, in a file with no labels, after a long pause: a line
+      // doesn't reach back across it.
       const prev = cues[cues.length - 1];
-      const gap = !!prev && (c.gap === true || s - prev.e > TP.PAUSE_MS || s < prev.s);
+      const gap = !!prev && (c.gap === true || (!value.labelled && s - prev.e > TP.PAUSE_MS) || s < prev.s);
       cues.push(gap ? { n: cues.length + 1, s, e, t, gap: true } : { n: cues.length + 1, s, e, t });
     }
     if (total > TP.MAX_TOTAL) errors.push("too_long");
@@ -163,12 +167,15 @@ function checkQuote(pick, ctx, where) {
     }[found.why] || "not found";
     return { ok: false, issue: { where, issue: why } };
   }
-  if (namesTrouble(found.quote, ctx.people)) return { ok: false, issue: { where, issue: "this line names someone on the film's cards (or a word of a minor's name): pick another" } };
+  // A minor's name run into a hashtag or a word ("#PrayForJamie") counts too:
+  // the name where a word starts or ends, asked about inside one.
+  const runIn = U.minorRunIns(found.quote, ctx.people);
+  if (namesTrouble(found.quote, ctx.people) || runIn.sure.length) return { ok: false, issue: { where, issue: "this line names someone on the film's cards (or a word of a minor's name): pick another" } };
   // One word of an adult's name ("Darnell taught me everything"): Claude
   // picks another; a person is asked.
   const nw = nameWords(found.quote, ctx.people);
   const held = [];
-  askOrRefuse([...nw.sure, ...nw.maybe], ctx, where, held, "this line");
+  askOrRefuse([...nw.sure, ...nw.maybe, ...runIn.maybe], ctx, where, held, "this line");
   if (held.length) return { ok: false, issue: held[0] };
   const voice = K.lintWords(found.quote, where);
   if (voice.length) return { ok: false, issue: { where, issue: `${voice[0].issue} (on screen the kit allows none): pick another line` } };
@@ -303,7 +310,7 @@ function rowsFor(value) {
 // A transcript as Claude reads it: numbered cues with their times, the
 // names in them as codes (tr.shown, when the route masked them).
 function transcriptText(tr, { from = 1, to = Infinity } = {}) {
-  const opts = { frames: !!tr.frames, fps: tr.fps, drop: !!tr.drop_frame };
+  const opts = { frames: !!tr.frames, fps: tr.fps, drop: !!tr.df_timecode };
   return (tr.shown || tr.cues)
     .filter((c) => c.n >= from && c.n <= to)
     .map((c) => `${tr.ref}#${c.n} [${TP.tc(c.s, opts)}–${TP.tc(c.e, opts)}]${c.gap ? " (after a question or a pause: a line doesn't reach back across it)" : ""} ${c.t}`)
@@ -354,10 +361,34 @@ function maskNames(text, people) {
       if (n >= 3 || (x.minor && n === 2 && !U.EVERYDAY_2.has(w.toLowerCase()))) swap(w, x.by);
     }
   }
+  // One word of a minor's name run into another word ("#PrayForJamie",
+  // "JamieStrong", "#teamjamie"): four letters or more, anywhere in a word;
+  // an everyday one ("hope") only written with its capital ("#PrayForHope",
+  // not "hopeful" or "#hopestrong").
+  for (const x of subjects.filter((v) => v.minor)) {
+    for (const w of x.full.toLowerCase().split(/[^\p{L}\p{M}]+/u).filter((v) => Array.from(v).length >= 4)) {
+      out = out.replace(/[\p{L}\p{M}]+/gu, (tok) => {
+        const low = tok.toLowerCase();
+        if (low === w || !low.includes(w)) return tok;
+        if (low.length !== tok.length) return ` ${mark(x.by)} `;
+        let res = "";
+        let i = 0;
+        for (let at = low.indexOf(w); at >= 0; at = low.indexOf(w, at + w.length)) {
+          if (!U.EVERYDAY_NAMES.has(w) || /\p{Lu}/u.test(tok[at])) {
+            res += tok.slice(i, at) + ` ${mark(x.by)} `;
+            i = at + w.length;
+          }
+        }
+        return res + tok.slice(i);
+      });
+    }
+  }
   return out.replace(/\u0001(\d+)\u0002/g, (_, k) => codes[Number(k)]);
 }
 
 module.exports = {
+  LABEL_MAX,
+  clean,
   TP,
   maskNames,
   writtenLines,

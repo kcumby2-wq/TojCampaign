@@ -44,9 +44,16 @@ function fileLink(url) {
   }
   let path = u.pathname.toLowerCase().replace(/%2e/g, ".").replace(/%2f/g, "/");
   path = path.replace(/;[^/]*/g, "").replace(/\/+$/, "");
-  // Instagram's /p/<id>/media/ address sends the picture itself.
-  const media = /(^|\.)instagram\.com$/.test(u.hostname.toLowerCase()) && /^\/(p|reel|tv)\/[^/]+\/media$/.test(path);
-  return FILE_END.test(path) || media || IMAGE_QUERY.test(u.search.replace(/^\?/, "").toLowerCase()) || IMAGE_HOST.test(u.hostname.toLowerCase());
+  const host = u.hostname.toLowerCase();
+  const query = u.search.replace(/^\?/, "").toLowerCase();
+  // Instagram's /p/<id>/media/ address sends the picture itself; so do
+  // Cloudinary's delivery addresses and Google Drive's download address
+  // (041's studio_taste_file_link reads the same).
+  const media = (/(^|\.)instagram\.com$/.test(host) && /^\/(p|reel|tv)\/[^/]+\/media$/.test(path))
+    || (/(^|\.)cloudinary\.com$/.test(host) && /\/(image|video)\/(upload|fetch|private|authenticated)\//.test(path + "/"))
+    || (host === "drive.google.com" && /^\/uc/.test(path) && /(^|&)export=/.test(query))
+    || /(^|\.)(drive\.usercontent\.google\.com|images\.ctfassets\.net|videos\.ctfassets\.net)$/.test(host);
+  return FILE_END.test(path) || media || IMAGE_QUERY.test(query) || IMAGE_HOST.test(host);
 }
 
 router.use((req, res, next) => {

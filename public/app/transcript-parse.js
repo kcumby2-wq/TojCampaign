@@ -6,14 +6,17 @@
  * the computer. The server keeps nothing it can't check with this same code
  * (utils/studio-words.js requires this file).
  *
- *   parse(text, { fps })          → { ok, format, frames, cues: [{ n, s, e, t, who, gap }], speakers: [{ who, cues }], mixed, error }
- *   only(cues, who)               → that speaker's cues, numbered again from 1; a cue after
- *                                   someone else's (a question) is marked gap: a line never bridges it
+ *   parse(text, { fps })          → { ok, format, frames, cues: [{ n, s, e, t, who, gap }], speakers: [{ who, cues }], labelled, mixed, error }
+ *   only(cues, who, { pauses })   → that speaker's cues, numbered again from 1; a cue after
+ *                                   someone else's (a question) is marked gap: a line never bridges it;
+ *                                   so is one after a long pause, in a file with no labels (pauses: true)
  *
  * who: a speaker's label; "" for a line whose voice the file doesn't say
- * (no label in a file that has labels, or a "- " line of two voices in one
- * subtitle); null only in a file with no labels at all. A subtitle with
- * two voices or two labels in it is split into one cue for each.
+ * (no label in a file that has labels); TWO for a part of a subtitle with
+ * two voices in it ("- " or "-" lines) that has no label or tag of its own:
+ * nobody's, never picked, counted in mixed; null only in a file with no
+ * labels at all. A subtitle with two voices or two labels in it is split
+ * into one cue for each.
  *   find(cues, from, to, quote)   → the quote's exact words in cues from..to, and when they're said
  *   tc(ms, { frames, fps })       → "00:01:23.4", or "00:01:23:10" for a frame-based transcript
  *
@@ -76,17 +79,32 @@
       .trim();
   }
   // A speaker's label the editor typed: "Speaker 1:", "COACH:", "Pat R.:",
-  // "JOSÉ:" (any alphabet).
+  // "JOSÉ:" (any alphabet). At the start of a subtitle or of a dashed line,
+  // any words before a colon may be one; on a later line, only what looks
+  // like a label ("INTERVIEWER: Why that year?"): a wrapped line ("for all
+  // of us: show up") is words.
   var LABEL = /^\s*(\p{L}[\p{L}\p{M}\p{N} .'’-]{0,38}?)\s*:\s+(\S.*)$/u;
+  // What a label looks like: all capitals, "Speaker 2", or one to three words
+  // each with a capital ("Coach", "Pat R.", "Mrs Lopez"). Anything else
+  // before a colon is a label only in a file that has labels, and then a
+  // voice the file doesn't say ("").
+  var LABEL_LIKE = /^(?:speaker\s*\d{1,2}|[\p{Lu}\p{M}\p{N} .'’-]+|\p{Lu}[\p{L}\p{M}.'’-]*(?:\s+\p{Lu}[\p{L}\p{M}.'’-]*){0,2})$/u;
+  // Someone quoting someone ("He said: ..."): never a label.
+  var SPEECH = /\b(?:said|says|say|asked|asks|ask|told|tells|tell|replied|replies|added|adds|explained|explains|yelled|yells|shouted|shouts|whispered|goes|went)\b/i;
+  // A part of a subtitle with two voices in it and no label of its own.
+  var TWO = "\u0000two";
   // A voice tag, anywhere in a line: <v Coach>, <v.loud Coach>.
   var VOICE_ANY = /<v(?:\.[^\s>]+)*\s+([^>]{1,40})>/gi;
-  // A line of a subtitle with two voices in it: "- Were you nervous?"
-  var DASH = /^\s*[-–—]\s+(\S.*)$/;
+  // A line of a subtitle with two voices in it: "- Were you nervous?", or
+  // "-Were you nervous?" (no space, as professional deliveries write it).
+  var DASH = /^\s*[-–—‐‑‒―]\s*([^\s\-–—].*)$/;
   var SPEAKER_N = /^\s*(speaker\s*\d{1,2})\s*$/i;
 
   // One subtitle's lines, split where the voice changes: a voice tag, a
   // "Speaker 1" line, a typed label, a "- " line. Each part: { kind, who,
-  // text } (kind null: no mark, the voice goes on from before).
+  // text } (kind null: no mark, the voice goes on from before). A subtitle
+  // with a dashed line in it has two voices: its parts with no tag or label
+  // of their own are nobody's (kind "dash").
   function partsOf(lines) {
     var out = [];
     var cur = null;
@@ -118,13 +136,18 @@
           var dash = DASH.exec(t);
           var body = dash ? dash[1] : t;
           var lab = LABEL.exec(body);
-          if (lab) { begin("label", lab[1].trim()); cur.dash = !!dash; cur.text.push(lab[2]); return; }
+          var name = lab ? lab[1].trim() : "";
+          var like = !!lab && LABEL_LIKE.test(name);
+          if (lab && !SPEECH.test(name) && (idx === 0 || dash || like)) { begin("label", name); cur.dash = !!dash; cur.odd = !like; cur.text.push(lab[2]); return; }
           if (dash) { begin("dash", ""); cur.text.push(body); return; }
         }
         if (!cur) begin(null, undefined);
         cur.text.push(t);
       });
     });
+    if (out.some(function (pt) { return pt.kind === "dash" || pt.dash; })) {
+      out.forEach(function (pt) { if (pt.kind === null) { pt.kind = "dash"; pt.who = ""; } });
+    }
     return out;
   }
 
@@ -189,12 +212,13 @@
     var counts = {};
     var split = [];
     raw.forEach(function (c) {
-      var ps = partsOf(c.lines).map(function (pt) { return { kind: pt.kind, who: pt.who, dash: !!pt.dash, text: pt.text.join(" ") }; })
+      var ps = partsOf(c.lines).map(function (pt) { return { kind: pt.kind, who: pt.who, dash: !!pt.dash, odd: !!pt.odd, text: pt.text.join(" ") }; })
         .filter(function (pt) { return /[\p{L}\p{N}]/u.test(cleanText(pt.text)); });
       if (!ps.length) return;
       ps.forEach(function (pt) {
         if (pt.kind === "voice" || pt.kind === "speaker") counts[pt.who] = (counts[pt.who] || 0) + 1;
-        if (pt.kind === "label") counts["?" + pt.who] = (counts["?" + pt.who] || 0) + 1;
+        // Only what looks like a label makes the file a labelled one.
+        if (pt.kind === "label" && !pt.odd) counts["?" + pt.who] = (counts["?" + pt.who] || 0) + 1;
       });
       // The subtitle's time, shared by how many words each part has.
       var n = ps.map(function (pt) { return Math.max(1, (cleanText(pt.text).match(/[\p{L}\p{N}]+/gu) || []).length); });
@@ -204,13 +228,15 @@
         var a = c.s == null ? null : Math.round(c.s + ((c.e - c.s) * acc) / all);
         acc += n[k];
         var b = c.s == null ? null : k === ps.length - 1 ? c.e : Math.round(c.s + ((c.e - c.s) * acc) / all);
-        split.push({ s: a, e: b, kind: pt.kind, who: pt.who, dash: pt.dash, text: pt.text, sub: ps.length > 1 });
+        split.push({ s: a, e: b, kind: pt.kind, who: pt.who, dash: pt.dash, odd: pt.odd, text: pt.text, sub: ps.length > 1 });
       });
     });
     // Once the file uses labels (a voice tag, "Speaker 1", or any typed label
     // used twice), every typed label counts: an interviewer asking once is
     // still the interviewer, not the speaker. In such a file a line with no
-    // label before any label, or a "- " line, is a voice the file doesn't name ("").
+    // label before any label is a voice the file doesn't name (""), and so is
+    // one after a colon that doesn't look like a label. A dashed subtitle's
+    // parts with no label of their own are nobody's (TWO).
     var labelled = Object.keys(counts).some(function (k) { return k.charAt(0) !== "?" || counts[k] >= 2; });
     var last = labelled ? "" : null;
     var cues = [];
@@ -222,15 +248,19 @@
       var who;
       if (p.kind === "voice" || p.kind === "speaker") who = p.who;
       else if (p.kind === "label") {
-        if (labelled) who = p.who;
-        else { p.text = p.who + ": " + p.text; who = p.dash ? "" : last; }
-      } else if (p.kind === "dash") who = "";
+        if (labelled && p.odd) { p.text = p.who + ": " + p.text; who = ""; }
+        else if (labelled) who = p.who;
+        else { p.text = p.who + ": " + p.text; who = p.dash ? TWO : last; }
+      } else if (p.kind === "dash") who = TWO;
       else who = last;
-      // In a file with no labels, a "- " line is the other voice of its
-      // subtitle: kept out of the speaker's words, and the file's voice
-      // goes on after it.
-      if (p.kind === "dash" || (p.kind === "label" && !labelled && p.dash)) mixed++;
-      if (labelled || who !== "") last = who;
+      // A part of a two-voice subtitle with no label of its own: kept out of
+      // everyone's words. In a file with labels, what follows it with no
+      // label is a voice the file doesn't name; in one without, the file's
+      // voice goes on.
+      if (who === TWO) {
+        mixed++;
+        if (labelled) last = "";
+      } else last = who;
       var tx = cleanText(p.text);
       if (!tx || !/[\p{L}\p{N}]/u.test(tx)) continue;
       if (p.s != null && p.e != null && p.e > MAX_MS) { late++; continue; }
@@ -246,6 +276,7 @@
     var seen = {};
     var speakers = [];
     cues.forEach(function (c) {
+      if (c.who === TWO) return;
       var k = c.who === null ? "\u0000all" : "=" + c.who;
       if (!(k in seen)) { seen[k] = speakers.length; speakers.push({ who: c.who, cues: 0 }); }
       speakers[seen[k]].cues++;
@@ -255,16 +286,20 @@
 
   // A speaker's cues, numbered again from 1. A cue that comes after someone
   // else's (a question, another voice) is marked gap: a line never reaches
-  // back across it. who null: a file with no labels (its lines with no other
-  // voice in them).
-  function only(cues, who) {
+  // back across it. In a file with no labels (pauses), so is one after a
+  // pause of more than three seconds: a question cut out of the file leaves
+  // one. who null: a file with no labels (its lines with no other voice in
+  // them).
+  function only(cues, who, opts) {
+    var pauses = !(opts && opts.pauses === false);
     var out = [];
     var prevIdx = -2;
+    if (who === TWO) return out;
     (cues || []).forEach(function (c, idx) {
       if (c.who !== (who === undefined ? null : who)) return;
       var x = { n: out.length + 1, s: c.s, e: c.e, t: c.t };
       var prev = out[out.length - 1];
-      if (prev && (idx !== prevIdx + 1 || c.s - prev.e > PAUSE_MS)) x.gap = true;
+      if (prev && (idx !== prevIdx + 1 || (pauses && c.s - prev.e > PAUSE_MS))) x.gap = true;
       out.push(x);
       prevIdx = idx;
     });
@@ -310,14 +345,21 @@
       if (j === q.length) hits.push(i);
     }
     if (!hits.length) return { ok: false, why: "not_verbatim" };
+    // A line starts and ends on whole words: not inside "4.4", "1,000",
+    // "5:30", "can‘t" (or "can´t", "can′t"), "well-known" or "1990–95". The
+    // first match that does is the one (the database reads the same:
+    // studio_quote_whole).
+    var JOIN = /[.,'’‘`´′ʼ＇:\-\/\u2010-\u2015]/;
+    var WORDCH = /[\p{L}\p{M}\p{N}]/u;
+    var whole = hits.filter(function (h) {
+      var f = hay[h], l = hay[h + q.length - 1];
+      return !((f.a >= 2 && JOIN.test(joined.charAt(f.a - 1)) && WORDCH.test(joined.charAt(f.a - 2))) ||
+        (JOIN.test(joined.charAt(l.b)) && WORDCH.test(joined.charAt(l.b + 1))));
+    });
+    if (!whole.length) return { ok: false, why: "part_of_a_word" };
+    hits = whole;
     var at = hits[0];
     var first = hay[at], lastT = hay[at + q.length - 1];
-    // A line starts and ends on whole words: not inside "4.4", "1,000",
-    // "can‘t" or "well-known".
-    var JOIN = /[.,'’‘`\-\/]/;
-    var WORDCH = /[\p{L}\p{M}\p{N}]/u;
-    if ((first.a >= 2 && JOIN.test(joined.charAt(first.a - 1)) && WORDCH.test(joined.charAt(first.a - 2))) ||
-        (JOIN.test(joined.charAt(lastT.b)) && WORDCH.test(joined.charAt(lastT.b + 1)))) return { ok: false, why: "part_of_a_word" };
     // Nor across words the transcript marks as missing.
     if (joined.slice(first.a, lastT.b).indexOf(MISSING) >= 0) return { ok: false, why: "missing_words" };
     function cueOf(tok) {
@@ -374,5 +416,5 @@
     return pad(h) + ":" + pad(m) + ":" + pad(s) + tail;
   }
 
-  return { parse: parse, only: only, find: find, tokens: tokens, tc: tc, FPS: FPS, MAX_CUES: MAX_CUES, MAX_CUE: MAX_CUE, MAX_TOTAL: MAX_TOTAL, MAX_MS: MAX_MS, MISSING: MISSING, PAUSE_MS: PAUSE_MS };
+  return { parse: parse, only: only, find: find, tokens: tokens, tc: tc, FPS: FPS, MAX_CUES: MAX_CUES, MAX_CUE: MAX_CUE, MAX_TOTAL: MAX_TOTAL, MAX_MS: MAX_MS, MISSING: MISSING, PAUSE_MS: PAUSE_MS, TWO: TWO };
 });

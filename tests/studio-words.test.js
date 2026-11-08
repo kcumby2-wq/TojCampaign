@@ -196,6 +196,37 @@ test("a subtitle with two voices or two labels is split, and only the chosen spe
   assert.deepEqual(TP.only(p.cues, null).map((c) => c.t), ["I have run here twenty years.", "And I still am."]);
 });
 
+test("dashed subtitles are two voices, with or without a space; a label is read where it looks like one", () => {
+  // Labelled, Netflix-style dashes: nobody's, not the last speaker's, and never a choice.
+  let p = TP.parse("1\n00:00:01,000 --> 00:00:03,000\nDAD: I always tell him to work.\n\n2\n00:00:03,000 --> 00:00:05,000\n-I want to play for my dad.\n-He says that every day.\n\n3\n00:00:05,000 --> 00:00:07,000\nDAD: And I mean it.\n");
+  const dad = TP.only(p.cues, "DAD");
+  assert.deepEqual(dad.map((c) => c.t), ["I always tell him to work.", "And I mean it."]);
+  assert.equal(p.mixed, 2);
+  assert.equal(p.speakers.some((x) => x.who === TP.TWO), false, "never a choice");
+  assert.deepEqual(TP.only(p.cues, "").map((c) => c.t), [], "nor in (no label)");
+  assert.equal(dad[1].gap, true, "a line doesn't reach across them");
+  assert.equal(TP.find(dad, 1, 2, "I want to play").ok, false);
+  // No labels, only the second line dashed: the question goes nowhere either.
+  p = TP.parse("1\n00:00:01,000 --> 00:00:03,000\nI always tell him to work.\n\n2\n00:00:03,000 --> 00:00:05,000\nWere you nervous?\n-No.\n\n3\n00:00:05,000 --> 00:00:07,000\nAnd I mean it.\n");
+  assert.deepEqual([p.labelled, p.mixed], [false, 2]);
+  assert.deepEqual(TP.only(p.cues, null).map((c) => c.t), ["I always tell him to work.", "And I mean it."]);
+  // A wrapped line with a colon is words; a later line that looks like a label is one.
+  p = TP.parse("1\n00:00:01,000 --> 00:00:04,000\nCOACH: We do it together,\nfor all of us: show up every Sunday.\n\n2\n00:00:04,000 --> 00:00:06,000\nCOACH: Every one.\nINTERVIEWER: Why?\n");
+  assert.deepEqual(TP.only(p.cues, "COACH").map((c) => c.t), ["We do it together, for all of us: show up every Sunday.", "Every one."]);
+  // Someone quoting someone isn't a label, and doesn't make the file a labelled one.
+  p = TP.parse("1\n00:00:01,000 --> 00:00:03,000\nHe said: you can do it.\n\n2\n00:00:03,000 --> 00:00:05,000\nHe said: keep going.\n");
+  assert.deepEqual([p.labelled, TP.only(p.cues, null).length], [false, 2]);
+  // In a labelled file, words before a colon that don't look like a label: a voice the file doesn't name.
+  p = TP.parse("1\n00:00:01,000 --> 00:00:03,000\nCOACH: Ready.\n\n2\n00:00:03,000 --> 00:00:05,000\nfor all of us: show up.\n\n3\n00:00:05,000 --> 00:00:07,000\nCOACH: Go.\n");
+  assert.deepEqual(TP.only(p.cues, "COACH").map((c) => c.t), ["Ready.", "Go."]);
+  assert.deepEqual(TP.only(p.cues, "").map((c) => c.t), ["for all of us: show up."]);
+  // A pause alone is a gap only in a file with no labels.
+  p = TP.parse("1\n00:00:01,000 --> 00:00:02,000\nCOACH: I ran it.\n\n2\n00:00:06,000 --> 00:00:08,000\nCOACH: Every Sunday.\n");
+  assert.deepEqual(TP.only(p.cues, "COACH", { pauses: !p.labelled }).map((c) => !!c.gap), [false, false]);
+  assert.deepEqual(W.transcriptInput({ labelled: true, cues: [{ s: 0, e: 1000, t: "a" }, { s: 5000, e: 6000, t: "b" }] }).value.cues.map((c) => !!c.gap), [false, false]);
+  assert.deepEqual(W.transcriptInput({ cues: [{ s: 0, e: 1000, t: "a" }, { s: 5000, e: 6000, t: "b" }] }).value.cues.map((c) => !!c.gap), [false, true]);
+});
+
 test("a line never reaches across a question, a pause or missing words, and starts and ends on whole words", () => {
   const p = TP.parse("1\n00:00:01,000 --> 00:00:04,000\nCOACH: I ran this drill.\n\n2\n00:00:04,000 --> 00:00:05,000\nINTERVIEWER: When?\n\n3\n00:00:05,000 --> 00:00:08,000\nCOACH: Every Sunday since.\n\n4\n00:00:12,000 --> 00:00:14,000\nCOACH: I never [inaudible] quit.\n");
   const mine = TP.only(p.cues, "COACH");
@@ -206,6 +237,11 @@ test("a line never reaches across a question, a pause or missing words, and star
   const cues = [{ n: 1, s: 0, e: 4000, t: "I ran a 4.4 forty, 1,000 times. I can‘t lose. A well-known drill." }];
   for (const q of ["4 forty", "000 times", "I can", "known drill"]) assert.equal(TP.find(cues, 1, 1, q).why, "part_of_a_word", q);
   for (const q of ["a 4.4 forty", "1,000 times", "I can‘t lose", "A well-known drill"]) assert.equal(TP.find(cues, 1, 1, q).ok, true, q);
+  // A time's colon, an apostrophe typed as ´ or ′, and a dash in a number join words too.
+  const more = [{ n: 1, s: 0, e: 4000, t: "Up at 5:30 every morning. I can´t lose. I can′t quit. From 1990–95 we won." }];
+  for (const q of ["30 every morning", "I can", "95 we won"]) assert.equal(TP.find(more, 1, 1, q).why, "part_of_a_word", q);
+  // The first match that's whole is the one.
+  assert.equal(TP.find([{ n: 1, s: 0, e: 1000, t: "well-known and known" }], 1, 1, "known").ok, true);
   // Said in two of the cues picked: which one isn't clear.
   assert.equal(TP.find([{ n: 1, s: 0, e: 1000, t: "Never quit." }, { n: 2, s: 1000, e: 2000, t: "Never quit, ever." }], 1, 2, "never quit").why, "said_twice");
   // The server keeps the browser's gap marks and finds pauses itself.
@@ -224,8 +260,8 @@ test("timecodes round to the nearest frame; a transcript past ten hours says so"
   // Drop-frame never shows frames 00 and 01 at the start of a minute (but every tenth).
   assert.equal(TP.tc(60000, { frames: true, fps: 29.97, drop: true }), "00:01:00;02");
   assert.equal(TP.tc(600000, { frames: true, fps: 29.97, drop: true }), "00:10:00;00");
-  assert.equal(W.transcriptInput({ frames: true, fps: 29.97, drop: true, cues: [{ s: 0, e: 1000, t: "a" }] }).value.drop_frame, true);
-  assert.equal(W.transcriptInput({ frames: true, fps: 25, drop: true, cues: [{ s: 0, e: 1000, t: "a" }] }).value.drop_frame, false);
+  assert.equal(W.transcriptInput({ frames: true, fps: 29.97, drop: true, cues: [{ s: 0, e: 1000, t: "a" }] }).value.df_timecode, true);
+  assert.equal(W.transcriptInput({ frames: true, fps: 25, drop: true, cues: [{ s: 0, e: 1000, t: "a" }] }).value.df_timecode, false);
   assert.deepEqual(TP.parse("1\n10:00:01,000 --> 10:00:04,000\nLate words.\n").error, "past_ten_hours");
 });
 
@@ -233,6 +269,9 @@ test("agents read names as codes, run together and in handles too; a code is nev
   const people = [{ name: "Jamie Rivers", person_code: "WJ01", is_minor: true }, { name: "Ty Ng", person_code: "TY1", is_minor: true, reviewer_name: "Ann Ng", reviewer_relation: "parent" }];
   assert.equal(W.maskNames("@jamierivers is up at five", people).includes("jamierivers"), false);
   assert.equal(W.maskNames("#JamieRivers2026", people).includes("Rivers"), false);
+  // One word of a minor's name run into a tag or a word.
+  for (const t of ["#PrayForJamie", "JamieStrong", "#teamjamie"]) assert.equal(/jamie/i.test(W.maskNames(t, people)), false, t);
+  assert.equal(W.maskNames("hopeful", [{ name: "Hope Field", person_code: "HF1", is_minor: true }]), "hopeful", "an everyday word in lower case stays");
   assert.equal(W.maskNames("TyNg runs", people).trim(), "TY1  runs");
   assert.equal(W.maskNames("Ann Ng drove Ty", people), "TY1's parent drove TY1");
 });
