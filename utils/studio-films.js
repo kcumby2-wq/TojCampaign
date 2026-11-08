@@ -85,6 +85,29 @@ function namesIn(textValue, people, { strong = false } = {}) {
   }
   return [...found];
 }
+// The words of a minor's name that a text has (two letters or more), and
+// the name run together. A note never keeps one, whatever its writer says:
+// there's no "it isn't a name here" for a child's name (the database refuses
+// it too, migration 039's studio_names_in).
+function minorWords(textValue, people) {
+  const hay = " " + String(textValue || "").toLowerCase().replace(/[^\p{L}\p{M}]+/gu, " ") + " ";
+  const letters = hay.replace(/ /g, "");
+  const found = new Set();
+  for (const p of people || []) {
+    if (!p || !p.is_minor) continue;
+    const parts = nameParts(p.name);
+    for (const w of parts) if (Array.from(w).length >= 2 && hay.includes(" " + w + " ")) found.add(w);
+    const joined = parts.join("");
+    if (parts.length > 1 && Array.from(joined).length >= 5 && letters.includes(joined)) found.add(joined);
+  }
+  return [...found];
+}
+// The words a writer said aren't names here ({ names_ok: ["will"] }), as a
+// set of lower-case words. Anything else (true, a string) acknowledges nothing.
+function namesOkWords(v) {
+  if (!Array.isArray(v)) return new Set();
+  return new Set(v.slice(0, 20).map((w) => String(w || "").normalize("NFC").toLowerCase().trim()).filter((w) => w && w.length <= 80));
+}
 
 // ── The board's structured parts ─────────────────────────────────────────
 function list(v, max) {
@@ -358,6 +381,8 @@ module.exports = {
   sha256,
   nameWords,
   namesIn,
+  minorWords,
+  namesOkWords,
   planInput,
   filmInput,
   coversInput,

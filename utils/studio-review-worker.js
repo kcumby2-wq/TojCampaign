@@ -234,29 +234,53 @@ async function claim(d, skip = new Set()) {
 // pull: an upload link made before it (they last 2 hours) can still land a
 // file that no row lists.
 const PULLED_SWEEP_MS = 3 * 60 * 60 * 1000;
+// Every file under a folder, a page of 1000 at a time. A listing storage
+// refuses throws: that film is looked at again on the next pass.
+const LIST_PAGE = 1000;
 async function listAll(d, prefix, depth = 0) {
   if (depth > 4) return [];
-  const { data, error } = await d.sb.storage.from(U.BUCKET).list(prefix, { limit: 1000 });
-  if (error || !data) return [];
   const out = [];
-  for (const e of data) {
-    const key = `${prefix}/${e.name}`;
-    if (e.id) out.push(key);
-    else out.push(...(await listAll(d, key, depth + 1)));
+  for (let offset = 0; offset < 100 * LIST_PAGE; offset += LIST_PAGE) {
+    const { data, error } = await d.sb.storage.from(U.BUCKET).list(prefix, { limit: LIST_PAGE, offset });
+    if (error) throw new Error(`listing ${prefix}: ${error.message || "storage refused"}`);
+    for (const e of data || []) {
+      const key = `${prefix}/${e.name}`;
+      if (e.id) out.push(key);
+      else out.push(...(await listAll(d, key, depth + 1)));
+    }
+    if (!data || data.length < LIST_PAGE) break;
   }
   return out;
 }
+// Every film pulled in the last 3 hours, newest pull first, a page at a
+// time. A file storage won't remove goes on the removal list, so it's tried
+// again after the 3 hours are up.
 async function sweepPulled(d) {
   const since = new Date(d.now().getTime() - PULLED_SWEEP_MS).toISOString();
-  const films = (await q(d.sb.from("studio_films").select("id").gte("pulled_at", since).limit(50))) || [];
   let removed = 0;
-  for (const f of films) {
-    const keys = await listAll(d, `films/${f.id}`);
-    for (let i = 0; i < keys.length; i += 100) {
-      const part = keys.slice(i, i + 100);
-      const { error } = await d.sb.storage.from(U.BUCKET).remove(part);
-      if (!error) removed += part.length;
+  for (let from = 0; from < 5000; from += 200) {
+    const films = (await q(d.sb.from("studio_films").select("id,pulled_at").gte("pulled_at", since).order("pulled_at", { ascending: false }).order("id", { ascending: true }).range(from, from + 199))) || [];
+    for (const f of films) {
+      let keys;
+      try {
+        keys = await listAll(d, `films/${f.id}`);
+      } catch (e) {
+        console.warn("[studio] pulled-film sweep couldn't list a folder; next pass tries again:", e && e.message);
+        continue;
+      }
+      for (let i = 0; i < keys.length; i += 100) {
+        const part = keys.slice(i, i + 100);
+        let ok = false;
+        try {
+          ok = !(await d.sb.storage.from(U.BUCKET).remove(part)).error;
+        } catch (e) {
+          ok = false;
+        }
+        if (ok) removed += part.length;
+        else await takeBack(d, part);
+      }
     }
+    if (films.length < 200) break;
   }
   return removed;
 }

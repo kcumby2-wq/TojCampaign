@@ -134,14 +134,19 @@ const idOk = (s) => U.UUID.test(String(s || ""));
 // A note that names someone on the film's cards is refused: the history
 // keeps no names (the database leaves such a note out regardless).
 const NOTE_HAS_NAME = { error: "invalid", fields: ["note_has_name"] };
-// A note's names: a whole name (or one run together) is refused; a single
-// word that's also a name ("Will", "Mark") is kept once the writer says it
-// isn't one here ({ names_ok: true }). null when the note can be kept.
+const NOTE_HAS_MINOR_NAME = { error: "invalid", fields: ["note_has_minor_name"] };
+// A note's names: a whole name (or one run together) is refused, and so is
+// any word of a minor's name. A single word of an adult's name ("Will",
+// "Mark") is asked about, and kept once the writer says that word isn't a
+// name here: { names_ok: ["will"] }, the exact words, for this exact text
+// (the app forgets them when the text changes). null when the note can be kept.
 function noteNames(text, people, body) {
   if (!text) return null;
   if (U.namesIn(text, people, { strong: true }).length) return NOTE_HAS_NAME;
-  const words = U.namesIn(text, people);
-  if (words.length && !(body && body.names_ok === true)) return { error: "invalid", fields: ["note_may_have_name"], words: words.slice(0, 3) };
+  if (U.minorWords(text, people).length) return NOTE_HAS_MINOR_NAME;
+  const ok = U.namesOkWords(body && body.names_ok);
+  const words = U.namesIn(text, people).filter((w) => !ok.has(w));
+  if (words.length) return { error: "invalid", fields: ["note_may_have_name"], words: words.slice(0, 10) };
   return null;
 }
 
@@ -662,10 +667,18 @@ router.post("/films/:id/cuts/:cid/reviews", member, withDb(async (req, res, sb) 
     console.warn("[studio-films] review email failed:", mailer.errorCode(e));
   }
   if (!sent || !sent.sent) {
-    // No email, no link: take it back.
+    // No email, no link: take it back (film first, like every cancel). If
+    // that fails too, the link is live but was never sent: say so, so it's
+    // cancelled by hand before another goes out.
     giveBackLink(person.reviewer_email);
-    await sb.from("studio_reviews").update({ link_hash: null, expires_at: null, changed_by: me(req), updated_at: nowIso() }).eq("id", review.id).not("link_hash", "is", null);
-    return res.status(502).json({ error: sent && sent.reason === "email_not_configured" ? "email_not_set_up" : "email_failed" });
+    let cancelled = false;
+    try {
+      cancelled = (await rpcRows(sb, "studio_review_cancel", { p_review: review.id, p_by: me(req) })).length > 0;
+    } catch (e) {
+      console.error("[studio-films] couldn't take back an unsent review link:", e && e.message);
+    }
+    const reason = sent && sent.reason === "email_not_configured" ? "email_not_set_up" : "email_failed";
+    return res.status(502).json(cancelled ? { error: reason } : { error: reason, link_live: true, review_id: review.id });
   }
   await T.logActivity(me(req), "sent_review_link", person.person_code, { film_id: film.id, cut_id: cut.id });
   res.json({ review: reviewView(review) });

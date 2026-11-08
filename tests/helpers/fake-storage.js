@@ -43,7 +43,8 @@ function fakeStorage() {
         if (!seen.has(name)) seen.set(name, rest.includes("/") ? { name, id: null } : { name, id: "obj-" + name });
       }
       calls.push(["list", prefix]);
-      return { data: [...seen.values()].slice(0, opts.limit || 100), error: null };
+      const from = opts.offset || 0;
+      return { data: [...seen.values()].sort((a, b) => a.name.localeCompare(b.name)).slice(from, from + (opts.limit || 100)), error: null };
     },
     async remove(keys) {
       for (const k of keys) objects.delete(full(bucket, k));
