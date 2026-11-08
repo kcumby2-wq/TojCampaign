@@ -391,12 +391,18 @@ function contactIn(text) {
 // field" stays on the phone; "westlake gym" doesn't.
 const PLACE_SKIP = new Set(("the a an at of on in by and to for from near with s st street road rd ave avenue " +
   "high middle school practice field fields track gym court courts park family home").split(" "));
+// A place's ordinary words are skipped only when it has a word of its own
+// ("Westlake" in "Westlake High School practice field"): "Park High School"
+// or "Court Street Park" is all ordinary words, so they all count.
+const PLACE_GLUE = new Set(["the", "a", "an", "at", "of", "on", "in", "by", "and", "to", "for", "from", "near", "with", "s"]);
 function placeWords(locations) {
   const out = new Set();
   for (const l of Array.isArray(locations) ? locations : []) {
-    for (const w of String(l || "").match(/[\p{L}\p{M}]+/gu) || []) {
+    const words = String(l || "").match(/[\p{L}\p{M}]+/gu) || [];
+    const own = words.some((w) => !PLACE_SKIP.has(w.toLowerCase()) && (/^\p{Lu}/u.test(w) || Array.from(w).length >= 4));
+    for (const w of words) {
       const lw = w.toLowerCase();
-      if (PLACE_SKIP.has(lw)) continue;
+      if (own ? PLACE_SKIP.has(lw) : PLACE_GLUE.has(lw)) continue;
       if (/^\p{Lu}/u.test(w) || Array.from(lw).length >= 4) out.add(lw);
     }
   }
@@ -429,7 +435,7 @@ const COMMON_FIRST = new Set(("i we he she they it the a an his her their our my
   "bouncing loading pushing pulling dripping rising falling").split(/\s+/));
 function offlineSafe(text, people, { places = [], vocab = null } = {}) {
   const t = String(text || "").trim();
-  if (!t || t.includes("@") || /\d/.test(t) || contactIn(t) || idNames(t, people).length) return false;
+  if (!t || t.includes("@") || /\d/.test(t) || contactIn(t) || idNames(t, people).length || minorRunIns(t, people).maybe.length) return false;
   const words = t.match(/[\p{L}\p{M}'’]+/gu) || [];
   const at = placeWords(places);
   if (words.some((w) => at.has(w.toLowerCase().replace(/['’]s?$/u, "")))) return false;
@@ -482,12 +488,18 @@ function graphicsCredit(p, as, format) {
 // "hope", as "Hope never quits" does). A whole name is still a whole name
 // ("#HopeFieldStrong"), and a short line keeps its reading ("Thanks Will").
 const TAG = /[#@][\p{L}\p{M}\p{N}_.]+/gu;
-// The small words a title leaves in lower case ("Keep the Faith").
-const TITLE_SMALL = new Set("a an and as at but by for from in into nor of off on or over per the to up vs via with".split(" "));
-function titleCaseLine(line) {
-  const words = line.replace(TAG, " ").match(/[\p{L}\p{M}][\p{L}\p{M}'’]*/gu) || [];
-  const caps = words.filter((w) => /^\p{Lu}/u.test(w));
-  return words.length >= 3 && caps.length >= 2 && words.every((w) => /^\p{Lu}/u.test(w) || TITLE_SMALL.has(w.toLowerCase()));
+// (Title Case as titles read it: titleCase, above.)
+const titleCaseLine = (line) => titleCase(line);
+// A shout-out ends on the name ("Way To Go Hope", "Happy Birthday Grace"):
+// the last word of each line in Title Case.
+function shoutOuts(all) {
+  const out = new Set();
+  for (const line of String(all || "").split(/\r?\n/)) {
+    if (!titleCaseLine(line)) continue;
+    const words = line.replace(TAG, " ").match(/[\p{L}\p{M}][\p{L}\p{M}'’]*/gu) || [];
+    if (words.length) out.add(words[words.length - 1].toLowerCase().replace(/['’]s$/u, ""));
+  }
+  return out;
 }
 function tagWords(tag) {
   return tag
@@ -542,7 +554,14 @@ function inTags(all, name, minRun) {
 }
 function publicNames(all, p) {
   const minor = !!p.is_minor;
-  return strictNames(publicText(all), [{ name: p.name, is_minor: minor }]).length > 0 || !!inTags(all, p.name, minor ? 4 : 5).sure;
+  if (strictNames(publicText(all), [{ name: p.name, is_minor: minor }]).length > 0 || !!inTags(all, p.name, minor ? 4 : 5).sure) return true;
+  if (!minor) return false;
+  // A minor: one word of their name run into a tag or a word where a word
+  // starts or ends ("#jordanstrong", "#teamjordan"), or an everyday-word name
+  // ending a line in Title Case (a shout-out: "Way To Go Hope").
+  if (minorRunIns(all, [p]).sure.length) return true;
+  const ends = shoutOuts(all);
+  return nameParts(p.name).some((w) => ends.has(w));
 }
 // What a graphic's words may not carry (the same rules as titles and file
 // names, read as above): the name of anyone the release doesn't let it name,
@@ -574,6 +593,9 @@ function graphicsAsks(texts, people, { format = null, ok = new Set() } = {}) {
     if (!mayName(p, format)) {
       for (const w of nameHits(all, p, p.is_minor ? { minRun: 4, minWord: 2 } : {}).maybe) out.add(w);
       for (const tag of inTags(raw, p.name, p.is_minor ? 4 : 5).ask || []) out.add(tag);
+      // One word of a minor's name inside a word, or an everyday one run in
+      // ("#hopestrong"): asked.
+      if (p.is_minor) for (const w of minorRunIns(raw, [p]).maybe) out.add(w);
     }
     if (p.reviewer_name && p.reviewer_relation !== "self") {
       for (const w of nameHits(all, { name: p.reviewer_name }).maybe) out.add(w);
