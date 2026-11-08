@@ -26,6 +26,7 @@
     title_has_name: "Titles never carry a name. Use the athlete ID instead.",
     story_has_name: "The one-sentence story goes on the speaker's review page: no names in it. Use the athlete ID or \"he\" or \"she\".",
     note_has_name: "The history keeps no names: write the note with the code instead.",
+    note_may_have_name: "A word in the note is also a name on a card. If it isn't a name here, send it again.",
     label_has_name: "No names on the takedown list: describe it with the code.",
     reconsent_note: "Say how and when the family gave their new consent.",
     cut_ids: "Pick the approved cuts that go on.",
@@ -78,6 +79,17 @@
       try { await fn(); } catch (e) { btn.disabled = false; T().toast(why(e)); }
     });
   }
+  // A note with a word that's also a name on a card ("Will", "Mark"): the
+  // server asks first; sending it again says it isn't a name here.
+  function nameAsk(btn, e) {
+    var d = e && e.data;
+    if (!btn || !d || d.error !== "invalid" || (d.fields || []).indexOf("note_may_have_name") < 0) return false;
+    btn.dataset.namesOk = "1";
+    btn.disabled = false;
+    T().toast("“" + (d.words || []).join("”, “") + "” is also a name on a card. If it isn't a name here, send it again.");
+    return true;
+  }
+  function namesOk(btn) { return !!(btn && btn.dataset.namesOk === "1"); }
   function loading(back) { T().show("studio", '<div class="screen">' + back + '<div class="spin"></div></div>'); }
   function failed(back, e) { T().show("studio", '<div class="screen">' + back + '<h1 class="title sm">Couldn\'t open it</h1><p class="body err">' + h(why(e)) + "</p></div>"); }
   function guard() { if (!T().atLeast("member") || !T().hasTool("studio")) { T().go("#studio"); return false; } return true; }
@@ -309,16 +321,17 @@
       var body = { note: (document.getElementById("stepNote") || {}).value || "" };
       var picks = document.querySelectorAll("[data-stepcut]");
       if (picks.length) body.cut_ids = Array.prototype.filter.call(picks, function (c) { return c.checked; }).map(function (c) { return c.dataset.stepcut; });
+      body.names_ok = namesOk(done);
       done.disabled = true;
-      try { await t.post("/api/studio-films/films/" + f.id + "/steps/" + done.dataset.step + "/done", body); t.toast("Done."); reload(); } catch (e) { done.disabled = false; say("roomMsg", why(e), true); done.scrollIntoView({ block: "center" }); }
+      try { await t.post("/api/studio-films/films/" + f.id + "/steps/" + done.dataset.step + "/done", body); t.toast("Done."); reload(); } catch (e) { if (nameAsk(done, e)) return; done.disabled = false; say("roomMsg", why(e), true); done.scrollIntoView({ block: "center" }); }
     });
     var second = document.getElementById("recordSecond");
     if (second) second.addEventListener("click", async function () {
-      try { await t.post("/api/studio-films/films/" + f.id + "/second-yes", { note: document.getElementById("secondYes").value }); reload(); } catch (e) { say("roomMsg", why(e), true); }
+      try { await t.post("/api/studio-films/films/" + f.id + "/second-yes", { note: document.getElementById("secondYes").value, names_ok: namesOk(second) }); reload(); } catch (e) { if (nameAsk(second, e)) return; say("roomMsg", why(e), true); }
     });
     var reopen = document.getElementById("reopen");
     if (reopen) armed(reopen, "Tap again to reopen", async function () {
-      await t.post("/api/studio-films/films/" + f.id + "/steps/" + reopen.dataset.step + "/reopen", { note: document.getElementById("reopenWhy").value });
+      try { await t.post("/api/studio-films/films/" + f.id + "/steps/" + reopen.dataset.step + "/reopen", { note: document.getElementById("reopenWhy").value, names_ok: namesOk(reopen) }); } catch (e) { if (nameAsk(reopen, e)) return; throw e; }
       reload();
     });
     document.querySelectorAll("[data-clear]").forEach(function (b) {
@@ -327,7 +340,8 @@
     document.querySelectorAll("[data-pull]").forEach(function (b) {
       armed(b, "Tap again: it can't be undone", async function () {
         var note = document.querySelector('[data-pullnote="' + b.dataset.pull + '"]').value;
-        var r = await t.post("/api/studio-films/people/pull", { person_code: b.dataset.pull, note: note, confirm: true });
+        var r;
+        try { r = await t.post("/api/studio-films/people/pull", { person_code: b.dataset.pull, note: note, confirm: true, names_ok: namesOk(b) }); } catch (e) { if (nameAsk(b, e)) return; throw e; }
         t.toast("Takedown started: " + (r.films || 0) + " film(s). 72 hours.");
         T().go("#film-takedowns");
       });
@@ -344,9 +358,9 @@
       try { await t.post("/api/studio-films/films/" + f.id + "/posts", { cut_id: document.getElementById("postCut").value, platform: document.getElementById("postPlatform").value, url: document.getElementById("postUrl").value }); t.toast("Recorded."); reload(); } catch (e) { rp.disabled = false; say("roomMsg", why(e), true); }
     });
     document.getElementById("addNote").addEventListener("click", async function () {
-      var v = document.getElementById("noteText").value.trim();
+      var btn = this, v = document.getElementById("noteText").value.trim();
       if (!v) return;
-      try { await t.post("/api/studio-films/films/" + f.id + "/notes", { note: v }); reload(); } catch (e) { say("roomMsg", why(e), true); }
+      try { await t.post("/api/studio-films/films/" + f.id + "/notes", { note: v, names_ok: namesOk(btn) }); reload(); } catch (e) { if (nameAsk(btn, e)) return; say("roomMsg", why(e), true); }
     });
     var ar = document.getElementById("archive");
     if (ar) armed(ar, "Tap again", async function () { await t.post("/api/studio-films/films/" + f.id + "/archive", { archived: !f.archived_at }); T().go(f.archived_at ? "#film/" + f.id : "#films"); });
@@ -575,10 +589,10 @@
       (d.open.length ? d.open.map(card).join("") : '<p class="empty">No open takedowns.</p>') +
       (d.recent.length ? '<section class="sec"><h2 class="sec-h">Closed in the last 30 days</h2>' + d.recent.map(card).join("") + "</section>" : "") + "</div>");
     document.querySelectorAll("[data-item]").forEach(function (b) {
-      b.addEventListener("click", async function () { b.disabled = true; try { await t.post("/api/studio-films/takedown-items/" + b.dataset.item + "/done", { note: document.querySelector('[data-itemnote="' + b.dataset.item + '"]').value }); filmTakedowns(); } catch (e) { b.disabled = false; T().toast(why(e)); } });
+      b.addEventListener("click", async function () { var ok = namesOk(b); b.disabled = true; try { await t.post("/api/studio-films/takedown-items/" + b.dataset.item + "/done", { note: document.querySelector('[data-itemnote="' + b.dataset.item + '"]').value, names_ok: ok }); filmTakedowns(); } catch (e) { if (nameAsk(b, e)) return; b.disabled = false; T().toast(why(e)); } });
     });
     document.querySelectorAll("[data-add]").forEach(function (b) {
-      b.addEventListener("click", async function () { var k = b.dataset.add; try { await t.post("/api/studio-films/takedowns/" + k + "/items", { film_id: document.querySelector('[data-addfilm="' + k + '"]').value, label: document.querySelector('[data-addlabel="' + k + '"]').value }); filmTakedowns(); } catch (e) { T().toast(why(e)); } });
+      b.addEventListener("click", async function () { var k = b.dataset.add; try { await t.post("/api/studio-films/takedowns/" + k + "/items", { film_id: document.querySelector('[data-addfilm="' + k + '"]').value, label: document.querySelector('[data-addlabel="' + k + '"]').value, names_ok: namesOk(b) }); filmTakedowns(); } catch (e) { if (nameAsk(b, e)) return; T().toast(why(e)); } });
     });
   }
 

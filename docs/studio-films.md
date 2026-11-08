@@ -25,7 +25,7 @@ From the Same Work kit's *Handoffs and checklists* column, in its order. One ste
 
 The rights check and the final sign-off are for the cuts the speaker review named, and **only those cuts are posted**: a cut approved after the sign-off waits for the steps to run again. The producer can reopen the last done step (and so walk back), with a reason. Walking back past the rights check takes Hooks's yes with it (it was for the cuts as they were). A film with anything live isn't walked back (take the posts down first), a published film is never reopened (it's taken down), and a closed film isn't reopened at all.
 
-Each change to a film takes the film's lock first, so two changes that are each allowed alone can't both land: a post recorded while consent is being pulled waits for the pull, then is refused.
+Each change to a film takes the film's lock first, so two changes that are each allowed alone can't both land: a post recorded while consent is being pulled waits for the pull, then is refused. The order is always the same: the person code (a card being added, a pull), then films in id order, then the film's rows, then its takedown. A change to a single row that a cascade can also reach (a card, a step, a review link, a post, a takedown line) goes through a database function that takes the film first. If two changes still collide in the same instant, the database rolls one back and the server tries it once more.
 
 ## Clearance cards
 
@@ -37,7 +37,8 @@ One per person on camera. The name stays on the card; everything else carries th
 - The producer clears a card. Changing a cleared card clears it again. A card in something live doesn't change or get uncleared at all (take the post down, or pull consent).
 - **Who approves** (the reviewer's name, email and relation) is the producer's to change. Any change to a card stops its live review links, and an approval counts only from the reviewer the card names now: an adult's own yes stops counting if the card is corrected to a minor whose parent approves.
 - Titles, file names and the one-sentence story never carry a name: the app refuses one that contains a card's name (a word of three letters or more, the whole name, or the name run together as in `JamieRivers`). A lone two-letter first name isn't caught: it would catch "an" and "al" too.
-- **A pulled consent stays pulled.** A new card for that code is refused while its takedown is open, and after that until the producer records the family's new consent (how and when) on the first new card.
+- Notes are screened the same way, with one difference: a single word that's also a name ("will" for a Will, "mark" for a Mark) is asked about, and kept once the writer sends it again. A whole name, or one run together, is always refused.
+- **A pulled consent stays pulled.** A new card for that code is refused while its takedown is open, and after that until the producer records the family's new consent (how and when) on the first new card. A card being added while the pull runs waits for it, and is pulled with it.
 
 ## Cuts, the clip log and review links
 
@@ -57,7 +58,9 @@ Only Kyron records posts, after the final sign-off, and only cuts every speaker 
 
 **Consent pulled** (the producer, from the card): every card with that code is closed, every film they're in is pulled for good, live review links stop, and a takedown opens with a line for every live post plus one for everything outside the app (drives, the Milanote board, the editor's machine). **The 72-hour clock** starts at once and shows on Today. Marking a line down takes its post down; the last line closes the takedown.
 
-The files of those films (uploads, review copies, posters) are listed for removal by the database in the same change, and removed at once; anything storage refuses is tried again on the worker's next pass (`studio_storage_removals`). A deleted cut's files go the same way.
+The files of those films (uploads, review copies, posters) are listed for removal by the database in the same change, and removed at once; anything storage refuses is tried again on the worker's next pass (`studio_storage_removals`). A deleted cut's files go the same way, and so do any the worker made for a cut that didn't make it. For three hours after a pull, the worker also empties the pulled film's whole folder on every pass: an upload link made just before the pull (they last two hours) can still land a file no row lists.
+
+A takedown's lines lock the takedown as they're marked down, so the last line always closes it; the worker closes any takedown with nothing left on it, as a safety net.
 
 ## Tool approvals
 
@@ -71,7 +74,7 @@ The kit's rule: a tool touches footage only once the producer has checked its te
 
 Every step, card, cut, review, post, takedown and switch is written to `studio_events` by the database itself (a trigger running as the tables' owner, which no API session can be) and never changed. Staff add notes.
 
-**No names go in it**, or in the team activity log. A reviewer is written as who they are to the speaker ("their parent"), and a change note stays on the review, not in the history. A staff note (a step, a reopen, Hooks's yes, a pull, a takedown line) that names someone on the film's cards is refused by the app, and the database leaves such a note out regardless. Who makes a change says so with that change (`changed_by` is taken by the database with each write, never carried over from the last one).
+**No names go in it**, or in the team activity log. A reviewer is written as who they are to the speaker ("their parent"), and a change note stays on the review, not in the history. A staff note (a step, a reopen, Hooks's yes, a pull, a takedown line) that names someone on the film's cards is refused by the app (or asked about, for a single word that's also a name), and the database leaves out any note with a whole name or a run-together one regardless. Who makes a change says so with that change (`changed_by` is taken by the database with each write, never carried over from the last one).
 
 Every Studio table refuses `TRUNCATE`, and the server's role (`service_role`) can read and write rows only: it can't empty a table, put a trigger on one, or point a foreign key at one.
 

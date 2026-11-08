@@ -140,18 +140,33 @@ test("the history keeps no names: reviewers by who they are, their notes on the 
   assert.deepEqual(ev, { kind: "review_changes", by_reviewer: "their parent", note: null });
   // The change note stays on the review (the speaker's own record).
   assert.equal((await pool.query("select note from studio_reviews where cut_id = $1", [cut.id])).rows[0].note, "Cut the part where Jordan cries.");
-  // Staff notes: refused with a name, here and in the database.
-  assert.deepEqual((await films("POST", `/films/${film.id}/notes`, { note: "Called Pat about the shoot" }, "lead")).data.fields, ["note_has_name"]);
+  // Staff notes: a whole name (or one run together) is refused, here and in
+  // the database; a single word that's also a name is asked about first.
+  assert.deepEqual((await films("POST", `/films/${film.id}/notes`, { note: "Called Pat Kid about the shoot" }, "lead")).data.fields, ["note_has_name"]);
   assert.deepEqual((await films("POST", `/films/${film.id}/notes`, { note: "JordanKid file renamed" }, "lead")).data.fields, ["note_has_name"]);
+  const asked = (await films("POST", `/films/${film.id}/notes`, { note: "Called Pat about the shoot" }, "lead")).data;
+  assert.deepEqual([asked.fields, asked.words], [["note_may_have_name"], ["pat"]]);
   ok(await films("POST", `/films/${film.id}/notes`, { note: "Called the parent of " + p.person_code + " about the shoot" }, "lead"), "note with the code");
-  await assert.rejects(pool.query("insert into studio_events (film_id, kind, by_staff, note) values ($1, 'note', 'lead@toj.test', 'Jordan was great')", [film.id]), /keeps no names/);
-  assert.deepEqual((await step(film.id, "speaker_review", "lead", { cut_ids: [cut.id], note: "Jordan's mum said yes" })).data.fields, ["note_has_name"]);
+  await assert.rejects(pool.query("insert into studio_events (film_id, kind, by_staff, note) values ($1, 'note', 'lead@toj.test', 'Jordan Kid was great')", [film.id]), /keeps no names/);
+  assert.deepEqual((await step(film.id, "speaker_review", "lead", { cut_ids: [cut.id], note: "Jordan's mum said yes" })).data.fields, ["note_may_have_name"]);
   // A note that reaches the database another way is left out of the history.
   await pool.query("select studio_film_reopen($1, 'rough_cut', 'lead@toj.test', 'Pat Kid asked for it')", [film.id]);
   const reopened = (await pool.query("select note from studio_events where film_id = $1 and kind = 'step_reopened'", [film.id])).rows[0];
   assert.equal(reopened.note, "(left out: it named someone on a card)");
   const all = JSON.stringify((await pool.query("select * from studio_events where film_id = $1", [film.id])).rows);
   assert.doesNotMatch(all, /Jordan|Pat|Kid/);
+});
+
+test("a word that's also a name is asked about, then kept; the database holds whole names only", async () => {
+  const { film } = await aFilm();
+  // A card named Will Hunter, reviewed by Grace Hunter.
+  ok(await films("POST", `/films/${film.id}/people`, { person_code: "W0001", name: "Will Hunter", role: "coach", release_on_file: true, speaker: true, reviewer_relation: "self", reviewer_name: "Grace Hunter", reviewer_email: "grace@x.test" }, "lead"), "card");
+  const first = await films("POST", `/films/${film.id}/notes`, { note: "We will reshoot the wide on Tuesday" }, "lead");
+  assert.deepEqual([first.status, first.data.fields, first.data.words], [400, ["note_may_have_name"], ["will"]]);
+  ok(await films("POST", `/films/${film.id}/notes`, { note: "We will reshoot the wide on Tuesday", names_ok: true }, "lead"), "kept once it's said not to be a name");
+  assert.deepEqual((await films("POST", `/films/${film.id}/notes`, { note: "Will Hunter called", names_ok: true }, "lead")).data.fields, ["note_has_name"]);
+  await pool.query("insert into studio_events (film_id, kind, by_staff, note) values ($1, 'note', 'lead@toj.test', 'By grace it is done')", [film.id]);
+  await assert.rejects(pool.query("insert into studio_events (film_id, kind, by_staff, note) values ($1, 'note', 'lead@toj.test', 'Grace Hunter said yes')", [film.id]), /keeps no names/);
 });
 
 test("an approval comes from the reviewer the card names now; a card change stops its links", async () => {
@@ -346,4 +361,127 @@ test("small rules: who brought a film back, a story with a name, the editor hear
   } finally {
     ok(await films("POST", "/tools/review_copies", { on: true, note: "Back on for the tests" }, "kyron"), "on");
   }
+});
+
+// Two transactions on one connection pool: the first holds its lock while the
+// second is started, then lets go.
+async function holding(sql, params) {
+  const c = await pool.connect();
+  await c.query("begin");
+  await c.query(sql, params);
+  return { c, done: async (how = "commit") => { try { await c.query(how); } finally { c.release(); } } };
+}
+const settle = (p) => p.then((v) => ({ ok: true, v }), (e) => ({ ok: false, code: e.code, msg: e.message }));
+
+test("film first: a link cancelled during a pull waits its turn instead of deadlocking", async () => {
+  const { film, p, code } = await aFilm();
+  const cut = await aCut(film, [p.id]);
+  ok(await films("POST", `/films/${film.id}/cuts/${cut.id}/reviews`, { person_id: p.id }, "lead"), "link");
+  const review = (await pool.query("select id from studio_reviews where cut_id = $1", [cut.id])).rows[0].id;
+  // A card edit holds the card's row for a moment, so the pull has the film
+  // and waits; the cancel (through its function) waits for the film.
+  const t0 = await holding("select 1 from studio_film_people where id = $1 for update", [p.id]);
+  const pull = settle(pool.query("select * from studio_pull_consent($1, 'lead@toj.test', 'staff', null)", [code]));
+  await wait(250);
+  const cancel = settle(pool.query("select * from studio_review_cancel($1, 'lead@toj.test')", [review]));
+  await wait(250);
+  await t0.done();
+  const [a, b] = await Promise.all([pull, cancel]);
+  assert.ok(a.ok, JSON.stringify(a));
+  assert.ok(b.ok, JSON.stringify(b));
+  assert.equal(b.v.rows.length, 0, "the pull had already stopped the link");
+  // The same for a post taken down by hand while its takedown line is marked down.
+  const x = await aFilm();
+  const c2 = await aCut(x.film, [x.p.id]);
+  await approve(x.film, c2, x.p);
+  ok(await step(x.film.id, "speaker_review", "lead", { cut_ids: [c2.id] }), "review");
+  ok(await step(x.film.id, "rights_check", "lead"), "rights");
+  ok(await films("POST", `/films/${x.film.id}/second-yes`, { note: "Hooks said yes" }, "lead"), "yes");
+  ok(await step(x.film.id, "final_signoff", "lead"), "final");
+  const post = ok(await films("POST", `/films/${x.film.id}/posts`, { cut_id: c2.id, platform: "instagram", url: "https://instagram.com/p/z" }, "kyron"), "post").post;
+  const td = ok(await films("POST", "/people/pull", { person_code: x.code, confirm: true }, "lead"), "pull").takedown;
+  const item = (await pool.query("select id from studio_takedown_items where takedown_id = $1 and post_id = $2", [td.id, post.id])).rows[0].id;
+  const t1 = await holding("select 1 from studio_films where id = $1 for update", [x.film.id]);
+  const byHand = settle(pool.query("select * from studio_post_remove($1, 'lead@toj.test')", [post.id]));
+  await wait(200);
+  const line = settle(pool.query("select * from studio_takedown_item_done($1, 'lead@toj.test', null)", [item]));
+  await wait(200);
+  await t1.done();
+  const [e, f] = await Promise.all([byHand, line]);
+  assert.ok(e.ok && f.ok, JSON.stringify([e, f]));
+  assert.ok((await pool.query("select removed_at from studio_film_posts where id = $1", [post.id])).rows[0].removed_at);
+});
+
+test("a card added for a code while it's being pulled waits for the pull, and is pulled with it", async () => {
+  const { code } = await aFilm();
+  const other = ok(await films("POST", "/films", { kit_slug: "same-work", title: "Other", lane: "college", athlete_id: code, format: "cutdown" }, "lead"), "film").film;
+  const t1 = await holding(`insert into studio_film_people (film_id, person_code, name, role, release_on_file, created_by) values ($1, $2, 'Alex Doe', 'athlete', true, 'lead@toj.test')`, [other.id, code]);
+  let pulled = false;
+  const pull = settle(pool.query("select * from studio_pull_consent($1, 'lead@toj.test', 'staff', null)", [code]).then((r) => { pulled = true; return r; }));
+  await wait(250);
+  assert.equal(pulled, false, "the pull waits for the card's insert");
+  await t1.done();
+  assert.ok((await pull).ok);
+  const r = (await pool.query(`select (select count(*)::int from studio_film_people where person_code = $1 and consent_pulled_at is null) as unpulled,
+      (select pulled_at is not null from studio_films where id = $2) as other_pulled`, [code, other.id])).rows[0];
+  assert.deepEqual(r, { unpulled: 0, other_pulled: true });
+  // And the other way round: a card added while the pull is under way is refused.
+  const y = await aFilm();
+  const film3 = ok(await films("POST", "/films", { kit_slug: "same-work", title: "Third", lane: "college", athlete_id: y.code, format: "cutdown" }, "lead"), "film").film;
+  const t2 = await holding("select * from studio_pull_consent($1, 'lead@toj.test', 'staff', null)", [y.code]);
+  const adding = settle(pool.query(`insert into studio_film_people (film_id, person_code, name, role, release_on_file, created_by) values ($1, $2, 'Alex Doe', 'athlete', true, 'lead@toj.test')`, [film3.id, y.code]));
+  await wait(250);
+  await t2.done();
+  const added = await adding;
+  assert.equal(added.ok, false);
+  assert.match(added.msg, /takedown is still open/);
+});
+
+test("a takedown closes when its last lines are marked down at once, and not before a line added meanwhile", async () => {
+  const code = "D" + String(5000 + ++n);
+  const a = await aFilm();
+  const b = await aFilm();
+  // Both films carry the same person.
+  for (const f of [a, b]) ok(await films("POST", `/films/${f.film.id}/people`, { person_code: code, name: "Sam Roe", role: "coach", release_on_file: true }, "lead"), "card");
+  const td = ok(await films("POST", "/people/pull", { person_code: code, confirm: true }, "lead"), "pull").takedown;
+  const items = (await pool.query("select id from studio_takedown_items where takedown_id = $1 order by film_id", [td.id])).rows;
+  assert.equal(items.length, 2);
+  const t1 = await holding("select * from studio_takedown_item_done($1, 'lead@toj.test', null)", [items[0].id]);
+  const second = settle(pool.query("select * from studio_takedown_item_done($1, 'lead@toj.test', null)", [items[1].id]));
+  await wait(200);
+  await t1.done();
+  assert.ok((await second).ok);
+  assert.ok((await pool.query("select closed_at from studio_takedowns where id = $1", [td.id])).rows[0].closed_at, "closed");
+  // A line added while the last one is marked down: the takedown stays open for it.
+  const c = await aFilm();
+  const d = await aFilm();
+  const code2 = "E" + String(5000 + ++n);
+  for (const f of [c, d]) ok(await films("POST", `/films/${f.film.id}/people`, { person_code: code2, name: "Kim Poe", role: "coach", release_on_file: true }, "lead"), "card");
+  const td2 = ok(await films("POST", "/people/pull", { person_code: code2, confirm: true }, "lead"), "pull").takedown;
+  const lines = (await pool.query("select id, film_id from studio_takedown_items where takedown_id = $1 order by film_id", [td2.id])).rows;
+  ok(await films("POST", `/takedown-items/${lines[0].id}/done`, {}, "lead"), "first line down");
+  const adding = await holding("insert into studio_takedown_items (takedown_id, film_id, what, label) values ($1, $2, 'other', 'a repost on a fan page')", [td2.id, lines[0].film_id]);
+  const last = settle(pool.query("select * from studio_takedown_item_done($1, 'lead@toj.test', null)", [lines[1].id]));
+  await wait(200);
+  await adding.done();
+  assert.ok((await last).ok);
+  const r = (await pool.query(`select (select count(*)::int from studio_takedown_items where takedown_id = $1 and done_at is null) as left_to_do,
+      (select closed_at is null from studio_takedowns where id = $1) as open`, [td2.id])).rows[0];
+  assert.deepEqual(r, { left_to_do: 1, open: true });
+  // The worker's safety net closes a takedown with nothing left on it.
+  await pool.query("update studio_takedown_items set done_at = now(), done_by = 'lead@toj.test' where takedown_id = $1 and done_at is null", [td2.id]);
+  await W.sweep({ sb });
+  assert.ok((await pool.query("select closed_at from studio_takedowns where id = $1", [td2.id])).rows[0].closed_at);
+});
+
+test("an upload that lands after a pull is swept from the pulled film's folder", async () => {
+  const { film, p, code } = await aFilm();
+  const file_name = `SW_COL_${film.athlete_id}_HERO_9x16_v01_20261117.mp4`;
+  const up = ok(await films("POST", `/films/${film.id}/cuts/upload`, { format: "hero", ratio: "9x16", version: 1, file_name, bytes: 4096, people: [p.id] }, "ed"), "upload link");
+  ok(await films("POST", "/people/pull", { person_code: code, confirm: true }, "lead"), "pull");
+  store.put(U.BUCKET, up.key, Buffer.alloc(4096, 1), "video/mp4");
+  refused(await films("POST", `/films/${film.id}/cuts`, { id: up.id, key: up.key, format: "hero", ratio: "9x16", version: 1, file_name, bytes: 4096, people: [p.id] }, "ed"), /closed|pulled consent/);
+  assert.ok(store.has(U.BUCKET, up.key));
+  await W.sweep({ sb });
+  assert.equal(store.has(U.BUCKET, up.key), false);
 });

@@ -66,17 +66,21 @@ function nameWords(people) {
   }
   return [...words];
 }
-function namesIn(textValue, people) {
+// { strong: true }: only what is certainly a name, a whole name of two words
+// or more, or one run together (the database's screen, migration 039). By
+// default a single word of a name counts too, which catches "Jamie's" but also
+// "will" for a Will: notes ask before they keep one of those.
+function namesIn(textValue, people, { strong = false } = {}) {
   // Apostrophes split words too, so a possessive ("Jamie's") is caught.
   const hay = " " + String(textValue || "").toLowerCase().replace(/[^\p{L}\p{M}]+/gu, " ") + " ";
   const letters = hay.replace(/ /g, "");
-  const found = new Set(nameWords(people).filter((w) => hay.includes(" " + w + " ")));
+  const found = new Set(strong ? [] : nameWords(people).filter((w) => hay.includes(" " + w + " ")));
   for (const p of people || []) {
     for (const full of [p.name, p.reviewer_name]) {
       const parts = nameParts(full);
       if (parts.length > 1 && hay.includes(" " + parts.join(" ") + " ")) found.add(parts.join(" "));
       const joined = parts.join("");
-      if (Array.from(joined).length >= 5 && letters.includes(joined)) found.add(joined);
+      if ((parts.length > 1 || !strong) && Array.from(joined).length >= 5 && letters.includes(joined)) found.add(joined);
     }
   }
   return [...found];

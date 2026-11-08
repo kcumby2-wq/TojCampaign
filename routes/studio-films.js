@@ -96,11 +96,29 @@ function withDb(fn) {
     return fn(req, res, sb);
   });
 }
+// Postgres ends a deadlock (two changes to one film in the same instant) by
+// rolling one back: that one is tried once more, after the other is through.
+const RETRY = new Set(["40P01", "40001"]);
 async function run(query) {
-  const { data, error } = await query;
+  let { data, error } = await query;
+  if (error && RETRY.has(error.code)) {
+    await new Promise((r) => setTimeout(r, 30 + Math.floor(Math.random() * 70)));
+    ({ data, error } = await query);
+  }
   if (error) throw Object.assign(new Error(error.message), { db: error });
   return data;
 }
+// The single-row writes a cascade can also reach go through the database's
+// film-first functions (migration 039's lock order).
+const rpcRows = async (sb, fn, args) => {
+  let { data, error } = await sb.rpc(fn, args);
+  if (error && RETRY.has(error.code)) {
+    await new Promise((r) => setTimeout(r, 30 + Math.floor(Math.random() * 70)));
+    ({ data, error } = await sb.rpc(fn, args));
+  }
+  if (error) throw Object.assign(new Error(error.message), { db: error });
+  return Array.isArray(data) ? data : data ? [data] : [];
+};
 // The database's refusals are written for people (migration 039): pass them
 // on. Anything else is a plain error.
 function refused(res, e) {
@@ -115,8 +133,17 @@ const bodyOf = H.bodyOf;
 const idOk = (s) => U.UUID.test(String(s || ""));
 // A note that names someone on the film's cards is refused: the history
 // keeps no names (the database leaves such a note out regardless).
-const named = (text, people) => !!text && U.namesIn(text, people).length > 0;
 const NOTE_HAS_NAME = { error: "invalid", fields: ["note_has_name"] };
+// A note's names: a whole name (or one run together) is refused; a single
+// word that's also a name ("Will", "Mark") is kept once the writer says it
+// isn't one here ({ names_ok: true }). null when the note can be kept.
+function noteNames(text, people, body) {
+  if (!text) return null;
+  if (U.namesIn(text, people, { strong: true }).length) return NOTE_HAS_NAME;
+  const words = U.namesIn(text, people);
+  if (words.length && !(body && body.names_ok === true)) return { error: "invalid", fields: ["note_may_have_name"], words: words.slice(0, 3) };
+  return null;
+}
 
 async function filmById(sb, id) {
   if (!idOk(id)) return null;
@@ -325,7 +352,8 @@ router.post("/films/:id/notes", member, withDb(async (req, res, sb) => {
   if (!film) return res.status(404).json({ error: "not_found" });
   const note = U.cleanNotes(bodyOf(req).note, 1000);
   if (!note) return res.status(400).json({ error: "invalid", fields: ["note"] });
-  if (named(note, await peopleOf(sb, film.id))) return res.status(400).json(NOTE_HAS_NAME);
+  const why = noteNames(note, await peopleOf(sb, film.id), bodyOf(req));
+  if (why) return res.status(400).json(why);
   try {
     await run(sb.from("studio_events").insert({ film_id: film.id, kind: "note", by_staff: me(req), note }));
     res.json({ ok: true });
@@ -372,8 +400,8 @@ router.patch("/films/:id/people/:pid", member, withDb(async (req, res, sb) => {
   if ((value.name || value.reviewer_name) && film.one_sentence && U.namesIn(film.one_sentence, [next]).length) return res.status(409).json({ error: "story_has_name" });
   if (!Object.keys(value).length) return res.json({ person: current });
   try {
-    const rows = await run(sb.from("studio_film_people").update({ ...value, changed_by: me(req), updated_at: nowIso() }).eq("id", current.id).eq("updated_at", body.seen).select());
-    if (!rows || !rows.length) return res.status(409).json({ error: "changed_meanwhile" });
+    const rows = await rpcRows(sb, "studio_card_save", { p_person: current.id, p_seen: body.seen, p_patch: value, p_by: me(req) });
+    if (!rows.length) return res.status(409).json({ error: "changed_meanwhile" });
     res.json({ person: { ...rows[0], gaps: U.clearanceGaps(rows[0]) }, uncleared: !!current.cleared_at && !rows[0].cleared_at });
   } catch (e) {
     refused(res, e);
@@ -383,9 +411,11 @@ router.patch("/films/:id/people/:pid", member, withDb(async (req, res, sb) => {
 router.delete("/films/:id/people/:pid", member, withDb(async (req, res, sb) => {
   const film = await filmById(sb, req.params.id);
   if (!film || !idOk(req.params.pid)) return res.status(404).json({ error: "not_found" });
+  const card = await run(sb.from("studio_film_people").select("id").eq("id", req.params.pid).eq("film_id", film.id).maybeSingle());
+  if (!card) return res.status(404).json({ error: "not_found" });
   try {
-    const rows = await run(sb.from("studio_film_people").delete().eq("id", req.params.pid).eq("film_id", film.id).select("id"));
-    if (!rows || !rows.length) return res.status(404).json({ error: "not_found" });
+    const rows = await rpcRows(sb, "studio_card_remove", { p_person: card.id });
+    if (!rows.length) return res.status(404).json({ error: "not_found" });
     res.json({ ok: true });
   } catch (e) {
     refused(res, e);
@@ -403,8 +433,8 @@ router.post("/films/:id/people/:pid/clear", member, withDb(async (req, res, sb) 
   const seen = bodyOf(req).seen;
   if (typeof seen !== "string") return res.status(400).json({ error: "invalid", fields: ["seen"] });
   try {
-    const rows = await run(sb.from("studio_film_people").update({ cleared_at: nowIso(), cleared_by: me(req), updated_at: nowIso() }).eq("id", person.id).eq("updated_at", seen).select());
-    if (!rows || !rows.length) return res.status(409).json({ error: "changed_meanwhile" });
+    const rows = await rpcRows(sb, "studio_card_clear", { p_person: person.id, p_seen: seen, p_by: me(req) });
+    if (!rows.length) return res.status(409).json({ error: "changed_meanwhile" });
     res.json({ person: rows[0] });
   } catch (e) {
     refused(res, e);
@@ -423,7 +453,8 @@ router.post("/people/pull", member, withDb(async (req, res, sb) => {
   const note = U.cleanNotes(body.note, 500) || null;
   if (note) {
     const cards = (await run(sb.from("studio_film_people").select("name,reviewer_name").eq("person_code", code))) || [];
-    if (named(note, cards)) return res.status(400).json(NOTE_HAS_NAME);
+    const why = noteNames(note, cards, body);
+    if (why) return res.status(400).json(why);
   }
   const out = await pullConsent(sb, { code, by: me(req), source: "staff", note });
   if (out.error) return refused(res, out.error);
@@ -460,7 +491,8 @@ router.post("/films/:id/steps/:step/done", member, withDb(async (req, res, sb) =
   if (!canFinish(req, film, req.params.step)) return res.status(403).json({ error: "not_your_step" });
   const body = bodyOf(req);
   const patch = { status: "done", done_by: me(req), note: U.cleanNotes(body.note, 500) || null, updated_at: nowIso() };
-  if (named(patch.note, await peopleOf(sb, film.id))) return res.status(400).json(NOTE_HAS_NAME);
+  const why = noteNames(patch.note, await peopleOf(sb, film.id), body);
+  if (why) return res.status(400).json(why);
   if (req.params.step === "speaker_review") {
     // The cuts that go on: the rights check and the sign-off are for these,
     // and only these are posted.
@@ -470,8 +502,8 @@ router.post("/films/:id/steps/:step/done", member, withDb(async (req, res, sb) =
     patch.cut_ids = list;
   }
   try {
-    const rows = await run(sb.from("studio_film_steps").update(patch).eq("film_id", film.id).eq("step", req.params.step).eq("status", "todo").select());
-    if (!rows || !rows.length) return res.status(409).json({ error: "already_done" });
+    const rows = await rpcRows(sb, "studio_step_done", { p_film: film.id, p_step: req.params.step, p_by: me(req), p_note: patch.note, p_cut_ids: patch.cut_ids || null });
+    if (!rows.length) return res.status(409).json({ error: "already_done" });
     if (req.params.step === "publish") await T.logActivity(me(req), "published_film", `${film.athlete_id} ${film.format}`, { film_id: film.id });
     res.json({ step: rows[0] });
   } catch (e) {
@@ -486,10 +518,11 @@ router.post("/films/:id/second-yes", member, withDb(async (req, res, sb) => {
   if (!film.second_yes_label) return res.status(409).json({ error: "no_second_yes" });
   const note = U.clean(bodyOf(req).note, 300);
   if (!note) return res.status(400).json({ error: "invalid", fields: ["note"] });
-  if (named(note, await peopleOf(sb, film.id))) return res.status(400).json(NOTE_HAS_NAME);
+  const why = noteNames(note, await peopleOf(sb, film.id), bodyOf(req));
+  if (why) return res.status(400).json(why);
   try {
-    const rows = await run(sb.from("studio_film_steps").update({ second_yes_by: film.second_yes_label, second_yes_note: note, updated_at: nowIso() }).eq("film_id", film.id).eq("step", "final_signoff").eq("status", "todo").select());
-    if (!rows || !rows.length) return res.status(409).json({ error: "already_done" });
+    const rows = await rpcRows(sb, "studio_second_yes", { p_film: film.id, p_by: film.second_yes_label, p_note: note });
+    if (!rows.length) return res.status(409).json({ error: "already_done" });
     res.json({ step: rows[0] });
   } catch (e) {
     refused(res, e);
@@ -502,7 +535,8 @@ router.post("/films/:id/steps/:step/reopen", member, withDb(async (req, res, sb)
   if (!film || !F.STEP_KEYS.includes(req.params.step)) return res.status(404).json({ error: "not_found" });
   const note = U.cleanNotes(bodyOf(req).note, 500);
   if (!note) return res.status(400).json({ error: "invalid", fields: ["note"] });
-  if (named(note, await peopleOf(sb, film.id))) return res.status(400).json(NOTE_HAS_NAME);
+  const why = noteNames(note, await peopleOf(sb, film.id), bodyOf(req));
+  if (why) return res.status(400).json(why);
   try {
     await run(sb.rpc("studio_film_reopen", { p_film: film.id, p_step: req.params.step, p_by: me(req), p_note: note }));
     res.json({ ok: true });
@@ -641,8 +675,8 @@ router.post("/reviews/:rid/cancel-link", member, withDb(async (req, res, sb) => 
   if (!isProducer(req)) return res.status(403).json({ error: "producer_only" });
   if (!idOk(req.params.rid)) return res.status(404).json({ error: "not_found" });
   try {
-    const rows = await run(sb.from("studio_reviews").update({ link_hash: null, expires_at: null, changed_by: me(req), updated_at: nowIso() }).eq("id", req.params.rid).not("link_hash", "is", null).is("decision", null).select());
-    if (!rows || !rows.length) return res.status(409).json({ error: "no_live_link" });
+    const rows = await rpcRows(sb, "studio_review_cancel", { p_review: req.params.rid, p_by: me(req) });
+    if (!rows.length) return res.status(409).json({ error: "no_live_link" });
     res.json({ review: reviewView(rows[0]) });
   } catch (e) {
     refused(res, e);
@@ -653,8 +687,8 @@ router.post("/reviews/:rid/withdraw", member, withDb(async (req, res, sb) => {
   if (!isProducer(req)) return res.status(403).json({ error: "producer_only" });
   if (!idOk(req.params.rid)) return res.status(404).json({ error: "not_found" });
   try {
-    const rows = await run(sb.from("studio_reviews").update({ withdrawn_at: nowIso(), withdrawn_by: me(req), updated_at: nowIso() }).eq("id", req.params.rid).eq("decision", "approved").is("withdrawn_at", null).select());
-    if (!rows || !rows.length) return res.status(409).json({ error: "not_approved" });
+    const rows = await rpcRows(sb, "studio_review_withdraw", { p_review: req.params.rid, p_by: me(req) });
+    if (!rows.length) return res.status(409).json({ error: "not_approved" });
     res.json({ review: reviewView(rows[0]) });
   } catch (e) {
     refused(res, e);
@@ -686,8 +720,8 @@ router.post("/posts/:pid/removed", member, withDb(async (req, res, sb) => {
   if (!isProducer(req)) return res.status(403).json({ error: "producer_only" });
   if (!idOk(req.params.pid)) return res.status(404).json({ error: "not_found" });
   try {
-    const rows = await run(sb.from("studio_film_posts").update({ removed_at: nowIso(), removed_by: me(req) }).eq("id", req.params.pid).is("removed_at", null).select());
-    if (!rows || !rows.length) return res.status(409).json({ error: "already_removed" });
+    const rows = await rpcRows(sb, "studio_post_remove", { p_post: req.params.pid, p_by: me(req) });
+    if (!rows.length) return res.status(409).json({ error: "already_removed" });
     res.json({ post: rows[0] });
   } catch (e) {
     refused(res, e);
@@ -722,7 +756,8 @@ router.post("/takedowns/:tid/items", member, withDb(async (req, res, sb) => {
   if (!td) return res.status(404).json({ error: "not_found" });
   const inFilm = await run(sb.from("studio_film_people").select("id").eq("film_id", body.film_id).eq("person_code", td.person_code).limit(1));
   if (!inFilm || !inFilm.length) return res.status(400).json({ error: "invalid", fields: ["film_id"] });
-  if (named(label, await peopleOf(sb, body.film_id))) return res.status(400).json({ error: "invalid", fields: ["label_has_name"] });
+  const why = noteNames(label, await peopleOf(sb, body.film_id), body);
+  if (why) return res.status(400).json(why.fields[0] === "note_has_name" ? { error: "invalid", fields: ["label_has_name"] } : why);
   try {
     const item = await run(sb.from("studio_takedown_items").insert({ takedown_id: td.id, film_id: body.film_id, what: "other", label }).select().single());
     res.json({ item });
@@ -738,11 +773,12 @@ router.post("/takedown-items/:iid/done", member, withDb(async (req, res, sb) => 
   if (note) {
     const item = await run(sb.from("studio_takedown_items").select("film_id").eq("id", req.params.iid).maybeSingle());
     if (!item) return res.status(404).json({ error: "not_found" });
-    if (named(note, await peopleOf(sb, item.film_id))) return res.status(400).json(NOTE_HAS_NAME);
+    const why = noteNames(note, await peopleOf(sb, item.film_id), bodyOf(req));
+    if (why) return res.status(400).json(why);
   }
   try {
-    const rows = await run(sb.from("studio_takedown_items").update({ done_by: me(req), done_at: nowIso(), note }).eq("id", req.params.iid).is("done_at", null).select());
-    if (!rows || !rows.length) return res.status(409).json({ error: "already_done" });
+    const rows = await rpcRows(sb, "studio_takedown_item_done", { p_item: req.params.iid, p_by: me(req), p_note: note });
+    if (!rows.length) return res.status(409).json({ error: "already_done" });
     res.json({ item: rows[0] });
   } catch (e) {
     refused(res, e);

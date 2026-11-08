@@ -32,6 +32,19 @@ function fakeStorage() {
       calls.push(["upload", key]);
       return { data: { path: key }, error: null };
     },
+    // A folder's entries, as Supabase lists them: files carry an id, folders don't.
+    async list(prefix = "", opts = {}) {
+      const base = full(bucket, prefix.replace(/\/+$/, "")) + "/";
+      const seen = new Map();
+      for (const k of objects.keys()) {
+        if (!k.startsWith(base)) continue;
+        const rest = k.slice(base.length);
+        const name = rest.split("/")[0];
+        if (!seen.has(name)) seen.set(name, rest.includes("/") ? { name, id: null } : { name, id: "obj-" + name });
+      }
+      calls.push(["list", prefix]);
+      return { data: [...seen.values()].slice(0, opts.limit || 100), error: null };
+    },
     async remove(keys) {
       for (const k of keys) objects.delete(full(bucket, k));
       calls.push(["remove", keys]);

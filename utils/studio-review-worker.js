@@ -41,10 +41,34 @@ class DbError extends Error {
     this.db = error;
   }
 }
+// A deadlock (the producer changing the film in the same instant) is ended
+// by rolling one side back: that side is tried once more.
 async function q(query) {
-  const { data, error } = await query;
+  let { data, error } = await query;
+  if (error && (error.code === "40P01" || error.code === "40001")) {
+    await new Promise((r) => setTimeout(r, 30 + Math.floor(Math.random() * 70)));
+    ({ data, error } = await query);
+  }
   if (error) throw new DbError(error);
   return data;
+}
+
+// Files made for a cut that didn't make it: removed now, or, if storage says
+// no, listed for the next pass.
+async function takeBack(d, keys) {
+  if (!keys.length) return;
+  let ok = false;
+  try {
+    const { error } = await d.sb.storage.from(U.BUCKET).remove(keys);
+    ok = !error;
+  } catch (e) {
+    ok = false;
+  }
+  if (!ok) {
+    for (const key of keys) {
+      await d.sb.from("studio_storage_removals").upsert({ key, reason: "left_over", done_at: null }, { onConflict: "key" }).then(() => {}, () => {});
+    }
+  }
 }
 
 async function download(d, key, file) {
@@ -109,11 +133,11 @@ async function finish(d, row, keys, patch) {
   try {
     done = await q(d.sb.from("studio_film_cuts").update({ ...patch, status: "ready", error: null, updated_at: d.now().toISOString() }).eq("id", row.id).eq("status", "processing").select("id"));
   } catch (e) {
-    await d.sb.storage.from(U.BUCKET).remove(keys).catch(() => {});
+    await takeBack(d, keys);
     if (refusedClosed(e)) throw closed();
     throw e;
   }
-  if (!(done || []).length) await d.sb.storage.from(U.BUCKET).remove(keys).catch(() => {});
+  if (!(done || []).length) await takeBack(d, keys);
   return !!(done && done.length);
 }
 
@@ -144,7 +168,7 @@ async function processOne(row, d) {
       await upload(d, ok, pic, "image/jpeg");
       keys.push(ok);
     } catch (e) {
-      await d.sb.storage.from(U.BUCKET).remove(keys.concat([pk, ok])).catch(() => {});
+      await takeBack(d, [pk, ok]);
       throw e;
     }
     const saved = await finish(d, row, [pk, ok], { sha256: sha, preview_sha256: copySha, bytes, duration_ms: info.duration_ms, width: info.width, height: info.height, preview_key: pk, poster_key: ok });
@@ -206,14 +230,57 @@ async function claim(d, skip = new Set()) {
   return null;
 }
 
+// A pulled film's folder is emptied on every pass for 3 hours after the
+// pull: an upload link made before it (they last 2 hours) can still land a
+// file that no row lists.
+const PULLED_SWEEP_MS = 3 * 60 * 60 * 1000;
+async function listAll(d, prefix, depth = 0) {
+  if (depth > 4) return [];
+  const { data, error } = await d.sb.storage.from(U.BUCKET).list(prefix, { limit: 1000 });
+  if (error || !data) return [];
+  const out = [];
+  for (const e of data) {
+    const key = `${prefix}/${e.name}`;
+    if (e.id) out.push(key);
+    else out.push(...(await listAll(d, key, depth + 1)));
+  }
+  return out;
+}
+async function sweepPulled(d) {
+  const since = new Date(d.now().getTime() - PULLED_SWEEP_MS).toISOString();
+  const films = (await q(d.sb.from("studio_films").select("id").gte("pulled_at", since).limit(50))) || [];
+  let removed = 0;
+  for (const f of films) {
+    const keys = await listAll(d, `films/${f.id}`);
+    for (let i = 0; i < keys.length; i += 100) {
+      const part = keys.slice(i, i + 100);
+      const { error } = await d.sb.storage.from(U.BUCKET).remove(part);
+      if (!error) removed += part.length;
+    }
+  }
+  return removed;
+}
+
 // The files the database listed for removal (a deleted cut's, a pulled
-// film's): removed, and marked done; what storage refuses is tried again on
-// the next pass. Returns how many were removed.
+// film's, the worker's own leftovers): removed, and marked done; what storage
+// refuses is tried again on the next pass. Then a pulled film's folder, and
+// takedowns with nothing left on them closed. Returns how many were removed.
 async function sweep(over = {}) {
   const d = defaults(over);
   if (!d.sb || !d.sb.storage) return { removed: 0, left: 0 };
+  let swept = 0;
+  try {
+    swept = await sweepPulled(d);
+  } catch (e) {
+    console.warn("[studio] pulled-film sweep failed:", e && e.message);
+  }
+  try {
+    await q(d.sb.rpc("studio_close_finished_takedowns", {}));
+  } catch (e) {
+    console.warn("[studio] closing finished takedowns failed:", e && e.message);
+  }
   const todo = (await q(d.sb.from("studio_storage_removals").select("key,tries").is("done_at", null).order("requested_at", { ascending: true }).limit(500))) || [];
-  if (!todo.length) return { removed: 0, left: 0 };
+  if (!todo.length) return { removed: swept, left: 0 };
   const keys = todo.map((x) => x.key);
   const at = d.now().toISOString();
   let failed = null;
@@ -226,12 +293,12 @@ async function sweep(over = {}) {
   if (failed) {
     for (const x of todo) await d.sb.from("studio_storage_removals").update({ tries: Math.min(1e6, (x.tries || 0) + 1), last_error: String(failed).slice(0, 300) }).eq("key", x.key).is("done_at", null);
     console.warn(`[studio] removing ${keys.length} file(s) failed; tried again next pass:`, failed);
-    return { removed: 0, left: keys.length };
+    return { removed: swept, left: keys.length };
   }
   for (let i = 0; i < keys.length; i += 100) {
     await q(d.sb.from("studio_storage_removals").update({ done_at: at, last_error: null }).in("key", keys.slice(i, i + 100)).is("done_at", null).select("key"));
   }
-  return { removed: keys.length, left: 0 };
+  return { removed: swept + keys.length, left: 0 };
 }
 
 function defaults(over = {}) {

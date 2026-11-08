@@ -124,7 +124,14 @@ router.post("/decide", safe(async (req, res) => {
   const sb = getSupabase();
   if (!sb) return res.status(503).json({ error: "storage_unavailable" });
   // One statement: the link is checked, burned and the decision recorded together.
-  const { data, error } = await sb.rpc("studio_review_decide", { p_proof: U.sha256(body.token), p_decision: decision, p_name: name, p_note: note || null });
+  // A deadlock (the producer changing the film in the same instant) is ended
+  // by rolling one side back: the decision is tried once more.
+  const args = { p_proof: U.sha256(body.token), p_decision: decision, p_name: name, p_note: note || null };
+  let { data, error } = await sb.rpc("studio_review_decide", args);
+  if (error && (error.code === "40P01" || error.code === "40001")) {
+    await new Promise((r) => setTimeout(r, 30 + Math.floor(Math.random() * 70)));
+    ({ data, error } = await sb.rpc("studio_review_decide", args));
+  }
   if (error) {
     console.error("[studio-review] decision not recorded:", error.code || "");
     return res.status(503).json({ error: "storage_unavailable" });

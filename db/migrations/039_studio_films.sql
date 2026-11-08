@@ -23,7 +23,12 @@
 --     are for those cuts, and only those cuts are posted, with every speaker's
 --     yes and everyone in them cleared.
 --   * Writes to a film take the film's row lock first, so two changes that
---     are each allowed alone can't both land (a post during a pull).
+--     are each allowed alone can't both land (a post during a pull). The
+--     order is always: the person code (an advisory lock), then films in id
+--     order, then a film's rows, then its takedown. A change to one row that a
+--     cascade can also reach goes through a function here that locks the film
+--     first (studio_card_save, studio_step_done, studio_review_cancel, ...),
+--     so a single-row update never holds its row while waiting on the film.
 --   * The clip log: every cut lists who is in it. A pulled consent pulls the
 --     film: every film the person is in stops, every live post of those films
 --     goes on a takedown list, and the 72-hour clock starts.
@@ -308,7 +313,7 @@ alter table public.studio_takedown_items enable row level security;
 -- worker.js) instead of forgotten.
 create table if not exists public.studio_storage_removals (
   key text primary key check (char_length(key) between 1 and 300),
-  reason text not null check (reason in ('cut_deleted', 'consent_pulled')),
+  reason text not null check (reason in ('cut_deleted', 'consent_pulled', 'left_over')),
   requested_at timestamptz not null default now(),
   done_at timestamptz,
   tries int not null default 0 check (tries >= 0),
@@ -368,10 +373,11 @@ language sql stable set search_path = '' as $$
   )
 $$;
 
--- Whether a note names someone on the film's cards, as utils/studio-films.js
--- namesIn does: a word of 3 or more letters of a name or a reviewer's name,
--- the whole name, or the name run together. Such a note stays out of the
--- history.
+-- Whether a note names someone on the film's cards for certain: their whole
+-- name (or their reviewer's), or the name run together ("JamieRivers"), as
+-- utils/studio-films.js namesIn does with { strong: true }. Such a note stays
+-- out of the history. A single word that's also a name ("Will", "Mark") is
+-- the app's to ask about, not the database's to refuse.
 create or replace function public.studio_names_in(p_film uuid, p_text text) returns boolean
 language sql stable set search_path = '' as $$
   with hay as (
@@ -385,9 +391,8 @@ language sql stable set search_path = '' as $$
   select p_text is not null and p_film is not null and exists (
     select 1 from names, hay
      where (names.spaced like '% %' and hay.words like '% ' || names.spaced || ' %')
-        or (char_length(replace(names.spaced, ' ', '')) >= 5 and hay.letters like '%' || replace(names.spaced, ' ', '') || '%')
-        or exists (select 1 from regexp_split_to_table(names.spaced, ' ') as w(word)
-                    where char_length(w.word) >= 3 and hay.words like '% ' || w.word || ' %'))
+        or (names.spaced like '% %' and char_length(replace(names.spaced, ' ', '')) >= 5
+            and hay.letters like '%' || replace(names.spaced, ' ', '') || '%'))
 $$;
 
 -- Every file a cut keeps in storage, made or not yet.
@@ -654,7 +659,11 @@ begin
     end if;
     return old;
   end if;
-  -- The film's row lock first: one change to a film at a time.
+  -- A new card takes its person code's lock first (a pull of that code takes
+  -- it too), then the film's row lock: one change to a film at a time.
+  if tg_op = 'INSERT' then
+    perform pg_advisory_xact_lock(hashtextextended('studio.code:' || new.person_code, 0));
+  end if;
   select * into f from public.studio_films where id = new.film_id for update;
   if tg_op = 'INSERT' then
     if new.cleared_at is not null or new.cleared_by is not null or new.consent_pulled_at is not null then
@@ -1019,8 +1028,10 @@ begin
   if tg_op = 'DELETE' then
     raise exception 'a takedown item is kept';
   end if;
-  -- The film's row lock first: one change to a film at a time.
+  -- The film's row lock first: one change to a film at a time; then the
+  -- takedown's, so "the last line closes it" sees every other line.
   perform 1 from public.studio_films where id = new.film_id for update;
+  perform 1 from public.studio_takedowns where id = new.takedown_id for update;
   if tg_op = 'INSERT' then
     if new.done_at is not null then
       raise exception 'a takedown item starts to do';
@@ -1096,7 +1107,7 @@ begin
   update public.studio_reviews set link_hash = null, expires_at = null, changed_by = new.pulled_by, updated_at = now()
    where film_id = new.film_id and link_hash is not null;
   select t.id into td from public.studio_takedowns t where t.person_code = new.person_code and t.closed_at is null
-   order by t.requested_at desc limit 1;
+   order by t.requested_at desc limit 1 for update;
   if td is null then
     insert into public.studio_takedowns (person_code, source, requested_by, note)
     values (new.person_code, coalesce(nullif(current_setting('studio.pull_source', true), ''), 'staff'), new.pulled_by, new.pulled_note)
@@ -1155,6 +1166,9 @@ create or replace function public.studio_tool_approvals_after() returns trigger
 language plpgsql set search_path = '' as $$
 begin
   if new.tool = 'review_copies' and old.is_on and not new.is_on then
+    perform 1 from public.studio_films f
+     where f.id in (select r.film_id from public.studio_reviews r where r.link_hash is not null)
+     order by f.id for update;
     update public.studio_reviews set link_hash = null, expires_at = null, changed_by = new.decided_by, updated_at = now()
      where link_hash is not null;
   end if;
@@ -1416,6 +1430,11 @@ create or replace function public.studio_review_decide(p_proof text, p_decision 
 returns table (review_id uuid)
 language sql volatile set search_path = '' as $$
   select set_config('studio.review_proof', coalesce(p_proof, ''), true);
+  -- The film first (see the lock order at the top).
+  select 1 from public.studio_films f
+   where f.id = (select r.film_id from public.studio_reviews r
+                  where r.link_hash = encode(sha256(convert_to(coalesce(p_proof, ''), 'UTF8')), 'hex'))
+     for update;
   update public.studio_reviews r
      set decision = p_decision,
          decided_name = btrim(p_name),
@@ -1451,8 +1470,10 @@ begin
     raise exception 'who pulled it';
   end if;
   perform set_config('studio.pull_source', p_source, true);
-  -- Every film of the code, locked in one order, so two pulls never wait on
-  -- each other the wrong way round.
+  -- The code's lock first, so a card being added for it waits for the pull
+  -- (and is then refused); then every film of the code, locked in one order,
+  -- so two pulls never wait on each other the wrong way round.
+  perform pg_advisory_xact_lock(hashtextextended('studio.code:' || code, 0));
   perform 1 from public.studio_films f
    where f.id in (select x.film_id from public.studio_film_people x where x.person_code = code and x.consent_pulled_at is null)
    order by f.id for update;
@@ -1472,6 +1493,7 @@ declare
   target smallint;
   s record;
 begin
+  perform 1 from public.studio_films where id = p_film for update;
   select position into target from public.studio_film_steps where film_id = p_film and step = p_step;
   if target is null then
     raise exception 'no such step';
@@ -1480,6 +1502,160 @@ begin
     update public.studio_film_steps set status = 'todo', changed_by = p_by, note = p_note, updated_at = now()
      where film_id = p_film and step = s.step;
   end loop;
+end $$;
+
+-- The single-row writes a cascade can also reach (see the lock order at the
+-- top): each locks the film first, then makes the change. They return the
+-- changed row, or nothing if it didn't match (already done, or changed
+-- meanwhile).
+create or replace function public.studio_card_save(p_person uuid, p_seen timestamptz, p_patch jsonb, p_by text)
+returns setof public.studio_film_people
+language plpgsql volatile set search_path = '' as $$
+declare
+  fid uuid := (select film_id from public.studio_film_people where id = p_person);
+begin
+  if fid is null then return; end if;
+  perform 1 from public.studio_films where id = fid for update;
+  return query
+  update public.studio_film_people x set
+    name = case when p_patch ? 'name' then p_patch->>'name' else x.name end,
+    role = case when p_patch ? 'role' then p_patch->>'role' else x.role end,
+    is_minor = case when p_patch ? 'is_minor' then (p_patch->>'is_minor')::boolean else x.is_minor end,
+    texas_youth = case when p_patch ? 'texas_youth' then (p_patch->>'texas_youth')::boolean else x.texas_youth end,
+    speaker = case when p_patch ? 'speaker' then (p_patch->>'speaker')::boolean else x.speaker end,
+    release_on_file = case when p_patch ? 'release_on_file' then (p_patch->>'release_on_file')::boolean else x.release_on_file end,
+    covers = case when p_patch ? 'covers' then p_patch->'covers' else x.covers end,
+    reviewer_relation = case when p_patch ? 'reviewer_relation' then p_patch->>'reviewer_relation' else x.reviewer_relation end,
+    reviewer_name = case when p_patch ? 'reviewer_name' then p_patch->>'reviewer_name' else x.reviewer_name end,
+    reviewer_email = case when p_patch ? 'reviewer_email' then p_patch->>'reviewer_email' else x.reviewer_email end,
+    changed_by = p_by, updated_at = now()
+   where x.id = p_person and x.updated_at = p_seen
+  returning x.*;
+end $$;
+
+create or replace function public.studio_card_clear(p_person uuid, p_seen timestamptz, p_by text)
+returns setof public.studio_film_people
+language plpgsql volatile set search_path = '' as $$
+declare
+  fid uuid := (select film_id from public.studio_film_people where id = p_person);
+begin
+  if fid is null then return; end if;
+  perform 1 from public.studio_films where id = fid for update;
+  return query
+  update public.studio_film_people x set cleared_at = now(), cleared_by = p_by, updated_at = now()
+   where x.id = p_person and x.updated_at = p_seen
+  returning x.*;
+end $$;
+
+create or replace function public.studio_card_remove(p_person uuid)
+returns setof uuid
+language plpgsql volatile set search_path = '' as $$
+declare
+  fid uuid := (select film_id from public.studio_film_people where id = p_person);
+begin
+  if fid is null then return; end if;
+  perform 1 from public.studio_films where id = fid for update;
+  return query delete from public.studio_film_people x where x.id = p_person returning x.id;
+end $$;
+
+create or replace function public.studio_step_done(p_film uuid, p_step text, p_by text, p_note text, p_cut_ids uuid[])
+returns setof public.studio_film_steps
+language plpgsql volatile set search_path = '' as $$
+begin
+  perform 1 from public.studio_films where id = p_film for update;
+  return query
+  update public.studio_film_steps s set status = 'done', done_by = p_by, note = p_note, cut_ids = p_cut_ids, updated_at = now()
+   where s.film_id = p_film and s.step = p_step and s.status = 'todo'
+  returning s.*;
+end $$;
+
+create or replace function public.studio_second_yes(p_film uuid, p_by text, p_note text)
+returns setof public.studio_film_steps
+language plpgsql volatile set search_path = '' as $$
+begin
+  perform 1 from public.studio_films where id = p_film for update;
+  return query
+  update public.studio_film_steps s set second_yes_by = p_by, second_yes_note = p_note, updated_at = now()
+   where s.film_id = p_film and s.step = 'final_signoff' and s.status = 'todo'
+  returning s.*;
+end $$;
+
+create or replace function public.studio_review_cancel(p_review uuid, p_by text)
+returns setof public.studio_reviews
+language plpgsql volatile set search_path = '' as $$
+declare
+  fid uuid := (select film_id from public.studio_reviews where id = p_review);
+begin
+  if fid is null then return; end if;
+  perform 1 from public.studio_films where id = fid for update;
+  return query
+  update public.studio_reviews r set link_hash = null, expires_at = null, changed_by = p_by, updated_at = now()
+   where r.id = p_review and r.link_hash is not null and r.decision is null
+  returning r.*;
+end $$;
+
+create or replace function public.studio_review_withdraw(p_review uuid, p_by text)
+returns setof public.studio_reviews
+language plpgsql volatile set search_path = '' as $$
+declare
+  fid uuid := (select film_id from public.studio_reviews where id = p_review);
+begin
+  if fid is null then return; end if;
+  perform 1 from public.studio_films where id = fid for update;
+  return query
+  update public.studio_reviews r set withdrawn_at = now(), withdrawn_by = p_by, updated_at = now()
+   where r.id = p_review and r.decision = 'approved' and r.withdrawn_at is null
+  returning r.*;
+end $$;
+
+create or replace function public.studio_post_remove(p_post uuid, p_by text)
+returns setof public.studio_film_posts
+language plpgsql volatile set search_path = '' as $$
+declare
+  fid uuid := (select film_id from public.studio_film_posts where id = p_post);
+begin
+  if fid is null then return; end if;
+  perform 1 from public.studio_films where id = fid for update;
+  return query
+  update public.studio_film_posts po set removed_at = now(), removed_by = p_by
+   where po.id = p_post and po.removed_at is null
+  returning po.*;
+end $$;
+
+create or replace function public.studio_takedown_item_done(p_item uuid, p_by text, p_note text)
+returns setof public.studio_takedown_items
+language plpgsql volatile set search_path = '' as $$
+declare
+  it record;
+begin
+  select film_id, takedown_id into it from public.studio_takedown_items where id = p_item;
+  if it.film_id is null then return; end if;
+  perform 1 from public.studio_films where id = it.film_id for update;
+  perform 1 from public.studio_takedowns where id = it.takedown_id for update;
+  return query
+  update public.studio_takedown_items i set done_at = now(), done_by = p_by, note = p_note
+   where i.id = p_item and i.done_at is null
+  returning i.*;
+end $$;
+
+-- A takedown with nothing left to do closes (the last line usually closes it;
+-- this is the worker's safety net). Returns how many it closed.
+create or replace function public.studio_close_finished_takedowns()
+returns int
+language plpgsql volatile set search_path = '' as $$
+declare
+  n int;
+begin
+  with done as (
+    select t.id from public.studio_takedowns t
+     where t.closed_at is null
+       and not exists (select 1 from public.studio_takedown_items i where i.takedown_id = t.id and i.done_at is null)
+     order by t.id
+       for update of t skip locked
+  )
+  update public.studio_takedowns t set closed_at = now(), closed_by = 'the app' from done where t.id = done.id;
+  get diagnostics n = row_count;
+  return n;
 end $$;
 
 -- Only the server (service role) uses these.
@@ -1497,6 +1673,11 @@ begin
     'public.studio_film_posts_after()', 'public.studio_log()', 'public.studio_events_gate()',
     'public.studio_names_in(uuid, text)', 'public.studio_cut_files(public.studio_film_cuts)', 'public.studio_film_steps_after()',
     'public.studio_film_cuts_deleted()', 'public.studio_tool_approvals_after()', 'public.studio_keep()',
+    'public.studio_card_save(uuid, timestamptz, jsonb, text)', 'public.studio_card_clear(uuid, timestamptz, text)',
+    'public.studio_card_remove(uuid)', 'public.studio_step_done(uuid, text, text, text, uuid[])',
+    'public.studio_second_yes(uuid, text, text)', 'public.studio_review_cancel(uuid, text)',
+    'public.studio_review_withdraw(uuid, text)', 'public.studio_post_remove(uuid, text)',
+    'public.studio_takedown_item_done(uuid, text, text)', 'public.studio_close_finished_takedowns()',
     'public.studio_review_for_reviewer(text)', 'public.studio_review_decide(text, text, text, text)',
     'public.studio_pull_consent(text, text, text, text)', 'public.studio_film_reopen(uuid, text, text, text)'] loop
     execute format('revoke all on function %s from public', fn);
@@ -1529,6 +1710,10 @@ begin
     -- Called by the gates and the cascade, which run as the caller.
     execute 'grant execute on function public.studio_names_in(uuid, text) to service_role';
     execute 'grant execute on function public.studio_cut_files(public.studio_film_cuts) to service_role';
+    execute 'grant execute on function public.studio_card_save(uuid, timestamptz, jsonb, text), public.studio_card_clear(uuid, timestamptz, text), '
+      'public.studio_card_remove(uuid), public.studio_step_done(uuid, text, text, text, uuid[]), public.studio_second_yes(uuid, text, text), '
+      'public.studio_review_cancel(uuid, text), public.studio_review_withdraw(uuid, text), public.studio_post_remove(uuid, text), '
+      'public.studio_takedown_item_done(uuid, text, text), public.studio_close_finished_takedowns() to service_role';
   end if;
 end $$;
 
