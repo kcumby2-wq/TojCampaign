@@ -523,7 +523,9 @@ test("a tag or a Title Case line reads each word as a sentence start; a whole na
   const mids = [{ person_code: "DD1", name: "Dan Day", is_minor: true }, { person_code: "RH1", name: "Ray Hill", is_minor: true },
     { person_code: "CY1", name: "Chase Young", is_minor: true }, { person_code: "FM1", name: "Faith Moore", is_minor: true }];
   for (const [t, want] of [["#GameDayGrind", "asked day"], ["#UpTheHill", "asked hill"], ["#StayYoung", "asked young"], ["#KeepTheFaith", "asked faith"],
-    ["Game Day Grind", "asked day"], ["Keep the Faith", "asked faith"], ["GAME DAY GRIND", "asked day"], ["game day grind", "passes"],
+    ["Game Day Grind", "asked day"], ["GAME DAY GRIND", "asked day"], ["game day grind", "passes"],
+    // A Title Case line that ends on a minor's name is a shout-out: the name.
+    ["Keep the Faith", "refused"], ["Way To Go Ray", "refused"], ["Proud Of You Chase", "refused"],
     // A short line, a capital mid-sentence and a whole name keep their reading.
     ["Thanks Ray", "refused"], ["We ran it with Faith", "refused"], ["#RayHillStrong", "refused"], ["Go Ray Hill Go", "refused"]]) {
     assert.equal(judge(t, mids), want, t);
@@ -536,6 +538,10 @@ test("a tag or a Title Case line reads each word as a sentence start; a whole na
   for (const t of ["#gojordankidd", "#believeinjordankidd", "#gohopefield", "#letsgohopefield", "#teamtyng"]) {
     assert.equal(judge(t, whole, new Set([t])), "refused", t);
   }
+  // One word of a minor's name run into a tag or a word: the name where a
+  // word starts or ends; an everyday one is asked about.
+  for (const t of ["#jordanstrong", "#teamjordan", "#prayforjordan", "#kiddstrong", "#JORDANSTRONG", "jordanstrong forever"]) assert.equal(judge(t, whole), "refused", t);
+  assert.equal(judge("#hopestrong", whole), "asked hope");
   assert.equal(judge("#SpeedLimit", whole), "asked #speedlimit");
   assert.equal(judge("#WalkOff", whole), "asked #walkoff");
   assert.equal(judge("#WalkOff", whole, new Set(["#walkoff"])), "passes");
@@ -549,8 +555,12 @@ test("the phone keeps an ordinary shot line, and a place's own name stays online
     "Medal around the neck", "Ice bath after practice", "Weight room, the bar loading", "Running the stadium stairs", "Wide on the empty field at sunrise"]) {
     assert.equal(U.offlineSafe(line, people, { places }), true, line);
   }
-  for (const line of ["westlake gym at dawn", "Riverside run at dawn", "pickup on oak, then the drive", "the rowe driveway", "kidd laces up", "Dana brings the sled"]) {
+  for (const line of ["westlake gym at dawn", "Riverside run at dawn", "pickup on oak, then the drive", "the rowe driveway", "kidd laces up", "Dana brings the sled", "jordanstrong at dawn"]) {
     assert.equal(U.offlineSafe(line, people, { places }), false, line);
+  }
+  // A place that's only ordinary words keeps them all.
+  for (const [place, line] of [["Park High School", "park high school at dawn"], ["Court Street Park", "court street park, wide"], ["Home Field", "home field lights"]]) {
+    assert.equal(U.offlineSafe(line, people, { places: [place] }), false, place);
   }
 });
 
