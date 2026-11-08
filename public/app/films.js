@@ -387,7 +387,7 @@
         if (!text) return T().toast("Write the note first.");
         if (at === undefined) return T().toast("Write the timecode as 0:12, or leave it empty.");
         b.disabled = true;
-        try { await t.post("/api/studio-films/films/" + f.id + "/cut-notes", { cut_id: cid, at_ms: at, note: text, label: document.querySelector('[data-notelabel="' + cid + '"]').value || null, names_ok: namesOk(b) }); reload(); } catch (e) { if (nameAsk(b, e)) return; b.disabled = false; T().toast(why(e)); }
+        try { await t.post("/api/studio-films/films/" + f.id + "/cut-notes", { cut_id: cid, at_ms: at, note: text, label: document.querySelector('[data-notelabel="' + cid + '"]').value || null, names_ok: namesOk(b, text) }); reload(); } catch (e) { if (nameAsk(b, e, text)) return; b.disabled = false; T().toast(why(e)); }
       });
     });
     document.querySelectorAll("[data-resolve]").forEach(function (b) {
