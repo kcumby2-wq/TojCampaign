@@ -222,11 +222,14 @@ function planInput(raw) {
   return v;
 }
 
-// What the director's phone keeps for a dead signal (shoot mode) comes from
-// the board's call times, must-have shots and frame pair: those carry codes,
-// not names, and no contacts or places (the kit's rule for the offline
-// sheet). Checked when the board is saved, and again line by line when the
-// sheet is made (offlineSafe).
+// What the director's phone keeps for a dead signal (shoot mode): the call
+// times without what they're for (a call sheet line names people and places
+// too often to keep), and only those must-haves and frame-pair lines a
+// strict screen can't fault: no name on a card, no word of a place under
+// Locations, no contact, no "@", no digits, and no capital after the first
+// word ("Westlake HS", "St. Mary's"). A name that's on no card and typed all
+// in lower case can't be told from other words, so the board says these
+// lines go on the phone. The rest shows online only.
 const PHONE_RE = /(?:\+?\d[\s().-]*){7,}/;
 const EMAIL_RE = /[^\s@]+@[^\s@]+\.[a-z]{2,}/i;
 const LINK_RE = /\bhttps?:\/\/|\bwww\./i;
@@ -235,26 +238,22 @@ function contactIn(text) {
   const t = String(text || "");
   return PHONE_RE.test(t) || EMAIL_RE.test(t) || LINK_RE.test(t) || STREET_RE.test(t);
 }
-// Two capitalised words in a row, the second mid-sentence ("Maria Lopez",
-// "Lincoln High", "Oak St"): likely a name or a place, so it stays online.
-function properNounsIn(text) {
-  const words = [...String(text || "").matchAll(/[\p{L}\p{M}'’]+|[.!?:;\n]/gu)].map((m) => m[0]);
-  for (let i = 1; i < words.length; i++) {
-    const a = words[i - 1], b = words[i];
-    if (/^\p{Lu}/u.test(a) && /^\p{Lu}\p{Ll}/u.test(b)) return true;
+// The capitalised words of the places under Locations ("The Rivers
+// family's driveway, 12 Oak St": rivers, oak, st), but "the".
+function placeWords(locations) {
+  const out = new Set();
+  for (const l of Array.isArray(locations) ? locations : []) {
+    for (const w of String(l || "").match(/[\p{L}\p{M}]+/gu) || []) if (/^\p{Lu}/u.test(w) && w.toLowerCase() !== "the") out.add(w.toLowerCase());
   }
-  return false;
+  return out;
 }
-function planProblems(plan, people) {
-  const errors = [];
-  const lines = [...(plan.schedule || []).map((x) => x.what), ...(plan.must_have || []), plan.frame_pair && plan.frame_pair.opening, plan.frame_pair && plan.frame_pair.closing].filter(Boolean);
-  if (lines.some((x) => strictNames(x, people).length)) errors.push("board_has_name");
-  if (lines.some(contactIn)) errors.push("board_has_contact");
-  return errors;
-}
-function offlineSafe(text, people) {
-  const t = String(text || "");
-  return !!t && !strictNames(t, people).length && !contactIn(t) && !properNounsIn(t);
+function offlineSafe(text, people, { places = [] } = {}) {
+  const t = String(text || "").trim();
+  if (!t || t.includes("@") || /\d/.test(t) || contactIn(t) || strictNames(t, people).length) return false;
+  const words = t.match(/[\p{L}\p{M}'’]+/gu) || [];
+  const at = placeWords(places);
+  if (words.some((w) => at.has(w.toLowerCase().replace(/['’]s?$/u, "")))) return false;
+  return !words.slice(1).some((w) => /^\p{Lu}/u.test(w) && w !== "I");
 }
 
 // ── Words on a graphic ───────────────────────────────────────────────────
@@ -274,23 +273,53 @@ function graphicsCredit(p, as, format) {
   }
   return { text: `A Coached by Hooks ${CREDIT_ROLE[p.role] || "athlete"}`, named: false };
 }
+// A graphic is public, and hashtags and handles run words together
+// (#TyNgNeverQuit, @tyng23): its words are also read with the capitals in a
+// run split apart, and a name run together counts anywhere inside a hashtag
+// or a handle.
+function publicText(all) {
+  return all + "\n" + all.replace(/(\p{Ll})(\p{Lu})/gu, "$1 $2").replace(/(\p{L})(\p{N})|(\p{N})(\p{L})/gu, "$1$3 $2$4");
+}
+function inTags(all, name, minRun) {
+  const joined = nameParts(name).join("");
+  if (nameParts(name).length < 2 || Array.from(joined).length < minRun) return false;
+  const tags = String(all || "").toLowerCase().match(/[#@][\p{L}\p{M}\p{N}_.]+/gu) || [];
+  return tags.some((t) => t.replace(/[^\p{L}\p{M}]+/gu, "").includes(joined));
+}
+function publicNames(all, p) {
+  const minor = !!p.is_minor;
+  return strictNames(publicText(all), [{ name: p.name, is_minor: minor }]).length > 0 || inTags(all, p.name, minor ? 4 : 5);
+}
 // What a graphic's words may not carry (the same rules as titles and file
-// names): the name of anyone the release doesn't let it name, any word of a
-// minor's name, a parent's or guardian's name (never on a graphic), or a
-// banned word. Returns plain sentences.
+// names, read as above): the name of anyone the release doesn't let it name,
+// any word of a minor's name, a parent's or guardian's name (never on a
+// graphic), or a banned word. Returns plain sentences.
 function graphicsProblems(texts, people, { format = null, banned = null } = {}) {
   const all = (texts || []).filter(Boolean).join("\n");
   const out = [];
   for (const p of people || []) {
-    if (strictNames(all, [{ name: p.name, is_minor: p.is_minor }]).length && !mayName(p, format)) {
+    if (publicNames(all, p) && !mayName(p, format)) {
       out.push(`The words name ${p.person_code}, whose release doesn't let a graphic name them on this format. Use the credit line the release allows.`);
     }
-    if (p.reviewer_name && p.reviewer_relation !== "self" && strictNames(all, [{ name: p.reviewer_name }]).length) {
+    if (p.reviewer_name && p.reviewer_relation !== "self" && publicNames(all, { name: p.reviewer_name })) {
       out.push(`The words name ${p.person_code}'s ${p.reviewer_relation}: a parent or guardian is never named on a graphic.`);
     }
   }
   if (banned && banned(all)) out.push("A word on the TOJ banned list is in the words. Say the concrete thing instead.");
   return [...new Set(out)];
+}
+// The words to ask about before a graphic goes (it can't carry a name its
+// release doesn't allow): an everyday word that's also such a name, with a
+// capital at the start of a sentence ("Will never quit"). ok: the words the
+// writer said aren't names here.
+function graphicsAsks(texts, people, { format = null, ok = new Set() } = {}) {
+  const all = publicText((texts || []).filter(Boolean).join("\n"));
+  const out = new Set();
+  for (const p of people || []) {
+    if (!mayName(p, format)) for (const w of nameHits(all, p, p.is_minor ? { minRun: 4, minWord: 2 } : {}).maybe) out.add(w);
+    if (p.reviewer_name && p.reviewer_relation !== "self") for (const w of nameHits(all, { name: p.reviewer_name }).maybe) out.add(w);
+  }
+  return [...out].filter((w) => !ok.has(w));
 }
 
 // ── A film ───────────────────────────────────────────────────────────────
@@ -340,10 +369,7 @@ function filmInput(raw, { partial = false, people = [] } = {}) {
     v.gfs_event_id = r.gfs_event_id ? (UUID.test(String(r.gfs_event_id)) ? String(r.gfs_event_id).toLowerCase() : null) : null;
     if (r.gfs_event_id && !v.gfs_event_id) errors.push("gfs_event_id");
   }
-  if (has(r, "plan")) {
-    v.plan = planInput(r.plan);
-    errors.push(...planProblems(v.plan, people));
-  }
+  if (has(r, "plan")) v.plan = planInput(r.plan);
   return { errors, value: v };
 }
 
@@ -625,11 +651,11 @@ module.exports = {
   EVERYDAY_NAMES,
   namesOkWords,
   planInput,
-  planProblems,
   offlineSafe,
   mayName,
   graphicsCredit,
   graphicsProblems,
+  graphicsAsks,
   contactIn,
   filmInput,
   coversInput,

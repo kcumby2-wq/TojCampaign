@@ -271,26 +271,50 @@ test("the shoot sheet: what the phone keeps for a dead signal has no names, cont
   for (const word of ["Alex", "Doe", "Jordan", "Pat", "kid.test", "x.test", "Oak St", "driveway"]) assert.equal(kept.includes(word), false, word);
   assert.deepEqual(d.offline.people.map((x) => [x.code, x.cleared, x.texas_youth, x.is_minor]), [["H0001", true, false, false], ["H0002", false, true, true]]);
   assert.deepEqual(d.offline.must_have, ["Hands on the sled", "The drive in", "Sunday drill wide"]);
-  assert.equal(d.offline.schedule[0].time, "07:30");
+  // The call times, without what they're for; the title only when it passes
+  // the strict screen (this one has digits: the phone shows the format).
+  assert.deepEqual(d.offline.schedule, [{ time: "07:30", what: null }]);
+  assert.equal(d.offline.title, null);
+  assert.equal(d.details.title, "H0001 same_drill");
   assert.deepEqual(d.offline.cards.map((c) => c.title), ["6. Minors on set", "3. Thirteen interview rules", "4. Run the day", "5. The Same Drill match cut"]);
   assert.equal(d.offline.checklist.length, 13);
   // Online, the names and places are there for the director.
   assert.equal(Object.values(d.names).sort().join(","), "Alex Doe,Jordan Kid");
   assert.deepEqual(d.locations, ["The Rivers family's driveway, 12 Oak St"]);
-  // The board's lines that go on the phone carry codes, not a card's name,
-  // and no contacts or places, when they're saved.
+  // The board is a call sheet: it takes names, contacts and places as
+  // typed (a card added later blocks nothing). What the phone keeps leaves
+  // out every line a strict screen could fault: a card's name, a contact, a
+  // digit, a capital after the first word (a name not on a card, a place).
   const plan = (await room(film.id)).film.plan;
   const patch = async (p2) => films("PATCH", `/films/${film.id}`, { seen: (await room(film.id)).film.updated_at, plan: { ...plan, ...p2 } }, "lead");
-  assert.deepEqual((await patch({ schedule: [{ time: "08:00", what: "Pick up Jordan" }] })).data.fields, ["board_has_name"]);
-  assert.deepEqual((await patch({ must_have: ["Wide at 12 Oak St", "x", "y"] })).data.fields, ["board_has_contact"]);
-  assert.deepEqual((await patch({ frame_pair: { opening: "Call 512-555-0199 first" } })).data.fields, ["board_has_contact"]);
-  // A name that isn't on a card can't be screened when it's typed, so the
-  // phone's copy leaves out a line that reads like a name or a place.
-  ok(await patch({ schedule: [{ time: "08:00", what: "Maria Lopez brings the sled" }, { time: "09:00", what: "The drill, wide" }] }), "board");
+  const board = {
+    schedule: [{ time: "08:00", what: "Pick up Jordan at 12 Oak St" }, { time: "09:00", what: "The drill, wide" }],
+    must_have: ["Maria Lopez watching", "Wide at Westlake HS", "hands on the sled"],
+    frame_pair: { opening: "Call 512-555-0199 first", closing: "Jordan walking off" },
+  };
+  ok(await patch(board), "board");
+  ok(await films("POST", `/films/${film.id}/people`, { person_code: "H0003", name: "Maria Lopez", role: "parent", release_on_file: true, covers: { voice: true } }, "dir"), "a card after the board");
+  ok(await patch({ ...board, must_have: ["Maria Lopez watching", "Wide at Westlake HS", "hands on the sled"] }), "the board still saves");
   const again = ok(await films("GET", `/films/${film.id}/shoot`, undefined, "dir"), "shoot again");
-  assert.deepEqual(again.offline.schedule, [{ time: "08:00", what: null }, { time: "09:00", what: "The drill, wide" }]);
-  assert.equal(JSON.stringify(again.offline).includes("Maria"), false);
-  assert.deepEqual(again.details.schedule.map((x) => x.what), ["Maria Lopez brings the sled", "The drill, wide"]);
+  assert.deepEqual(again.offline.schedule, [{ time: "08:00", what: null }, { time: "09:00", what: null }]);
+  assert.deepEqual(again.offline.must_have, [null, null, "hands on the sled"]);
+  assert.deepEqual(again.offline.frame_pair, { opening: null, closing: null });
+  const kept2 = JSON.stringify(again.offline);
+  for (const word of ["Maria", "Lopez", "Westlake", "Oak St", "512", "Jordan"]) assert.equal(kept2.includes(word), false, word);
+  // Online, the board as written.
+  assert.deepEqual(again.details.schedule.map((x) => x.what), ["Pick up Jordan at 12 Oak St", "The drill, wide"]);
+  assert.equal(again.details.frame_pair.opening, "Call 512-555-0199 first");
+  // The screen itself.
+  const people = [{ name: "Jordan Kid", is_minor: true }];
+  for (const [line, safe] of [["Hands on the sled", true], ["The drive in", true], ["I want the drive", true], ["Gate at dawn", true],
+    ["Wide at Westlake HS", false], ["St. Mary's gym", false], ["Dana's hands", true], ["Then Dana", false], ["jordan at the gate", false],
+    ["Call 5125550199", false], ["dana@x.test", false], ["Shot 2 wide", false], ["", false]]) {
+    assert.equal(U.offlineSafe(line, people), safe, line);
+  }
+  // A word of a place under Locations, in any case, stays online too.
+  const places = ["The Rivers family's driveway, 12 Oak St"];
+  assert.equal(U.offlineSafe("the rivers' gate at dusk", people, { places }), false);
+  assert.equal(U.offlineSafe("hands on the sled", people, { places }), true);
 });
 
 // A set of stills registered and (optionally) processed.
@@ -354,12 +378,97 @@ test("the graphics switch is held by the database: no sets, no links while it's 
   assert.deepEqual([back.row.status, /graphics system, which is off/.test(back.row.error)], ["failed", true], back.row.error);
 });
 
+test("turning the graphics switch off waits for a link being written, and a set it made waits for the switch", async () => {
+  const { film, p } = await aFilm("K0003", "quote_card");
+  ok(await films("POST", "/tools/graphics_system", { on: true, note: "Kyron and Hooks approved the type system" }, "kyron"), "on");
+  const made = await aSet(film, [p.id], { made_with: "graphics", files: [I.png(4, 5, { mark: true })] });
+  assert.equal(made.row.status, "ready");
+  // A link written in one transaction holds the switch: turning it off waits,
+  // then stops that link too.
+  const a = await pool.connect();
+  const b = await pool.connect();
+  try {
+    await a.query("begin");
+    await a.query(`insert into studio_reviews (film_id, cut_id, person_id, reviewer_email, reviewer_relation, link_hash, expires_at, asked_fingerprint, asked_by)
+      values ($1, $2, $3, 'alex@x.test', 'self', $4, now() + interval '1 day', $5, 'lead@toj.test')`, [film.id, made.cut.id, p.id, "a".repeat(64), "0".repeat(64)]);
+    let done = false;
+    const off = b.query("update studio_tool_approvals set is_on = false, decided_by = 'kyron@toj.test', decided_at = now() where tool = 'graphics_system'").then(() => { done = true; });
+    await new Promise((r) => setTimeout(r, 300));
+    assert.equal(done, false, "turning it off waits for the link being written");
+    await a.query("commit");
+    await off;
+  } finally {
+    a.release();
+    b.release();
+  }
+  assert.equal((await pool.query("select count(*)::int as n from studio_reviews where cut_id = $1 and link_hash is not null", [made.cut.id])).rows[0].n, 0, "and then stops it");
+
+  // Belt and braces: a live link for such a set (here made by switching the
+  // switch's own trigger off) shows the speaker "paused", and the database
+  // won't take their decision.
+  ok(await films("POST", "/tools/graphics_system", { on: true, note: "Back on" }, "kyron"), "on again");
+  ok(await films("POST", `/films/${film.id}/cuts/${made.cut.id}/reviews`, { person_id: p.id }, "lead"), "a new link");
+  const token = tokenFrom(mails.at(-1));
+  assert.equal((await reviewer("/view", { token })).status, 200);
+  await pool.query("alter table studio_tool_approvals disable trigger studio_tool_approvals_graphics");
+  try {
+    await pool.query("update studio_tool_approvals set is_on = false where tool = 'graphics_system'");
+    const view = await reviewer("/view", { token });
+    assert.deepEqual([view.status, view.data.error], [409, "paused"]);
+    const yes = await reviewer("/decide", { token, decision: "approved", name: "Alex Doe", confirm: true });
+    assert.deepEqual([yes.status, yes.data.error], [409, "paused"]);
+    assert.equal((await pool.query("select decision from studio_reviews where cut_id = $1 and link_hash is not null", [made.cut.id])).rows[0].decision, null, "nothing recorded");
+  } finally {
+    await pool.query("alter table studio_tool_approvals enable trigger studio_tool_approvals_graphics");
+  }
+});
+
+test("a registration that names an id already used keeps that cut's files", async () => {
+  const { film, p } = await aFilm("V0002", "quote_card");
+  const first = await aSet(film, [p.id], { drain: false });
+  assert.equal(first.reg.status, 200);
+  // A second registration naming the first set's id (a retry, or another
+  // screen): refused, and the first set's files stay.
+  const body = { format: "quote_card", ratio: "4x5", version: 2, file_name: "SW_COL_V0002_QUOTE_4x5_v02_20261118", people: [p.id], slides: ["png"], made_with: "upload", id: first.up.id };
+  const again = await films("POST", `/films/${film.id}/slides`, body, "ed");
+  assert.deepEqual([again.status, again.data.error], [409, "id_taken"]);
+  assert.equal(store.has(U.BUCKET, first.up.uploads[0].key), true, "the set's file stays");
+  // The same with the graphics switch off: still the id's answer, files kept.
+  const g = await films("POST", `/films/${film.id}/slides`, { ...body, made_with: "graphics" }, "ed");
+  assert.deepEqual([g.status, g.data.error], [409, "id_taken"]);
+  assert.equal(store.has(U.BUCKET, first.up.uploads[0].key), true);
+  // A video cut registered twice keeps its file.
+  const file_name = "SW_COL_V0002_HERO_9x16_v01_20261117.mp4";
+  const up = ok(await films("POST", `/films/${film.id}/cuts/upload`, { format: "hero", ratio: "9x16", version: 1, file_name, bytes: 4096, people: [p.id] }, "ed"), "upload link");
+  store.put(U.BUCKET, up.key, Buffer.alloc(4096, 1), "video/mp4");
+  const vbody = { id: up.id, key: up.key, format: "hero", ratio: "9x16", version: 1, file_name, bytes: 4096, people: [p.id] };
+  ok(await films("POST", `/films/${film.id}/cuts`, vbody, "ed"), "register");
+  const twice = await films("POST", `/films/${film.id}/cuts`, { ...vbody, version: 2, file_name: file_name.replace("v01", "v02") }, "ed");
+  assert.deepEqual([twice.status, twice.data.error], [409, "id_taken"]);
+  assert.equal(store.has(U.BUCKET, up.key), true, "the cut's file stays");
+});
+
+test("a graphic asks about an everyday word that's also a name it can't carry, and takes the writer's word for it", async () => {
+  const { film, p } = await aFilm("Q0003", "quote_card");
+  ok(await films("POST", `/films/${film.id}/people`, { person_code: "Q0004", name: "Will Carter", role: "coach", release_on_file: true, covers: { voice: true } }, "lead"), "coach");
+  const check = (body) => films("POST", `/films/${film.id}/graphics/check`, { format: "quote_card", speaker_id: p.id, credit: "role", ...body }, "ed");
+  const asked = (await check({ texts: ["Will never quit. We ran it every Sunday."] })).data;
+  assert.deepEqual([asked.ok, asked.asks], [false, ["will"]]);
+  assert.equal((await check({ texts: ["Will never quit. We ran it every Sunday."], names_ok: ["will"] })).data.ok, true);
+  // Mid-sentence with a capital, it's a name: no asking.
+  const named = (await check({ texts: ["We ran it with Will every Sunday."], names_ok: ["will"] })).data;
+  assert.equal(named.ok, false);
+  assert.match(named.problems[0], /Q0004/);
+  // Lower case, mid-sentence: an everyday word.
+  assert.equal((await check({ texts: ["We will run it every Sunday."] })).data.ok, true);
+});
+
 test("the words on a graphic pass the server's name rules, and the credit goes only as far as the release", async () => {
   const { film, p } = await aFilm("Q0001", "quote_card");
   const kid = ok(await films("POST", `/films/${film.id}/people`, { person_code: "Q0002", name: "Ty Ng", role: "athlete", is_minor: true, release_on_file: true, covers: { voice: true }, reviewer_relation: "parent", reviewer_name: "Lin Ng", reviewer_email: "lin@x.test", speaker: true }, "lead"), "kid").person;
   const check = (body) => films("POST", `/films/${film.id}/graphics/check`, { format: "quote_card", speaker_id: p.id, credit: "role", ...body }, "ed");
   assert.equal((await check({ texts: ["We ran it every Sunday."] })).data.ok, true);
-  for (const words of ["Ty never quit", "#TyNg forever", "#TyNgNeverQuit", "Lin drove us", "His mom Lin Ng was there"]) {
+  for (const words of ["Ty never quit", "#TyNg forever", "#TyNgNeverQuit", "#tyngneverquit", "@tyng_23", "Lin drove us", "His mom Lin Ng was there", "#AlexDoe23 ran it"]) {
     const r = (await check({ texts: [words] })).data;
     assert.equal(r.ok, false, words);
   }

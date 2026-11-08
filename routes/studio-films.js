@@ -621,8 +621,12 @@ router.post("/films/:id/cuts", member, withDb(async (req, res, sb) => {
     worker.kick();
     res.json({ cut });
   } catch (e) {
-    // Refused for good: the uploaded file goes too (nothing else lists it).
-    if (refusal(e)) await worker.forget([body.key], { sb }).catch(() => {});
+    // Refused for good: the uploaded file goes too, unless a cut already
+    // has that id or that file (then it's that cut's, and stays).
+    const owner = await run(sb.from("studio_film_cuts").select("id").eq("id", row.id).maybeSingle()).catch(() => ({ id: "unknown" }));
+    const holder = owner ? null : await run(sb.from("studio_film_cuts").select("id").eq("object_key", body.key).maybeSingle()).catch(() => ({ id: "unknown" }));
+    if (refusal(e) && !owner && !holder) await worker.forget([body.key], { sb }).catch(() => {});
+    if (owner) return res.status(409).json({ error: "id_taken" });
     if (dbCode(e) === "23505") return res.status(409).json({ error: "version_taken" });
     refused(res, e);
   }
@@ -1029,6 +1033,9 @@ router.post("/films/:id/slides", member, withDb(async (req, res, sb) => {
       return [];
     }
   };
+  // A set that already has this id keeps its files whatever happens here.
+  const owner = await run(sb.from("studio_film_cuts").select("id").eq("id", id).maybeSingle()).catch(() => ({ id: "unknown" }));
+  if (owner) return res.status(409).json({ error: "id_taken" });
   if (!(await slidesAllowed(sb, res, film, value.made_with))) {
     await worker.forget(await uploaded(), { sb }).catch(() => {});
     return;
@@ -1052,6 +1059,9 @@ router.post("/films/:id/slides", member, withDb(async (req, res, sb) => {
     worker.kick();
     res.json({ cut });
   } catch (e) {
+    // Another request registered this id meanwhile: its files are its own.
+    const now = await run(sb.from("studio_film_cuts").select("id").eq("id", id).maybeSingle()).catch(() => ({ id: "unknown" }));
+    if (now) return res.status(409).json({ error: "id_taken" });
     if (refusal(e)) await worker.forget(await uploaded(), { sb }).catch(() => {});
     if (dbCode(e) === "23505") return res.status(409).json({ error: "version_taken" });
     refused(res, e);
@@ -1077,8 +1087,10 @@ router.post("/films/:id/graphics/check", member, withDb(async (req, res, sb) => 
   if (speaker && (!speaker.cleared_at || speaker.consent_pulled_at)) problems.push(`${speaker.person_code}'s card isn't cleared (or their consent was pulled): their words don't go on a graphic.`);
   const re = [new RegExp(K.BANNED_RE.source, "i"), new RegExp(K.BANNED_PHRASES_RE.source, "i")];
   problems.push(...U.graphicsProblems(texts, people, { format, banned: (t) => re.some((r) => r.test(t)) }));
+  // "Will never quit": asked about first, kept once the writer says it isn't a name here.
+  const asks = U.graphicsAsks(texts, people, { format, ok: U.namesOkWords(body.names_ok) });
   const credit = U.graphicsCredit(speaker && speaker.cleared_at && !speaker.consent_pulled_at ? speaker : null, String(body.credit || "role"), format);
-  res.json({ ok: !problems.length, problems, credit: speaker ? credit.text : "Coached by Hooks" });
+  res.json({ ok: !problems.length && !asks.length, problems, asks, credit: speaker ? credit.text : "Coached by Hooks" });
 }));
 
 // ── Shoot mode ───────────────────────────────────────────────────────────
@@ -1115,21 +1127,24 @@ router.get("/films/:id/shoot", member, withDb(async (req, res, sb) => {
     pulled: !!p.consent_pulled_at,
     covers: { face: !!(p.covers || {}).face, name: !!(p.covers || {}).name, jersey: !!(p.covers || {}).jersey, voice: !!(p.covers || {}).voice },
   });
+  const safe = (x) => U.offlineSafe(x, people, { places: plan.locations });
   const offline = {
     v: 1,
     film_id: film.id,
     saved_at: nowIso(),
-    title: film.title,
+    // The title too, only when the strict screen can't fault it (the phone
+    // shows the format otherwise).
+    title: safe(film.title) ? film.title : null,
     athlete_id: film.athlete_id,
     format: film.format,
     format_label: t && t.formats[film.format] ? t.formats[film.format].label : film.format,
     closed: !!(film.pulled_at || film.archived_at),
     shoot_date: plan.shoot_date || null,
-    // Times and codes, and only the lines that carry no name, contact or
-    // place (U.offlineSafe); the rest shows online only ("details").
-    schedule: (Array.isArray(plan.schedule) ? plan.schedule.slice(0, 40) : []).map((x) => ({ time: x.time || null, what: U.offlineSafe(x.what, people) ? x.what : null })),
-    must_have: (Array.isArray(plan.must_have) ? plan.must_have.slice(0, 3) : []).map((m) => (U.offlineSafe(m, people) ? m : null)),
-    frame_pair: { opening: U.offlineSafe(fp.opening, people) ? fp.opening : null, closing: U.offlineSafe(fp.closing, people) ? fp.closing : null },
+    // The call times without what they're for, and only the shots that
+    // pass U.offlineSafe; the rest shows online only ("details").
+    schedule: (Array.isArray(plan.schedule) ? plan.schedule.slice(0, 40) : []).map((x) => ({ time: x.time || null, what: null })),
+    must_have: (Array.isArray(plan.must_have) ? plan.must_have.slice(0, 3) : []).map((m) => (safe(m) ? m : null)),
+    frame_pair: { opening: safe(fp.opening) ? fp.opening : null, closing: safe(fp.closing) ? fp.closing : null },
     people: people.map(light),
     cards,
     checklist: checklist ? checklist.parts.map((x) => x.text) : [],
@@ -1140,6 +1155,7 @@ router.get("/films/:id/shoot", member, withDb(async (req, res, sb) => {
     // Online only: never saved on the phone.
     names: Object.fromEntries(people.map((p) => [p.id, p.name])),
     details: {
+      title: film.title,
       schedule: Array.isArray(plan.schedule) ? plan.schedule.slice(0, 40) : [],
       must_have: Array.isArray(plan.must_have) ? plan.must_have.slice(0, 3) : [],
       frame_pair: { opening: fp.opening || null, closing: fp.closing || null },

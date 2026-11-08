@@ -185,12 +185,20 @@ end $$;
 -- The graphics system needs Kyron's yes (studio_tool_approvals, 039): a set
 -- made with it isn't kept while it's off, no review link goes out for one,
 -- and turning it off stops the live links for them (as review copies do).
+-- The switch is read with a share lock: turning it off waits for a link
+-- being made (and then stops it), or the link waits and sees it off. A
+-- decision on a set made with it waits for the switch the same way.
 create or replace function public.studio_reviews_graphics() returns trigger
 language plpgsql set search_path = '' as $$
 begin
-  if exists (select 1 from public.studio_film_cuts c where c.id = new.cut_id and c.made_with = 'graphics')
-     and not public.studio_tool_on('graphics_system') then
-    raise exception 'the graphics system is off: no review links for sets made with it';
+  if tg_op = 'UPDATE' and not (old.decision is null and new.decision is not null) then
+    return new;
+  end if;
+  if exists (select 1 from public.studio_film_cuts c where c.id = new.cut_id and c.made_with = 'graphics') then
+    perform 1 from public.studio_tool_approvals where tool = 'graphics_system' and is_on for share;
+    if not found then
+      raise exception 'the graphics system is off: sets made with it are paused (no links, no decisions)';
+    end if;
   end if;
   return new;
 end $$;
@@ -235,7 +243,7 @@ create or replace trigger studio_delivery_checks_keep before truncate on public.
   for each statement execute function public.studio_delivery_checks_gate();
 create or replace trigger studio_notes_keep before truncate on public.studio_notes
   for each statement execute function public.studio_keep();
-create or replace trigger studio_reviews_graphics before insert on public.studio_reviews
+create or replace trigger studio_reviews_graphics before insert or update on public.studio_reviews
   for each row execute function public.studio_reviews_graphics();
 create or replace trigger studio_tool_approvals_graphics after update on public.studio_tool_approvals
   for each row execute function public.studio_tool_approvals_graphics();

@@ -44,11 +44,10 @@
     no_reviewer: "That card doesn't say who approves the cut.",
     exists: "There's already a live link for that cut and reviewer.",
     version_taken: "That version number was just used: open the film again and send it as the next version.",
+    id_taken: "That upload's id is already in use: start the upload again.",
     editor_only: "Only the film's editor (or the producer) marks a note done.",
     format_not_stills: "Stills and slides are for a parent card, a quote card or a carousel.",
     ratio_for_format: "That ratio isn't one the kit makes for this format.",
-    board_has_name: "Call times, must-haves and the frame pair go on the director's phone: codes, not names.",
-    board_has_contact: "Call times, must-haves and the frame pair go on the director's phone: no phone numbers, emails, links or addresses (put places under Locations).",
     not_uploaded: "The file isn't in storage yet. Try the upload again.",
     film_closed: "This film is closed.",
     confirm_first: "Confirm first.",
@@ -476,6 +475,7 @@
       field("eShootDate", "Shoot date", p.shoot_date, { type: "date" }) +
       field("eLocations", "Locations <small>(one per line; no locker rooms, training rooms or changing areas)</small>", lines(p.locations, String), { area: true, h: 70 }) +
       field("eSchedule", "Call times <small>(one per line: 09:30 B-roll)</small>", lines(p.schedule, function (x) { return (x.time ? x.time + " " : "") + x.what; }), { area: true }) +
+      '<p class="sub" style="margin:0">The director\'s phone keeps the call times and the shots below for a dead signal. Write them as shots, not people or places: a line with a name, a place, a number or a capital after its first word stays online only, and a name typed in lower case can\'t be caught.</p>' +
       field("eMust1", "Must-have shot 1", (p.must_have || [])[0]) + field("eMust2", "Must-have shot 2", (p.must_have || [])[1]) + field("eMust3", "Must-have shot 3", (p.must_have || [])[2]) +
       field("eOpen", "Opening frame", fp.opening) + field("eClose", "Closing frame (rhymes with the opening)", fp.closing) +
       '<h2 class="sec-h" style="margin-top:8px">The speaker</h2>' +

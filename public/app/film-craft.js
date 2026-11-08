@@ -94,7 +94,12 @@
     // Online, the board as written; the saved copy has only the lines with
     // no name, contact or place in them.
     var det = (d && d.details) || { schedule: o.schedule, must_have: o.must_have, frame_pair: o.frame_pair };
-    var later = function (x) { return x == null ? '<span class="sub">(details online only)</span>' : h(x); };
+    // Online, a line the phone won't keep says so, so the director knows
+    // before the signal goes.
+    var later = function (x, kept) {
+      if (x == null) return '<span class="sub">(details online only)</span>';
+      return h(x) + (!saved && kept === null ? ' <span class="sub">(not saved on this phone)</span>' : "");
+    };
     var ticks = lsGet(TICKS + id) || { must: {}, list: {}, ways: {} };
     var minors = o.people.some(function (p) { return p.is_minor; });
     var notCleared = o.people.filter(function (p) { return !p.cleared; }).length;
@@ -108,7 +113,7 @@
     }).join("");
 
     var times = (det.schedule || []).map(function (x) { return '<div class="row" style="padding:6px 0;border-top:1px solid #1E2C40"><b style="font:700 15px/1.3 var(--mono);min-width:56px">' + h(x.time || "") + '</b><div class="grow body" style="font-size:14.5px;color:var(--ink)">' + later(x.what) + "</div></div>"; }).join("");
-    var must = (det.must_have || []).map(function (m, i) { return checkbox('data-must="' + i + '"', ticks.must[i], later(m)); }).join("");
+    var must = (det.must_have || []).map(function (m, i) { return checkbox('data-must="' + i + '"', ticks.must[i], later(m, (o.must_have || [])[i])); }).join("");
     var fp = det.frame_pair || {};
     var cardHtml = (o.cards || []).map(function (c) {
       var open = c.title === "6. Minors on set" && minors;
@@ -120,15 +125,15 @@
 
     t.show(null,
       '<div class="screen">' + back +
-      '<div><p class="kicker">Shoot mode · ' + h(o.format_label + " · " + o.athlete_id) + '</p><h1 class="title sm">' + h(o.title) + "</h1>" +
+      '<div><p class="kicker">Shoot mode · ' + h(o.format_label + " · " + o.athlete_id) + '</p><h1 class="title sm">' + h(det.title || o.title || o.format_label) + "</h1>" +
       (o.shoot_date ? '<p class="lede" style="font-size:15px">Shoot day: ' + h(new Date(o.shoot_date + "T12:00:00").toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" })) + "</p>" : "") + "</div>" +
       (saved ? '<div class="card tight"><p class="body" style="font-size:13.5px;margin:0">No signal: this is the copy saved on this phone ' + h(T().ago(o.saved_at)) + ". It keeps times, codes and the lines with no name, contact or place in them; the rest shows when you're back online.</p></div>" : "") +
       (o.closed ? '<div class="card tight"><p class="body err" style="margin:0">This film is closed. Nothing more is shot for it.</p></div>' : "") +
       '<section class="sec"><div class="row"><h2 class="sec-h grow" style="margin:0">The cards</h2>' + (notCleared ? F().badge(notCleared + " not cleared", "bad") : F().badge("Everyone cleared", "ok")) + '</div><p class="sub" style="margin:0">No card, no shoot. Check before you roll.</p><div class="card tight" style="gap:0">' + (lights || '<p class="empty">No cards yet: nobody goes on camera.</p>') + "</div></section>" +
-      (times ? '<section class="sec"><h2 class="sec-h">Call times</h2><div class="card tight" style="gap:0">' + times + "</div></section>" : "") +
+      (times ? '<section class="sec"><h2 class="sec-h">Call times</h2>' + (saved ? "" : '<p class="sub" style="margin:0">This phone keeps the times, not what they\'re for.</p>') + '<div class="card tight" style="gap:0">' + times + "</div></section>" : "") +
       (d && d.locations && d.locations.length ? '<section class="sec"><h2 class="sec-h">Where</h2><div class="card tight">' + d.locations.map(function (x) { return '<p class="body" style="font-size:14.5px;margin:0;color:var(--ink)">' + h(x) + "</p>"; }).join("") + "</div></section>" : "") +
       (must ? '<section class="sec"><h2 class="sec-h">The three must-haves</h2><div style="display:flex;flex-direction:column;gap:8px">' + must + "</div></section>" : "") +
-      (fp.opening || fp.closing || (saved && (o.frame_pair || {}).opening === null) ? '<section class="sec"><h2 class="sec-h">The frame pair</h2><div class="card tight"><p class="body" style="font-size:14.5px;margin:0"><b style="color:var(--ink)">Opening:</b> ' + later(fp.opening) + '</p><p class="body" style="font-size:14.5px;margin:0"><b style="color:var(--ink)">Closing:</b> ' + later(fp.closing) + "</p></div></section>" : "") +
+      (fp.opening || fp.closing || (saved && (o.frame_pair || {}).opening === null) ? '<section class="sec"><h2 class="sec-h">The frame pair</h2><div class="card tight"><p class="body" style="font-size:14.5px;margin:0"><b style="color:var(--ink)">Opening:</b> ' + later(fp.opening, (o.frame_pair || {}).opening) + '</p><p class="body" style="font-size:14.5px;margin:0"><b style="color:var(--ink)">Closing:</b> ' + later(fp.closing, (o.frame_pair || {}).closing) + "</p></div></section>" : "") +
       (o.format === "same_drill" ? '<section class="sec"><h2 class="sec-h">The Same Drill</h2><a class="btn soft" href="#film-ghost/' + h(id) + '">Open the ghost frame</a><p class="sub" style="margin:0">The archive frame over the live camera, to match the angle, height and side. It never leaves this phone.</p></section>' : "") +
       '<section class="sec"><h2 class="sec-h">The kit for today</h2>' + (cardHtml || '<p class="empty">The kit\'s cards aren\'t here.</p>') + "</section>" +
       (list ? '<section class="sec"><div class="row"><h2 class="sec-h grow" style="margin:0">Shoot day: director</h2><span class="sub" id="listCount">' + listDone + " of " + o.checklist.length + "</span></div>" + '<div style="display:flex;flex-direction:column;gap:8px">' + list + "</div></section>" : "") +
@@ -678,15 +683,29 @@
     function blobs() { return Promise.all(canvases.map(function (x) { return new Promise(function (r) { x.canvas.toBlob(function (b) { r(b); }, "image/png"); }); })).then(function (list) { return Promise.all(list.map(markPng)); }); }
     // Before anything is saved or sent: the switch read again, and the words
     // and the credit checked by the server's rules. null when it can go.
+    // The words as they are now, to check and then draw from: what's
+    // exported is exactly what the server checked.
+    var asked = null;
+    function wordsNow() { return [g.line, g.more, g.letters, g.title].map(function (x) { return String(x || ""); }); }
     async function cleared(forReview) {
       var was = approved;
+      var texts = wordsNow();
       meta = await F().getMeta(true);
       approved = on("graphics_system"); copiesOn = on("review_copies");
       if (approved !== was) { draw(); return approved ? "The graphics system was just approved: look again, then tap again." : "The graphics system was just switched off: this now carries the PROPOSED band. Look again, then tap again."; }
       var tm = TEMPLATES[g.tpl];
-      var r = await T().post("/api/studio-films/films/" + encodeURIComponent(f.id) + "/graphics/check", { texts: [g.line, g.more, g.letters, g.title], speaker_id: g.speaker, credit: g.creditAs, format: tm.format || f.format, for_review: !!forReview });
+      var same = asked && asked.texts.join("\u0000") === texts.join("\u0000");
+      var r = await T().post("/api/studio-films/films/" + encodeURIComponent(f.id) + "/graphics/check", { texts: texts, speaker_id: g.speaker, credit: g.creditAs, format: tm.format || f.format, for_review: !!forReview, names_ok: same ? asked.words : [] });
       if (r.problems && r.problems.length) return r.problems[0];
+      if (r.asks && r.asks.length) {
+        asked = { texts: texts, words: (same ? asked.words : []).concat(r.asks) };
+        return "\u201c" + r.asks.join("\u201d, \u201c") + "\u201d is also a name on a card that this graphic can't carry. If it isn't a name here, tap again.";
+      }
       if (r.credit && r.credit !== credit()) { g.creditAs = "role"; keepDraft(); draw(); return "The credit can only be what the release allows: it now reads \u201c" + r.credit + "\u201d. Look again, then tap again."; }
+      // Typed over while it was checked: check again.
+      if (wordsNow().join("\u0000") !== texts.join("\u0000")) return "The words changed while they were checked. Tap again.";
+      // Draw from the checked words now, so the files show exactly them.
+      paint();
       return null;
     }
     function wire() {

@@ -189,3 +189,74 @@ test("the worker refuses a moving picture in a set of slides", { skip: !ffmpeg &
     fs.rmSync(dir, { recursive: true, force: true });
   }
 });
+
+test("the still check refuses a file it can't read whole, rather than throwing, and reads only one header", () => {
+  const zlib = require("zlib");
+  const Still = require("../utils/studio-still");
+  const I = require("./helpers/images");
+  const SIG = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+  const chunk = (t, d) => { const l = Buffer.alloc(4); l.writeUInt32BE(d.length); const b = Buffer.concat([Buffer.from(t, "latin1"), d]); const c = Buffer.alloc(4); c.writeUInt32BE(zlib.crc32(b) >>> 0); return Buffer.concat([l, b, c]); };
+  const ihdr = (w, h, depth, color) => { const d = Buffer.alloc(13); d.writeUInt32BE(w, 0); d.writeUInt32BE(h, 4); d[8] = depth; d[9] = color; return chunk("IHDR", d); };
+  const png = (...c) => Buffer.concat([SIG, ...c, chunk("IEND", Buffer.alloc(0))]);
+  // A picture encoded with every row filter (None, Sub, Up, Average, Paeth),
+  // as an encoder would: read back right, opaque or not.
+  const encode = (px, w, h, bpp) => {
+    const stride = w * bpp;
+    const out = [];
+    for (let y = 0; y < h; y++) {
+      const f = y % 5;
+      const row = Buffer.alloc(1 + stride);
+      row[0] = f;
+      for (let x = 0; x < stride; x++) {
+        const a = x >= bpp ? px[y * stride + x - bpp] : 0;
+        const b = y > 0 ? px[(y - 1) * stride + x] : 0;
+        const c = y > 0 && x >= bpp ? px[(y - 1) * stride + x - bpp] : 0;
+        const pa = Math.abs(b - c), pb = Math.abs(a - c), pc = Math.abs(a + b - 2 * c);
+        const pred = [0, a, b, (a + b) >> 1, pa <= pb && pa <= pc ? a : pb <= pc ? b : c][f];
+        row[1 + x] = (px[y * stride + x] - pred) & 255;
+      }
+      out.push(row);
+    }
+    return zlib.deflateSync(Buffer.concat(out));
+  };
+  const w = 7, h = 10, bpp = 4;
+  const px = Buffer.alloc(w * h * bpp);
+  for (let i = 0; i < px.length; i++) px[i] = i % 4 === 3 ? 255 : (i * 37 + 11) % 256;
+  assert.deepEqual(Still.check(png(ihdr(w, h, 8, 6), chunk("IDAT", encode(px, w, h, bpp)))), { ok: true, type: "png", width: w, height: h, marked: false });
+  for (const at of [3, (w * 4 + 2) * 4 + 3, px.length - 1]) {
+    const one = Buffer.from(px);
+    one[at] = 254;
+    assert.match(Still.check(png(ihdr(w, h, 8, 6), chunk("IDAT", encode(one, w, h, bpp)))).why, /see-through/, String(at));
+  }
+  // Malformed: refused with a reason, never thrown.
+  const bad = [
+    png(chunk("IHDR", Buffer.alloc(0))),
+    png(chunk("IHDR", Buffer.alloc(4))),
+    Buffer.concat([SIG, Buffer.from([0xff, 0xff, 0xff, 0xff]), Buffer.from("IDAT")]),
+    png(ihdr(10, 10, 8, 6)),
+    png(ihdr(10, 10, 8, 6), chunk("IDAT", Buffer.from("not zlib"))),
+    png(ihdr(2, 2, 8, 6), chunk("IDAT", zlib.deflateSync(Buffer.from([9, 1, 1, 1, 255, 1, 1, 1, 255, 9, 1, 1, 1, 255, 1, 1, 1, 255])))),
+    png(ihdr(2, 2, 8, 6), chunk("IDAT", zlib.deflateSync(Buffer.from([0, 1, 1, 1, 255, 1, 1, 1, 255])))),
+    png(ihdr(0, 10, 8, 2)),
+    png(ihdr(0x80000000, 1, 8, 2)),
+    // Two headers (the browser reads the first, a decoder may read the second), or one after the pixels.
+    png(ihdr(4, 4, 8, 6), ihdr(4, 4, 8, 2), chunk("IDAT", zlib.deflateSync(Buffer.alloc(4 * 17)))),
+    png(chunk("IDAT", zlib.deflateSync(Buffer.alloc(4 * 13))), ihdr(4, 4, 8, 2)),
+    // 16-bit alpha: refused, with what to do.
+    png(ihdr(4, 4, 16, 6), chunk("IDAT", zlib.deflateSync(Buffer.alloc(4 * 33, 255)))),
+    Buffer.from([0xff, 0xd8, 0xff]),
+    Buffer.from([0xff, 0xd8, 0xff, 0xc0, 0x00, 0x11, 0x08]),
+  ];
+  for (const b of bad) {
+    const out = Still.check(b);
+    assert.equal(out.ok, false);
+    assert.equal(typeof out.why, "string");
+  }
+  assert.match(Still.check(bad[11]).why, /16-bit/);
+  // A JPEG with two frame headers (small, then huge) is refused; fill bytes before one are fine.
+  const j = I.jpeg(100, 100);
+  const sof = j.subarray(2, 2 + 19);
+  const big = Buffer.from(sof); big.writeUInt16BE(16000, 5); big.writeUInt16BE(16000, 7);
+  assert.equal(Still.check(Buffer.concat([j.subarray(0, 21), big, j.subarray(21)])).ok, false);
+  assert.deepEqual(Still.check(Buffer.concat([Buffer.from([0xff, 0xd8, 0xff]), j.subarray(2)])), { ok: true, type: "jpeg", width: 100, height: 100, marked: false });
+});

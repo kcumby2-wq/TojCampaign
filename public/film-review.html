@@ -129,6 +129,8 @@
   function later(status) {
     $("laterText").textContent = status === 429
       ? "Too many tries from here just now. Your link still works: wait a minute, then try again."
+      : status === 409
+      ? "This review is paused for now. Nothing is needed from you: the producer will be in touch."
       : "We couldn't reach the server. Your link still works: wait a minute, then try again.";
     show("later");
   }
@@ -168,6 +170,8 @@
       } else if (r.status === 400 || r.status === 404) {
         forget();
         show("invalid");
+      } else if (r.status === 409 && r.data && r.data.error === "paused") {
+        later(409);
       } else later(r.status);
     }).catch(function () { later(0); });
   }
@@ -195,6 +199,8 @@
       } else if (r.status === 404) {
         forget();
         err.textContent = "This link isn't active anymore: it may have been used or stopped. Ask the producer for a new one.";
+      } else if (r.status === 409 && r.data && r.data.error === "paused") {
+        again("This review is paused for now, so nothing was recorded. The producer will be in touch.");
       } else if (r.status === 400 && r.data.error === "name_required") {
         again("Please enter your name as letters, without links or numbers.");
       } else if (r.status === 429) {

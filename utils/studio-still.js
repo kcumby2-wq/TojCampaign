@@ -29,33 +29,40 @@ function sizeOk(w, h) {
   return null;
 }
 
-// Each PNG row starts with a filter byte; undo it to read the pixels.
-function unfilter(raw, width, height, bpp) {
+// Each PNG row starts with a filter byte; undo it, a row at a time (two rows
+// held, not the picture), and stop at the first pixel that isn't opaque.
+// aw: the alpha sample's width in bytes (1 here: 16-bit alpha is refused).
+function allOpaque(raw, width, height, bpp, aw) {
   const stride = width * bpp;
-  const out = Buffer.alloc(stride * height);
+  let prev = Buffer.alloc(stride);
+  let cur = Buffer.alloc(stride);
   let p = 0;
   for (let y = 0; y < height; y++) {
-    const f = raw[p++];
-    const row = y * stride;
-    const prev = row - stride;
-    for (let x = 0; x < stride; x++) {
-      const a = x >= bpp ? out[row + x - bpp] : 0;
-      const b = y > 0 ? out[prev + x] : 0;
-      const c = y > 0 && x >= bpp ? out[prev + x - bpp] : 0;
-      const v = raw[p++];
-      let r;
-      if (f === 0) r = v;
-      else if (f === 1) r = v + a;
-      else if (f === 2) r = v + b;
-      else if (f === 3) r = v + ((a + b) >> 1);
-      else if (f === 4) {
-        const pa = Math.abs(b - c), pb = Math.abs(a - c), pc = Math.abs(a + b - 2 * c);
-        r = v + (pa <= pb && pa <= pc ? a : pb <= pc ? b : c);
-      } else throw new Error("bad filter");
-      out[row + x] = r & 0xff;
-    }
+    if (p + 1 + stride > raw.length) throw new Error("short");
+    const f = raw[p];
+    const s = p + 1;
+    p = s + stride;
+    if (f === 0) raw.copy(cur, 0, s, s + stride);
+    else if (f === 1) {
+      for (let x = 0; x < bpp; x++) cur[x] = raw[s + x];
+      for (let x = bpp; x < stride; x++) cur[x] = (raw[s + x] + cur[x - bpp]) & 255;
+    } else if (f === 2) {
+      for (let x = 0; x < stride; x++) cur[x] = (raw[s + x] + prev[x]) & 255;
+    } else if (f === 3) {
+      for (let x = 0; x < bpp; x++) cur[x] = (raw[s + x] + (prev[x] >> 1)) & 255;
+      for (let x = bpp; x < stride; x++) cur[x] = (raw[s + x] + ((cur[x - bpp] + prev[x]) >> 1)) & 255;
+    } else if (f === 4) {
+      for (let x = 0; x < bpp; x++) cur[x] = (raw[s + x] + prev[x]) & 255;
+      for (let x = bpp; x < stride; x++) {
+        const a = cur[x - bpp], b = prev[x], c = prev[x - bpp];
+        const pa = b > c ? b - c : c - b, pb = a > c ? a - c : c - a, d = a + b - c - c, pc = d < 0 ? -d : d;
+        cur[x] = (raw[s + x] + (pa <= pb && pa <= pc ? a : pb <= pc ? b : c)) & 255;
+      }
+    } else throw new Error("bad filter");
+    for (let i = bpp - aw; i < stride; i += bpp) if (cur[i] !== 255) return false;
+    const t = prev; prev = cur; cur = t;
   }
-  return out;
+  return true;
 }
 
 function checkPng(buf) {
@@ -69,7 +76,12 @@ function checkPng(buf) {
     const type = buf.toString("latin1", p + 4, p + 8);
     const data = buf.subarray(p + 8, p + 8 + len);
     if (p + 12 + len > buf.length) return no("the file is cut short");
-    if (type === "IHDR") ihdr = { w: data.readUInt32BE(0), h: data.readUInt32BE(4), depth: data[8], color: data[9], interlace: data[12] };
+    if (type === "IHDR") {
+      // One header, first, of the size the format says: a second one could
+      // tell this check one size and a browser another.
+      if (ihdr || idat.length || len !== 13) return no("it isn't a PNG that can be read");
+      ihdr = { w: data.readUInt32BE(0), h: data.readUInt32BE(4), depth: data[8], color: data[9], interlace: data[12] };
+    }
     else if (type === "acTL" || type === "fcTL" || type === "fdAT") return no("it's an animated PNG: a slide is one still");
     else if (type === "tRNS") trns = data;
     else if (type === "IDAT") idat.push(data);
@@ -90,51 +102,60 @@ function checkPng(buf) {
     // An alpha channel can still be fully opaque (a canvas export always has
     // one): read it. Interlaced ones are refused rather than read.
     if (ihdr.interlace) return no("it's an interlaced PNG with an alpha channel: export it without either");
-    if (ihdr.depth !== 8 && ihdr.depth !== 16) return no("it isn't a PNG that can be read");
+    // 16-bit alpha is refused rather than read: reading it is slow, and no
+    // export the kit names makes one.
+    if (ihdr.depth === 16) return no("it's a 16-bit PNG with an alpha channel: export it at 8 bits, flattened");
+    if (ihdr.depth !== 8) return no("it isn't a PNG that can be read");
     let raw;
     try {
       raw = zlib.inflateSync(Buffer.concat(idat), { maxOutputLength: (ihdr.w * channels * (ihdr.depth / 8) + 1) * ihdr.h + 1 });
     } catch (e) {
       return no("its pixels can't be read");
     }
-    const bpp = channels * (ihdr.depth / 8);
-    let px;
+    let opaque;
     try {
-      px = unfilter(raw, ihdr.w, ihdr.h, bpp);
+      opaque = allOpaque(raw, ihdr.w, ihdr.h, channels, 1);
     } catch (e) {
       return no("its pixels can't be read");
     }
-    const aw = ihdr.depth / 8;
-    for (let i = bpp - aw; i < px.length; i += bpp) {
-      if (px[i] !== 255 || (aw === 2 && px[i + 1] !== 255)) return no(see);
-    }
+    if (!opaque) return no(see);
   }
   return { ok: true, type: "png", width: ihdr.w, height: ihdr.h, marked };
 }
 
+// Reads the frame header (SOF) up to the start of the picture data (SOS).
+// Exactly one: a second could tell this check one size and a viewer another.
 function checkJpeg(buf) {
   let p = 2;
+  let size = null;
   while (p + 4 <= buf.length) {
     if (buf[p] !== 0xff) return no("it isn't a JPEG that can be read");
     const m = buf[p + 1];
+    if (m === 0xff) { p += 1; continue; }
     if (m === 0xd8 || (m >= 0xd0 && m <= 0xd7) || m === 0x01) { p += 2; continue; }
     if (m === 0xd9 || m === 0xda) break;
     const len = buf.readUInt16BE(p + 2);
+    if (len < 2 || p + 2 + len > buf.length) return no("the file is cut short");
     if ((m >= 0xc0 && m <= 0xcf) && m !== 0xc4 && m !== 0xc8 && m !== 0xcc) {
-      const h = buf.readUInt16BE(p + 5);
-      const w = buf.readUInt16BE(p + 7);
-      const bad = sizeOk(w, h);
-      return bad ? no(bad) : { ok: true, type: "jpeg", width: w, height: h, marked: false };
+      if (size || len < 8) return no("it isn't a JPEG that can be read");
+      size = { h: buf.readUInt16BE(p + 5), w: buf.readUInt16BE(p + 7) };
     }
     p += 2 + len;
   }
-  return no("its size can't be read");
+  if (!size) return no("its size can't be read");
+  const bad = sizeOk(size.w, size.h);
+  return bad ? no(bad) : { ok: true, type: "jpeg", width: size.w, height: size.h, marked: false };
 }
 
 function check(buf) {
   if (!Buffer.isBuffer(buf) || buf.length < 8) return no("it isn't an image that can be read");
-  if (buf.subarray(0, 8).equals(PNG_SIG)) return checkPng(buf);
-  if (buf[0] === 0xff && buf[1] === 0xd8) return checkJpeg(buf);
+  try {
+    if (buf.subarray(0, 8).equals(PNG_SIG)) return checkPng(buf);
+    if (buf[0] === 0xff && buf[1] === 0xd8) return checkJpeg(buf);
+  } catch (e) {
+    // A header that ends early, or a field out of range: not readable.
+    return no("it isn't an image that can be read");
+  }
   return no("it isn't a PNG or a JPEG");
 }
 
