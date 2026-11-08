@@ -251,6 +251,9 @@ test("a title or a file name is read harder than a sentence: run-together, camel
   // A file name has no one to ask: an everyday word run in at a word's start or end counts there.
   for (const f of ["hopequote_v02", "quotehope", "HopeQuote"]) assert.deepEqual(U.idNames(f, [{ name: "Hope Field", is_minor: true }]), ["hope"], f);
   assert.deepEqual(U.idNames("ourhopefam", [{ name: "Hope Field", is_minor: true }]), [], "inside a word, it's another word");
+  // Only beside a word a file name uses: ordinary words that start or end with one stay ordinary.
+  for (const [f, name] of [["hopeful_promo", "Hope Field"], ["kicking_drill_v2", "Sam King"], ["milestone_v1", "Miles Stone"], ["downhill_sprints", "Ty Hill"]]) assert.deepEqual(U.idNames(f, [{ name, is_minor: true }]), [], f);
+  assert.deepEqual(U.idNames("teamhope_final", [{ name: "Hope Field", is_minor: true }]), ["hope"]);
   assert.deepEqual(U.titleNames("The walkout", [{ name: "Al Ko", is_minor: true }]), { sure: [], maybe: ["alko"] });
   assert.ok(U.titleNames("Jordankidd drive", [{ name: "Jordan Kidd", is_minor: true }]).sure.includes("jordankidd"));
   // A title or story sent unchanged isn't asked about again; a certain name in it still counts.

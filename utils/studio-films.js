@@ -246,6 +246,11 @@ function strictMaybe(textValue, people) {
 function splitWords(raw) {
   return String(raw || "").replace(/(\p{Ll})(\p{Lu})/gu, "$1 $2").replace(/(\p{Lu})(\p{Lu}\p{Ll})/gu, "$1 $2");
 }
+// Words a file name runs a name into ("hopequote", "teamhope").
+const FILE_WORDS = new Set(("quote quotes card cards promo promos cut cuts edit edits final finals reel reels slide slides story stories clip clips " +
+  "cover covers title titles draft drafts strong team hero heroes teaser teasers trailer intro outro broll bts vo mix master export exports " +
+  "select selects graphic graphics gfx thumb thumbs thumbnail poster posters still stills photo photos pic pics carousel post posts short shorts " +
+  "frame frames spot spots sizzle recap highlight highlights feature profile interview interviews sitdown").split(" "));
 function idNames(textValue, people) {
   const raw = String(textValue || "");
   const hay = " " + splitWords(raw).toLowerCase().replace(/[^\p{L}\p{M}]+/gu, " ") + " ";
@@ -268,9 +273,18 @@ function idNames(textValue, people) {
     if (p.reviewer_name) look(p.reviewer_name, false);
   }
   // One word of a minor's name run into a word where a word starts or ends
-  // ("jordanquote_v2", "quotejordan"), an everyday one too ("hopequote_v02"):
-  // a file name has no one to ask, and its everyday words count already.
-  for (const w of minorRunIns(raw, people).edge) out.add(w);
+  // ("jordanquote_v2", "quotejordan"). An everyday one ("hope") only when the
+  // rest of the word is one a file name uses ("hopequote_v02", "quotehope"):
+  // "hopeful_promo" and "kicking_drill" are ordinary words.
+  for (const w of minorRunIns(raw, people).sure) out.add(w);
+  const words = raw.toLowerCase().split(/[^\p{L}\p{M}]+/u).filter(Boolean);
+  for (const p of people || []) {
+    if (!p || !p.is_minor) continue;
+    for (const w of nameParts(p.name)) {
+      if (Array.from(w).length < 4 || !everyday(w)) continue;
+      if (words.some((t) => t !== w && ((t.startsWith(w) && FILE_WORDS.has(t.slice(w.length))) || (t.endsWith(w) && FILE_WORDS.has(t.slice(0, t.length - w.length)))))) out.add(w);
+    }
+  }
   return [...out];
 }
 // Names in a film's title. A title is read like a file name (any word of a
