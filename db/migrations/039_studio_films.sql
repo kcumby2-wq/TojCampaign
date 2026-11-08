@@ -25,7 +25,8 @@
 --   * Writes to a film take the film's row lock first, so two changes that
 --     are each allowed alone can't both land (a post during a pull). The
 --     order is always: the person code (an advisory lock), then films in id
---     order, then a film's rows, then its takedown. A change to one row that a
+--     order, then a film's rows, then takedowns in id order (a post's line
+--     coming down locks every takedown listing that post). A change to one row that a
 --     cascade can also reach goes through a function here that locks the film
 --     first (studio_card_save, studio_step_done, studio_review_cancel, ...),
 --     so a single-row update never holds its row while waiting on the film.
@@ -375,24 +376,30 @@ $$;
 
 -- Whether a note names someone on the film's cards for certain: their whole
 -- name (or their reviewer's), or the name run together ("JamieRivers"), as
--- utils/studio-films.js namesIn does with { strong: true }. Such a note stays
--- out of the history. A single word that's also a name ("Will", "Mark") is
--- the app's to ask about, not the database's to refuse.
+-- utils/studio-films.js namesIn does with { strong: true }; or any word of a
+-- minor's name ("Jamie's mom called"), as its minorWords does. Such a note
+-- stays out of the history. A single word of an adult's name ("Will",
+-- "Mark") is the app's to ask about, not the database's to refuse; a child's
+-- name has no such question.
 create or replace function public.studio_names_in(p_film uuid, p_text text) returns boolean
 language sql stable set search_path = '' as $$
   with hay as (
     select ' ' || btrim(regexp_replace(lower(coalesce(p_text, '')), '[^[:alpha:]]+', ' ', 'g')) || ' ' as words,
            regexp_replace(lower(coalesce(p_text, '')), '[^[:alpha:]]+', '', 'g') as letters
   ), names as (
-    select btrim(regexp_replace(lower(n.full_name), '[^[:alpha:]]+', ' ', 'g')) as spaced
-      from public.studio_film_people p, lateral (values (p.name), (p.reviewer_name)) as n(full_name)
+    select btrim(regexp_replace(lower(n.full_name), '[^[:alpha:]]+', ' ', 'g')) as spaced, n.minor
+      from public.studio_film_people p, lateral (values (p.name, p.is_minor), (p.reviewer_name, false)) as n(full_name, minor)
      where p.film_id = p_film and n.full_name is not null
+  ), minor_words as (
+    select w from names, lateral regexp_split_to_table(names.spaced, ' ') as w
+     where names.minor and char_length(w) >= 2
   )
-  select p_text is not null and p_film is not null and exists (
+  select p_text is not null and p_film is not null and (exists (
     select 1 from names, hay
      where (names.spaced like '% %' and hay.words like '% ' || names.spaced || ' %')
         or (names.spaced like '% %' and char_length(replace(names.spaced, ' ', '')) >= 5
             and hay.letters like '%' || replace(names.spaced, ' ', '') || '%'))
+    or exists (select 1 from minor_words, hay where hay.words like '% ' || minor_words.w || ' %'))
 $$;
 
 -- Every file a cut keeps in storage, made or not yet.
@@ -1608,6 +1615,9 @@ begin
   returning r.*;
 end $$;
 
+-- A post coming down ticks its line on every takedown that lists it (two
+-- people in one film, both pulled): those takedowns are locked first, in id
+-- order, so two of these at once never wait on each other the wrong way round.
 create or replace function public.studio_post_remove(p_post uuid, p_by text)
 returns setof public.studio_film_posts
 language plpgsql volatile set search_path = '' as $$
@@ -1616,6 +1626,9 @@ declare
 begin
   if fid is null then return; end if;
   perform 1 from public.studio_films where id = fid for update;
+  perform 1 from public.studio_takedowns t
+   where t.id in (select i.takedown_id from public.studio_takedown_items i where i.post_id = p_post and i.done_at is null)
+   order by t.id for update;
   return query
   update public.studio_film_posts po set removed_at = now(), removed_by = p_by
    where po.id = p_post and po.removed_at is null
@@ -1628,10 +1641,15 @@ language plpgsql volatile set search_path = '' as $$
 declare
   it record;
 begin
-  select film_id, takedown_id into it from public.studio_takedown_items where id = p_item;
+  select film_id, takedown_id, post_id into it from public.studio_takedown_items where id = p_item;
   if it.film_id is null then return; end if;
   perform 1 from public.studio_films where id = it.film_id for update;
-  perform 1 from public.studio_takedowns where id = it.takedown_id for update;
+  -- A post's line coming down takes the post down, which ticks that post's
+  -- lines on other takedowns: this one and those are locked now, in id order.
+  perform 1 from public.studio_takedowns t
+   where t.id = it.takedown_id
+      or (it.post_id is not null and t.id in (select i.takedown_id from public.studio_takedown_items i where i.post_id = it.post_id and i.done_at is null))
+   order by t.id for update;
   return query
   update public.studio_takedown_items i set done_at = now(), done_by = p_by, note = p_note
    where i.id = p_item and i.done_at is null
@@ -1644,17 +1662,24 @@ create or replace function public.studio_close_finished_takedowns()
 returns int
 language plpgsql volatile set search_path = '' as $$
 declare
-  n int;
+  n int := 0;
+  tid uuid;
 begin
-  with done as (
+  -- One at a time: a takedown that someone is changing right now is left
+  -- for the next pass, and so is one that got a new line meanwhile (looked
+  -- at again once it's locked), so one busy takedown never stops the others.
+  for tid in
     select t.id from public.studio_takedowns t
      where t.closed_at is null
        and not exists (select 1 from public.studio_takedown_items i where i.takedown_id = t.id and i.done_at is null)
      order by t.id
-       for update of t skip locked
-  )
-  update public.studio_takedowns t set closed_at = now(), closed_by = 'the app' from done where t.id = done.id;
-  get diagnostics n = row_count;
+  loop
+    perform 1 from public.studio_takedowns t where t.id = tid and t.closed_at is null for update skip locked;
+    continue when not found;
+    continue when exists (select 1 from public.studio_takedown_items i where i.takedown_id = tid and i.done_at is null);
+    update public.studio_takedowns t set closed_at = now(), closed_by = 'the app' where t.id = tid;
+    n := n + 1;
+  end loop;
   return n;
 end $$;
 

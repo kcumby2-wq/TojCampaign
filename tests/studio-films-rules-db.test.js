@@ -148,7 +148,12 @@ test("the history keeps no names: reviewers by who they are, their notes on the 
   assert.deepEqual([asked.fields, asked.words], [["note_may_have_name"], ["pat"]]);
   ok(await films("POST", `/films/${film.id}/notes`, { note: "Called the parent of " + p.person_code + " about the shoot" }, "lead"), "note with the code");
   await assert.rejects(pool.query("insert into studio_events (film_id, kind, by_staff, note) values ($1, 'note', 'lead@toj.test', 'Jordan Kid was great')", [film.id]), /keeps no names/);
-  assert.deepEqual((await step(film.id, "speaker_review", "lead", { cut_ids: [cut.id], note: "Jordan's mum said yes" })).data.fields, ["note_may_have_name"]);
+  // Any word of a minor's name is refused, and saying it isn't a name here
+  // changes nothing: the history never keeps a child's name.
+  assert.deepEqual((await step(film.id, "speaker_review", "lead", { cut_ids: [cut.id], note: "Jordan's mum said yes" })).data.fields, ["note_has_minor_name"]);
+  assert.deepEqual((await films("POST", `/films/${film.id}/notes`, { note: "Jordan's mum called about Saturday", names_ok: ["jordan"] }, "lead")).data.fields, ["note_has_minor_name"]);
+  assert.deepEqual((await films("POST", `/films/${film.id}/notes`, { note: "Jordan's mum called about Saturday", names_ok: true }, "lead")).data.fields, ["note_has_minor_name"]);
+  await assert.rejects(pool.query("insert into studio_events (film_id, kind, by_staff, note) values ($1, 'note', 'lead@toj.test', 'Jordan''s mum called')", [film.id]), /keeps no names/);
   // A note that reaches the database another way is left out of the history.
   await pool.query("select studio_film_reopen($1, 'rough_cut', 'lead@toj.test', 'Pat Kid asked for it')", [film.id]);
   const reopened = (await pool.query("select note from studio_events where film_id = $1 and kind = 'step_reopened'", [film.id])).rows[0];
@@ -157,14 +162,18 @@ test("the history keeps no names: reviewers by who they are, their notes on the 
   assert.doesNotMatch(all, /Jordan|Pat|Kid/);
 });
 
-test("a word that's also a name is asked about, then kept; the database holds whole names only", async () => {
+test("a word of an adult's name is asked about, then kept for those words in that text; the database holds whole names", async () => {
   const { film } = await aFilm();
   // A card named Will Hunter, reviewed by Grace Hunter.
   ok(await films("POST", `/films/${film.id}/people`, { person_code: "W0001", name: "Will Hunter", role: "coach", release_on_file: true, speaker: true, reviewer_relation: "self", reviewer_name: "Grace Hunter", reviewer_email: "grace@x.test" }, "lead"), "card");
   const first = await films("POST", `/films/${film.id}/notes`, { note: "We will reshoot the wide on Tuesday" }, "lead");
   assert.deepEqual([first.status, first.data.fields, first.data.words], [400, ["note_may_have_name"], ["will"]]);
-  ok(await films("POST", `/films/${film.id}/notes`, { note: "We will reshoot the wide on Tuesday", names_ok: true }, "lead"), "kept once it's said not to be a name");
-  assert.deepEqual((await films("POST", `/films/${film.id}/notes`, { note: "Will Hunter called", names_ok: true }, "lead")).data.fields, ["note_has_name"]);
+  // `true` acknowledges nothing: it's the exact words, for this text.
+  assert.deepEqual((await films("POST", `/films/${film.id}/notes`, { note: "We will reshoot the wide on Tuesday", names_ok: true }, "lead")).data.words, ["will"]);
+  ok(await films("POST", `/films/${film.id}/notes`, { note: "We will reshoot the wide on Tuesday", names_ok: ["Will"] }, "lead"), "kept once it's said not to be a name");
+  // A rewritten note with another name word is asked about again.
+  assert.deepEqual((await films("POST", `/films/${film.id}/notes`, { note: "We will reshoot it, by grace", names_ok: ["will"] }, "lead")).data.words, ["grace"]);
+  assert.deepEqual((await films("POST", `/films/${film.id}/notes`, { note: "Will Hunter called", names_ok: ["will", "hunter"] }, "lead")).data.fields, ["note_has_name"]);
   await pool.query("insert into studio_events (film_id, kind, by_staff, note) values ($1, 'note', 'lead@toj.test', 'By grace it is done')", [film.id]);
   await assert.rejects(pool.query("insert into studio_events (film_id, kind, by_staff, note) values ($1, 'note', 'lead@toj.test', 'Grace Hunter said yes')", [film.id]), /keeps no names/);
 });
@@ -472,6 +481,83 @@ test("a takedown closes when its last lines are marked down at once, and not bef
   await pool.query("update studio_takedown_items set done_at = now(), done_by = 'lead@toj.test' where takedown_id = $1 and done_at is null", [td2.id]);
   await W.sweep({ sb });
   assert.ok((await pool.query("select closed_at from studio_takedowns where id = $1", [td2.id])).rows[0].closed_at);
+});
+
+// A film through its sign-off and posted, with two cleared adults in the cut:
+// the speaker (x) and someone else on camera (y).
+async function postedWithTwo(x, y) {
+  let film = ok(await films("POST", "/films", { kit_slug: "same-work", title: `${x} hero`, lane: "college", athlete_id: x, format: "hero", one_sentence: "One line." }, "lead"), "start").film;
+  film = ok(await films("PATCH", `/films/${film.id}`, { seen: film.updated_at, director_email: "dir@toj.test", editor_email: "ed@toj.test" }, "lead"), "assign").film;
+  let p = ok(await films("POST", `/films/${film.id}/people`, { person_code: x, name: "Alex Doe", role: "athlete", speaker: true, release_on_file: true, covers: { face: true, name: true, voice: true }, reviewer_relation: "self", reviewer_name: "Alex Doe", reviewer_email: "alex@x.test" }, "lead"), "card").person;
+  p = ok(await films("POST", `/films/${film.id}/people/${p.id}/clear`, { seen: p.updated_at }, "lead"), "clear").person;
+  let q = ok(await films("POST", `/films/${film.id}/people`, { person_code: y, name: "Sam Roe", role: "coach", release_on_file: true, covers: { face: true, name: true, voice: true } }, "lead"), "card 2").person;
+  q = ok(await films("POST", `/films/${film.id}/people/${q.id}/clear`, { seen: q.updated_at }, "lead"), "clear 2").person;
+  for (const [k, who] of [["brief", "lead"], ["board", "dir"], ["clearance", "lead"], ["shoot", "dir"], ["selects", "dir"], ["rough_cut", "ed"]]) ok(await step(film.id, k, who), k);
+  const cut = await aCut(film, [p.id, q.id]);
+  await approve(film, cut, p);
+  ok(await step(film.id, "speaker_review", "lead", { cut_ids: [cut.id] }), "review");
+  ok(await step(film.id, "rights_check", "lead"), "rights");
+  ok(await films("POST", `/films/${film.id}/second-yes`, { note: "Hooks said yes" }, "lead"), "yes");
+  ok(await step(film.id, "final_signoff", "lead"), "final");
+  const post = ok(await films("POST", `/films/${film.id}/posts`, { cut_id: cut.id, platform: "instagram", url: "https://instagram.com/p/" + film.id.slice(0, 8) }, "kyron"), "post").post;
+  return { film, post };
+}
+
+test("two takedowns listing the same two posts: lines marked down at once lock in one order", async () => {
+  const x = "X" + String(5000 + ++n), y = "Y" + String(5000 + n);
+  const F = await postedWithTwo(x, y);
+  const G = await postedWithTwo(x, y);
+  const tX = ok(await films("POST", "/people/pull", { person_code: x, confirm: true }, "lead"), "pull x").takedown;
+  const tY = ok(await films("POST", "/people/pull", { person_code: y, confirm: true }, "lead"), "pull y").takedown;
+  const line = async (td, post) => (await pool.query("select id from studio_takedown_items where takedown_id = $1 and post_id = $2", [td, post])).rows[0].id;
+  const xF = await line(tX.id, F.post.id);
+  const yG = await line(tY.id, G.post.id);
+  // Both posts held for a moment, so each line gets as far as its post.
+  const t0 = await holding("select 1 from studio_film_posts where id = any($1) for update", [[F.post.id, G.post.id]]);
+  const a = settle(pool.query("select * from studio_takedown_item_done($1, 'lead@toj.test', null)", [xF]));
+  const b = settle(pool.query("select * from studio_takedown_item_done($1, 'kyron@toj.test', null)", [yG]));
+  await wait(300);
+  await t0.done();
+  const [ra, rb] = await Promise.all([a, b]);
+  assert.ok(ra.ok && rb.ok, JSON.stringify([ra, rb]));
+  // Each post came down, and that ticked its line on the other takedown too.
+  const lines = (await pool.query("select done_at is not null as done from studio_takedown_items where post_id = any($1)", [[F.post.id, G.post.id]])).rows;
+  assert.deepEqual(lines.map((r) => r.done), [true, true, true, true]);
+  // The same two posts taken down by hand at once.
+  const H = await postedWithTwo("X" + String(5000 + ++n), "Y" + String(5000 + n));
+  const J = await postedWithTwo(H.film.athlete_id, "Y" + String(5000 + n));
+  for (const code of [H.film.athlete_id, "Y" + String(5000 + n)]) ok(await films("POST", "/people/pull", { person_code: code, confirm: true }, "lead"), "pull");
+  const t1 = await holding("select 1 from studio_film_posts where id = any($1) for update", [[H.post.id, J.post.id]]);
+  const c = settle(pool.query("select * from studio_post_remove($1, 'lead@toj.test')", [H.post.id]));
+  const d = settle(pool.query("select * from studio_post_remove($1, 'kyron@toj.test')", [J.post.id]));
+  await wait(300);
+  await t1.done();
+  const [rc, rd] = await Promise.all([c, d]);
+  assert.ok(rc.ok && rd.ok, JSON.stringify([rc, rd]));
+});
+
+test("the worker's safety net closes what it can and leaves a takedown that's busy for the next pass", async () => {
+  const codes = ["S" + String(5000 + ++n), "S" + String(5000 + ++n)];
+  const tds = [];
+  for (const code of codes) {
+    const f = await aFilm();
+    ok(await films("POST", `/films/${f.film.id}/people`, { person_code: code, name: "Kim Poe", role: "coach", release_on_file: true }, "lead"), "card");
+    tds.push(ok(await films("POST", "/people/pull", { person_code: code, confirm: true }, "lead"), "pull").takedown);
+  }
+  // Both are finished, but nobody's lines closed them (marked down by hand in the database).
+  await pool.query("alter table studio_takedown_items disable trigger studio_takedown_items_then");
+  try {
+    await pool.query("update studio_takedown_items set done_at = now(), done_by = 'lead@toj.test' where takedown_id = any($1) and done_at is null", [tds.map((t) => t.id)]);
+  } finally {
+    await pool.query("alter table studio_takedown_items enable trigger studio_takedown_items_then");
+  }
+  const busy = await holding("select 1 from studio_takedowns where id = $1 for update", [tds[0].id]);
+  const closed = (await pool.query("select studio_close_finished_takedowns() as n")).rows[0].n;
+  await busy.done();
+  assert.equal(closed, 1, "the one nobody was changing closed, without waiting");
+  const open = (await pool.query("select id from studio_takedowns where id = any($1) and closed_at is null", [tds.map((t) => t.id)])).rows.map((r) => r.id);
+  assert.deepEqual(open, [tds[0].id]);
+  assert.equal((await pool.query("select studio_close_finished_takedowns() as n")).rows[0].n, 1, "and the next pass closes it");
 });
 
 test("an upload that lands after a pull is swept from the pulled film's folder", async () => {
