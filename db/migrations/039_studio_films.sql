@@ -9,13 +9,21 @@
 --   * One step at a time, in the kit's order. "No card, no shoot": the
 --     clearance step needs a cleared card for everyone on camera, and the
 --     shoot needs them still cleared.
+--   * Minors appear only unidentifiable: no face, no name, no jersey number
+--     (Kyron's rule; the kit's for Texas youth). A pulled consent stays
+--     pulled: a new card for that code needs the family's new consent.
 --   * A speaker approves their own cut (a minor's parent or guardian does),
 --     on a one-time review link that expires. The link carries a token; the
 --     server turns it into a proof (sha256 of the token) and the table keeps
 --     only sha256 of the proof, so nothing that can read the table can
---     decide. The approval is for that exact file (its sha256).
---   * Nothing is posted before the final sign-off, and only cuts every
---     speaker in them approved, with everyone in them cleared.
+--     decide. The approval is for that exact file (its sha256), from the
+--     reviewer the card names now: a card change cancels its live links.
+--   * The speaker review names the cuts that go on; the rights check and the
+--     final sign-off (with Coach Hooks's yes, recorded after the rights check)
+--     are for those cuts, and only those cuts are posted, with every speaker's
+--     yes and everyone in them cleared.
+--   * Writes to a film take the film's row lock first, so two changes that
+--     are each allowed alone can't both land (a post during a pull).
 --   * The clip log: every cut lists who is in it. A pulled consent pulls the
 --     film: every film the person is in stops, every live post of those films
 --     goes on a takedown list, and the 72-hour clock starts.
@@ -71,6 +79,10 @@ create table if not exists public.studio_films (
   updated_at timestamptz not null default now(),
   archived_at timestamptz,
   archived_by text check (archived_by is null or char_length(archived_by) between 3 and 200),
+  -- Who makes a change says so with that change: changed_by is taken by the
+  -- gate (it's empty again after every write), and kept as last_changed_by.
+  changed_by text check (changed_by is null or char_length(changed_by) between 3 and 200),
+  last_changed_by text check (last_changed_by is null or char_length(last_changed_by) between 3 and 200),
   -- A pulled consent pulls the film, for good.
   pulled_at timestamptz,
   constraint studio_films_archived_whole check ((archived_at is null) = (archived_by is null))
@@ -89,7 +101,10 @@ create table if not exists public.studio_film_steps (
   -- The staff member behind a reopen (for the history).
   changed_by text check (changed_by is null or char_length(changed_by) between 3 and 200),
   note text check (note is null or char_length(note) between 1 and 500),
-  -- Speaker review onward: the cut every speaker in it approved.
+  -- Speaker review onward: the cuts every speaker in them approved, which the
+  -- rights check and the final sign-off are for and which alone are posted
+  -- (a hero film's 9:16 and its 4:5). cut_id is the first of them.
+  cut_ids uuid[],
   cut_id uuid,
   second_yes_by text check (second_yes_by is null or char_length(second_yes_by) between 2 and 200),
   second_yes_at timestamptz,
@@ -126,10 +141,15 @@ create table if not exists public.studio_film_people (
     and reviewer_email ~ '^[a-z0-9._+''-]+@[a-z0-9-]+(\.[a-z0-9-]+)*\.[a-z]{2,}$')),
   cleared_at timestamptz,
   cleared_by text check (cleared_by is null or char_length(cleared_by) between 3 and 200),
+  -- Who changes a card says so with that change (as on studio_films).
   changed_by text check (changed_by is null or char_length(changed_by) between 3 and 200),
+  last_changed_by text check (last_changed_by is null or char_length(last_changed_by) between 3 and 200),
   consent_pulled_at timestamptz,
   pulled_by text check (pulled_by is null or char_length(pulled_by) between 3 and 200),
   pulled_note text check (pulled_note is null or char_length(pulled_note) between 1 and 500),
+  -- A code whose consent was pulled comes back only with the family's new
+  -- consent, recorded by the producer (how and when), once its takedown is done.
+  reconsent_note text check (reconsent_note is null or char_length(reconsent_note) between 3 and 500),
   created_by text not null check (char_length(created_by) between 3 and 200),
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
@@ -137,10 +157,11 @@ create table if not exists public.studio_film_people (
   constraint studio_film_people_cleared_whole check ((cleared_at is null) = (cleared_by is null)),
   constraint studio_film_people_cleared_release check (cleared_at is null or release_on_file),
   constraint studio_film_people_pulled_whole check ((consent_pulled_at is null) = (pulled_by is null)),
-  -- Texas youth athletes appear only unidentifiable until counsel clears it:
-  -- no face, no name, no jersey number.
-  constraint studio_film_people_texas_youth check (not texas_youth or (is_minor
-    and coalesce(covers->>'face', 'false') = 'false' and coalesce(covers->>'name', 'false') = 'false'
+  -- Minors appear only unidentifiable: no face, no name, no jersey number.
+  -- Texas youth athletes are minors (and stay so until counsel clears it).
+  constraint studio_film_people_texas_youth check (not texas_youth or is_minor),
+  constraint studio_film_people_minor check (not is_minor or (
+    coalesce(covers->>'face', 'false') = 'false' and coalesce(covers->>'name', 'false') = 'false'
     and coalesce(covers->>'jersey', 'false') = 'false')),
   -- An adult approves their own cut; a minor's parent or legal guardian does.
   constraint studio_film_people_reviewer check (reviewer_relation is null
@@ -172,8 +193,12 @@ create table if not exists public.studio_film_cuts (
   duration_ms int check (duration_ms is null or duration_ms >= 0),
   width int check (width is null or width > 0),
   height int check (height is null or height > 0),
-  -- The fingerprint of the file the speakers watch, set when it's ready.
+  -- The uploaded file's fingerprint (the file that will post): every
+  -- approval is for it. Set when the cut is ready.
   sha256 text check (sha256 is null or sha256 ~ '^[0-9a-f]{64}$'),
+  -- The fingerprint of the copy the speakers watch, made from that file. Its
+  -- storage key carries the start of it, and neither changes once ready.
+  preview_sha256 text check (preview_sha256 is null or preview_sha256 ~ '^[0-9a-f]{64}$'),
   status text not null default 'uploaded' check (status in ('uploaded', 'processing', 'ready', 'failed')),
   error text check (error is null or char_length(error) <= 500),
   attempts int not null default 0 check (attempts between 0 and 10),
@@ -182,7 +207,7 @@ create table if not exists public.studio_film_cuts (
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   unique (film_id, format, ratio, version),
-  constraint studio_film_cuts_ready check (status <> 'ready' or (sha256 is not null and (kind = 'slides' or (preview_key is not null and duration_ms is not null))))
+  constraint studio_film_cuts_ready check (status <> 'ready' or (sha256 is not null and (kind = 'slides' or (preview_key is not null and duration_ms is not null and preview_sha256 is not null))))
 );
 create index if not exists studio_film_cuts_film_idx on public.studio_film_cuts (film_id, created_at);
 create index if not exists studio_film_cuts_work_idx on public.studio_film_cuts (status, created_at) where status in ('uploaded', 'processing');
@@ -277,6 +302,21 @@ create unique index if not exists studio_takedown_items_post on public.studio_ta
 create unique index if not exists studio_takedown_items_elsewhere on public.studio_takedown_items (takedown_id, film_id) where what = 'elsewhere';
 alter table public.studio_takedown_items enable row level security;
 
+-- ── Files to remove from storage ──────────────────────────────────────────
+-- A deleted cut's files and a pulled film's files, listed by the database in
+-- the same change, so a removal that fails is retried (utils/studio-review-
+-- worker.js) instead of forgotten.
+create table if not exists public.studio_storage_removals (
+  key text primary key check (char_length(key) between 1 and 300),
+  reason text not null check (reason in ('cut_deleted', 'consent_pulled')),
+  requested_at timestamptz not null default now(),
+  done_at timestamptz,
+  tries int not null default 0 check (tries >= 0),
+  last_error text check (last_error is null or char_length(last_error) <= 300)
+);
+create index if not exists studio_storage_removals_todo_idx on public.studio_storage_removals (requested_at) where done_at is null;
+alter table public.studio_storage_removals enable row level security;
+
 -- ── The history ───────────────────────────────────────────────────────────
 create table if not exists public.studio_events (
   id bigint generated always as identity primary key,
@@ -305,7 +345,8 @@ alter table public.studio_events enable row level security;
 -- ── Helpers ───────────────────────────────────────────────────────────────
 -- A cut is approved when it's ready, has a speaker in it, everyone in it is
 -- cleared and nobody in it has pulled consent, and every speaker in it said
--- yes to this exact file and still does.
+-- yes to this exact file and still does, through the reviewer their card
+-- names now.
 create or replace function public.studio_cut_approved(p_cut uuid) returns boolean
 language sql stable set search_path = '' as $$
   select exists (
@@ -322,8 +363,40 @@ language sql stable set search_path = '' as $$
             and not exists (
               select 1 from public.studio_reviews r
                where r.cut_id = c.id and r.person_id = p.id and r.decision = 'approved'
-                 and r.withdrawn_at is null and r.approved_fingerprint = c.sha256))
+                 and r.withdrawn_at is null and r.approved_fingerprint = c.sha256
+                 and r.reviewer_email = p.reviewer_email and r.reviewer_relation = p.reviewer_relation))
   )
+$$;
+
+-- Whether a note names someone on the film's cards, as utils/studio-films.js
+-- namesIn does: a word of 3 or more letters of a name or a reviewer's name,
+-- the whole name, or the name run together. Such a note stays out of the
+-- history.
+create or replace function public.studio_names_in(p_film uuid, p_text text) returns boolean
+language sql stable set search_path = '' as $$
+  with hay as (
+    select ' ' || btrim(regexp_replace(lower(coalesce(p_text, '')), '[^[:alpha:]]+', ' ', 'g')) || ' ' as words,
+           regexp_replace(lower(coalesce(p_text, '')), '[^[:alpha:]]+', '', 'g') as letters
+  ), names as (
+    select btrim(regexp_replace(lower(n.full_name), '[^[:alpha:]]+', ' ', 'g')) as spaced
+      from public.studio_film_people p, lateral (values (p.name), (p.reviewer_name)) as n(full_name)
+     where p.film_id = p_film and n.full_name is not null
+  )
+  select p_text is not null and p_film is not null and exists (
+    select 1 from names, hay
+     where (names.spaced like '% %' and hay.words like '% ' || names.spaced || ' %')
+        or (char_length(replace(names.spaced, ' ', '')) >= 5 and hay.letters like '%' || replace(names.spaced, ' ', '') || '%')
+        or exists (select 1 from regexp_split_to_table(names.spaced, ' ') as w(word)
+                    where char_length(w.word) >= 3 and hay.words like '% ' || w.word || ' %'))
+$$;
+
+-- Every file a cut keeps in storage, made or not yet.
+create or replace function public.studio_cut_files(c public.studio_film_cuts) returns setof text
+language sql stable set search_path = '' as $$
+  select k from (
+    select c.object_key as k union all select c.preview_key union all select c.poster_key
+    union all select unnest(coalesce(c.slide_keys, '{}'::text[]))
+  ) as x where k is not null
 $$;
 
 create or replace function public.studio_tool_on(p_tool text) returns boolean
@@ -359,6 +432,8 @@ end $$;
 
 create or replace function public.studio_films_gate() returns trigger
 language plpgsql set search_path = '' as $$
+declare
+  who text;
 begin
   if tg_op = 'DELETE' then
     raise exception 'a film is archived, not deleted';
@@ -367,8 +442,14 @@ begin
     if new.pulled_at is not null or new.archived_at is not null then
       raise exception 'a new film starts active';
     end if;
+    new.changed_by := null;
+    new.last_changed_by := null;
     return new;
   end if;
+  -- Who's making this change, said with it (never carried over).
+  who := new.changed_by;
+  new.changed_by := null;
+  new.last_changed_by := coalesce(who, old.last_changed_by);
   if new.id <> old.id or new.kit_slug <> old.kit_slug or new.kit_id <> old.kit_id or new.kit_version <> old.kit_version
      or new.created_by <> old.created_by or new.created_at <> old.created_at
      or new.second_yes_label is distinct from old.second_yes_label then
@@ -396,6 +477,7 @@ begin
       if new.archived_by is null then raise exception 'who archived film %', old.id; end if;
       new.archived_at := now();
     elsif new.archived_at is null then
+      if who is null then raise exception 'who brought film % back', old.id; end if;
       new.archived_by := null;
     else
       raise exception 'film % was archived at %', old.id, old.archived_at;
@@ -410,13 +492,12 @@ declare
   f public.studio_films%rowtype;
   prev text;
   later text;
-  approved_cut uuid;
 begin
   if tg_op = 'DELETE' then
     raise exception 'a film keeps its ten steps';
   end if;
   if tg_op = 'INSERT' then
-    if new.status <> 'todo' or new.done_at is not null or new.done_by is not null or new.cut_id is not null
+    if new.status <> 'todo' or new.done_at is not null or new.done_by is not null or new.cut_id is not null or new.cut_ids is not null
        or new.second_yes_by is not null or new.second_yes_at is not null then
       raise exception 'a film step starts as to do';
     end if;
@@ -426,37 +507,52 @@ begin
   if new.film_id <> old.film_id or new.step <> old.step or new.position <> old.position then
     raise exception 'a step keeps its film and its place';
   end if;
-  select * into f from public.studio_films where id = new.film_id;
+  -- The film's row lock first: one change to a film at a time.
+  select * into f from public.studio_films where id = new.film_id for update;
 
   -- A done step stays as it was; only a reopen changes it.
   if old.status = 'done' and new.status = 'done' then
-    if row(new.done_at, new.done_by, new.note, new.cut_id, new.second_yes_by, new.second_yes_at, new.second_yes_note)
-       is distinct from row(old.done_at, old.done_by, old.note, old.cut_id, old.second_yes_by, old.second_yes_at, old.second_yes_note) then
+    if row(new.done_at, new.done_by, new.note, new.cut_id, new.cut_ids, new.second_yes_by, new.second_yes_at, new.second_yes_note)
+       is distinct from row(old.done_at, old.done_by, old.note, old.cut_id, old.cut_ids, old.second_yes_by, old.second_yes_at, old.second_yes_note) then
       raise exception 'the % step is done: reopen it to change it', old.step;
     end if;
     return new;
   end if;
 
-  -- Still to do: a note, and the second yes for the final sign-off.
+  -- Still to do: a note, and the second yes for the final sign-off, given
+  -- for the cuts the rights check passed (so only once it's done).
   if old.status = 'todo' and new.status = 'todo' then
-    if new.done_at is not null or new.done_by is not null or new.cut_id is distinct from old.cut_id then
+    if new.done_at is not null or new.done_by is not null or new.cut_id is distinct from old.cut_id or new.cut_ids is distinct from old.cut_ids then
       raise exception 'the % step is still to do', old.step;
     end if;
     if new.second_yes_by is distinct from old.second_yes_by or new.second_yes_note is distinct from old.second_yes_note then
-      if f.pulled_at is not null or f.archived_at is not null then
-        raise exception 'film % is closed', f.id;
+      if new.second_yes_by is not null then
+        if f.pulled_at is not null or f.archived_at is not null then
+          raise exception 'film % is closed', f.id;
+        end if;
+        if not exists (select 1 from public.studio_film_steps s where s.film_id = new.film_id and s.step = 'rights_check' and s.status = 'done') then
+          raise exception '% says yes to the cuts the rights check passed: the rights check comes first', coalesce(f.second_yes_label, 'the second yes');
+        end if;
       end if;
       new.second_yes_at := case when new.second_yes_by is null then null else now() end;
+      if new.second_yes_by is null then new.second_yes_note := null; end if;
     else
       new.second_yes_at := old.second_yes_at;
     end if;
     return new;
   end if;
 
-  -- Reopen: the last done step only (later ones first), never the publish.
+  -- Reopen: the last done step only (later ones first), never the publish,
+  -- and not while anything of the film is out.
   if old.status = 'done' and new.status = 'todo' then
     if old.step = 'publish' then
       raise exception 'a published film is taken down, not reopened';
+    end if;
+    if f.pulled_at is not null or f.archived_at is not null then
+      raise exception 'film % is closed', f.id;
+    end if;
+    if exists (select 1 from public.studio_film_posts po where po.film_id = new.film_id and po.removed_at is null) then
+      raise exception 'this film is out: take its posts down first, then reopen';
     end if;
     select status into later from public.studio_film_steps where film_id = new.film_id and position = new.position + 1;
     if later = 'done' then
@@ -468,6 +564,7 @@ begin
     new.done_at := null;
     new.done_by := null;
     new.cut_id := null;
+    new.cut_ids := null;
     if new.step = 'final_signoff' then
       new.second_yes_by := null;
       new.second_yes_at := null;
@@ -507,17 +604,25 @@ begin
       raise exception 'no card, no shoot: everyone on camera needs a cleared card';
     end if;
   elsif new.step = 'speaker_review' then
-    if new.cut_id is null or not exists (select 1 from public.studio_film_cuts c where c.id = new.cut_id and c.film_id = f.id) then
+    -- The cuts that go on: one or more of this film's, each approved.
+    if new.cut_ids is null and new.cut_id is not null then
+      new.cut_ids := array[new.cut_id];
+    end if;
+    if new.cut_ids is null or cardinality(new.cut_ids) not between 1 and 10
+       or (select count(distinct u) from unnest(new.cut_ids) as u) <> cardinality(new.cut_ids)
+       or exists (select 1 from unnest(new.cut_ids) as u(cid)
+                   where not exists (select 1 from public.studio_film_cuts c where c.id = u.cid and c.film_id = f.id)) then
       raise exception 'which of this film''s cuts did the speakers approve?';
     end if;
-    if not public.studio_cut_approved(new.cut_id) then
-      raise exception 'every speaker in that cut has to say yes to it first';
+    if exists (select 1 from unnest(new.cut_ids) as u(cid) where not public.studio_cut_approved(u.cid)) then
+      raise exception 'every speaker in those cuts has to say yes to them first';
     end if;
+    new.cut_id := new.cut_ids[1];
   elsif new.step in ('rights_check', 'final_signoff', 'publish') then
-    select s.cut_id into approved_cut from public.studio_film_steps s where s.film_id = f.id and s.step = 'speaker_review';
-    new.cut_id := approved_cut;
-    if approved_cut is null or not public.studio_cut_approved(approved_cut) then
-      raise exception 'the approved cut is no longer approved: a speaker took it back or a card changed';
+    select s.cut_ids into new.cut_ids from public.studio_film_steps s where s.film_id = f.id and s.step = 'speaker_review';
+    new.cut_id := new.cut_ids[1];
+    if new.cut_ids is null or exists (select 1 from unnest(new.cut_ids) as u(cid) where not public.studio_cut_approved(u.cid)) then
+      raise exception 'the approved cuts are no longer approved: a speaker took it back or a card changed';
     end if;
     if new.step = 'final_signoff' and f.second_yes_label is not null and new.second_yes_at is null then
       raise exception '% says yes too, or it waits', f.second_yes_label;
@@ -527,6 +632,7 @@ begin
     end if;
   else
     new.cut_id := null;
+    new.cut_ids := null;
   end if;
   return new;
 end $$;
@@ -536,8 +642,11 @@ language plpgsql set search_path = '' as $$
 declare
   f public.studio_films%rowtype;
   card_changed boolean;
+  pulled_last timestamptz;
+  who text;
 begin
   if tg_op = 'DELETE' then
+    perform 1 from public.studio_films where id = old.film_id for update;
     if old.cleared_at is not null or old.consent_pulled_at is not null
        or exists (select 1 from public.studio_film_cuts c where c.film_id = old.film_id and old.id = any (c.people))
        or exists (select 1 from public.studio_reviews r where r.person_id = old.id) then
@@ -545,7 +654,8 @@ begin
     end if;
     return old;
   end if;
-  select * into f from public.studio_films where id = new.film_id;
+  -- The film's row lock first: one change to a film at a time.
+  select * into f from public.studio_films where id = new.film_id for update;
   if tg_op = 'INSERT' then
     if new.cleared_at is not null or new.cleared_by is not null or new.consent_pulled_at is not null then
       raise exception 'a new card starts not cleared';
@@ -553,11 +663,35 @@ begin
     if f.pulled_at is not null or f.archived_at is not null then
       raise exception 'film % is closed', f.id;
     end if;
+    -- A pulled consent stays pulled: the code comes back only once its
+    -- takedown is done, with the family's new consent recorded on the first
+    -- card after the pull.
+    pulled_last := (select max(x.consent_pulled_at) from public.studio_film_people x where x.person_code = new.person_code);
+    if pulled_last is not null and not exists (
+         select 1 from public.studio_film_people x
+          where x.person_code = new.person_code and x.reconsent_note is not null and x.consent_pulled_at is null and x.created_at > pulled_last) then
+      if exists (select 1 from public.studio_takedowns t where t.person_code = new.person_code and t.closed_at is null) then
+        raise exception 'consent for % was pulled and its takedown is still open', new.person_code;
+      end if;
+      if new.reconsent_note is null then
+        raise exception 'consent for % was pulled: a new card needs the family''s new consent, recorded by the producer', new.person_code;
+      end if;
+    elsif new.reconsent_note is not null then
+      raise exception 'a new consent is recorded only for a code whose consent was pulled';
+    end if;
+    new.created_at := now();
+    new.changed_by := null;
+    new.last_changed_by := null;
     return new;
   end if;
+  -- Who's making this change, said with it (never carried over).
+  who := new.changed_by;
+  new.changed_by := null;
+  new.last_changed_by := coalesce(who, old.last_changed_by);
 
-  if new.film_id <> old.film_id or new.person_code <> old.person_code or new.created_by <> old.created_by then
-    raise exception 'a card keeps its film, its code and its author';
+  if new.film_id <> old.film_id or new.person_code <> old.person_code or new.created_by <> old.created_by
+     or new.reconsent_note is distinct from old.reconsent_note then
+    raise exception 'a card keeps its film, its code, its author and its consent note';
   end if;
   if old.consent_pulled_at is not null then
     raise exception 'consent was pulled: the card for % is closed', old.person_code;
@@ -583,14 +717,17 @@ begin
                   is distinct from row(old.name, old.role, old.is_minor, old.texas_youth, old.speaker, old.release_on_file, old.covers,
                       old.reviewer_relation, old.reviewer_name, old.reviewer_email);
 
+  -- A card in something live doesn't change, or get uncleared, at all: take
+  -- the post down or pull consent instead.
+  if (card_changed or (new.cleared_at is null and old.cleared_at is not null))
+     and exists (select 1 from public.studio_film_posts p join public.studio_film_cuts c on c.id = p.cut_id
+                  where p.film_id = old.film_id and p.removed_at is null and old.id = any (c.people)) then
+    raise exception 'the card for % is in something posted: take it down or pull consent instead', old.person_code;
+  end if;
+  if card_changed and who is null then
+    raise exception 'who changed the card for %', old.person_code;
+  end if;
   if card_changed and old.cleared_at is not null then
-    if exists (select 1 from public.studio_film_posts p join public.studio_film_cuts c on c.id = p.cut_id
-                where p.film_id = old.film_id and p.removed_at is null and old.id = any (c.people)) then
-      raise exception 'the card for % is in something posted: take it down or pull consent instead', old.person_code;
-    end if;
-    if new.changed_by is null then
-      raise exception 'who changed the card for %', old.person_code;
-    end if;
     -- A changed card is cleared again before anything goes on.
     new.cleared_at := null;
     new.cleared_by := null;
@@ -609,7 +746,7 @@ begin
     end if;
     new.cleared_at := now();
   elsif new.cleared_at is null and old.cleared_at is not null then
-    if new.changed_by is null then
+    if who is null then
       raise exception 'who uncleared the card for %', old.person_code;
     end if;
     new.cleared_by := null;
@@ -626,13 +763,15 @@ declare
   asked boolean;
 begin
   if tg_op = 'DELETE' then
+    perform 1 from public.studio_films where id = old.film_id for update;
     if exists (select 1 from public.studio_reviews r where r.cut_id = old.id)
        or exists (select 1 from public.studio_film_posts p where p.cut_id = old.id) then
       raise exception 'a cut that went to review or out is kept';
     end if;
     return old;
   end if;
-  select * into f from public.studio_films where id = new.film_id;
+  -- The film's row lock first: one change to a film at a time.
+  select * into f from public.studio_films where id = new.film_id for update;
   -- Everyone in it is on this film's cards, and nobody in it pulled consent.
   if exists (select 1 from unnest(new.people) as u(pid)
                left join public.studio_film_people p on p.id = u.pid
@@ -660,15 +799,25 @@ begin
     raise exception 'cut % went to review: who is in it stays as it was', old.id;
   end if;
   if old.status = 'ready' then
-    if new.status <> 'ready' or row(new.sha256, new.preview_key, new.poster_key, new.slide_keys, new.bytes, new.duration_ms, new.width, new.height)
-       is distinct from row(old.sha256, old.preview_key, old.poster_key, old.slide_keys, old.bytes, old.duration_ms, old.width, old.height) then
+    if new.status <> 'ready' or row(new.sha256, new.preview_sha256, new.preview_key, new.poster_key, new.slide_keys, new.bytes, new.duration_ms, new.width, new.height)
+       is distinct from row(old.sha256, old.preview_sha256, old.preview_key, old.poster_key, old.slide_keys, old.bytes, old.duration_ms, old.width, old.height) then
       raise exception 'cut % is ready: its file stays as it was', old.id;
     end if;
   elsif new.status is distinct from old.status then
-    if not ((old.status = 'uploaded' and new.status = 'processing')
+    if not ((old.status = 'uploaded' and new.status in ('processing', 'failed'))
          or (old.status = 'processing' and new.status in ('ready', 'failed', 'uploaded'))
          or (old.status = 'failed' and new.status = 'processing')) then
       raise exception 'cut % can''t go from % to %', old.id, old.status, new.status;
+    end if;
+    -- Nothing more is made for a closed film (a pull's sweep has run).
+    if new.status in ('processing', 'ready') and (f.pulled_at is not null or f.archived_at is not null) then
+      raise exception 'film % is closed: no more review copies', f.id;
+    end if;
+    -- A video's review copy and poster are named by the copy's fingerprint.
+    if new.status = 'ready' and new.kind = 'video'
+       and (new.preview_key is distinct from format('films/%s/previews/%s-%s.mp4', new.film_id, new.id, left(new.preview_sha256, 16))
+            or new.poster_key is distinct from format('films/%s/previews/%s-%s.jpg', new.film_id, new.id, left(new.preview_sha256, 16))) then
+      raise exception 'cut %''s review copy is kept under its own fingerprint', old.id;
     end if;
   end if;
   return new;
@@ -685,9 +834,10 @@ begin
   if tg_op = 'DELETE' then
     raise exception 'a review is kept';
   end if;
+  -- The film's row lock first: one change to a film at a time.
+  select * into f from public.studio_films where id = new.film_id for update;
   select * into c from public.studio_film_cuts where id = new.cut_id;
   select * into p from public.studio_film_people where id = new.person_id;
-  select * into f from public.studio_films where id = new.film_id;
 
   if tg_op = 'INSERT' then
     if new.decision is not null or new.decided_at is not null or new.approved_fingerprint is not null or new.withdrawn_at is not null then
@@ -743,7 +893,9 @@ begin
       raise exception 'review % is decided only by the reviewer, through their link', old.id;
     end if;
     if c.status <> 'ready' or c.sha256 is distinct from old.asked_fingerprint
-       or p.cleared_at is null or p.consent_pulled_at is not null or f.pulled_at is not null or f.archived_at is not null then
+       or p.cleared_at is null or p.consent_pulled_at is not null or f.pulled_at is not null or f.archived_at is not null
+       or old.reviewer_email is distinct from p.reviewer_email or old.reviewer_relation is distinct from p.reviewer_relation
+       or not public.studio_tool_on('review_copies') then
       raise exception 'review % can''t be decided now', old.id;
     end if;
     if new.decision = 'changes' and char_length(btrim(coalesce(new.note, ''))) < 3 then
@@ -794,8 +946,9 @@ begin
   if tg_op = 'DELETE' then
     raise exception 'a post is marked removed, never deleted';
   end if;
+  -- The film's row lock first: one change to a film at a time.
+  select * into f from public.studio_films where id = new.film_id for update;
   if tg_op = 'INSERT' then
-    select * into f from public.studio_films where id = new.film_id;
     if f.pulled_at is not null or f.archived_at is not null then
       raise exception 'film % is closed', new.film_id;
     end if;
@@ -804,6 +957,9 @@ begin
     end if;
     if not exists (select 1 from public.studio_film_steps s where s.film_id = new.film_id and s.step = 'final_signoff' and s.status = 'done') then
       raise exception 'nothing goes out before the final sign-off';
+    end if;
+    if not exists (select 1 from public.studio_film_steps s where s.film_id = new.film_id and s.step = 'final_signoff' and new.cut_id = any (s.cut_ids)) then
+      raise exception 'only the cuts the final sign-off was for go out';
     end if;
     if not exists (select 1 from public.studio_film_cuts c where c.id = new.cut_id and c.film_id = new.film_id) then
       raise exception 'a post is for one of this film''s cuts';
@@ -863,6 +1019,8 @@ begin
   if tg_op = 'DELETE' then
     raise exception 'a takedown item is kept';
   end if;
+  -- The film's row lock first: one change to a film at a time.
+  perform 1 from public.studio_films where id = new.film_id for update;
   if tg_op = 'INSERT' then
     if new.done_at is not null then
       raise exception 'a takedown item starts to do';
@@ -905,18 +1063,36 @@ begin
   return null;
 end $$;
 
--- A pulled consent pulls the film, stops its live review links, and puts
--- every live post of it on the person's open takedown (one per person code),
--- with a line for everything outside the app.
+-- A changed or uncleared card stops its live review links: an approval comes
+-- from the reviewer the card names now.
+-- A pulled consent pulls the film, stops its live review links, lists its
+-- files for removal from storage, and puts every live post of it on the
+-- person's open takedown (one per person code), with a line for everything
+-- outside the app.
 create or replace function public.studio_people_cascade() returns trigger
 language plpgsql set search_path = '' as $$
 declare
   td uuid;
 begin
+  if old.consent_pulled_at is null and new.consent_pulled_at is null
+     and (row(new.name, new.role, new.is_minor, new.texas_youth, new.speaker, new.release_on_file, new.covers,
+              new.reviewer_relation, new.reviewer_name, new.reviewer_email)
+          is distinct from row(old.name, old.role, old.is_minor, old.texas_youth, old.speaker, old.release_on_file, old.covers,
+              old.reviewer_relation, old.reviewer_name, old.reviewer_email)
+          or (new.cleared_at is null and old.cleared_at is not null)) then
+    update public.studio_reviews set link_hash = null, expires_at = null, changed_by = coalesce(new.last_changed_by, 'the app'), updated_at = now()
+     where person_id = new.id and link_hash is not null;
+    return null;
+  end if;
   if not (new.consent_pulled_at is not null and old.consent_pulled_at is null) then
     return null;
   end if;
   update public.studio_films set pulled_at = now(), updated_at = now() where id = new.film_id and pulled_at is null;
+  insert into public.studio_storage_removals (key, reason)
+  select k, 'consent_pulled' from public.studio_film_cuts c, lateral public.studio_cut_files(c) as k
+   where c.film_id = new.film_id
+  on conflict (key) do update set done_at = null, tries = 0
+    where public.studio_storage_removals.done_at is not null;
   update public.studio_reviews set link_hash = null, expires_at = null, changed_by = new.pulled_by, updated_at = now()
    where film_id = new.film_id and link_hash is not null;
   select t.id into td from public.studio_takedowns t where t.person_code = new.person_code and t.closed_at is null
@@ -951,6 +1127,47 @@ begin
   return null;
 end $$;
 
+-- A step before the final sign-off reopened: Coach Hooks's yes was for the
+-- cuts as they were, so it goes.
+create or replace function public.studio_film_steps_after() returns trigger
+language plpgsql set search_path = '' as $$
+begin
+  if old.status = 'done' and new.status = 'todo' and new.position < 9 then
+    update public.studio_film_steps set second_yes_by = null, second_yes_note = null, updated_at = now()
+     where film_id = new.film_id and step = 'final_signoff' and status = 'todo' and second_yes_by is not null;
+  end if;
+  return null;
+end $$;
+
+-- A deleted cut's files go on the removal list in the same change.
+create or replace function public.studio_film_cuts_deleted() returns trigger
+language plpgsql set search_path = '' as $$
+begin
+  insert into public.studio_storage_removals (key, reason)
+  select k, 'cut_deleted' from public.studio_cut_files(old) as k
+  on conflict (key) do nothing;
+  return null;
+end $$;
+
+-- Review copies turned off: the live links stop (the copies they show are
+-- what was turned off).
+create or replace function public.studio_tool_approvals_after() returns trigger
+language plpgsql set search_path = '' as $$
+begin
+  if new.tool = 'review_copies' and old.is_on and not new.is_on then
+    update public.studio_reviews set link_hash = null, expires_at = null, changed_by = new.decided_by, updated_at = now()
+     where link_hash is not null;
+  end if;
+  return null;
+end $$;
+
+-- Studio records are kept: no truncating them.
+create or replace function public.studio_keep() returns trigger
+language plpgsql set search_path = '' as $$
+begin
+  raise exception 'Studio records (%) are kept', tg_table_name;
+end $$;
+
 -- A post taken down by hand ticks its takedown item.
 create or replace function public.studio_film_posts_after() returns trigger
 language plpgsql set search_path = '' as $$
@@ -966,7 +1183,10 @@ end $$;
 -- Runs as the tables' owner, so the history is written whoever made the
 -- change, and the change fails if it can't be. Only this function writes the
 -- database's own entries (studio_events_gate checks it's running as this
--- function's owner, with its mark on); staff add notes.
+-- function's owner, with its mark on); staff add notes. No names go in it: a
+-- reviewer is written as who they are to the speaker, their note stays on
+-- the review, and a staff note that names someone on the film's cards is
+-- left out.
 create or replace function public.studio_log() returns trigger
 language plpgsql security definer set search_path = '' as $$
 declare
@@ -994,7 +1214,7 @@ begin
     elsif new.archived_at is not null and old.archived_at is null then
       k := 'film_archived'; bys := new.archived_by;
     elsif new.archived_at is null and old.archived_at is not null then
-      k := 'film_unarchived'; bys := old.archived_by;
+      k := 'film_unarchived'; bys := new.last_changed_by;
     end if;
   elsif tg_table_name = 'studio_film_steps' then
     fid := new.film_id; subj := new.step;
@@ -1014,7 +1234,7 @@ begin
     elsif new.cleared_at is not null and old.cleared_at is null then
       k := 'person_cleared'; bys := new.cleared_by;
     elsif new.cleared_at is null and old.cleared_at is not null then
-      k := 'person_uncleared'; bys := new.changed_by;
+      k := 'person_uncleared'; bys := new.last_changed_by;
     end if;
   elsif tg_table_name = 'studio_film_cuts' then
     fid := new.film_id; rf := new.id; subj := new.format || ' ' || new.ratio || ' v' || new.version;
@@ -1032,7 +1252,8 @@ begin
     if tg_op = 'INSERT' then
       k := 'review_asked'; bys := new.asked_by;
     elsif new.decision is not null and old.decision is null then
-      k := 'review_' || new.decision; byr := new.decided_name; nt := new.note;
+      k := 'review_' || new.decision;
+      byr := case new.reviewer_relation when 'self' then 'the speaker' when 'parent' then 'their parent' else 'their guardian' end;
     elsif new.withdrawn_at is not null and old.withdrawn_at is null then
       k := 'review_withdrawn'; bys := new.withdrawn_by;
     elsif new.link_hash is null and old.link_hash is not null and new.decision is null then
@@ -1048,7 +1269,7 @@ begin
   elsif tg_table_name = 'studio_takedowns' then
     rf := new.id; subj := new.person_code;
     if tg_op = 'INSERT' then
-      k := 'takedown_opened'; bys := new.requested_by; nt := new.note;
+      k := 'takedown_opened'; bys := new.requested_by;
     elsif new.closed_at is not null and old.closed_at is null then
       k := 'takedown_closed'; bys := new.closed_by;
     end if;
@@ -1058,6 +1279,9 @@ begin
     end if;
   end if;
   if k is not null then
+    if nt is not null and public.studio_names_in(fid, nt) then
+      nt := '(left out: it named someone on a card)';
+    end if;
     insert into public.studio_events (film_id, kind, by_staff, by_reviewer, subject, note, ref)
     values (fid, k, bys, byr, left(subj, 120), left(nt, 1000), rf);
   end if;
@@ -1079,6 +1303,9 @@ begin
   if new.kind = 'note' and (new.by_staff is null or new.note is null or new.film_id is null or new.by_reviewer is not null) then
     raise exception 'studio history: a note is a staff member''s, on a film';
   end if;
+  if new.kind = 'note' and public.studio_names_in(new.film_id, new.note) then
+    raise exception 'the history keeps no names: write the note with the code instead';
+  end if;
   new.at := now();
   return new;
 end $$;
@@ -1087,6 +1314,8 @@ create or replace trigger studio_tool_approvals_gate before insert or update or 
   for each row execute function public.studio_tool_approvals_gate();
 create or replace trigger studio_tool_approvals_log after update on public.studio_tool_approvals
   for each row execute function public.studio_log();
+create or replace trigger studio_tool_approvals_then after update on public.studio_tool_approvals
+  for each row execute function public.studio_tool_approvals_after();
 
 create or replace trigger studio_films_gate before insert or update or delete on public.studio_films
   for each row execute function public.studio_films_gate();
@@ -1099,6 +1328,8 @@ create or replace trigger studio_film_steps_gate before insert or update or dele
   for each row execute function public.studio_film_steps_gate();
 create or replace trigger studio_film_steps_log after update on public.studio_film_steps
   for each row execute function public.studio_log();
+create or replace trigger studio_film_steps_then after update on public.studio_film_steps
+  for each row execute function public.studio_film_steps_after();
 
 create or replace trigger studio_film_people_gate before insert or update or delete on public.studio_film_people
   for each row execute function public.studio_film_people_gate();
@@ -1111,6 +1342,8 @@ create or replace trigger studio_film_cuts_gate before insert or update or delet
   for each row execute function public.studio_film_cuts_gate();
 create or replace trigger studio_film_cuts_log after insert or update on public.studio_film_cuts
   for each row execute function public.studio_log();
+create or replace trigger studio_film_cuts_then after delete on public.studio_film_cuts
+  for each row execute function public.studio_film_cuts_deleted();
 
 create or replace trigger studio_reviews_gate before insert or update or delete on public.studio_reviews
   for each row execute function public.studio_reviews_gate();
@@ -1140,12 +1373,22 @@ create or replace trigger studio_events_gate before insert or update or delete o
   for each row execute function public.studio_events_gate();
 create or replace trigger studio_events_keep before truncate on public.studio_events
   for each statement execute function public.studio_events_gate();
+do $$
+declare
+  t text;
+begin
+  foreach t in array array['studio_tool_approvals', 'studio_films', 'studio_film_steps', 'studio_film_people', 'studio_film_cuts',
+                           'studio_reviews', 'studio_film_posts', 'studio_takedowns', 'studio_takedown_items', 'studio_storage_removals'] loop
+    execute format('create or replace trigger %I before truncate on public.%I for each statement execute function public.studio_keep()', t || '_keep', t);
+  end loop;
+end $$;
 
 -- ── What the server calls ─────────────────────────────────────────────────
 -- What the reviewer's link shows: the cut to watch and what they approve.
 -- p_proof is the link's proof (sha256 of the token); the table holds sha256
--- of that. Nothing for a link that's used, expired, cancelled or unknown, or
--- on a film or card that's closed.
+-- of that. Nothing for a link that's used, expired, cancelled or unknown, on
+-- a film or card that's closed, for a reviewer the card no longer names, or
+-- while review copies are off.
 create or replace function public.studio_review_for_reviewer(p_proof text)
 returns table (review_id uuid, kit_slug text, format text, ratio text, version int, kind text, duration_ms int,
                one_sentence text, relation text, reviewer_name text, preview_key text, poster_key text,
@@ -1162,6 +1405,8 @@ language sql stable set search_path = '' as $$
      and c.status = 'ready' and c.sha256 = r.asked_fingerprint
      and f.pulled_at is null and f.archived_at is null
      and p.cleared_at is not null and p.consent_pulled_at is null
+     and r.reviewer_email = p.reviewer_email and r.reviewer_relation = p.reviewer_relation
+     and public.studio_tool_on('review_copies')
 $$;
 
 -- The reviewer's decision, in one statement: the gate checks the proof
@@ -1184,6 +1429,8 @@ language sql volatile set search_path = '' as $$
      and c.status = 'ready' and c.sha256 = r.asked_fingerprint
      and f.pulled_at is null and f.archived_at is null
      and p.cleared_at is not null and p.consent_pulled_at is null
+     and r.reviewer_email = p.reviewer_email and r.reviewer_relation = p.reviewer_relation
+     and public.studio_tool_on('review_copies')
      and p_decision in ('approved', 'changes')
      and char_length(btrim(coalesce(p_name, ''))) between 2 and 200
   returning r.id;
@@ -1204,6 +1451,11 @@ begin
     raise exception 'who pulled it';
   end if;
   perform set_config('studio.pull_source', p_source, true);
+  -- Every film of the code, locked in one order, so two pulls never wait on
+  -- each other the wrong way round.
+  perform 1 from public.studio_films f
+   where f.id in (select x.film_id from public.studio_film_people x where x.person_code = code and x.consent_pulled_at is null)
+   order by f.id for update;
   update public.studio_film_people
      set consent_pulled_at = now(), pulled_by = p_by, pulled_note = nullif(btrim(coalesce(p_note, '')), ''), updated_at = now()
    where person_code = code and consent_pulled_at is null;
@@ -1243,6 +1495,8 @@ begin
     'public.studio_film_posts_gate()', 'public.studio_takedowns_gate()', 'public.studio_takedown_items_gate()',
     'public.studio_films_steps()', 'public.studio_people_cascade()', 'public.studio_takedown_items_after()',
     'public.studio_film_posts_after()', 'public.studio_log()', 'public.studio_events_gate()',
+    'public.studio_names_in(uuid, text)', 'public.studio_cut_files(public.studio_film_cuts)', 'public.studio_film_steps_after()',
+    'public.studio_film_cuts_deleted()', 'public.studio_tool_approvals_after()', 'public.studio_keep()',
     'public.studio_review_for_reviewer(text)', 'public.studio_review_decide(text, text, text, text)',
     'public.studio_pull_consent(text, text, text, text)', 'public.studio_film_reopen(uuid, text, text, text)'] loop
     execute format('revoke all on function %s from public', fn);
@@ -1256,17 +1510,25 @@ begin
     if exists (select 1 from pg_roles where rolname = r) then
       execute format('revoke all on public.studio_tool_approvals, public.studio_films, public.studio_film_steps, public.studio_film_people, '
         'public.studio_film_cuts, public.studio_reviews, public.studio_film_posts, public.studio_takedowns, '
-        'public.studio_takedown_items, public.studio_events from %I', r);
+        'public.studio_takedown_items, public.studio_events, public.studio_storage_removals from %I', r);
       execute format('revoke all on sequence public.studio_events_id_seq from %I', r);
     end if;
   end loop;
   if exists (select 1 from pg_roles where rolname = 'service_role') then
+    -- The server reads and writes rows; it never empties a table, hangs a
+    -- trigger on one, or points a foreign key at one.
+    execute 'revoke truncate, trigger, references on public.studio_tool_approvals, public.studio_films, public.studio_film_steps, '
+      'public.studio_film_people, public.studio_film_cuts, public.studio_reviews, public.studio_film_posts, public.studio_takedowns, '
+      'public.studio_takedown_items, public.studio_events, public.studio_storage_removals from service_role';
     execute 'grant execute on function public.studio_review_for_reviewer(text) to service_role';
     execute 'grant execute on function public.studio_review_decide(text, text, text, text) to service_role';
     execute 'grant execute on function public.studio_pull_consent(text, text, text, text) to service_role';
     execute 'grant execute on function public.studio_film_reopen(uuid, text, text, text) to service_role';
     execute 'grant execute on function public.studio_cut_approved(uuid) to service_role';
     execute 'grant execute on function public.studio_tool_on(text) to service_role';
+    -- Called by the gates and the cascade, which run as the caller.
+    execute 'grant execute on function public.studio_names_in(uuid, text) to service_role';
+    execute 'grant execute on function public.studio_cut_files(public.studio_film_cuts) to service_role';
   end if;
 end $$;
 

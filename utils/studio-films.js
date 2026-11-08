@@ -54,19 +54,32 @@ const sha256 = (s) => crypto.createHash("sha256").update(String(s), "utf8").dige
 // ── People's names, kept out of titles and file names ────────────────────
 // The kit: projects and files carry the athlete ID, never a name. The words of
 // a card's name (3 letters or more), found as whole words, case aside.
+// The names on cards (the person's and their reviewer's): each word of 3 or
+// more letters, the whole name ("Al Ko"), and the name run together
+// ("JamieRivers" in a file name). A lone two-letter first name isn't caught:
+// it would catch "an" and "al" too.
+const nameParts = (full) => String(full || "").toLowerCase().split(/[^\p{L}\p{M}]+/u).filter(Boolean);
 function nameWords(people) {
   const words = new Set();
   for (const p of people || []) {
-    for (const w of String(p.name || "").toLowerCase().split(/[^\p{L}\p{M}]+/u)) {
-      if (Array.from(w).length >= 3) words.add(w);
-    }
+    for (const full of [p.name, p.reviewer_name]) for (const w of nameParts(full)) if (Array.from(w).length >= 3) words.add(w);
   }
   return [...words];
 }
 function namesIn(textValue, people) {
   // Apostrophes split words too, so a possessive ("Jamie's") is caught.
   const hay = " " + String(textValue || "").toLowerCase().replace(/[^\p{L}\p{M}]+/gu, " ") + " ";
-  return nameWords(people).filter((w) => hay.includes(" " + w + " "));
+  const letters = hay.replace(/ /g, "");
+  const found = new Set(nameWords(people).filter((w) => hay.includes(" " + w + " ")));
+  for (const p of people || []) {
+    for (const full of [p.name, p.reviewer_name]) {
+      const parts = nameParts(full);
+      if (parts.length > 1 && hay.includes(" " + parts.join(" ") + " ")) found.add(parts.join(" "));
+      const joined = parts.join("");
+      if (Array.from(joined).length >= 5 && letters.includes(joined)) found.add(joined);
+    }
+  }
+  return [...found];
 }
 
 // ── The board's structured parts ─────────────────────────────────────────
@@ -121,7 +134,11 @@ function filmInput(raw, { partial = false, people = [] } = {}) {
     v.format = clean(r.format, 20).toLowerCase();
     if (!FORMATS.includes(v.format)) errors.push("format");
   }
-  if (has(r, "one_sentence")) v.one_sentence = clean(r.one_sentence, 300) || null;
+  if (has(r, "one_sentence")) {
+    // The story is on the speaker's review page: never a name.
+    v.one_sentence = clean(r.one_sentence, 300) || null;
+    if (v.one_sentence && namesIn(v.one_sentence, people).length) errors.push("story_has_name");
+  }
   if (has(r, "post_date")) {
     v.post_date = r.post_date ? day(r.post_date) : null;
     if (r.post_date && !v.post_date) errors.push("post_date");
@@ -176,12 +193,19 @@ function personInput(raw, { partial = false, current = null } = {}) {
   for (const k of ["is_minor", "texas_youth", "speaker", "release_on_file"]) if (want(k)) v[k] = yes(r[k]);
   if (want("covers")) v.covers = coversInput(r.covers);
   const merged = { ...(current || {}), ...v };
-  // Texas youth athletes stay unidentifiable: a minor, with no face, name or
-  // jersey number on screen.
-  if (merged.texas_youth) {
-    merged.is_minor = v.is_minor = true;
-    const c = { ...(merged.covers || coversInput({})), face: false, name: false, jersey: false };
-    merged.covers = v.covers = c;
+  // Minors stay unidentifiable: no face, name or jersey number on screen
+  // (Kyron's rule; the kit's for Texas youth, who are minors).
+  if (merged.texas_youth) merged.is_minor = v.is_minor = true;
+  if (merged.is_minor) {
+    const c = merged.covers || coversInput({});
+    if (c.face || c.name || c.jersey || want("is_minor") || want("texas_youth") || want("covers")) {
+      merged.covers = v.covers = { ...c, face: false, name: false, jersey: false };
+    }
+  }
+  // A new consent, after a pull (the producer records it).
+  if (has(r, "reconsent_note")) {
+    v.reconsent_note = cleanNotes(r.reconsent_note, 500) || null;
+    if (r.reconsent_note && (!v.reconsent_note || Array.from(v.reconsent_note).length < 3)) errors.push("reconsent_note");
   }
   // Who approves the cut: the person (adult) or their parent or legal guardian.
   if (want("reviewer_relation") || want("reviewer_name") || want("reviewer_email") || want("is_minor") || want("texas_youth")) {
@@ -267,8 +291,10 @@ function nameWarnings(fileName, film, cut) {
 // ── Keys in storage ──────────────────────────────────────────────────────
 const BUCKET = "studio-films";
 const cutKey = (filmId, cutId, ext) => `films/${filmId}/cuts/${cutId}.${ext}`;
-const previewKey = (filmId, cutId) => `films/${filmId}/previews/${cutId}.mp4`;
-const posterKey = (filmId, cutId) => `films/${filmId}/previews/${cutId}.jpg`;
+// A review copy is named by its content (the start of its sha256), and its
+// poster after it: a copy is never overwritten, only added (migration 039).
+const previewKey = (filmId, cutId, copySha) => `films/${filmId}/previews/${cutId}-${String(copySha || "").slice(0, 16)}.mp4`;
+const posterKey = (filmId, cutId, copySha) => `films/${filmId}/previews/${cutId}-${String(copySha || "").slice(0, 16)}.jpg`;
 
 // ── What people read ─────────────────────────────────────────────────────
 const RELATION_WORDS = { self: "you", parent: "your child", guardian: "the athlete in your care" };

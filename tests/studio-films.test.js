@@ -125,9 +125,11 @@ test("the worker makes a real review copy: 720 wide, with its sound, fingerprint
     const key = U.cutKey(filmId, cutId, "mp4");
     store.put(U.BUCKET, key, bytes, "video/mp4");
     let update = null;
+    const open = { eq: () => open, maybeSingle: async () => ({ data: { pulled_at: null, archived_at: null }, error: null }) };
     const sb = {
       storage: store,
       from: () => ({
+        select: () => open,
         update(v) {
           update = v;
           const chain = { eq: () => chain, select: async () => ({ data: [{ id: cutId }], error: null }) };
@@ -141,12 +143,18 @@ test("the worker makes a real review copy: 720 wide, with its sound, fingerprint
     assert.equal(update.sha256, crypto.createHash("sha256").update(bytes).digest("hex"));
     assert.equal(update.width, 1080);
     assert.ok(update.duration_ms >= 1900 && update.duration_ms <= 2200, String(update.duration_ms));
+    // The copy is named by its own fingerprint, which is kept with the cut.
+    const theCopy = store.get(U.BUCKET, update.preview_key);
+    assert.ok(theCopy);
+    assert.equal(update.preview_sha256, crypto.createHash("sha256").update(theCopy.bytes).digest("hex"));
+    assert.equal(update.preview_key, U.previewKey(filmId, cutId, update.preview_sha256));
+    assert.equal(update.poster_key, U.posterKey(filmId, cutId, update.preview_sha256));
     const copy = path.join(dir, "check.mp4");
-    fs.writeFileSync(copy, store.get(U.BUCKET, U.previewKey(filmId, cutId)).bytes);
+    fs.writeFileSync(copy, theCopy.bytes);
     const r = await media.run(["-i", copy]);
     assert.match(r.stderr, /Video: h264[^\n]*720x1280/);
     assert.match(r.stderr, /Audio: aac/);
-    assert.ok(store.has(U.BUCKET, U.posterKey(filmId, cutId)));
+    assert.ok(store.has(U.BUCKET, update.poster_key));
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
   }

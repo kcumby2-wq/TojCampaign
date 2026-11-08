@@ -16,28 +16,38 @@ From the Same Work kit's *Handoffs and checklists* column, in its order. One ste
 | Shoot | Director | Cards copied twice; everyone still cleared |
 | Selects | Director | The editor can cut without calling the director |
 | Rough cut | Editor | The review copy is uploaded with everyone in it listed |
-| Speaker review | Producer | Every speaker in the cut said yes to that exact file |
-| Rights check | Producer | What's on screen matches each release |
-| Final sign-off | Producer and Coach Hooks | Both say yes, or it waits (the producer records Hooks's yes and how it came) |
+| Speaker review | Producer | Every speaker in the cuts that go on said yes to those exact files (the producer names the cuts: a hero film's 9:16 and its 4:5, say) |
+| Rights check | Producer | What's on screen in those cuts matches each release |
+| Final sign-off | Producer and Coach Hooks | Both say yes, or it waits. The producer records Hooks's yes and how it came, once the rights check is done |
 | Publish | Kyron | Every post recorded, so a takedown can find it |
 
-*Producer* means an approver or Kyron. The film's director and editor (assigned by the producer) finish their own steps; the producer can finish any step but Publish. The checklists (*Shoot day: director*, *Edit delivery: editor*, *Release: producer*) are read from the approved kit, so a kit refresh updates them. The producer can reopen the last done step (and so walk back), with a reason; a published film is never reopened: it's taken down.
+*Producer* means an approver or Kyron. The film's director and editor (assigned by the producer) finish their own steps; the producer can finish any step but Publish. The checklists (*Shoot day: director*, *Edit delivery: editor*, *Release: producer*) are read from the approved kit, so a kit refresh updates them.
+
+The rights check and the final sign-off are for the cuts the speaker review named, and **only those cuts are posted**: a cut approved after the sign-off waits for the steps to run again. The producer can reopen the last done step (and so walk back), with a reason. Walking back past the rights check takes Hooks's yes with it (it was for the cuts as they were). A film with anything live isn't walked back (take the posts down first), a published film is never reopened (it's taken down), and a closed film isn't reopened at all.
+
+Each change to a film takes the film's lock first, so two changes that are each allowed alone can't both land: a post recorded while consent is being pulled waits for the pull, then is refused.
 
 ## Clearance cards
 
 One per person on camera. The name stays on the card; everything else carries the **code** (the athlete ID; a parent adds `-P1`). The same person has the same code in every film: that's how a pulled consent finds them all.
 
 - What the release covers: face, name, jersey, voice, and which formats.
-- **Texas youth athletes** are minors and unidentifiable until counsel clears it: no face, no name, no jersey number. The form and the database both hold this.
+- **Every minor is unidentifiable**: no face, no name, no jersey number (Kyron's rule; the kit's for Texas youth, who are minors until counsel clears otherwise). The form and the database both hold this.
 - A **speaker** (their words are in the film) approves the cut: an adult themselves, a minor's parent or legal guardian.
-- The producer clears a card. Changing a cleared card clears it again; a card in something live can't change (pull consent instead).
-- Titles and file names never carry a name: the app refuses one that contains a card's name.
+- The producer clears a card. Changing a cleared card clears it again. A card in something live doesn't change or get uncleared at all (take the post down, or pull consent).
+- **Who approves** (the reviewer's name, email and relation) is the producer's to change. Any change to a card stops its live review links, and an approval counts only from the reviewer the card names now: an adult's own yes stops counting if the card is corrected to a minor whose parent approves.
+- Titles, file names and the one-sentence story never carry a name: the app refuses one that contains a card's name (a word of three letters or more, the whole name, or the name run together as in `JamieRivers`). A lone two-letter first name isn't caught: it would catch "an" and "al" too.
+- **A pulled consent stays pulled.** A new card for that code is refused while its takedown is open, and after that until the producer records the family's new consent (how and when) on the first new card.
 
 ## Cuts, the clip log and review links
 
-An editor uploads a review copy (720p is plenty; up to `STUDIO_REVIEW_MAX_MB`, 50 MB by default, which is also Supabase's free-plan limit) and ticks everyone in it. **That list is the clip log** a takedown follows. The file goes straight to the private bucket `studio-films`; the worker (`utils/studio-review-worker.js`, ffmpeg) makes the copy speakers watch, at 720 on the short side, with its sound and *REVIEW COPY · NOT FOR SHARING* burned in, and takes the file's sha256.
+An editor uploads a review copy (720p is plenty; up to `STUDIO_REVIEW_MAX_MB`, 50 MB by default, which is also Supabase's free-plan limit) and ticks everyone in it. **That list is the clip log** a takedown follows. The file goes straight to the private bucket `studio-films`; the worker (`utils/studio-review-worker.js`, ffmpeg) makes the copy speakers watch, at 720 on the short side, with its sound and *REVIEW COPY · NOT FOR SHARING* burned in. It takes the uploaded file's sha256 (the file that will post; every approval is for it) and the copy's own sha256, whose start names the copy in storage: a copy is never overwritten, and neither fingerprint changes once the cut is ready. Nothing is made for a pulled or archived film, and whatever the worker made for a cut that didn't make it is taken back out.
 
-The producer sends each speaker in the cut their link (`/film-review.html#t=…`, 7 days, one use). Like the Concierge's family approvals (migration 037), the token stays in the link's fragment, the server sends the database its proof, and the table keeps only the proof's hash: nobody who can read the table can answer for the speaker. The approval is for that exact file. A *change* answer needs a note and goes to the producer and editor; the reviewer gets a receipt either way. If the email fails, the link is taken back. Replies go back to the reviewer (or `STUDIO_REVIEW_REPLY_TO`, an address nobody reads), never to staff: a reply quotes the link.
+The producer sends each speaker in the cut their link (`/film-review.html#t=…`, 7 days, one use). Like the Concierge's family approvals (migration 037), the token stays in the link's fragment, the server sends the database its proof, and the table keeps only the proof's hash: nobody who can read the table can answer for the speaker. The approval is for that exact file, from the reviewer the card names. A *change* answer needs a note and goes to the producer and the film's editor; the reviewer gets a receipt either way. If the email fails, the link is taken back. Replies go back to the reviewer (or `STUDIO_REVIEW_REPLY_TO`, an address nobody reads), never to staff: a reply quotes the link.
+
+Live links sit in more places than the app:
+- with Gmail as the app's mail account, the **Sent folder** keeps a copy of every review email, links included: whoever can open that account can see live links. Some sending services keep message bodies for days too (Postmark and Mailgun do): check yours, and keep whichever account sends to Kyron;
+- a **bounced** review email usually comes back whole, link included, to the sending account. The speaker never got it: **Cancel link** on that cut, check the address on the card, and send a new one.
 
 Once a link is out, who's in the cut is fixed. A speaker who takes their yes back is recorded by the producer ("They took it back"); that cut can't go out (a live post has to come down first).
 
@@ -45,19 +55,25 @@ Once a link is out, who's in the cut is fixed. A speaker who takes their yes bac
 
 Only Kyron records posts, after the final sign-off, and only cuts every speaker in them approved, with everyone in them cleared.
 
-**Consent pulled** (the producer, from the card): every card with that code is closed, every film they're in is pulled for good, live review links stop, the review copies of those films leave storage, and a takedown opens with a line for every live post plus one for everything outside the app (drives, the Milanote board, the editor's machine). **The 72-hour clock** starts at once and shows on Today. Marking a line down takes its post down; the last line closes the takedown.
+**Consent pulled** (the producer, from the card): every card with that code is closed, every film they're in is pulled for good, live review links stop, and a takedown opens with a line for every live post plus one for everything outside the app (drives, the Milanote board, the editor's machine). **The 72-hour clock** starts at once and shows on Today. Marking a line down takes its post down; the last line closes the takedown.
+
+The files of those films (uploads, review copies, posters) are listed for removal by the database in the same change, and removed at once; anything storage refuses is tried again on the worker's next pass (`studio_storage_removals`). A deleted cut's files go the same way.
 
 ## Tool approvals
 
 The kit's rule: a tool touches footage only once the producer has checked its terms and added it, with a one-line reason. Three switches start **off**; only Kyron turns them on, and the reason is kept:
 
-- **Review copies in storage**: needed for uploads and review links.
+- **Review copies in storage**: needed for uploads and review links. Turning it off stops every live link.
 - **Claude reads transcripts**: for the real-words tools (next PR).
 - **The graphics system**: once Kyron and Coach Hooks approve the type system (next PR).
 
 ## The history
 
-Every step, card, cut, review, post, takedown and switch is written to `studio_events` by the database itself (a trigger running as the tables' owner, which no API session can be) and never changed. Staff add notes. No names go in it, or in the team activity log.
+Every step, card, cut, review, post, takedown and switch is written to `studio_events` by the database itself (a trigger running as the tables' owner, which no API session can be) and never changed. Staff add notes.
+
+**No names go in it**, or in the team activity log. A reviewer is written as who they are to the speaker ("their parent"), and a change note stays on the review, not in the history. A staff note (a step, a reopen, Hooks's yes, a pull, a takedown line) that names someone on the film's cards is refused by the app, and the database leaves such a note out regardless. Who makes a change says so with that change (`changed_by` is taken by the database with each write, never carried over from the last one).
+
+Every Studio table refuses `TRUNCATE`, and the server's role (`service_role`) can read and write rows only: it can't empty a table, put a trigger on one, or point a foreign key at one.
 
 ## Endpoints
 
@@ -69,8 +85,8 @@ All under `/api/studio-films` (team members with Studio; writes are JSON from th
 | POST | `/films` | members (the producer assigns director and editor) |
 | PATCH | `/films/:id` (with `seen`) | members |
 | POST | `/films/:id/archive`, `/films/:id/second-yes`, `/films/:id/steps/:step/reopen` | producer |
-| POST | `/films/:id/steps/:step/done` | the step's owner or the producer (Publish: Kyron) |
-| POST/PATCH/DELETE | `/films/:id/people[/:pid]` | members |
+| POST | `/films/:id/steps/:step/done` (Speaker review: `{ cut_ids }`) | the step's owner or the producer (Publish: Kyron) |
+| POST/PATCH/DELETE | `/films/:id/people[/:pid]` | members (who approves, and a new consent: the producer) |
 | POST | `/films/:id/people/:pid/clear`, `/people/pull` | producer |
 | POST | `/films/:id/cuts/upload`, `/films/:id/cuts`; PATCH/DELETE `/films/:id/cuts/:cid` | members |
 | POST | `/films/:id/cuts/:cid/reviews`, `/reviews/:rid/cancel-link`, `/reviews/:rid/withdraw` | producer |
@@ -91,4 +107,6 @@ The speakers' page: `POST /api/studio-review/view {token}` and `POST /api/studio
 
 - The kit names only some file codes (YTH, HERO in its example). The other lane and format codes (`NFL`, `COL`, `PAR`, `CUT`, …) are the app's until the kit names them; the file-name check only warns.
 - Coach Hooks's yes is recorded by the producer with how it came (a text, an email), not by Hooks in the app.
+- The worker reads a review copy into memory to upload it (a 10-minute copy at 720p is tens of megabytes).
+- The speakers' page limits tries per visitor by `X-Forwarded-For`, which a caller reaching Render directly can set. The per-connection limit and the 256-bit tokens still hold.
 - Slides (In Their Own Words, quote cards) go through the same review links once the graphics templates land (next PR).

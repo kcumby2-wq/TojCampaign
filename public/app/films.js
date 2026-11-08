@@ -24,6 +24,11 @@
     owner_only: "Only Kyron can do that.",
     tool_off: "Review copies are off until Kyron approves storing them (Studio → Films → Tool approvals).",
     title_has_name: "Titles never carry a name. Use the athlete ID instead.",
+    story_has_name: "The one-sentence story goes on the speaker's review page: no names in it. Use the athlete ID or \"he\" or \"she\".",
+    note_has_name: "The history keeps no names: write the note with the code instead.",
+    label_has_name: "No names on the takedown list: describe it with the code.",
+    reconsent_note: "Say how and when the family gave their new consent.",
+    cut_ids: "Pick the approved cuts that go on.",
     file_name_has_name: "File names never carry a name. Use the athlete ID, the kit's way.",
     too_big: "That file is over the size limit for review copies. Export the review copy at 720p.",
     changed_meanwhile: "It changed while you were looking. Open it again.",
@@ -190,7 +195,8 @@
     var steps = d.steps.map(function (s) {
       var isCur = current && s.step === current.step && !closed;
       var body = "<b>" + h(s.label) + "</b><span>" + h(STEP_OWNER[s.owner] || s.owner) + (s.owner === "producer" && s.step === "final_signoff" && f.second_yes_label ? " and " + h(f.second_yes_label) : "") + " · " + h(s.carries) + "</span>";
-      if (s.status === "done") body += '<span style="color:var(--ok)">Done by ' + h(s.done_by) + " · " + h(t.ago(s.done_at)) + (s.cut_id ? " · cut " + h(cutLabel(cuts.find(function (c) { return c.id === s.cut_id; }))) : "") + "</span>" + (s.note ? "<span>" + h(s.note) + "</span>" : "") + (s.second_yes_at ? "<span>" + h(s.second_yes_by) + ": " + h(s.second_yes_note || "yes") + "</span>" : "");
+      var stepCuts = (s.cut_ids || (s.cut_id ? [s.cut_id] : [])).map(function (cid) { return cutLabel(cuts.find(function (c) { return c.id === cid; })); });
+      if (s.status === "done") body += '<span style="color:var(--ok)">Done by ' + h(s.done_by) + " · " + h(t.ago(s.done_at)) + (stepCuts.length ? " · " + h(stepCuts.join(", ")) : "") + "</span>" + (s.note ? "<span>" + h(s.note) + "</span>" : "") + (s.second_yes_at ? "<span>" + h(s.second_yes_by) + ": " + h(s.second_yes_note || "yes") + "</span>" : "");
       if (isCur) {
         body += "<span><i>Done when:</i> " + h(s.done_when) + "</span>";
         if (s.checklist && s.checklist.length) body += '<details><summary class="sub" style="cursor:pointer;min-height:32px;display:flex;align-items:center">' + h(s.checklist_title) + " (" + s.checklist.length + ")</summary><ul class=\"body\" style=\"margin:6px 0 0;padding-left:18px;font-size:13.5px\">" + s.checklist.map(function (x) { return "<li>" + h(x) + "</li>"; }).join("") + "</ul></details>";
@@ -205,7 +211,7 @@
     function stepForm(s) {
       var out = '<div class="field" style="margin-top:6px">';
       if (s.step === "speaker_review") {
-        out += approved.length ? '<select class="input" id="stepCut">' + approved.map(function (c) { return '<option value="' + h(c.id) + '">' + h(cutLabel(c)) + "</option>"; }).join("") + "</select>" : '<span class="warnc">No cut is approved by every speaker in it yet (Cuts, below).</span>';
+        out += approved.length ? '<span>The cuts that go on: the rights check and the sign-off are for these, and only these are posted.</span><div style="display:flex;flex-direction:column;gap:6px">' + approved.map(function (c, i) { return '<label class="li" style="cursor:pointer;border-radius:12px;border:1px solid var(--line);min-height:46px"><div class="grow name" style="font-size:14.5px">' + h(cutLabel(c)) + '</div><input type="checkbox" class="switch" data-stepcut="' + h(c.id) + '"' + (i === 0 ? " checked" : "") + "></label>"; }).join("") + "</div>" : '<span class="warnc">No cut is approved by every speaker in it yet (Cuts, below).</span>';
       }
       if (s.step === "final_signoff" && f.second_yes_label && !s.second_yes_at) {
         out += '<input class="input" id="secondYes" maxlength="300" placeholder="How ' + h(f.second_yes_label) + ' said yes (text, email, date)"><button type="button" class="btn soft small" id="recordSecond">Record ' + h(f.second_yes_label) + "'s yes</button>";
@@ -259,8 +265,10 @@
       return '<div class="row" style="padding:8px 0;border-top:1px solid #1E2C40"><div class="grow"><div class="name" style="font-size:14.5px">' + h(p.platform) + " · " + h(cutLabel(c)) + '</div><div class="sub"><a href="' + h(p.url) + '" target="_blank" rel="noopener" style="color:var(--ink-2)">' + h(p.url) + "</a></div><div class=\"sub\">" + (p.removed_at ? "Taken down " + h(t.ago(p.removed_at)) : "Posted " + h(t.ago(p.posted_at)) + " by " + h(p.posted_by)) + "</div></div>" +
         (!p.removed_at && d.can.producer ? '<button type="button" class="btn ghost small" data-down="' + h(p.id) + '" style="flex:none">Mark taken down</button>' : "") + "</div>";
     }).join("");
-    var finalDone = d.steps.some(function (s) { return s.step === "final_signoff" && s.status === "done"; });
-    var postForm = d.can.owner && finalDone && !closed ? '<div class="field" style="margin-top:8px"><select class="input" id="postCut">' + approved.map(function (c) { return '<option value="' + h(c.id) + '">' + h(cutLabel(c)) + "</option>"; }).join("") + '</select><select class="input" id="postPlatform">' + meta.platforms.map(function (p) { return "<option>" + h(p) + "</option>"; }).join("") + '</select><input class="input" id="postUrl" type="url" inputmode="url" placeholder="https://… the post"><button type="button" class="btn small" id="recordPost"' + (approved.length ? "" : " disabled") + ">Record the post</button></div>" : "";
+    var finalStep = d.steps.find(function (s) { return s.step === "final_signoff"; }) || {};
+    var finalDone = finalStep.status === "done";
+    var signedOff = approved.filter(function (c) { return (finalStep.cut_ids || []).indexOf(c.id) >= 0; });
+    var postForm = d.can.owner && finalDone && !closed ? '<div class="field" style="margin-top:8px"><select class="input" id="postCut">' + signedOff.map(function (c) { return '<option value="' + h(c.id) + '">' + h(cutLabel(c)) + "</option>"; }).join("") + '</select><select class="input" id="postPlatform">' + meta.platforms.map(function (p) { return "<option>" + h(p) + "</option>"; }).join("") + '</select><input class="input" id="postUrl" type="url" inputmode="url" placeholder="https://… the post"><button type="button" class="btn small" id="recordPost"' + (signedOff.length ? "" : " disabled") + ">Record the post</button></div>" : "";
 
     var tds = (d.takedowns || []).map(function (x) {
       var l = left(x.due_at), open = x.items.filter(function (i) { return !i.done_at; }).length;
@@ -299,8 +307,8 @@
     var done = document.getElementById("stepDone");
     if (done) done.addEventListener("click", async function () {
       var body = { note: (document.getElementById("stepNote") || {}).value || "" };
-      var sc = document.getElementById("stepCut");
-      if (sc) body.cut_id = sc.value;
+      var picks = document.querySelectorAll("[data-stepcut]");
+      if (picks.length) body.cut_ids = Array.prototype.filter.call(picks, function (c) { return c.checked; }).map(function (c) { return c.dataset.stepcut; });
       done.disabled = true;
       try { await t.post("/api/studio-films/films/" + f.id + "/steps/" + done.dataset.step + "/done", body); t.toast("Done."); reload(); } catch (e) { done.disabled = false; say("roomMsg", why(e), true); done.scrollIntoView({ block: "center" }); }
     });
@@ -414,9 +422,11 @@
     var s = p ? JSON.parse(JSON.stringify(p)) : { person_code: "", name: "", role: "athlete", is_minor: false, texas_youth: false, speaker: false, release_on_file: false, covers: { face: false, name: false, jersey: false, voice: false, formats: [] }, reviewer_relation: null, reviewer_name: "", reviewer_email: "" };
     s.covers = s.covers || {};
     function sw(key, label, sub, on, disabled) { return '<label class="li" style="cursor:pointer;border-radius:14px;border:1px solid var(--line)"><div class="grow"><div class="name" style="font-size:15px">' + h(label) + "</div>" + (sub ? '<div class="sub">' + h(sub) + "</div>" : "") + '</div><input type="checkbox" class="switch" data-k="' + key + '"' + (on ? " checked" : "") + (disabled ? " disabled" : "") + "></label>"; }
+    var lockReviewer = !!p && !(meta.can && meta.can.producer);
     function draw() {
       var ty = s.texas_youth;
-      var rel = s.is_minor || ty ? (s.reviewer_relation === "guardian" ? "guardian" : "parent") : "self";
+      var minor = s.is_minor || ty;
+      var rel = minor ? (s.reviewer_relation === "guardian" ? "guardian" : "parent") : "self";
       t.show(null,
         '<div class="screen">' + back + '<h1 class="title sm">' + (p ? "Clearance card" : "Add a card") + '</h1><p class="lede">Everyone on camera gets one. The name stays on this card; everything else carries the code.' + (p && p.cleared_at ? " Changing a cleared card clears it again." : "") + "</p>" +
         (p ? '<div class="field"><span class="label">Code</span><div class="name">' + h(p.person_code) + "</div></div>" : '<div class="field"><label class="label" for="pCode">Code <small>(the athlete ID; a parent adds -P1)</small></label><input class="input" id="pCode" maxlength="20" autocapitalize="characters" placeholder="' + h(f.athlete_id) + '" value="' + h(s.person_code) + '"></div>') +
@@ -428,10 +438,12 @@
         sw("speaker", "Speaker", "Their words are in the film: they (or a parent) approve the cut", s.speaker) +
         sw("release_on_file", "Release on file", "No release, no card", s.release_on_file) + "</div>" +
         '<div class="field"><span class="label">What the release covers</span><div style="display:flex;flex-direction:column;gap:8px">' +
-        sw("c_face", "Face", ty ? "Never, for Texas youth" : "", !ty && s.covers.face, ty) + sw("c_name", "Name", "", !ty && s.covers.name, ty) + sw("c_jersey", "Jersey number", "", !ty && s.covers.jersey, ty) + sw("c_voice", "Voice", "", s.covers.voice) + "</div>" +
+        (minor ? '<p class="sub" style="margin:0">A minor appears only unidentifiable: wide shots, no face, name or jersey number.</p>' : "") +
+        sw("c_face", "Face", minor ? "Never, for a minor" : "", !minor && s.covers.face, minor) + sw("c_name", "Name", minor ? "Never, for a minor" : "", !minor && s.covers.name, minor) + sw("c_jersey", "Jersey number", minor ? "Never, for a minor" : "", !minor && s.covers.jersey, minor) + sw("c_voice", "Voice", "", s.covers.voice) + "</div>" +
         '<div class="sub" style="margin-top:6px">Formats it covers</div><div style="display:flex;flex-wrap:wrap;gap:6px">' + Object.keys(tp.formats).map(function (k) { return '<label class="badge" style="cursor:pointer;min-height:34px"><input type="checkbox" data-fmt="' + k + '"' + ((s.covers.formats || []).indexOf(k) >= 0 ? " checked" : "") + "> " + h(tp.formats[k].label) + "</label>"; }).join("") + "</div></div>" +
-        '<div class="field"><span class="label">Who approves the cut</span><div class="seg" role="group" aria-label="Who approves">' + (s.is_minor || ty ? '<button type="button" data-rel="parent" aria-pressed="' + (rel === "parent") + '">Parent</button><button type="button" data-rel="guardian" aria-pressed="' + (rel === "guardian") + '">Legal guardian</button>' : '<button type="button" aria-pressed="true">Themselves (18+)</button>') + "</div>" +
-        '<input class="input" id="rName" maxlength="80" placeholder="' + (rel === "self" ? "Their name" : "Parent or guardian's name") + '" value="' + h(s.reviewer_name || "") + '"><input class="input" id="rEmail" type="email" placeholder="Their email (the review link goes here)" value="' + h(s.reviewer_email || "") + '"></div>' +
+        '<div class="field"><span class="label">Who approves the cut' + (lockReviewer ? " <small>(the producer changes this)</small>" : "") + '</span><div class="seg" role="group" aria-label="Who approves">' + (minor ? '<button type="button" data-rel="parent" aria-pressed="' + (rel === "parent") + '"' + (lockReviewer ? " disabled" : "") + '>Parent</button><button type="button" data-rel="guardian" aria-pressed="' + (rel === "guardian") + '"' + (lockReviewer ? " disabled" : "") + '>Legal guardian</button>' : '<button type="button" aria-pressed="true">Themselves (18+)</button>') + "</div>" +
+        '<input class="input" id="rName" maxlength="80" placeholder="' + (rel === "self" ? "Their name" : "Parent or guardian's name") + '" value="' + h(s.reviewer_name || "") + '"' + (lockReviewer ? " readonly" : "") + '><input class="input" id="rEmail" type="email" placeholder="Their email (the review link goes here)" value="' + h(s.reviewer_email || "") + '"' + (lockReviewer ? " readonly" : "") + "></div>" +
+        (!p && meta.can && meta.can.producer ? '<details class="field"><summary class="sub" style="cursor:pointer;min-height:36px;display:flex;align-items:center">Consent was pulled for this code before?</summary><label class="label" for="pReconsent" style="margin-top:6px">The family\'s new consent <small>(how and when; only once the takedown is done)</small></label><input class="input" id="pReconsent" maxlength="500" placeholder="New release signed Nov 20, on file" value="' + h(s.reconsent_note || "") + '"></details>' : "") +
         msgBox("pMsg") + "</div>" +
         '<div class="dock"><div class="dock-inner"><button type="button" class="btn block" id="savePerson">' + (p ? "Save the card" : "Add the card") + '</button>' + (p && !p.cleared_at ? '<button type="button" class="btn danger small" id="delPerson">Remove this card</button>' : "") + "</div></div>");
       document.querySelectorAll("[data-k]").forEach(function (c) {
@@ -439,7 +451,7 @@
           keep();
           var k = c.dataset.k;
           if (k.indexOf("c_") === 0) s.covers[k.slice(2)] = c.checked; else s[k] = c.checked;
-          if (k === "texas_youth" && c.checked) { s.is_minor = true; s.covers.face = s.covers.name = s.covers.jersey = false; }
+          if ((k === "texas_youth" || k === "is_minor") && c.checked) { s.is_minor = true; s.covers.face = s.covers.name = s.covers.jersey = false; }
           draw();
         });
       });
@@ -453,13 +465,16 @@
       var g = function (x) { var el = document.getElementById(x); return el ? el.value : null; };
       if (g("pCode") !== null) s.person_code = g("pCode");
       s.name = g("pName"); s.role = g("pRole"); s.reviewer_name = g("rName"); s.reviewer_email = g("rEmail");
+      if (g("pReconsent") !== null) s.reconsent_note = g("pReconsent");
     }
     async function save() {
       keep();
       var minor = s.is_minor || s.texas_youth;
       var hasReviewer = (s.reviewer_name || "").trim() || (s.reviewer_email || "").trim();
-      var body = { name: s.name, role: s.role, is_minor: minor, texas_youth: s.texas_youth, speaker: s.speaker, release_on_file: s.release_on_file, covers: s.covers,
-        reviewer_relation: hasReviewer ? (minor ? (s.reviewer_relation === "guardian" ? "guardian" : "parent") : "self") : null, reviewer_name: hasReviewer ? s.reviewer_name : null, reviewer_email: hasReviewer ? s.reviewer_email : null };
+      var body = { name: s.name, role: s.role, is_minor: minor, texas_youth: s.texas_youth, speaker: s.speaker, release_on_file: s.release_on_file, covers: s.covers };
+      // Who approves goes with the card when it's new, or when the producer changes it.
+      if (!lockReviewer) Object.assign(body, { reviewer_relation: hasReviewer ? (minor ? (s.reviewer_relation === "guardian" ? "guardian" : "parent") : "self") : null, reviewer_name: hasReviewer ? s.reviewer_name : null, reviewer_email: hasReviewer ? s.reviewer_email : null });
+      if (!p && (s.reconsent_note || "").trim()) body.reconsent_note = s.reconsent_note.trim();
       var btn = document.getElementById("savePerson");
       btn.disabled = true;
       try {

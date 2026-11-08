@@ -144,7 +144,7 @@ router.post("/decide", safe(async (req, res) => {
     try {
       ({ data: r } = await sb.from("studio_reviews").select("id,film_id,cut_id,person_id,reviewer_email").eq("id", id).maybeSingle());
       if (r) {
-        ({ data: film } = await sb.from("studio_films").select("id,kit_slug,title,athlete_id").eq("id", r.film_id).maybeSingle());
+        ({ data: film } = await sb.from("studio_films").select("id,kit_slug,title,athlete_id,editor_email").eq("id", r.film_id).maybeSingle());
         ({ data: cut } = await sb.from("studio_film_cuts").select("id,format,ratio,version").eq("id", r.cut_id).maybeSingle());
         ({ data: person } = await sb.from("studio_film_people").select("person_code,reviewer_name").eq("id", r.person_id).maybeSingle());
       }
@@ -166,7 +166,9 @@ router.post("/decide", safe(async (req, res) => {
       const what = decision === "approved" ? "approved" : "asked for a change to";
       const title = decision === "approved" ? `${code} approved the review copy` : `${code} asked for a change`;
       const url = `/app/#film/${film.id}`;
-      push.notifySoon(push.teamEmails("approver"), { title, body: `${label} ${cut.ratio} v${cut.version} · ${film.title}`, url, tag: `review-${r.id}` });
+      // The producer hears either way; a change goes to the film's editor too.
+      const who = push.teamEmails("approver").then((list) => (decision === "changes" && film.editor_email && !list.includes(film.editor_email) ? list.concat([film.editor_email]) : list));
+      push.notifySoon(who, { title, body: `${label} ${cut.ratio} v${cut.version} · ${film.title}`, url, tag: `review-${r.id}` });
       const to = [...staffEmails()];
       const sent = await mailer.sendMail({
         to,

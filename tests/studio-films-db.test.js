@@ -231,7 +231,8 @@ test("a film from brief to takedown, inside the database's rules", async () => {
   assert.ok(pulled.takedown);
   assert.equal(new Date(pulled.takedown.due_at) - new Date(pulled.takedown.requested_at), 72 * 3600 * 1000);
   assert.ok(pulled.files_removed >= 3);
-  assert.equal(store.has(U.BUCKET, U.previewKey(film.id, cut.id)), false);
+  const madeKeys = (await pool.query("select object_key, preview_key, poster_key from studio_film_cuts where id = $1", [cut.id])).rows[0];
+  for (const k of Object.values(madeKeys)) assert.equal(store.has(U.BUCKET, k), false, k);
   rm = await room(film.id);
   assert.equal(rm.where.state, "pulled");
   const today = ok(await films("GET", "/today", undefined, "lead"), "today");
@@ -276,6 +277,8 @@ test("a decision needs the reviewer's link: no forging, no second answer, nothin
   // (As Supabase's service role: every table right, and row security bypassed.)
   await pool.query("do $$ begin if not exists (select 1 from pg_roles where rolname = 't_studio_svc') then create role t_studio_svc nologin; end if; end $$; alter role t_studio_svc bypassrls");
   await pool.query(`grant usage on schema ${SCHEMA} to t_studio_svc; grant all on all tables in schema ${SCHEMA} to t_studio_svc; grant usage on all sequences in schema ${SCHEMA} to t_studio_svc`);
+  // What the migration grants service_role.
+  await pool.query(`grant execute on function ${SCHEMA}.studio_names_in(uuid, text), ${SCHEMA}.studio_cut_files(${SCHEMA}.studio_film_cuts), ${SCHEMA}.studio_cut_approved(uuid), ${SCHEMA}.studio_tool_on(text) to t_studio_svc`);
   const c = await pool.connect();
   try {
     await c.query("begin");

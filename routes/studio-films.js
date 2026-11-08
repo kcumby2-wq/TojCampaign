@@ -113,6 +113,10 @@ function refused(res, e) {
 }
 const bodyOf = H.bodyOf;
 const idOk = (s) => U.UUID.test(String(s || ""));
+// A note that names someone on the film's cards is refused: the history
+// keeps no names (the database leaves such a note out regardless).
+const named = (text, people) => !!text && U.namesIn(text, people).length > 0;
+const NOTE_HAS_NAME = { error: "invalid", fields: ["note_has_name"] };
 
 async function filmById(sb, id) {
   if (!idOk(id)) return null;
@@ -274,8 +278,7 @@ router.get("/films/:id", member, withDb(async (req, res, sb) => {
       ...c,
       watch_url: c.preview_key ? signed[c.preview_key] || null : null,
       poster_url: c.poster_key ? signed[c.poster_key] || null : null,
-      approved: false,
-      warnings: U.nameWarnings(c.file_name, film, c),
+      warnings: [...(U.namesIn(String(c.file_name || "").replace(/\.[a-z0-9]+$/i, ""), people).length ? ["The file name has a name in it: rename the export, the kit's way"] : []), ...U.nameWarnings(c.file_name, film, c)],
     })),
     reviews: (reviews || []).map((r) => reviewView(r)),
     posts: posts || [],
@@ -296,7 +299,7 @@ router.patch("/films/:id", member, withDb(async (req, res, sb) => {
   if (!isProducer(req) && ("director_email" in value || "editor_email" in value)) return res.status(403).json({ error: "producer_only" });
   if (!Object.keys(value).length) return res.json({ film });
   try {
-    const rows = await run(sb.from("studio_films").update({ ...value, updated_at: nowIso() }).eq("id", film.id).eq("updated_at", body.seen).select());
+    const rows = await run(sb.from("studio_films").update({ ...value, changed_by: me(req), updated_at: nowIso() }).eq("id", film.id).eq("updated_at", body.seen).select());
     if (!rows || !rows.length) return res.status(409).json({ error: "changed_meanwhile" });
     res.json({ film: rows[0] });
   } catch (e) {
@@ -310,7 +313,7 @@ router.post("/films/:id/archive", member, withDb(async (req, res, sb) => {
   if (!film) return res.status(404).json({ error: "not_found" });
   const archived = bodyOf(req).archived === true;
   try {
-    const rows = await run(sb.from("studio_films").update(archived ? { archived_at: nowIso(), archived_by: me(req), updated_at: nowIso() } : { archived_at: null, updated_at: nowIso() }).eq("id", film.id).select());
+    const rows = await run(sb.from("studio_films").update(archived ? { archived_at: nowIso(), archived_by: me(req), changed_by: me(req), updated_at: nowIso() } : { archived_at: null, changed_by: me(req), updated_at: nowIso() }).eq("id", film.id).select());
     res.json({ film: rows && rows[0] });
   } catch (e) {
     refused(res, e);
@@ -322,6 +325,7 @@ router.post("/films/:id/notes", member, withDb(async (req, res, sb) => {
   if (!film) return res.status(404).json({ error: "not_found" });
   const note = U.cleanNotes(bodyOf(req).note, 1000);
   if (!note) return res.status(400).json({ error: "invalid", fields: ["note"] });
+  if (named(note, await peopleOf(sb, film.id))) return res.status(400).json(NOTE_HAS_NAME);
   try {
     await run(sb.from("studio_events").insert({ film_id: film.id, kind: "note", by_staff: me(req), note }));
     res.json({ ok: true });
@@ -336,8 +340,11 @@ router.post("/films/:id/people", member, withDb(async (req, res, sb) => {
   if (!film) return res.status(404).json({ error: "not_found" });
   const { errors, value } = U.personInput(bodyOf(req));
   if (errors.length) return res.status(400).json({ error: "invalid", fields: errors });
-  // The title never carries a name: if it has this one, the title changes first.
+  if (value.reconsent_note && !isProducer(req)) return res.status(403).json({ error: "producer_only" });
+  // The title and the story never carry a name: if they have this one, they
+  // change first.
   if (U.namesIn(film.title, [value]).length) return res.status(409).json({ error: "title_has_name" });
+  if (film.one_sentence && U.namesIn(film.one_sentence, [value]).length) return res.status(409).json({ error: "story_has_name" });
   try {
     const person = await run(sb.from("studio_film_people").insert({ ...value, film_id: film.id, created_by: me(req) }).select().single());
     res.json({ person: { ...person, gaps: U.clearanceGaps(person) } });
@@ -353,9 +360,16 @@ router.patch("/films/:id/people/:pid", member, withDb(async (req, res, sb) => {
   if (!current) return res.status(404).json({ error: "not_found" });
   const body = bodyOf(req);
   if (typeof body.seen !== "string") return res.status(400).json({ error: "invalid", fields: ["seen"] });
+  if ("reconsent_note" in body) return res.status(400).json({ error: "invalid", fields: ["reconsent_note"] });
   const { errors, value } = U.personInput(body, { partial: true, current });
   if (errors.length) return res.status(400).json({ error: "invalid", fields: errors });
-  if (value.name && U.namesIn(film.title, [value]).length) return res.status(409).json({ error: "title_has_name" });
+  // Who approves the cut is the producer's to change (a change stops that
+  // card's live links; the database holds that).
+  const reviewerChanged = ["reviewer_relation", "reviewer_name", "reviewer_email"].some((k) => k in value && value[k] !== current[k]);
+  if (reviewerChanged && !isProducer(req)) return res.status(403).json({ error: "producer_only" });
+  const next = { ...current, ...value };
+  if ((value.name || value.reviewer_name) && U.namesIn(film.title, [next]).length) return res.status(409).json({ error: "title_has_name" });
+  if ((value.name || value.reviewer_name) && film.one_sentence && U.namesIn(film.one_sentence, [next]).length) return res.status(409).json({ error: "story_has_name" });
   if (!Object.keys(value).length) return res.json({ person: current });
   try {
     const rows = await run(sb.from("studio_film_people").update({ ...value, changed_by: me(req), updated_at: nowIso() }).eq("id", current.id).eq("updated_at", body.seen).select());
@@ -407,6 +421,10 @@ router.post("/people/pull", member, withDb(async (req, res, sb) => {
   if (!code) return res.status(400).json({ error: "invalid", fields: ["person_code"] });
   if (body.confirm !== true) return res.status(400).json({ error: "confirm_first" });
   const note = U.cleanNotes(body.note, 500) || null;
+  if (note) {
+    const cards = (await run(sb.from("studio_film_people").select("name,reviewer_name").eq("person_code", code))) || [];
+    if (named(note, cards)) return res.status(400).json(NOTE_HAS_NAME);
+  }
   const out = await pullConsent(sb, { code, by: me(req), source: "staff", note });
   if (out.error) return refused(res, out.error);
   if (!out.takedown) return res.status(404).json({ error: "nothing_to_pull" });
@@ -425,23 +443,10 @@ async function pullConsent(sb, { code, by, source, note }) {
   } catch (e) {
     return { error: e };
   }
-  // Their films' review copies leave storage: the takedown covers us too.
+  // Their films' files leave storage: the database listed them in the same
+  // change; what fails now, the worker retries.
   const filmIds = [...new Set(films.map((f) => f.film_id))];
-  let removed = 0;
-  if (filmIds.length && sb.storage) {
-    const cuts = (await run(sb.from("studio_film_cuts").select("object_key,preview_key,poster_key,slide_keys").in("film_id", filmIds))) || [];
-    const keys = [];
-    for (const c of cuts) keys.push(c.object_key, c.preview_key, c.poster_key, ...(c.slide_keys || []));
-    const list = keys.filter(Boolean);
-    if (list.length) {
-      try {
-        const { error } = await sb.storage.from(U.BUCKET).remove(list);
-        if (!error) removed = list.length;
-      } catch (e) {
-        console.warn("[studio-films] removing review copies failed:", e && e.message);
-      }
-    }
-  }
+  const removed = (await worker.sweep({ sb }).catch(() => ({ removed: 0 }))).removed;
   if (takedown) {
     P.notifySoon(P.teamEmails("approver"), { title: "Consent pulled: takedown clock started", body: `${code}: everything down within 72 hours.`, url: "/app/#film-takedowns", tag: `takedown-${takedown.id}` });
   }
@@ -455,9 +460,14 @@ router.post("/films/:id/steps/:step/done", member, withDb(async (req, res, sb) =
   if (!canFinish(req, film, req.params.step)) return res.status(403).json({ error: "not_your_step" });
   const body = bodyOf(req);
   const patch = { status: "done", done_by: me(req), note: U.cleanNotes(body.note, 500) || null, updated_at: nowIso() };
+  if (named(patch.note, await peopleOf(sb, film.id))) return res.status(400).json(NOTE_HAS_NAME);
   if (req.params.step === "speaker_review") {
-    if (!idOk(body.cut_id)) return res.status(400).json({ error: "invalid", fields: ["cut_id"] });
-    patch.cut_id = body.cut_id;
+    // The cuts that go on: the rights check and the sign-off are for these,
+    // and only these are posted.
+    const ids = Array.isArray(body.cut_ids) ? body.cut_ids : body.cut_id ? [body.cut_id] : [];
+    const list = [...new Set(ids.map((x) => String(x || "").toLowerCase()))];
+    if (!list.length || list.length > 10 || !list.every(idOk)) return res.status(400).json({ error: "invalid", fields: ["cut_ids"] });
+    patch.cut_ids = list;
   }
   try {
     const rows = await run(sb.from("studio_film_steps").update(patch).eq("film_id", film.id).eq("step", req.params.step).eq("status", "todo").select());
@@ -476,6 +486,7 @@ router.post("/films/:id/second-yes", member, withDb(async (req, res, sb) => {
   if (!film.second_yes_label) return res.status(409).json({ error: "no_second_yes" });
   const note = U.clean(bodyOf(req).note, 300);
   if (!note) return res.status(400).json({ error: "invalid", fields: ["note"] });
+  if (named(note, await peopleOf(sb, film.id))) return res.status(400).json(NOTE_HAS_NAME);
   try {
     const rows = await run(sb.from("studio_film_steps").update({ second_yes_by: film.second_yes_label, second_yes_note: note, updated_at: nowIso() }).eq("film_id", film.id).eq("step", "final_signoff").eq("status", "todo").select());
     if (!rows || !rows.length) return res.status(409).json({ error: "already_done" });
@@ -491,6 +502,7 @@ router.post("/films/:id/steps/:step/reopen", member, withDb(async (req, res, sb)
   if (!film || !F.STEP_KEYS.includes(req.params.step)) return res.status(404).json({ error: "not_found" });
   const note = U.cleanNotes(bodyOf(req).note, 500);
   if (!note) return res.status(400).json({ error: "invalid", fields: ["note"] });
+  if (named(note, await peopleOf(sb, film.id))) return res.status(400).json(NOTE_HAS_NAME);
   try {
     await run(sb.rpc("studio_film_reopen", { p_film: film.id, p_step: req.params.step, p_by: me(req), p_note: note }));
     res.json({ ok: true });
@@ -562,10 +574,10 @@ router.delete("/films/:id/cuts/:cid", member, withDb(async (req, res, sb) => {
   const film = await filmById(sb, req.params.id);
   if (!film || !idOk(req.params.cid)) return res.status(404).json({ error: "not_found" });
   try {
-    const rows = await run(sb.from("studio_film_cuts").delete().eq("id", req.params.cid).eq("film_id", film.id).select("object_key,preview_key,poster_key"));
+    const rows = await run(sb.from("studio_film_cuts").delete().eq("id", req.params.cid).eq("film_id", film.id).select("id"));
     if (!rows || !rows.length) return res.status(404).json({ error: "not_found" });
-    const keys = [rows[0].object_key, rows[0].preview_key, rows[0].poster_key].filter(Boolean);
-    if (keys.length) await sb.storage.from(U.BUCKET).remove(keys).catch(() => {});
+    // The database listed its files for removal in the same change.
+    await worker.sweep({ sb }).catch(() => {});
     res.json({ ok: true });
   } catch (e) {
     refused(res, e);
@@ -710,6 +722,7 @@ router.post("/takedowns/:tid/items", member, withDb(async (req, res, sb) => {
   if (!td) return res.status(404).json({ error: "not_found" });
   const inFilm = await run(sb.from("studio_film_people").select("id").eq("film_id", body.film_id).eq("person_code", td.person_code).limit(1));
   if (!inFilm || !inFilm.length) return res.status(400).json({ error: "invalid", fields: ["film_id"] });
+  if (named(label, await peopleOf(sb, body.film_id))) return res.status(400).json({ error: "invalid", fields: ["label_has_name"] });
   try {
     const item = await run(sb.from("studio_takedown_items").insert({ takedown_id: td.id, film_id: body.film_id, what: "other", label }).select().single());
     res.json({ item });
@@ -722,6 +735,11 @@ router.post("/takedown-items/:iid/done", member, withDb(async (req, res, sb) => 
   if (!isProducer(req)) return res.status(403).json({ error: "producer_only" });
   if (!idOk(req.params.iid)) return res.status(404).json({ error: "not_found" });
   const note = U.cleanNotes(bodyOf(req).note, 500) || null;
+  if (note) {
+    const item = await run(sb.from("studio_takedown_items").select("film_id").eq("id", req.params.iid).maybeSingle());
+    if (!item) return res.status(404).json({ error: "not_found" });
+    if (named(note, await peopleOf(sb, item.film_id))) return res.status(400).json(NOTE_HAS_NAME);
+  }
   try {
     const rows = await run(sb.from("studio_takedown_items").update({ done_by: me(req), done_at: nowIso(), note }).eq("id", req.params.iid).is("done_at", null).select());
     if (!rows || !rows.length) return res.status(409).json({ error: "already_done" });

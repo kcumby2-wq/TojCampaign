@@ -2,15 +2,19 @@
 // Studio review copies (migration 039). An editor uploads a cut for review;
 // this makes the copy its speakers watch: the cut at 720 on the short side,
 // with its sound, "REVIEW COPY · NOT FOR SHARING" burned in, and a poster. It
-// also takes the uploaded file's sha256, the fingerprint every approval is
-// tied to:
+// takes the uploaded file's sha256, the fingerprint every approval is tied to
+// (the file that will post), and the copy's own sha256, whose start is in the
+// copy's storage key, so the copy can't be swapped for another unseen:
 //
-//   uploaded → processing → ready        (failed after 3 tries)
+//   uploaded → processing → ready        (failed after 3 tries, or the film closed)
 //
 // It runs inside the web server, one cut at a time, claimed by moving it from
 // uploaded to processing in one update. A cut left in processing (a restart
-// mid-way) goes back in the queue after 30 minutes. Nothing leaves the
-// server but the files it writes back to the private bucket.
+// mid-way) goes back in the queue after 30 minutes. Nothing is made for a
+// pulled or archived film, and nothing it made stays behind if the cut didn't
+// make it. Each pass also retries the files the database listed for removal
+// (a deleted cut's, a pulled film's). Nothing leaves the server but the files
+// it writes back to the private bucket.
 //
 //   STUDIO_REVIEW_WORKER=off   don't run it here
 
@@ -51,9 +55,13 @@ async function download(d, key, file) {
   await pipeline(Readable.fromWeb(r.body), fs.createWriteStream(file));
 }
 
+// Copies are named by their content and never overwritten: an object already
+// at that key is the same bytes.
 async function upload(d, key, file, contentType) {
-  const { error } = await d.sb.storage.from(U.BUCKET).upload(key, await fs.promises.readFile(file), { contentType, upsert: true, cacheControl: "3600" });
-  if (error) throw new Error("storage refused " + key + ": " + error.message);
+  const { error } = await d.sb.storage.from(U.BUCKET).upload(key, await fs.promises.readFile(file), { contentType, upsert: false, cacheControl: "3600" });
+  if (error && !/already exists|duplicate/i.test(String(error.message || "")) && String(error.statusCode || error.status || "") !== "409") {
+    throw new Error("storage refused " + key + ": " + error.message);
+  }
 }
 
 function sha256File(file) {
@@ -86,9 +94,33 @@ async function posterOf(d, src, out, info, opts) {
   if (r.code !== 0 || !fs.existsSync(out)) throw new media.MediaError("Couldn't make the poster: " + media.lastWords(r.stderr, opts.dir));
 }
 
+// The film is still open (not pulled, not archived) and the cut still here.
+async function stillWanted(d, row) {
+  const f = await q(d.sb.from("studio_films").select("pulled_at,archived_at").eq("id", row.film_id).maybeSingle());
+  return !!f && !f.pulled_at && !f.archived_at;
+}
+const closed = () => new media.MediaError("The film closed (consent pulled or archived) while its review copy was being made.", { final: true });
+const refusedClosed = (e) => !!e && e.db && e.db.code === "P0001" && /closed/.test(String(e.db.message || ""));
+
+// What a cut became, saved; or, if it didn't make it, the files made for it
+// taken back out (a film that closed, a cut deleted meanwhile).
+async function finish(d, row, keys, patch) {
+  let done;
+  try {
+    done = await q(d.sb.from("studio_film_cuts").update({ ...patch, status: "ready", error: null, updated_at: d.now().toISOString() }).eq("id", row.id).eq("status", "processing").select("id"));
+  } catch (e) {
+    await d.sb.storage.from(U.BUCKET).remove(keys).catch(() => {});
+    if (refusedClosed(e)) throw closed();
+    throw e;
+  }
+  if (!(done || []).length) await d.sb.storage.from(U.BUCKET).remove(keys).catch(() => {});
+  return !!(done && done.length);
+}
+
 async function processOne(row, d) {
   const dir = await fs.promises.mkdtemp(path.join(d.tmp, "studio-cut-"));
   try {
+    if (!(await stillWanted(d, row))) throw closed();
     const src = path.join(dir, "cut." + (/\.(mp4|mov|m4v)$/.exec(row.object_key) || [, "mp4"])[1]);
     await download(d, row.object_key, src);
     const bytes = (await fs.promises.stat(src)).size;
@@ -100,19 +132,23 @@ async function processOne(row, d) {
     const pic = path.join(dir, "poster.jpg");
     await reviewCopy(d, src, out, { dir });
     await posterOf(d, src, pic, info, { dir });
-    const pk = U.previewKey(row.film_id, row.id);
-    const ok = U.posterKey(row.film_id, row.id);
-    await upload(d, pk, out, "video/mp4");
-    await upload(d, ok, pic, "image/jpeg");
-    const done = await q(
-      d.sb
-        .from("studio_film_cuts")
-        .update({ status: "ready", sha256: sha, bytes, duration_ms: info.duration_ms, width: info.width, height: info.height, preview_key: pk, poster_key: ok, error: null, updated_at: d.now().toISOString() })
-        .eq("id", row.id)
-        .eq("status", "processing")
-        .select("id")
-    );
-    return { ok: !!(done && done.length), sha256: sha };
+    const copySha = await sha256File(out);
+    const pk = U.previewKey(row.film_id, row.id, copySha);
+    const ok = U.posterKey(row.film_id, row.id, copySha);
+    // Checked again just before anything is written for it.
+    if (!(await stillWanted(d, row))) throw closed();
+    const keys = [];
+    try {
+      await upload(d, pk, out, "video/mp4");
+      keys.push(pk);
+      await upload(d, ok, pic, "image/jpeg");
+      keys.push(ok);
+    } catch (e) {
+      await d.sb.storage.from(U.BUCKET).remove(keys.concat([pk, ok])).catch(() => {});
+      throw e;
+    }
+    const saved = await finish(d, row, [pk, ok], { sha256: sha, preview_sha256: copySha, bytes, duration_ms: info.duration_ms, width: info.width, height: info.height, preview_key: pk, poster_key: ok });
+    return { ok: saved, sha256: sha, preview_sha256: copySha };
   } finally {
     await fs.promises.rm(dir, { recursive: true, force: true }).catch(() => {});
   }
@@ -148,17 +184,54 @@ async function claim(d, skip = new Set()) {
   for (const w of waiting || []) {
     if (skip.has(w.id)) continue;
     const at = d.now().toISOString();
-    const got = await q(
-      d.sb
-        .from("studio_film_cuts")
-        .update({ status: "processing", claimed_at: at, attempts: Math.min(10, (w.attempts || 0) + 1), updated_at: at })
-        .eq("id", w.id)
-        .eq("status", "uploaded")
-        .select("*")
-    );
+    let got;
+    try {
+      got = await q(
+        d.sb
+          .from("studio_film_cuts")
+          .update({ status: "processing", claimed_at: at, attempts: Math.min(10, (w.attempts || 0) + 1), updated_at: at })
+          .eq("id", w.id)
+          .eq("status", "uploaded")
+          .select("*")
+      );
+    } catch (e) {
+      // Its film closed before it was made: it's done waiting.
+      if (!refusedClosed(e)) throw e;
+      await d.sb.from("studio_film_cuts").update({ status: "failed", error: "The film closed (consent pulled or archived) before its review copy was made.", updated_at: at }).eq("id", w.id).eq("status", "uploaded");
+      skip.add(w.id);
+      continue;
+    }
     if (got && got.length) return got[0];
   }
   return null;
+}
+
+// The files the database listed for removal (a deleted cut's, a pulled
+// film's): removed, and marked done; what storage refuses is tried again on
+// the next pass. Returns how many were removed.
+async function sweep(over = {}) {
+  const d = defaults(over);
+  if (!d.sb || !d.sb.storage) return { removed: 0, left: 0 };
+  const todo = (await q(d.sb.from("studio_storage_removals").select("key,tries").is("done_at", null).order("requested_at", { ascending: true }).limit(500))) || [];
+  if (!todo.length) return { removed: 0, left: 0 };
+  const keys = todo.map((x) => x.key);
+  const at = d.now().toISOString();
+  let failed = null;
+  try {
+    const { error } = await d.sb.storage.from(U.BUCKET).remove(keys);
+    if (error) failed = error.message || "storage refused";
+  } catch (e) {
+    failed = (e && e.message) || "storage unreachable";
+  }
+  if (failed) {
+    for (const x of todo) await d.sb.from("studio_storage_removals").update({ tries: Math.min(1e6, (x.tries || 0) + 1), last_error: String(failed).slice(0, 300) }).eq("key", x.key).is("done_at", null);
+    console.warn(`[studio] removing ${keys.length} file(s) failed; tried again next pass:`, failed);
+    return { removed: 0, left: keys.length };
+  }
+  for (let i = 0; i < keys.length; i += 100) {
+    await q(d.sb.from("studio_storage_removals").update({ done_at: at, last_error: null }).in("key", keys.slice(i, i + 100)).is("done_at", null).select("key"));
+  }
+  return { removed: keys.length, left: 0 };
 }
 
 function defaults(over = {}) {
@@ -168,6 +241,7 @@ function defaults(over = {}) {
 async function drain(over = {}) {
   const d = defaults(over);
   if (!d.sb) return { processed: 0 };
+  await sweep(over).catch((e) => console.warn("[studio] removal pass failed:", e && e.message));
   await recover(d);
   let processed = 0;
   const results = [];
@@ -235,4 +309,4 @@ function stop() {
   timer = null;
 }
 
-module.exports = { MAX_ATTEMPTS, STALE_MS, MAX_SECONDS, WATERMARK, start, stop, kick, drain, claim, recover, processOne, sha256File };
+module.exports = { MAX_ATTEMPTS, STALE_MS, MAX_SECONDS, WATERMARK, start, stop, kick, drain, claim, recover, sweep, processOne, sha256File };
