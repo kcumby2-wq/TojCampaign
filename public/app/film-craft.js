@@ -25,12 +25,17 @@
   function lsDel(k) { try { localStorage.removeItem(k); } catch (e) { /* blocked: fine */ } }
   function lsKeys(prefix) { var out = []; try { for (var i = 0; i < localStorage.length; i++) { var k = localStorage.key(i); if (k && k.indexOf(prefix) === 0) out.push(k); } } catch (e) { /* blocked */ } return out; }
   var SHEET = "toj.shoot.sheet.", TICKS = "toj.shoot.ticks.", DRAFT = "toj.graphics.draft.";
+  var SHEET_DAYS = 14;
+  // A draft of a graphic lives for this session only, and a day at most.
+  function ssGet(k) { try { var v = sessionStorage.getItem(k); return v ? JSON.parse(v) : null; } catch (e) { return null; } }
+  function ssSet(k, v) { try { sessionStorage.setItem(k, JSON.stringify(v)); } catch (e) { /* full or blocked: fine */ } }
+  function ssDel(k) { try { sessionStorage.removeItem(k); } catch (e) { /* blocked: fine */ } }
   // At most 10 films' sheets, none older than 14 days.
   function keepSheet(o) {
     lsSet(SHEET + o.film_id, o);
     lsKeys(SHEET).map(function (k) { var v = lsGet(k); return { k: k, at: v && v.saved_at ? Date.parse(v.saved_at) : 0 }; })
       .sort(function (a, b) { return b.at - a.at; })
-      .forEach(function (x, i) { if (i >= 10 || Date.now() - x.at > 14 * 864e5) forget(x.k.slice(SHEET.length)); });
+      .forEach(function (x, i) { if (i >= 10 || Date.now() - x.at > SHEET_DAYS * 864e5) forget(x.k.slice(SHEET.length)); });
   }
   function forget(id) { lsDel(SHEET + id); lsDel(TICKS + id); }
   function tc(ms) { var s = Math.round(ms / 1000); return Math.floor(s / 60) + ":" + String(s % 60).padStart(2, "0"); }
@@ -55,10 +60,16 @@
       if (e.status) return F().failed(back, e);
       o = lsGet(SHEET + id);
       saved = true;
-      if (!o) return F().failed(back, { message: "No signal, and this phone has no saved shoot sheet for this film. Open shoot mode once with a signal before you go." });
+      // A saved copy is good for 14 days.
+      if (o && !(Date.now() - Date.parse(o.saved_at) <= SHEET_DAYS * 864e5)) { forget(id); o = null; }
+      if (!o) return F().failed(back, { message: "No signal, and this phone has no saved shoot sheet for this film from the last 14 days. Open shoot mode once with a signal before you go." });
     }
     if (!saved) { if (o.closed) forget(id); else keepSheet(o); }
     var names = (d && d.names) || {};
+    // Online, the board as written; the saved copy has only the lines with
+    // no name, contact or place in them.
+    var det = (d && d.details) || { schedule: o.schedule, must_have: o.must_have, frame_pair: o.frame_pair };
+    var later = function (x) { return x == null ? '<span class="sub">(details online only)</span>' : h(x); };
     var ticks = lsGet(TICKS + id) || { must: {}, list: {}, ways: {} };
     var minors = o.people.some(function (p) { return p.is_minor; });
     var notCleared = o.people.filter(function (p) { return !p.cleared; }).length;
@@ -71,9 +82,9 @@
       return '<div class="li" style="align-items:flex-start;min-height:0;padding:10px 4px"><span class="light ' + cls + '" aria-hidden="true"></span><div class="grow"><div class="name" style="font-size:15px">' + h(p.code) + (names[p.id] ? ' <span class="sub">' + h(names[p.id]) + "</span>" : "") + '</div><div class="sub">' + h([p.role, p.is_minor ? (p.texas_youth ? "minor · Texas youth" : "minor") : "", p.speaker ? "speaker" : ""].filter(Boolean).join(" · ")) + '</div><div class="body" style="font-size:13.5px;' + (p.cleared && !p.pulled ? "" : "color:var(--bad)") + '">' + h(say) + "</div></div></div>";
     }).join("");
 
-    var times = (o.schedule || []).map(function (x) { return '<div class="row" style="padding:6px 0;border-top:1px solid #1E2C40"><b style="font:700 15px/1.3 var(--mono);min-width:56px">' + h(x.time || "") + '</b><div class="grow body" style="font-size:14.5px;color:var(--ink)">' + h(x.what) + "</div></div>"; }).join("");
-    var must = (o.must_have || []).map(function (m, i) { return checkbox('data-must="' + i + '"', ticks.must[i], h(m)); }).join("");
-    var fp = o.frame_pair || {};
+    var times = (det.schedule || []).map(function (x) { return '<div class="row" style="padding:6px 0;border-top:1px solid #1E2C40"><b style="font:700 15px/1.3 var(--mono);min-width:56px">' + h(x.time || "") + '</b><div class="grow body" style="font-size:14.5px;color:var(--ink)">' + later(x.what) + "</div></div>"; }).join("");
+    var must = (det.must_have || []).map(function (m, i) { return checkbox('data-must="' + i + '"', ticks.must[i], later(m)); }).join("");
+    var fp = det.frame_pair || {};
     var cardHtml = (o.cards || []).map(function (c) {
       var open = c.title === "6. Minors on set" && minors;
       return '<details class="card tight"' + (open ? " open" : "") + '><summary class="name" style="cursor:pointer;font-size:15px;min-height:30px;display:flex;align-items:center">' + h(c.title.replace(/^\d+\.\s*/, "")) + '</summary><ul class="body" style="margin:4px 0 0;padding-left:18px;font-size:14px;display:flex;flex-direction:column;gap:6px">' +
@@ -86,17 +97,17 @@
       '<div class="screen">' + back +
       '<div><p class="kicker">Shoot mode · ' + h(o.format_label + " · " + o.athlete_id) + '</p><h1 class="title sm">' + h(o.title) + "</h1>" +
       (o.shoot_date ? '<p class="lede" style="font-size:15px">Shoot day: ' + h(new Date(o.shoot_date + "T12:00:00").toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" })) + "</p>" : "") + "</div>" +
-      (saved ? '<div class="card tight"><p class="body" style="font-size:13.5px;margin:0">No signal: this is the copy saved on this phone ' + h(T().ago(o.saved_at)) + ". It has codes, times and shots, never names or places.</p></div>" : "") +
+      (saved ? '<div class="card tight"><p class="body" style="font-size:13.5px;margin:0">No signal: this is the copy saved on this phone ' + h(T().ago(o.saved_at)) + ". It keeps times, codes and the lines with no name, contact or place in them; the rest shows when you're back online.</p></div>" : "") +
       (o.closed ? '<div class="card tight"><p class="body err" style="margin:0">This film is closed. Nothing more is shot for it.</p></div>' : "") +
       '<section class="sec"><div class="row"><h2 class="sec-h grow" style="margin:0">The cards</h2>' + (notCleared ? F().badge(notCleared + " not cleared", "bad") : F().badge("Everyone cleared", "ok")) + '</div><p class="sub" style="margin:0">No card, no shoot. Check before you roll.</p><div class="card tight" style="gap:0">' + (lights || '<p class="empty">No cards yet: nobody goes on camera.</p>') + "</div></section>" +
       (times ? '<section class="sec"><h2 class="sec-h">Call times</h2><div class="card tight" style="gap:0">' + times + "</div></section>" : "") +
       (d && d.locations && d.locations.length ? '<section class="sec"><h2 class="sec-h">Where</h2><div class="card tight">' + d.locations.map(function (x) { return '<p class="body" style="font-size:14.5px;margin:0;color:var(--ink)">' + h(x) + "</p>"; }).join("") + "</div></section>" : "") +
       (must ? '<section class="sec"><h2 class="sec-h">The three must-haves</h2><div style="display:flex;flex-direction:column;gap:8px">' + must + "</div></section>" : "") +
-      (fp.opening || fp.closing ? '<section class="sec"><h2 class="sec-h">The frame pair</h2><div class="card tight"><p class="body" style="font-size:14.5px;margin:0"><b style="color:var(--ink)">Opening:</b> ' + h(fp.opening || "—") + '</p><p class="body" style="font-size:14.5px;margin:0"><b style="color:var(--ink)">Closing:</b> ' + h(fp.closing || "—") + "</p></div></section>" : "") +
+      (fp.opening || fp.closing || (saved && (o.frame_pair || {}).opening === null) ? '<section class="sec"><h2 class="sec-h">The frame pair</h2><div class="card tight"><p class="body" style="font-size:14.5px;margin:0"><b style="color:var(--ink)">Opening:</b> ' + later(fp.opening) + '</p><p class="body" style="font-size:14.5px;margin:0"><b style="color:var(--ink)">Closing:</b> ' + later(fp.closing) + "</p></div></section>" : "") +
       (o.format === "same_drill" ? '<section class="sec"><h2 class="sec-h">The Same Drill</h2><a class="btn soft" href="#film-ghost/' + h(id) + '">Open the ghost frame</a><p class="sub" style="margin:0">The archive frame over the live camera, to match the angle, height and side. It never leaves this phone.</p></section>' : "") +
       '<section class="sec"><h2 class="sec-h">The kit for today</h2>' + (cardHtml || '<p class="empty">The kit\'s cards aren\'t here.</p>') + "</section>" +
       (list ? '<section class="sec"><div class="row"><h2 class="sec-h grow" style="margin:0">Shoot day: director</h2><span class="sub" id="listCount">' + listDone + " of " + o.checklist.length + "</span></div>" + '<div style="display:flex;flex-direction:column;gap:8px">' + list + "</div></section>" : "") +
-      '<p class="sub" style="margin:0">Ticks stay on this phone. A copy of this sheet without names, contacts or places opens here if the signal drops while the app is open.' + (o.kit_version ? " Kit v" + h(o.kit_version) + "." : "") + "</p></div>");
+      '<p class="sub" style="margin:0">Ticks stay on this phone. A copy of this sheet without names, contacts or places (times, codes and the plain lines) opens here for 14 days if the signal drops. Signing out removes it.' + (o.kit_version ? " Kit v" + h(o.kit_version) + "." : "") + "</p></div>");
 
     function save() { lsSet(TICKS + id, ticks); }
     document.querySelectorAll("[data-must]").forEach(function (c) { c.addEventListener("change", function () { ticks.must[c.dataset.must] = c.checked; save(); }); });
@@ -477,7 +488,8 @@
     var approved = on("graphics_system"), copiesOn = on("review_copies");
     var people = d.people.filter(function (p) { return p.cleared_at && !p.consent_pulled_at; });
     var banned = meta.banned ? [new RegExp(meta.banned.words, "gi"), new RegExp(meta.banned.phrases, "gi")] : [];
-    var draft = lsGet(DRAFT + id) || {};
+    var draft = ssGet(DRAFT + id) || {};
+    if (draft.at && !(Date.now() - draft.at < 864e5)) { ssDel(DRAFT + id); draft = {}; }
     var g = {
       tpl: draft.tpl && TEMPLATES[draft.tpl] ? draft.tpl : FIT[f.format] || "title",
       ratio: draft.ratio || "4x5", line: draft.line || "", italic: draft.italic == null ? -1 : draft.italic, more: draft.more || "",
@@ -486,7 +498,7 @@
       people: [], photo: null, photoOk: false, yearsTrue: false,
     };
     g.people = g.speaker ? [g.speaker] : [];
-    function keepDraft() { lsSet(DRAFT + id, { tpl: g.tpl, ratio: g.ratio, line: g.line, italic: g.italic, more: g.more, letters: g.letters, title: g.title, then: g.then, now: g.now, speaker: g.speaker, creditAs: g.creditAs }); }
+    function keepDraft() { ssSet(DRAFT + id, { at: Date.now(), tpl: g.tpl, ratio: g.ratio, line: g.line, italic: g.italic, more: g.more, letters: g.letters, title: g.title, then: g.then, now: g.now, speaker: g.speaker, creditAs: g.creditAs }); }
     var ROLE = { athlete: "athlete", parent: "parent", guardian: "parent", coach: "coach", other: "family" };
     function credit() {
       var p = d.people.find(function (x) { return x.id === g.speaker; });
@@ -692,7 +704,7 @@
         try {
           var list = await blobs();
           await F().uploadSet(f.id, { format: tm.format, ratio: g.ratio, version: v, file_name: setName(tm.format, g.ratio, v), people: g.people, made_with: "graphics" }, list, function (n, pr) { send.textContent = "Sending " + n + " of " + list.length + " · " + Math.round(pr * 100) + "%"; });
-          lsDel(DRAFT + id);
+          ssDel(DRAFT + id);
           T().toast("Sent: the marked copies are on their way. Then send the speaker their link.");
           T().go("#film/" + f.id);
         } catch (e) { send.disabled = false; send.textContent = "Send for review"; F().say("gMsg", F().why(e), true); } finally { F().busy(-1); }
@@ -714,5 +726,12 @@
     draw();
   }
 
+  // Everything this phone keeps for films (shoot sheets, ticks, graphics
+  // drafts), gone at sign-out.
+  function forgetAll() {
+    ["toj.shoot.", "toj.graphics."].forEach(function (p) { lsKeys(p).forEach(lsDel); });
+    try { for (var i = sessionStorage.length - 1; i >= 0; i--) { var k = sessionStorage.key(i); if (k && (k.indexOf("toj.shoot.") === 0 || k.indexOf("toj.graphics.") === 0)) sessionStorage.removeItem(k); } } catch (e) { /* blocked */ }
+  }
+  window.TOJFilmCraft = { forgetAll: forgetAll };
   window.TOJScreens = Object.assign(window.TOJScreens || {}, { "film-shoot": shoot, "film-ghost": ghost, "film-check": check, "film-graphics": graphics });
 })();

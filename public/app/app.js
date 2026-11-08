@@ -89,6 +89,9 @@
     toast.t = setTimeout(function () { toastEl.hidden = true; }, 2600);
   }
   function go(hash) { if (location.hash === hash) render(); else location.hash = hash; }
+  // What this phone keeps for the team's work (shoot sheets, graphics
+  // drafts) goes when someone signs out.
+  function forgetDevice() { try { if (window.TOJFilmCraft) window.TOJFilmCraft.forgetAll(); } catch (e) { /* nothing kept */ } }
   function stopPolling() { state.pollers.forEach(function (t) { clearTimeout(t); }); state.pollers = []; }
   function later(fn, ms) { var t = setTimeout(fn, ms); state.pollers.push(t); }
   function ago(iso) {
@@ -928,6 +931,7 @@
       installHint() + "</div>");
     document.getElementById("signout").addEventListener("click", async function () {
       try { await post("/api/auth/logout"); } catch (e) {}
+      forgetDevice();
       state.me = null; go("#signin");
     });
     if (window.TOJPush) window.TOJPush.row(document.getElementById("pushRow"));
@@ -943,6 +947,7 @@
       try {
         if (N) { try { await N.push.disable(post); } catch (e) {} }
         await post("/api/team/me", { confirm: true }, "DELETE");
+        forgetDevice();
         state.me = null;
         toast("Your account is deleted.");
         go("#signin");
@@ -1103,7 +1108,7 @@
   }
   function notOnTeam() {
     show(null, '<div class="screen" style="padding-top:40px;text-align:center;align-items:center">' + appIcon() + '<h1 class="title sm">Not on the team yet</h1><p class="lede">You\'re signed in as ' + h(state.me.email) + ", but this account isn't on the TOJ team. Ask Kyron for an invite link.</p><button type=\"button\" class=\"btn ghost\" id=\"so\">Sign out</button></div>");
-    document.getElementById("so").addEventListener("click", async function () { try { await post("/api/auth/logout"); } catch (e) {} state.me = null; go("#signin"); });
+    document.getElementById("so").addEventListener("click", async function () { try { await post("/api/auth/logout"); } catch (e) {} forgetDevice(); state.me = null; go("#signin"); });
   }
 
   // ── The iPhone app ───────────────────────────────────────────────────

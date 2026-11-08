@@ -1034,6 +1034,7 @@ router.get("/films/:id/shoot", member, withDb(async (req, res, sb) => {
   const cards = titles.map((t) => F.cardFor(k, t)).filter(Boolean);
   const checklist = F.cardFor(k, "Shoot day: director");
   const plan = film.plan || {};
+  const fp = plan.frame_pair || {};
   const t = F.templateFor(film.kit_slug);
   const light = (p) => ({
     id: p.id,
@@ -1056,9 +1057,11 @@ router.get("/films/:id/shoot", member, withDb(async (req, res, sb) => {
     format_label: t && t.formats[film.format] ? t.formats[film.format].label : film.format,
     closed: !!(film.pulled_at || film.archived_at),
     shoot_date: plan.shoot_date || null,
-    schedule: Array.isArray(plan.schedule) ? plan.schedule.slice(0, 40) : [],
-    must_have: Array.isArray(plan.must_have) ? plan.must_have.slice(0, 3) : [],
-    frame_pair: plan.frame_pair || {},
+    // Times and codes, and only the lines that carry no name, contact or
+    // place (U.offlineSafe); the rest shows online only ("details").
+    schedule: (Array.isArray(plan.schedule) ? plan.schedule.slice(0, 40) : []).map((x) => ({ time: x.time || null, what: U.offlineSafe(x.what, people) ? x.what : null })),
+    must_have: (Array.isArray(plan.must_have) ? plan.must_have.slice(0, 3) : []).map((m) => (U.offlineSafe(m, people) ? m : null)),
+    frame_pair: { opening: U.offlineSafe(fp.opening, people) ? fp.opening : null, closing: U.offlineSafe(fp.closing, people) ? fp.closing : null },
     people: people.map(light),
     cards,
     checklist: checklist ? checklist.parts.map((x) => x.text) : [],
@@ -1066,7 +1069,13 @@ router.get("/films/:id/shoot", member, withDb(async (req, res, sb) => {
   };
   res.json({
     offline,
+    // Online only: never saved on the phone.
     names: Object.fromEntries(people.map((p) => [p.id, p.name])),
+    details: {
+      schedule: Array.isArray(plan.schedule) ? plan.schedule.slice(0, 40) : [],
+      must_have: Array.isArray(plan.must_have) ? plan.must_have.slice(0, 3) : [],
+      frame_pair: { opening: fp.opening || null, closing: fp.closing || null },
+    },
     locations: Array.isArray(plan.locations) ? plan.locations : [],
     one_sentence: film.one_sentence || null,
   });

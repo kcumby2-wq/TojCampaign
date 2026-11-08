@@ -169,6 +169,41 @@ function planInput(raw) {
   return v;
 }
 
+// What the director's phone keeps for a dead signal (shoot mode) comes from
+// the board's call times, must-have shots and frame pair: those carry codes,
+// not names, and no contacts or places (the kit's rule for the offline
+// sheet). Checked when the board is saved, and again line by line when the
+// sheet is made (offlineSafe).
+const PHONE_RE = /(?:\+?\d[\s().-]*){7,}/;
+const EMAIL_RE = /[^\s@]+@[^\s@]+\.[a-z]{2,}/i;
+const LINK_RE = /\bhttps?:\/\/|\bwww\./i;
+const STREET_RE = /\b\d{1,6}\s+(?:[\p{L}\p{N}.'-]+\s+){0,3}(?:st|street|ave|avenue|rd|road|blvd|boulevard|dr|drive|ln|lane|way|ct|court|pl|place|hwy|highway|pkwy|parkway|cir|circle|ter|terrace|trl|trail)\b\.?/iu;
+function contactIn(text) {
+  const t = String(text || "");
+  return PHONE_RE.test(t) || EMAIL_RE.test(t) || LINK_RE.test(t) || STREET_RE.test(t);
+}
+// Two capitalised words in a row, the second mid-sentence ("Maria Lopez",
+// "Lincoln High", "Oak St"): likely a name or a place, so it stays online.
+function properNounsIn(text) {
+  const words = [...String(text || "").matchAll(/[\p{L}\p{M}'’]+|[.!?:;\n]/gu)].map((m) => m[0]);
+  for (let i = 1; i < words.length; i++) {
+    const a = words[i - 1], b = words[i];
+    if (/^\p{Lu}/u.test(a) && /^\p{Lu}\p{Ll}/u.test(b)) return true;
+  }
+  return false;
+}
+function planProblems(plan, people) {
+  const errors = [];
+  const lines = [...(plan.schedule || []).map((x) => x.what), ...(plan.must_have || []), plan.frame_pair && plan.frame_pair.opening, plan.frame_pair && plan.frame_pair.closing].filter(Boolean);
+  if (lines.some((x) => strictNames(x, people).length)) errors.push("board_has_name");
+  if (lines.some(contactIn)) errors.push("board_has_contact");
+  return errors;
+}
+function offlineSafe(text, people) {
+  const t = String(text || "");
+  return !!t && !strictNames(t, people).length && !contactIn(t) && !properNounsIn(t);
+}
+
 // ── A film ───────────────────────────────────────────────────────────────
 // partial: only the fields sent (an edit); otherwise a new film.
 function filmInput(raw, { partial = false, people = [] } = {}) {
@@ -216,7 +251,10 @@ function filmInput(raw, { partial = false, people = [] } = {}) {
     v.gfs_event_id = r.gfs_event_id ? (UUID.test(String(r.gfs_event_id)) ? String(r.gfs_event_id).toLowerCase() : null) : null;
     if (r.gfs_event_id && !v.gfs_event_id) errors.push("gfs_event_id");
   }
-  if (has(r, "plan")) v.plan = planInput(r.plan);
+  if (has(r, "plan")) {
+    v.plan = planInput(r.plan);
+    errors.push(...planProblems(v.plan, people));
+  }
   return { errors, value: v };
 }
 
@@ -495,6 +533,9 @@ module.exports = {
   EVERYDAY_2,
   namesOkWords,
   planInput,
+  planProblems,
+  offlineSafe,
+  contactIn,
   filmInput,
   coversInput,
   personInput,
