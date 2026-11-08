@@ -137,6 +137,31 @@ It writes no lines for anyone: a quoted line of three words or more is refused, 
 
 Whoever added a note, or the producer, edits or archives it. Archived notes are kept, never deleted, and searches skip them.
 
+## The kit learns from the work
+
+Migration 042, API `routes/studio-learn.js`, screens in `public/app/learn.js` and the kit page.
+
+**Wrap-ups** (the room → *Wrap-ups*):
+- What worked on the film, what missed, and what the kit should change, with the kit card it's about if you know it.
+- No names, as for the history: a whole name, one run together, or any word of a minor's name is refused, by the app and by the database. A word that's also a name is asked about first.
+- Whoever wrote one edits it; they or an approver can remove it, until it's folded into a refresh. After that it's kept as it was.
+
+**Suggest an edit** (a card on the kit page): what the card should say and why.
+- It names a card in the approved kit, and carries no name: a kit never does. It's checked against every film's cards, by the app and by the database.
+- It stays open until an approver folds it into a refresh or declines it, with a reason. Never deleted.
+
+**Copy the whole column** (the kit page): every card in the column at once, in order, to paste onto the Milanote board.
+
+**Rules in the making.** A review-note label used on three notes is proposed as a rule. An approver folds it into a refresh or declines it, with a reason. A declined one comes back after three more uses.
+
+**The month's refresh.** Today shows approvers *This month's kit refresh* when there's something new and no refresh this month.
+- *Open the month's brief* lists the wrap-ups, suggested edits and rules in the making, each ticked, and builds the Kit Refresher's brief from them.
+- Untick what shouldn't go in; edit the brief if you like; the ticks decide what's marked folded in. What doesn't fit in one brief (6,000 characters) waits for next month.
+- *Start the monthly refresh* starts a kit run like any other, and it makes a draft only: nothing changes until Kyron approves it.
+- The run is marked, and what it drew on is folded in, each once.
+
+**The gear re-check.** Today shows *Gear re-check due* a month after the last one, or when there's never been one. *Re-check gear* goes through the Brief Writer as before, and the run it starts is marked as the gear re-check.
+
 ## Tool approvals
 
 The kit's rule: a tool touches footage only once the producer has checked its terms and added it, with a one-line reason. Three switches start **off**; only Kyron turns them on, and the reason is kept:
@@ -191,13 +216,27 @@ Real words (`/api/studio-words`, members with Studio; "the film's people" are it
 | POST | `/films/:id/directions` | the producer, the film's director |
 | POST | `/directions/:did/pick` `{ n }` | producer |
 
+The kit learns (`/api/studio-learn`):
+
+| Method | Path | Who |
+|---|---|---|
+| GET/POST | `/films/:id/wraps` `{ worked, missed, change, card_title, names_ok }` | members |
+| PATCH | `/wraps/:wid` | whoever wrote it, until it's folded |
+| DELETE | `/wraps/:wid` | whoever wrote it or an approver, until it's folded |
+| GET/POST | `/suggestions?slug=&status=`, `/suggestions` `{ slug, version, column, card_title, suggestion, why }` | members |
+| POST | `/suggestions/:id/decline` `{ note }`, `/labels/decline` `{ label, note }` | approvers |
+| GET | `/monthly/:slug` | approvers |
+| GET | `/today` | members (the month's refresh: approvers only) |
+
+A kit run takes `{ purpose: "monthly", sources: { wraps, suggestions, labels } }` (approvers) or `{ purpose: "gear" }`.
+
 The taste library (`/api/studio-taste`): GET `?q=&tag=&limit=`, GET `/tags`, GET `/:id`, POST (members); PATCH `/:id` with `seen`, POST `/:id/archive` (whoever added it, the producer). Briefs: GET `/api/studio-agents/briefs/unstarted`; POST `/api/studio-agents/briefs/:id/set-aside` `{ aside }`; a kit run started from a brief sends `{ from_brief, direction }`.
 
 The speakers' page: `POST /api/studio-review/view {token}` and `POST /api/studio-review/decide {token, decision, name, note, confirm}` (POST and JSON only, from the site's own pages, 30 tries per visitor per 10 minutes).
 
 ## Setup
 
-1. Apply `db/migrations/039_studio_films.sql` (tables, rules, the bucket `studio-films`), then `040_studio_craft.sql` (notes, delivery checks, stills and slides), then `041_studio_words.sql` (transcripts, lines, directions, the taste library, brief marks). None has been applied anywhere yet: each goes on fresh, in order (040 isn't written to upgrade an earlier draft of itself).
+1. Apply `db/migrations/039_studio_films.sql` (tables, rules, the bucket `studio-films`), then `040_studio_craft.sql` (notes, delivery checks, stills and slides), then `041_studio_words.sql` (transcripts, lines, directions, the taste library, brief marks), then `042_studio_learn.sql` (wrap-ups, suggested edits, rule decisions, refresh marks). None has been applied anywhere yet: each goes on fresh, in order (040 isn't written to upgrade an earlier draft of itself).
 2. Optional settings on Render: `STUDIO_SITE_BASE` (default `https://www.tojcampaign.com`), `STUDIO_REVIEW_REPLY_TO`, `STUDIO_REVIEW_MAX_MB` (raise it after the Supabase Pro upgrade), `STUDIO_REVIEW_WORKER=off` to stop the worker on a server.
 3. Kyron turns on *Review copies in storage* (Studio → Films → Tool approvals) once he's checked Supabase's terms, and *Claude reads transcripts* once he's checked Anthropic's terms for interview transcripts.
 4. Email works as for the rest of the app (`EMAIL_USER`/`EMAIL_PASS` or `SMTP_*`); without it, review links aren't made.
@@ -214,6 +253,8 @@ The speakers' page: `POST /api/studio-review/view {token}` and `POST /api/studio
 - A line is checked against the transcript, not the sound: a word Resolve misheard is kept as Resolve wrote it. Fix it in Resolve and add the transcript again.
 - A line's start and end inside one transcript line are estimated from where its words fall in that line, so they can be off by a fraction of a second; a cutdown's two seconds are measured the same way.
 - A minor's words can't be used at all yet (adults first): their review comes later.
+- The month's refresh is started by an approver from Today, not on a timer: nothing runs a model on its own.
+- A wrap-up's card is free text (with the kit's titles offered); a title that isn't a card's is kept as written.
 - The phone's copy of the shoot sheet drops lines that read like a name or a place by their capitals, the cards and *Locations*; a name typed all in lower case, of someone not on the cards, can't be told from other words. Keep names on the cards and places under *Locations*.
 - A minor's name run together ("tyng") is caught by the app from four letters; the database's own screen starts at five.
 - The still check reads a slide's pixels in the web server's own process: about a tenth of a second for the largest it takes (3000 × 2000), a few hundredths for the kit's sizes.

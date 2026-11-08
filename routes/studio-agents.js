@@ -233,6 +233,17 @@ router.post("/run", member, async (req, res) => {
   // Started from a brief that came back (and which of its three directions).
   const fromBrief = S.isUuid(String(body.from_brief || "")) ? String(body.from_brief).toLowerCase() : null;
   const direction = Number.isInteger(body.direction) && body.direction >= 1 && body.direction <= 3 ? body.direction : null;
+  // What it's for (migration 042): the month's refresh, from the wrap-ups,
+  // suggested edits and rules in the making it lists (an approver's call),
+  // or a gear re-check. Marked, so Today knows what's due.
+  const purpose = ["monthly", "gear"].includes(body.purpose) ? body.purpose : null;
+  if (purpose === "monthly" && !(req.team && T.can(req.team, "studio", "approver"))) return res.status(403).json({ error: "producer_only" });
+  if (purpose && role !== "kit-refresher") return res.status(400).json({ error: "invalid_purpose" });
+  const src = body.sources && typeof body.sources === "object" ? body.sources : {};
+  const ids = (v) => (Array.isArray(v) ? [...new Set(v.map((x) => String(x).toLowerCase()).filter((x) => S.isUuid(x)))].slice(0, 200) : []);
+  const sources = purpose === "monthly"
+    ? { wraps: ids(src.wraps), suggestions: ids(src.suggestions), labels: (Array.isArray(src.labels) ? src.labels : []).filter((l) => l && typeof l.label === "string").slice(0, 50).map((l) => ({ label: l.label.slice(0, 60), uses: Math.max(0, Math.floor(Number(l.uses) || 0)) })) }
+    : null;
   if (allowLocked && req._apiKeyAuth) return res.status(403).json({ error: "rule_changes_need_a_person" });
   if (allowLocked && !(req.team && req.team.owner)) return res.status(403).json({ error: "rule_changes_need_the_owner" });
 
@@ -283,6 +294,19 @@ router.post("/run", member, async (req, res) => {
     .single();
   if (insErr) return fail(res, insErr, "start_run");
 
+  if (purpose) {
+    // Marked (and the month's sources folded in) before the answer goes back.
+    try {
+      const { error: fErr } = await sb.rpc("studio_refresh_fold", {
+        p_run: runRow.id, p_slug: slug, p_kind: purpose, p_by: who(req),
+        p_wraps: sources ? sources.wraps : [], p_suggestions: sources ? sources.suggestions : [],
+        p_labels: sources ? sources.labels.map((l) => l.label) : [], p_label_uses: sources ? sources.labels.map((l) => l.uses) : [],
+      });
+      if (fErr) console.warn("[studio-agents] refresh not marked:", fErr.code || fErr.message);
+    } catch (e) {
+      /* before 042: not marked */
+    }
+  }
   if (fromBrief) {
     // Today stops listing the brief, before the answer goes back. Before
     // migration 041 there's no table: the brief stays on Today.
@@ -575,7 +599,7 @@ router.post("/brief", member, async (req, res) => {
           status: passed ? "completed" : brief ? "waiting" : "failed",
           output: brief ? `${briefText(brief)}\n\n---\n${result.output || ""}` : result.output || "",
           error: brief ? null : "The Brief Writer didn't hand back a brief.",
-          trace: [...(result.trace || []), ...(brief ? [{ type: "studio_brief", brief }] : [])],
+          trace: [...(result.trace || []), ...(brief ? [{ type: "studio_brief", brief: parsed.purpose ? { ...brief, purpose: parsed.purpose } : brief }] : [])],
           usage: result.usage,
           eval_status: result.eval_status,
           retry_count: result.retry_count || 0,

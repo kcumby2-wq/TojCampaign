@@ -235,6 +235,7 @@ app.use("/api/studio-review", require("./routes/studio-review"));
 // migration 041). Claude reads a transcript only while Kyron has it on.
 app.use("/api/studio-words", require("./routes/studio-words"));
 app.use("/api/studio-taste", require("./routes/studio-taste"));
+app.use("/api/studio-learn", require("./routes/studio-learn"));
 
 // Public health signal — powers the live status dot on the Command Center.
 // Reports which storage/AI backends are actually wired (no secrets leaked).
