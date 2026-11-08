@@ -96,6 +96,14 @@ The files of those films (uploads, review copies, posters) are listed for remova
 
 A takedown's lines lock the takedown as they're marked down, so the last line always closes it; the worker closes any takedown with nothing left on it, as a safety net.
 
+## Their own page
+
+Everyone whose email a card names as the one who approves (the speaker themself, or a minor's parent or guardian) has a page of their own at `/my-films.html`: every film they or their child are in, where each one is, whether a review copy is waiting on them, what their release covers, what they approved or asked to change, what's posted of the cuts they're in, and (adults only) the lines of theirs that were kept, as they said them, with where in the recording. It never shows a title, a name, a caption written around their words, anyone else on a film, or a post of a cut they aren't in.
+
+**The link.** They ask for it on the page with their email, or the producer sends it from the card (*Send their page*). It comes by email, works for 7 days, and a new one stops the old ones. The page answers "check your email" at once, whether or not a card names that address, so it never tells a stranger who's on a card. A link that couldn't be emailed is stopped at once. Signing out stops it. As with review links, the token sits in the link's fragment, the server sends the database its hash, and the database keeps the hash of that (migration 043).
+
+**Taking consent back.** The page has *Take my consent back* (for a parent, *Take back consent for your child*): a tick, then two taps. It's the same pull the producer makes from a card, written as "the speaker, on their page" (or their parent or guardian), never a name or an email: every film with them stops, review copies leave storage, live posts go on the takedown list and the 72-hour clock starts. Staff hear at once by push and by email that's sent even when the day's email budget is spent. Only a live link can do it, only for a person whose card names that link's email, and only once; the link and the person are checked before anything else is answered. An optional note is kept with the takedown, so it's refused if it has a name from that person's cards.
+
 ## Real words and three directions
 
 The film's room → **Real words** (`public/app/film-words.js`, API `routes/studio-words.js`, migration 041).
@@ -190,7 +198,7 @@ All under `/api/studio-films` (team members with Studio; writes are JSON from th
 | POST | `/films/:id/archive`, `/films/:id/second-yes`, `/films/:id/steps/:step/reopen` | producer |
 | POST | `/films/:id/steps/:step/done` (Speaker review: `{ cut_ids }`) | the step's owner or the producer (Publish: Kyron) |
 | POST/PATCH/DELETE | `/films/:id/people[/:pid]` | members (who approves, and a new consent: the producer) |
-| POST | `/films/:id/people/:pid/clear`, `/people/pull` | producer |
+| POST | `/films/:id/people/:pid/clear`, `/films/:id/people/:pid/page-link`, `/people/pull` | producer |
 | POST | `/films/:id/cuts/upload`, `/films/:id/cuts`; PATCH/DELETE `/films/:id/cuts/:cid` | members |
 | POST | `/films/:id/cuts/:cid/reviews`, `/reviews/:rid/cancel-link`, `/reviews/:rid/withdraw` | producer |
 | POST | `/films/:id/posts` | Kyron |
@@ -232,11 +240,13 @@ A kit run takes `{ purpose: "monthly", sources: { wraps, suggestions, labels } }
 
 The taste library (`/api/studio-taste`): GET `?q=&tag=&limit=`, GET `/tags`, GET `/:id`, POST (members); PATCH `/:id` with `seen`, POST `/:id/archive` (whoever added it, the producer). Briefs: GET `/api/studio-agents/briefs/unstarted`; POST `/api/studio-agents/briefs/:id/set-aside` `{ aside }`; a kit run started from a brief sends `{ from_brief, direction }`.
 
-The speakers' page: `POST /api/studio-review/view {token}` and `POST /api/studio-review/decide {token, decision, name, note, confirm}` (POST and JSON only, from the site's own pages, 30 tries per visitor per 10 minutes).
+The speakers' review page: `POST /api/studio-review/view {token}` and `POST /api/studio-review/decide {token, decision, name, note, confirm}` (POST and JSON only, from the site's own pages, 30 tries per visitor per 10 minutes).
+
+Their own page (`/api/studio-speaker`, the same rules): `POST /send-link {email}` (always `{ ok: true }`; 5 asks per visitor an hour, 3 per email a day), `POST /view {token}`, `POST /pull {token, person_code, confirm: true, note}`, `POST /sign-out {token}`.
 
 ## Setup
 
-1. Apply `db/migrations/039_studio_films.sql` (tables, rules, the bucket `studio-films`), then `040_studio_craft.sql` (notes, delivery checks, stills and slides), then `041_studio_words.sql` (transcripts, lines, directions, the taste library, brief marks), then `042_studio_learn.sql` (wrap-ups, suggested edits, rule decisions, refresh marks). None has been applied anywhere yet: each goes on fresh, in order (040 isn't written to upgrade an earlier draft of itself).
+1. Apply `db/migrations/039_studio_films.sql` (tables, rules, the bucket `studio-films`), then `040_studio_craft.sql` (notes, delivery checks, stills and slides), then `041_studio_words.sql` (transcripts, lines, directions, the taste library, brief marks), then `042_studio_learn.sql` (wrap-ups, suggested edits, rule decisions, refresh marks), then `043_studio_speaker.sql` (their own page's links). None has been applied anywhere yet: each goes on fresh, in order (040 isn't written to upgrade an earlier draft of itself).
 2. Optional settings on Render: `STUDIO_SITE_BASE` (default `https://www.tojcampaign.com`), `STUDIO_REVIEW_REPLY_TO`, `STUDIO_REVIEW_MAX_MB` (raise it after the Supabase Pro upgrade), `STUDIO_REVIEW_WORKER=off` to stop the worker on a server.
 3. Kyron turns on *Review copies in storage* (Studio → Films → Tool approvals) once he's checked Supabase's terms, and *Claude reads transcripts* once he's checked Anthropic's terms for interview transcripts.
 4. Email works as for the rest of the app (`EMAIL_USER`/`EMAIL_PASS` or `SMTP_*`); without it, review links aren't made.
@@ -246,7 +256,8 @@ The speakers' page: `POST /api/studio-review/view {token}` and `POST /api/studio
 - The kit names only some file codes (YTH, HERO in its example). The other lane and format codes (`NFL`, `COL`, `PAR`, `CUT`, …) are the app's until the kit names them; the file-name check only warns.
 - Coach Hooks's yes is recorded by the producer with how it came (a text, an email), not by Hooks in the app.
 - The worker reads a review copy into memory to upload it (a 10-minute copy at 720p is tens of megabytes).
-- The speakers' page limits tries per visitor by `X-Forwarded-For`, which a caller reaching Render directly can set. The per-connection limit and the 256-bit tokens still hold.
+- The speakers' pages limit tries per visitor by `X-Forwarded-For`, which a caller reaching Render directly can set. The per-connection limit and the 256-bit tokens still hold.
+- Someone who knows a person's email can use up that address's three page links for the day; the producer can still send one from the card.
 - If the phone closes the app with no signal, the app opens at sign-in until there's a signal again: open shoot mode before the signal goes.
 - The end card is a type stand-in until the Coached by Hooks mark file is added to the app.
 - The graphics read the speaker's line as typed: copy a kept line from Real words into the graphic.

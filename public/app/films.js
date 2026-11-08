@@ -272,10 +272,12 @@
       var cov = p.covers || {};
       var covers = "Release covers: " + (["face", "name", "jersey", "voice"].filter(function (k) { return cov[k]; }).join(", ") || "nothing identifying") + ((cov.formats || []).length ? " · " + cov.formats.map(function (x) { return fmtLabel(f.kit_slug, x); }).join(", ") : "");
       var who = p.reviewer_email ? (p.reviewer_relation === "self" ? "Approves their own cut" : "Approved by " + (p.reviewer_relation === "guardian" ? "legal guardian" : "parent") + " " + p.reviewer_name) + " · " + p.reviewer_email : "";
+      // Their own page (every film with them, and taking consent back), by email.
+      var pageBtn = d.can.producer && p.reviewer_email ? '<button type="button" class="btn ghost small" data-pagelink="' + h(p.id) + '">Send their page</button>' : "";
       return '<article class="card tight"><div class="row"><div class="grow"><div class="name" style="font-size:15px">' + h(p.name) + ' <span class="sub">' + h(p.person_code) + '</span></div><div class="sub">' + h(tags) + "</div></div>" + state + "</div>" +
         '<p class="body" style="font-size:13.5px">' + h(covers) + (who ? "<br>" + h(who) : "") + (p.cleared_at ? "<br>Cleared by " + h(p.cleared_by) + " · " + h(t.ago(p.cleared_at)) : "") + (p.gaps && p.gaps.length && !p.cleared_at ? '<br><span class="warnc">Still needed: ' + h(p.gaps.join("; ")) + "</span>" : "") + "</p>" +
-        (closed || p.consent_pulled_at ? "" : '<div class="btn-row"><a class="btn ghost small" href="#film-person/' + h(f.id) + "/" + h(p.id) + '">Edit card</a>' +
-          (d.can.producer && !p.cleared_at && !(p.gaps || []).length ? '<button type="button" class="btn small" data-clear="' + h(p.id) + '" data-seen="' + h(p.updated_at) + '">Clear it</button>' : "") + "</div>") +
+        (closed || p.consent_pulled_at ? (pageBtn ? '<div class="btn-row">' + pageBtn + "</div>" : "") : '<div class="btn-row"><a class="btn ghost small" href="#film-person/' + h(f.id) + "/" + h(p.id) + '">Edit card</a>' +
+          (d.can.producer && !p.cleared_at && !(p.gaps || []).length ? '<button type="button" class="btn small" data-clear="' + h(p.id) + '" data-seen="' + h(p.updated_at) + '">Clear it</button>' : "") + pageBtn + "</div>") +
         (d.can.producer && !p.consent_pulled_at ? '<details><summary class="sub" style="cursor:pointer;min-height:32px;display:flex;align-items:center">Consent pulled?</summary><div class="field" style="margin-top:6px"><p class="body" style="font-size:13.5px">Every film ' + h(p.person_code) + ' is in stops, every live post goes on the takedown list, and the 72-hour clock starts. It can\'t be undone.</p><input class="input" data-pullnote="' + h(p.person_code) + '" maxlength="500" placeholder="How it came in (phone call, email)"><button type="button" class="btn danger small" data-pull="' + h(p.person_code) + '">Consent pulled: start the takedown</button></div></details>' : "") +
         "</article>";
     }).join("");
@@ -422,6 +424,9 @@
     });
     document.querySelectorAll("[data-clear]").forEach(function (b) {
       b.addEventListener("click", async function () { b.disabled = true; try { await t.post("/api/studio-films/films/" + f.id + "/people/" + b.dataset.clear + "/clear", { seen: b.dataset.seen }); t.toast("Cleared."); reload(); } catch (e) { b.disabled = false; T().toast(why(e)); } });
+    });
+    document.querySelectorAll("[data-pagelink]").forEach(function (b) {
+      b.addEventListener("click", async function () { b.disabled = true; b.textContent = "Sending…"; try { await t.post("/api/studio-films/films/" + f.id + "/people/" + b.dataset.pagelink + "/page-link", {}); t.toast("Their page link is on its way (it works for 7 days)."); b.textContent = "Sent"; } catch (e) { b.disabled = false; b.textContent = "Send their page"; T().toast(why(e)); } });
     });
     document.querySelectorAll("[data-pull]").forEach(function (b) {
       armed(b, "Tap again: it can't be undone", async function () {

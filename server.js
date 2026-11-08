@@ -230,6 +230,9 @@ app.use("/api/pylon-parent", require("./routes/pylon-parent"));
 // migration 039).
 app.use("/api/studio-films", require("./routes/studio-films"));
 app.use("/api/studio-review", require("./routes/studio-review"));
+// A speaker's own page: their films, what they approved, what's posted, and
+// taking their consent back themselves (routes/studio-speaker.js, migration 043).
+app.use("/api/studio-speaker", require("./routes/studio-speaker"));
 // Real words from the speakers' transcripts, three directions for a film,
 // and the taste library (routes/studio-words.js, routes/studio-taste.js;
 // migration 041). Claude reads a transcript only while Kyron has it on.

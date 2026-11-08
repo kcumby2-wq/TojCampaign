@@ -15,6 +15,7 @@
 //   PATCH  /api/studio-films/films/:id/people/:pid        edit a card (a cleared card is cleared again)
 //   DELETE /api/studio-films/films/:id/people/:pid        a card never cleared or used
 //   POST   /api/studio-films/films/:id/people/:pid/clear  the producer clears it
+//   POST   /api/studio-films/films/:id/people/:pid/page-link  email the person their own page (migration 043)
 //   POST   /api/studio-films/people/pull                  { person_code, note }: consent pulled, the 72-hour clock starts
 //   POST   /api/studio-films/films/:id/steps/:step/done   { note, cut_id }
 //   POST   /api/studio-films/films/:id/second-yes         { note }: the second sign-off (Coach Hooks), recorded
@@ -58,6 +59,7 @@ const F = require("../agents/studio/films");
 const S = require("../agents/studio/service");
 const K = require("../agents/studio/kit");
 const worker = require("../utils/studio-review-worker");
+const SP = require("../utils/studio-speaker");
 
 const router = express.Router();
 const safe = H.safe("studio-films");
@@ -476,6 +478,31 @@ router.post("/films/:id/people/:pid/clear", member, withDb(async (req, res, sb) 
   } catch (e) {
     refused(res, e);
   }
+}));
+
+// The person's own page (migration 043, public/my-films.html): a link by
+// email to whoever approves for this card, for 7 days. It shows every film
+// with them (or their child), and lets them take consent back themselves.
+router.post("/films/:id/people/:pid/page-link", member, withDb(async (req, res, sb) => {
+  if (!isProducer(req)) return res.status(403).json({ error: "producer_only" });
+  const film = await filmById(sb, req.params.id);
+  if (!film || !idOk(req.params.pid)) return res.status(404).json({ error: "not_found" });
+  const person = await run(sb.from("studio_film_people").select("id,person_code,reviewer_email,reviewer_relation").eq("id", req.params.pid).eq("film_id", film.id).maybeSingle());
+  if (!person) return res.status(404).json({ error: "not_found" });
+  const email = U.email(person.reviewer_email);
+  if (!email) return res.status(409).json({ error: "no_reviewer" });
+  if (!linkAllowed(email)) return res.status(429).json({ error: "too_many_links_today" });
+  // Who they approve for, across every card with that email: the email says
+  // "you", "your child" or both.
+  const cards = (await run(sb.from("studio_film_people").select("reviewer_relation").eq("reviewer_email", email).limit(50))) || [];
+  const relations = [...new Set(cards.map((c) => c.reviewer_relation).concat(person.reviewer_relation))];
+  const out = await SP.issueLink(sb, mailer, { email, sentBy: me(req), relations });
+  if (!out.sent) {
+    giveBackLink(email);
+    return res.status(502).json({ error: out.why === "email_not_set_up" ? "email_not_set_up" : out.why === "storage" ? "storage_unavailable" : "email_failed" });
+  }
+  await T.logActivity(me(req), "sent_page_link", person.person_code, { film_id: film.id });
+  res.json({ ok: true });
 }));
 
 // A pulled consent: every film the person is in is pulled, its live posts go
