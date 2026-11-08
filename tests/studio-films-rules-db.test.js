@@ -238,14 +238,21 @@ test("a title or a file name is read harder than a sentence: run-together, camel
   for (const t of ["SW_YTH_A0142_QUOTE_4x5_v01_20261107", "Gate at dawn, hands on the sled", "In an hour", "A0142 hero"]) assert.deepEqual(U.idNames(t, people), [], t);
   // A title is words someone chose: an everyday word that's also a name, or a
   // short name run together inside a word, is asked about; the rest is sure.
-  const hopeTitle = U.filmInput({ title: "Hope's first season" }, { partial: true, people });
-  assert.deepEqual([hopeTitle.errors, hopeTitle.asks], [["title_may_have_name"], ["hope"]]);
-  assert.deepEqual(U.filmInput({ title: "Hope's first season" }, { partial: true, people, namesOk: new Set(["hope"]) }).errors, []);
-  for (const t of ["Lopez's first season", "TyNg first season", "Hope Field's first season", "tynghero", "JamieCarter drive"]) assert.deepEqual(U.filmInput({ title: t }, { partial: true, people }).errors, ["title_has_name"], t);
+  const hopeTitle = U.filmInput({ title: "Field of hope" }, { partial: true, people });
+  assert.deepEqual([hopeTitle.errors, hopeTitle.asks], [["title_may_have_name"], ["hope", "field"]]);
+  assert.deepEqual(U.filmInput({ title: "Field of hope" }, { partial: true, people, namesOk: new Set(["hope", "field"]) }).errors, []);
+  // A minor's everyday-word name reads as in a story: a possessive, or a capital mid-title, is the name.
+  for (const t of ["Hope's first season", "Thanks, Hope", "Go Hope go", "Lopez's first season", "TyNg first season", "Hope Field's first season", "tynghero", "JamieCarter drive"]) assert.deepEqual(U.filmInput({ title: t }, { partial: true, people }).errors, ["title_has_name"], t);
+  // One word of a minor's name run into another word, where a word starts or ends.
+  const kidd = [{ name: "Jordan Kidd", is_minor: true }];
+  for (const t of ["teamjordan", "Kiddstrong season"]) assert.deepEqual(U.titleNames(t, kidd).sure.length, 1, t);
+  for (const f of ["jordanquote_v2", "kiddquote", "quotejordan"]) assert.ok(U.idNames(f, kidd).length, f);
+  assert.deepEqual(U.minorRunIns("#hopestrong", [{ name: "Hope Field", is_minor: true }]), { sure: [], maybe: ["hope"] });
   assert.deepEqual(U.titleNames("The walkout", [{ name: "Al Ko", is_minor: true }]), { sure: [], maybe: ["alko"] });
-  assert.deepEqual(U.titleNames("Jordankidd drive", [{ name: "Jordan Kidd", is_minor: true }]).sure, ["jordankidd"]);
-  // A title or story sent unchanged isn't read again.
-  assert.deepEqual(U.filmInput({ title: "Hope's first season", one_sentence: "Hope never quits." }, { partial: true, people, current: { title: "Hope's first season", one_sentence: "Hope never quits." } }).errors, []);
+  assert.ok(U.titleNames("Jordankidd drive", [{ name: "Jordan Kidd", is_minor: true }]).sure.includes("jordankidd"));
+  // A title or story sent unchanged isn't asked about again; a certain name in it still counts.
+  assert.deepEqual(U.filmInput({ title: "Field of hope", one_sentence: "Hope never quits." }, { partial: true, people, current: { title: "Field of hope", one_sentence: "Hope never quits." } }).errors, []);
+  assert.deepEqual(U.filmInput({ title: "TyNg first season" }, { partial: true, people, current: { title: "TyNg first season" } }).errors, ["title_has_name"]);
   assert.ok(U.cutInput({ format: "hero", ratio: "9x16", version: 1, file_name: "TyNgQuoteCard.mp4", people: [] }, { filmPeople: people }).errors.includes("file_name_has_name"));
   // A story is a sentence: an everyday-word name starting one is asked about, and kept once the writer says it isn't a name here.
   const story = U.filmInput({ one_sentence: "Hope never quits, even in the rain." }, { partial: true, people });
