@@ -1,0 +1,348 @@
+"use strict";
+// Studio films: what the film room takes in, checked (routes/studio-films.js,
+// migration 039). Each checker returns { errors: [field names], value } and
+// never throws on odd input. The database holds the hard lines too; this is
+// where a person gets a clear refusal first.
+
+const crypto = require("crypto");
+const { clean, cleanNotes, email, mailbox, personName, UUID } = require("./pylon");
+const F = require("../agents/studio/films");
+
+const LANES = Object.freeze(["nfl", "college", "youth", "parent"]);
+const FORMATS = Object.freeze(["hero", "cutdown", "sit_down", "parent_card", "quote_card", "same_drill", "own_words", "on_the_mic"]);
+const RATIOS = Object.freeze(["9x16", "4x5", "1x1", "16x9"]);
+const ROLES = Object.freeze(["athlete", "parent", "guardian", "coach", "other"]);
+const RELATIONS = Object.freeze(["self", "parent", "guardian"]);
+const PLATFORMS = Object.freeze(["instagram", "tiktok", "youtube", "facebook", "x", "threads", "other"]);
+const TOOLS = Object.freeze({
+  review_copies: "Review copies in storage",
+  claude_transcripts: "Claude reads transcripts",
+  graphics_system: "The graphics system",
+});
+const CODE = /^[A-Z0-9][A-Z0-9-]{1,19}$/;
+const REVIEW_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+const MAX_REVIEW_MB = () => {
+  const n = Number(process.env.STUDIO_REVIEW_MAX_MB);
+  return Number.isFinite(n) && n >= 5 && n <= 2048 ? n : 50;
+};
+const CONTENT_TYPES = Object.freeze({ mp4: "video/mp4", mov: "video/quicktime", m4v: "video/x-m4v" });
+
+const yes = (v) => v === true || v === "true" || v === "yes" || v === "on" || v === "1";
+const has = (o, k) => !!o && Object.prototype.hasOwnProperty.call(o, k);
+const https = (v) => {
+  const s = clean(v, 500);
+  if (!/^https:\/\/[^\s]+$/i.test(s)) return null;
+  try {
+    const u = new URL(s);
+    return u.protocol === "https:" && u.hostname.includes(".") ? u.toString() : null;
+  } catch {
+    return null;
+  }
+};
+const day = (v) => {
+  const s = clean(v, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return null;
+  const d = new Date(s + "T00:00:00Z");
+  return !isNaN(d) && d.toISOString().slice(0, 10) === s ? s : null;
+};
+const code = (v) => {
+  const s = clean(v, 20).toUpperCase().replace(/\s+/g, "");
+  return CODE.test(s) ? s : null;
+};
+const sha256 = (s) => crypto.createHash("sha256").update(String(s), "utf8").digest("hex");
+
+// ── People's names, kept out of titles and file names ────────────────────
+// The kit: projects and files carry the athlete ID, never a name. The words of
+// a card's name (3 letters or more), found as whole words, case aside.
+function nameWords(people) {
+  const words = new Set();
+  for (const p of people || []) {
+    for (const w of String(p.name || "").toLowerCase().split(/[^\p{L}\p{M}]+/u)) {
+      if (Array.from(w).length >= 3) words.add(w);
+    }
+  }
+  return [...words];
+}
+function namesIn(textValue, people) {
+  // Apostrophes split words too, so a possessive ("Jamie's") is caught.
+  const hay = " " + String(textValue || "").toLowerCase().replace(/[^\p{L}\p{M}]+/gu, " ") + " ";
+  return nameWords(people).filter((w) => hay.includes(" " + w + " "));
+}
+
+// ── The board's structured parts ─────────────────────────────────────────
+function list(v, max) {
+  return Array.isArray(v) ? v.slice(0, max) : [];
+}
+function planInput(raw) {
+  const r = raw && typeof raw === "object" && !Array.isArray(raw) ? raw : {};
+  const v = {};
+  v.references = list(r.references, 5)
+    .map((x) => ({ url: x && x.url ? https(x.url) : null, note: clean(x && x.note, 300) }))
+    .filter((x) => x.url || x.note);
+  v.song = clean(r.song, 120) || null;
+  const sp = r.speaker && typeof r.speaker === "object" ? r.speaker : {};
+  v.speaker = {};
+  for (const k of ["role_in_life", "how_world_sees", "how_hooks_sees", "wants", "at_stake"]) v.speaker[k] = clean(sp[k], 300) || null;
+  v.quotes = list(r.quotes, 20)
+    .map((q) => ({ quote: clean(q && q.quote, 300), question: clean(q && q.question, 300) }))
+    .filter((q) => q.quote || q.question);
+  v.must_have = list(r.must_have, 3).map((s) => clean(s, 200)).filter(Boolean);
+  const fp = r.frame_pair && typeof r.frame_pair === "object" ? r.frame_pair : {};
+  v.frame_pair = { opening: clean(fp.opening, 200) || null, closing: clean(fp.closing, 200) || null };
+  v.shoot_date = day(r.shoot_date);
+  v.locations = list(r.locations, 10).map((s) => clean(s, 120)).filter(Boolean);
+  v.schedule = list(r.schedule, 20)
+    .map((x) => ({ time: /^([01]\d|2[0-3]):[0-5]\d$/.test(clean(x && x.time, 5)) ? clean(x.time, 5) : null, what: clean(x && x.what, 120) }))
+    .filter((x) => x.what);
+  return v;
+}
+
+// ── A film ───────────────────────────────────────────────────────────────
+// partial: only the fields sent (an edit); otherwise a new film.
+function filmInput(raw, { partial = false, people = [] } = {}) {
+  const r = raw && typeof raw === "object" ? raw : {};
+  const errors = [];
+  const v = {};
+  const want = (k) => !partial || has(r, k);
+  if (want("title")) {
+    v.title = clean(r.title, 120);
+    if (!v.title) errors.push("title");
+    else if (namesIn(v.title, people).length) errors.push("title_has_name");
+  }
+  if (want("lane")) {
+    v.lane = clean(r.lane, 20).toLowerCase();
+    if (!LANES.includes(v.lane)) errors.push("lane");
+  }
+  if (want("athlete_id")) {
+    v.athlete_id = code(r.athlete_id);
+    if (!v.athlete_id) errors.push("athlete_id");
+  }
+  if (want("format")) {
+    v.format = clean(r.format, 20).toLowerCase();
+    if (!FORMATS.includes(v.format)) errors.push("format");
+  }
+  if (has(r, "one_sentence")) v.one_sentence = clean(r.one_sentence, 300) || null;
+  if (has(r, "post_date")) {
+    v.post_date = r.post_date ? day(r.post_date) : null;
+    if (r.post_date && !v.post_date) errors.push("post_date");
+  }
+  if (has(r, "board_url")) {
+    v.board_url = r.board_url ? https(r.board_url) : null;
+    if (r.board_url && !v.board_url) errors.push("board_url");
+  }
+  for (const k of ["director_email", "editor_email"]) {
+    if (has(r, k)) {
+      v[k] = r[k] ? email(r[k]) : null;
+      if (r[k] && !v[k]) errors.push(k);
+    }
+  }
+  if (has(r, "gfs_event_id")) {
+    v.gfs_event_id = r.gfs_event_id ? (UUID.test(String(r.gfs_event_id)) ? String(r.gfs_event_id).toLowerCase() : null) : null;
+    if (r.gfs_event_id && !v.gfs_event_id) errors.push("gfs_event_id");
+  }
+  if (has(r, "plan")) v.plan = planInput(r.plan);
+  return { errors, value: v };
+}
+
+// ── A clearance card ─────────────────────────────────────────────────────
+// What the release covers: face, name, jersey, voice, and which formats.
+function coversInput(raw) {
+  const r = raw && typeof raw === "object" && !Array.isArray(raw) ? raw : {};
+  return {
+    face: yes(r.face),
+    name: yes(r.name),
+    jersey: yes(r.jersey),
+    voice: yes(r.voice),
+    formats: list(r.formats, FORMATS.length).map((f) => clean(f, 20).toLowerCase()).filter((f, i, a) => FORMATS.includes(f) && a.indexOf(f) === i),
+  };
+}
+function personInput(raw, { partial = false, current = null } = {}) {
+  const r = raw && typeof raw === "object" ? raw : {};
+  const errors = [];
+  const v = {};
+  const want = (k) => !partial || has(r, k);
+  if (!partial) {
+    v.person_code = code(r.person_code);
+    if (!v.person_code) errors.push("person_code");
+  }
+  if (want("name")) {
+    v.name = personName(r.name);
+    if (!v.name) errors.push("name");
+  }
+  if (want("role")) {
+    v.role = clean(r.role, 20).toLowerCase();
+    if (!ROLES.includes(v.role)) errors.push("role");
+  }
+  for (const k of ["is_minor", "texas_youth", "speaker", "release_on_file"]) if (want(k)) v[k] = yes(r[k]);
+  if (want("covers")) v.covers = coversInput(r.covers);
+  const merged = { ...(current || {}), ...v };
+  // Texas youth athletes stay unidentifiable: a minor, with no face, name or
+  // jersey number on screen.
+  if (merged.texas_youth) {
+    merged.is_minor = v.is_minor = true;
+    const c = { ...(merged.covers || coversInput({})), face: false, name: false, jersey: false };
+    merged.covers = v.covers = c;
+  }
+  // Who approves the cut: the person (adult) or their parent or legal guardian.
+  if (want("reviewer_relation") || want("reviewer_name") || want("reviewer_email") || want("is_minor") || want("texas_youth")) {
+    const rel = has(r, "reviewer_relation") ? clean(r.reviewer_relation, 20).toLowerCase() : merged.reviewer_relation || "";
+    const name = has(r, "reviewer_name") ? personName(r.reviewer_name) : merged.reviewer_name || null;
+    const mail = has(r, "reviewer_email") ? email(r.reviewer_email) : merged.reviewer_email || null;
+    if (has(r, "reviewer_email") && r.reviewer_email && !mail) errors.push("reviewer_email");
+    if (has(r, "reviewer_name") && r.reviewer_name && !name) errors.push("reviewer_name");
+    if (rel || name || mail) {
+      if (!RELATIONS.includes(rel)) errors.push("reviewer_relation");
+      else if (merged.is_minor && rel === "self") errors.push("minor_needs_parent");
+      else if (!merged.is_minor && rel !== "self") errors.push("adult_reviews_self");
+      if (!name) errors.push("reviewer_name");
+      if (!mail) errors.push("reviewer_email");
+      v.reviewer_relation = rel || null;
+      v.reviewer_name = name;
+      v.reviewer_email = mail;
+    } else {
+      v.reviewer_relation = v.reviewer_name = v.reviewer_email = null;
+    }
+  }
+  return { errors: [...new Set(errors)], value: v };
+}
+
+// What's still missing before a card can be cleared.
+function clearanceGaps(p) {
+  const gaps = [];
+  if (!p.release_on_file) gaps.push("No release on file");
+  if (p.speaker && !p.reviewer_email) gaps.push("Who approves the cut (the speaker, or a minor's parent or guardian)");
+  if (p.is_minor && p.speaker && p.reviewer_relation === "self") gaps.push("A minor's cut is approved by a parent or guardian");
+  return gaps;
+}
+
+// ── A cut ────────────────────────────────────────────────────────────────
+function cutInput(raw, { people = [], filmPeople = [] } = {}) {
+  const r = raw && typeof raw === "object" ? raw : {};
+  const errors = [];
+  const v = {};
+  v.format = clean(r.format, 20).toLowerCase();
+  if (!FORMATS.includes(v.format)) errors.push("format");
+  v.ratio = clean(r.ratio, 5).toLowerCase();
+  if (!RATIOS.includes(v.ratio)) errors.push("ratio");
+  v.version = Number(r.version);
+  if (!Number.isInteger(v.version) || v.version < 1 || v.version > 999) errors.push("version");
+  v.file_name = clean(r.file_name, 200).replace(/[/\\]/g, "");
+  const ext = (/\.([a-z0-9]{2,4})$/i.exec(v.file_name) || [])[1];
+  v.ext = ext ? ext.toLowerCase() : "";
+  if (!v.file_name || !CONTENT_TYPES[v.ext]) errors.push("file_name");
+  else if (namesIn(v.file_name.replace(/\.[a-z0-9]+$/i, ""), filmPeople).length) errors.push("file_name_has_name");
+  v.content_type = CONTENT_TYPES[v.ext] || null;
+  v.bytes = Number(r.bytes);
+  if (!Number.isInteger(v.bytes) || v.bytes <= 0) errors.push("bytes");
+  else if (v.bytes > MAX_REVIEW_MB() * 1024 * 1024) errors.push("too_big");
+  const ids = new Set(filmPeople.map((p) => p.id));
+  v.people = [...new Set(list(r.people, 50).map((x) => String(x).toLowerCase()))];
+  if (v.people.some((id) => !UUID.test(id) || !ids.has(id))) errors.push("people");
+  void people;
+  return { errors, value: v };
+}
+
+// How a file name reads against the kit's pattern (warnings, never refusals:
+// the kit names only some of the codes).
+function nameWarnings(fileName, film, cut) {
+  const t = F.templateFor(film.kit_slug);
+  if (!t) return [];
+  const base = String(fileName || "").replace(/\.[a-z0-9]+$/i, "");
+  const parts = base.split("_");
+  const out = [];
+  const lane = t.lanes[film.lane];
+  const fmt = t.formats[cut.format];
+  if (parts.length !== 7 || parts[0] !== t.file_prefix) out.push(`The kit names files ${F.fileNameFor(t, film, cut)}.mp4`);
+  else {
+    if (lane && parts[1] !== lane.code) out.push(`Lane: ${lane.code}`);
+    if (parts[2] !== film.athlete_id) out.push(`Athlete ID: ${film.athlete_id}`);
+    if (fmt && parts[3] !== fmt.code) out.push(`Format: ${fmt.code}`);
+    if (parts[4] !== cut.ratio) out.push(`Ratio: ${cut.ratio}`);
+    if (!/^v\d{2,3}$/.test(parts[5]) || Number(parts[5].slice(1)) !== cut.version) out.push(`Version: v${String(cut.version).padStart(2, "0")}`);
+    if (!/^\d{8}$/.test(parts[6])) out.push("Date: YYYYMMDD");
+  }
+  return out;
+}
+
+// ── Keys in storage ──────────────────────────────────────────────────────
+const BUCKET = "studio-films";
+const cutKey = (filmId, cutId, ext) => `films/${filmId}/cuts/${cutId}.${ext}`;
+const previewKey = (filmId, cutId) => `films/${filmId}/previews/${cutId}.mp4`;
+const posterKey = (filmId, cutId) => `films/${filmId}/previews/${cutId}.jpg`;
+
+// ── What people read ─────────────────────────────────────────────────────
+const RELATION_WORDS = { self: "you", parent: "your child", guardian: "the athlete in your care" };
+
+function reviewEmail({ reviewerName, relation, formatLabel, link, expiresAt, producerName = "Kyron" }) {
+  const hi = String(reviewerName || "").trim().split(/\s+/)[0] || "there";
+  const who = relation === "self" ? "you" : relation === "parent" ? "your child" : "the athlete in your care";
+  const until = new Date(expiresAt).toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", timeZone: "America/New_York" });
+  return {
+    subject: "A review copy is ready for your OK",
+    text:
+      `Hi ${hi},\n\n` +
+      `A REVIEW COPY of a Same Work ${formatLabel.toLowerCase()} with ${who} is ready. Nothing goes out until you say yes.\n\n` +
+      `Watch it here, then approve it or ask for a change:\n${link}\n\n` +
+      `The link works once and stops working on ${until}. Please don't forward it: anyone with it can answer for you. ` +
+      `We'll email you a receipt when it's used.\n\n` +
+      `If you'd rather talk it through, call or text ${producerName}. Please don't reply to this email with the link in it.\n\n` +
+      `Same Work`,
+  };
+}
+
+function reviewReceipt({ reviewerName, decision, formatLabel, decidedName }) {
+  const hi = String(reviewerName || "").trim().split(/\s+/)[0] || "there";
+  const said = decision === "approved" ? "approved" : "asked for a change to";
+  return {
+    subject: decision === "approved" ? "You approved the review copy" : "You asked for a change",
+    text:
+      `Hi ${hi},\n\n` +
+      `${decidedName} just ${said} the Same Work ${formatLabel.toLowerCase()} on your review link. ` +
+      (decision === "approved"
+        ? "Nothing else is needed from you. It still waits for the producer's final sign-off before anything goes out.\n\n"
+        : "The editor gets your note, and you'll get a new review copy to look at.\n\n") +
+      `If that wasn't you, call or text Kyron right away: we'll stop it.\n\n` +
+      `You can take your yes back at any time, and if you pull consent, every version comes down within 72 hours.\n\n` +
+      `Same Work`,
+  };
+}
+
+module.exports = {
+  LANES,
+  FORMATS,
+  RATIOS,
+  ROLES,
+  RELATIONS,
+  PLATFORMS,
+  TOOLS,
+  CODE,
+  REVIEW_TTL_MS,
+  MAX_REVIEW_MB,
+  CONTENT_TYPES,
+  BUCKET,
+  RELATION_WORDS,
+  yes,
+  https,
+  day,
+  code,
+  sha256,
+  nameWords,
+  namesIn,
+  planInput,
+  filmInput,
+  coversInput,
+  personInput,
+  clearanceGaps,
+  cutInput,
+  nameWarnings,
+  cutKey,
+  previewKey,
+  posterKey,
+  reviewEmail,
+  reviewReceipt,
+  mailbox,
+  email,
+  cleanNotes,
+  clean,
+  UUID,
+};
