@@ -132,7 +132,7 @@ async function readable(sb, film, people) {
     const p = people.find((x) => x.id === t.person_id);
     if (!p || W.whyNot(p)) continue;
     const shown = t.cues.map((c) => ({ ...c, t: W.maskNames(c.t, people) }));
-    out.push({ ref: `T${out.length + 1}`, id: t.id, person_id: t.person_id, speaker: W.speakerLabel(p), label: t.label, frames: !!t.frames, fps: t.fps == null ? null : Number(t.fps), cues: t.cues, shown });
+    out.push({ ref: `T${out.length + 1}`, id: t.id, person_id: t.person_id, speaker: W.speakerLabel(p), label: t.label, frames: !!t.frames, fps: t.fps == null ? null : Number(t.fps), drop_frame: !!t.drop_frame, cues: t.cues, shown });
   }
   return out;
 }
@@ -159,7 +159,7 @@ function wordsView(rows, transcripts, people) {
   };
   const line = (r) => {
     const t = tr.get(r.transcript_id) || {};
-    const opts = { frames: !!t.frames, fps: t.fps == null ? null : Number(t.fps) };
+    const opts = { frames: !!t.frames, fps: t.fps == null ? null : Number(t.fps), drop: !!t.drop_frame };
     return { id: r.id, quote: r.quote, from_cue: r.from_cue, to_cue: r.to_cue, start_ms: r.start_ms, end_ms: r.end_ms, at: `${W.TP.tc(r.start_ms, opts)}–${W.TP.tc(r.end_ms, opts)}`, transcript_id: r.transcript_id, label: t.label || null, speaker: who(r.person_id), note: r.note, text: r.text, made_by: r.made_by, run_id: r.run_id, created_at: r.created_at };
   };
   const groups = (kind) =>
@@ -175,6 +175,19 @@ function wordsView(rows, transcripts, people) {
   };
 }
 
+// A link as an agent sees it: one that names someone on the cards
+// ("instagram.com/jamierivers") isn't shown, only that there was one.
+function linkShown(url, people) {
+  if (!url) return null;
+  let s = String(url);
+  try {
+    s = decodeURIComponent(s);
+  } catch (e) {
+    /* as it is */
+  }
+  const words = s.replace(/[/._\-?=&#:~+%]+/g, " ");
+  return W.maskNames(words, people) !== words ? "(a link that names someone on the cards)" : url;
+}
 const stale = (r) => r.status === "running" && Date.now() - new Date(r.created_at).getTime() > STALE_RUN_MS;
 function runStatus(r) {
   const status = stale(r) ? "failed" : r.status;
@@ -194,7 +207,7 @@ router.get("/films/:id", member, withDb(async (req, res, sb) => {
   if (!film) return res.status(404).json({ error: "not_found" });
   const people = await peopleOf(sb, film.id);
   const [transcripts, rows, directions, links, claudeOn] = await Promise.all([
-    run(sb.from("studio_transcripts").select("id,person_id,label,frames,fps,cue_count,words,duration_ms,created_by,created_at").eq("film_id", film.id).order("created_at", { ascending: true })),
+    run(sb.from("studio_transcripts").select("id,person_id,label,frames,fps,drop_frame,cue_count,words,duration_ms,created_by,created_at").eq("film_id", film.id).order("created_at", { ascending: true })),
     run(sb.from("studio_words").select("*").eq("film_id", film.id).order("created_at", { ascending: true }).limit(2000)),
     run(sb.from("studio_film_directions").select("*").eq("film_id", film.id).order("created_at", { ascending: false }).limit(5)),
     run(sb.from("studio_film_runs").select("run_id,kind,created_at").eq("film_id", film.id).order("created_at", { ascending: false }).limit(10)),
@@ -224,7 +237,7 @@ router.get("/transcripts/:tid", member, withDb(async (req, res, sb) => {
   if (!t) return res.status(404).json({ error: "not_found" });
   const people = await peopleOf(sb, t.film_id);
   const p = people.find((x) => x.id === t.person_id);
-  res.json({ transcript: { id: t.id, film_id: t.film_id, label: t.label, frames: !!t.frames, fps: t.fps == null ? null : Number(t.fps), cues: t.cues, code: p && p.person_code, role: p && p.role, on_hold: p ? W.whyNot(p) : "not_on_this_film" } });
+  res.json({ transcript: { id: t.id, film_id: t.film_id, label: t.label, frames: !!t.frames, fps: t.fps == null ? null : Number(t.fps), drop_frame: !!t.drop_frame, cues: t.cues, code: p && p.person_code, role: p && p.role, on_hold: p ? W.whyNot(p) : "not_on_this_film" } });
 }));
 
 // ── Transcripts ──────────────────────────────────────────────────────────
@@ -242,7 +255,7 @@ router.post("/films/:id/transcripts", member, withDb(async (req, res, sb) => {
   if (errors.length) return res.status(400).json({ error: "invalid", fields: errors });
   if (U.idNames(value.label, people).length) return res.status(400).json({ error: "invalid", fields: ["label_has_name"] });
   try {
-    const t = await run(sb.from("studio_transcripts").insert({ film_id: film.id, person_id: p.id, label: value.label, frames: value.frames, fps: value.fps, cues: value.cues, cue_count: value.cues.length, words: value.words, duration_ms: value.duration_ms, created_by: me(req) }).select("id,person_id,label,cue_count,words,duration_ms,created_at").single());
+    const t = await run(sb.from("studio_transcripts").insert({ film_id: film.id, person_id: p.id, label: value.label, frames: value.frames, fps: value.fps, drop_frame: value.drop_frame, cues: value.cues, cue_count: value.cues.length, words: value.words, duration_ms: value.duration_ms, created_by: me(req) }).select("id,person_id,label,cue_count,words,duration_ms,created_at").single());
     await T.logActivity(me(req), "studio_transcript_added", p.person_code, { film_id: film.id, cues: value.cues.length });
     res.json({ transcript: t });
   } catch (e) {
@@ -450,7 +463,7 @@ router.post("/films/:id/directions", member, withDb(async (req, res, sb) => {
       one_sentence: film.one_sentence ? W.maskNames(film.one_sentence, people) : null,
       second_yes_label: film.second_yes_label || null,
       board: {
-        references: (plan.references || []).map((r) => ({ url: r.url || null, note: mask(r.note) })),
+        references: (plan.references || []).map((r) => ({ url: linkShown(r.url, people), note: mask(r.note) })),
         song: mask(plan.song),
         speaker: Object.fromEntries(Object.entries(plan.speaker || {}).map(([k, v]) => [k, mask(v)])),
         questions: (plan.quotes || []).map((q) => q && q.question).filter(Boolean).map(mask),

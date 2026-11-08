@@ -326,7 +326,7 @@ test("the taste library: notes and a link, never a picture; found by any form of
   await assert.rejects(pool.query("delete from studio_taste where id = $1", [e1.id]), /archived, not deleted/);
   await assert.rejects(pool.query("insert into studio_taste (title, url, note, added_by) values ('x', 'https://x.test/a.PNG', 'y', 'dir@toj.test')"), /check constraint|picture or a video file/);
   // An image service's own address, an ending hidden behind ";v=2" or "%2E", a video file: all refused, by the app and the database.
-  for (const url of ["https://pbs.twimg.com/media/abc?format=jpg", "https://x.test/a.jpg;v=2", "https://x.test/a%2Ejpg", "https://x.test/clip.mp4", "https://x.test/a.jpg/"]) {
+  for (const url of ["https://pbs.twimg.com/media/abc?format=jpg", "https://x.test/a.jpg;v=2", "https://x.test/a%2Ejpg", "https://x.test/clip.mp4", "https://x.test/a.jpg/", "https://www.instagram.com/p/Cxyz123/media/?size=l"]) {
     assert.deepEqual((await add({ title: "x", url, note: "y" })).data.fields, ["url_is_an_image"], url);
     await assert.rejects(pool.query("insert into studio_taste (title, url, note, added_by) values ('x', $1, 'y', 'dir@toj.test')", [url]), /picture or a video file/, url);
   }
@@ -438,6 +438,11 @@ test("a card added or renamed after the words were kept waits until the lines wi
   const r = await films("POST", `/films/${film.id}/people`, kid, "lead");
   assert.equal(r.status, 409);
   assert.match(r.data.reason, /remove those lines/);
+  // A transcript's label with a word of a card added later: the card waits too.
+  const f3 = await aFilm();
+  ok(await words("POST", `/films/${f3.film.id}/transcripts`, { person_id: f3.people[0].id, label: "Hooks session", cues: [{ s: 0, e: 2000, t: "I open the gate." }] }, "ed"), "a label first");
+  const later = await films("POST", `/films/${f3.film.id}/people`, { person_code: "WH01", name: "Darnell Hooks", role: "coach", release_on_file: true, covers: { voice: true } }, "lead");
+  assert.equal(later.status, 409);
   // Gone from Real words, the card goes in.
   const w = ok(await words("GET", `/films/${film.id}`, undefined, "ed"), "room").words.lines[0];
   ok(await words("DELETE", `/words/${w.id}`, {}, "ed"), "removed");
