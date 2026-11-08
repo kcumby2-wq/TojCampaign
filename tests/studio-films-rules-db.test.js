@@ -247,7 +247,10 @@ test("a title or a file name is read harder than a sentence: run-together, camel
   const kidd = [{ name: "Jordan Kidd", is_minor: true }];
   for (const t of ["teamjordan", "Kiddstrong season"]) assert.deepEqual(U.titleNames(t, kidd).sure.length, 1, t);
   for (const f of ["jordanquote_v2", "kiddquote", "quotejordan"]) assert.ok(U.idNames(f, kidd).length, f);
-  assert.deepEqual(U.minorRunIns("#hopestrong", [{ name: "Hope Field", is_minor: true }]), { sure: [], maybe: ["hope"] });
+  assert.deepEqual(U.minorRunIns("#hopestrong", [{ name: "Hope Field", is_minor: true }]), { sure: [], maybe: ["hope"], edge: ["hope"] });
+  // A file name has no one to ask: an everyday word run in at a word's start or end counts there.
+  for (const f of ["hopequote_v02", "quotehope", "HopeQuote"]) assert.deepEqual(U.idNames(f, [{ name: "Hope Field", is_minor: true }]), ["hope"], f);
+  assert.deepEqual(U.idNames("ourhopefam", [{ name: "Hope Field", is_minor: true }]), [], "inside a word, it's another word");
   assert.deepEqual(U.titleNames("The walkout", [{ name: "Al Ko", is_minor: true }]), { sure: [], maybe: ["alko"] });
   assert.ok(U.titleNames("Jordankidd drive", [{ name: "Jordan Kidd", is_minor: true }]).sure.includes("jordankidd"));
   // A title or story sent unchanged isn't asked about again; a certain name in it still counts.
@@ -309,6 +312,10 @@ test("a title and a card saved in the same instant: the database lets one throug
   const film = ok(await films("POST", "/films", { kit_slug: "same-work", title: `${code} hero`, lane: "youth", athlete_id: code, format: "hero" }, "lead"), "start").film;
   ok(await films("POST", `/films/${film.id}/people`, { person_code: code, name: "Ty Ng", role: "athlete", is_minor: true, release_on_file: true, covers: { voice: true } }, "lead"), "card");
   await assert.rejects(pool.query("update studio_films set title = 'Ty Ng first season' where id = $1", [film.id]), /carries no name/);
+  // A card whose name a title already has: refused, in words for the film's cards.
+  const code2 = "R" + String(8000 + ++n);
+  const f2 = ok(await films("POST", "/films", { kit_slug: "same-work", title: "Sam Roe first season", lane: "college", athlete_id: code2, format: "hero" }, "lead"), "start 2").film;
+  await assert.rejects(pool.query("insert into studio_film_people (film_id, person_code, name, role, is_minor, release_on_file, covers, created_by) values ($1, $2, 'Sam Roe', 'athlete', false, true, '{}', 'lead@toj.test')", [f2.id, code2]), /title has a name from its cards in it/);
 });
 
 test("an approval comes from the reviewer the card names now; a card change stops its links", async () => {

@@ -139,9 +139,12 @@ function capitalizedAtStart(raw, w) {
 // letter, or a capital after a small letter), it's the name for certain,
 // unless it's also an everyday word ("#hopestrong" for a Hope: asked); inside
 // a word, asked ("#ourjordanfam"). The word alone is read by the other screens.
+// edge: every word found where a word of the run starts or ends, everyday
+// or not (a file name reads "hopequote_v02" as Hope's).
 function minorRunIns(textValue, people) {
   const sure = new Set();
   const maybe = new Set();
+  const edge = new Set();
   const runs = [];
   for (const m of String(textValue || "").matchAll(/[\p{L}\p{M}]+/gu)) {
     const tok = m[0];
@@ -156,14 +159,16 @@ function minorRunIns(textValue, people) {
       for (const r of runs) {
         if (r.low === w) continue;
         for (let i = r.low.indexOf(w); i >= 0; i = r.low.indexOf(w, i + 1)) {
-          if ((r.edges.has(i) || r.edges.has(i + w.length)) && !everyday(w)) sure.add(w);
+          const atEdge = r.edges.has(i) || r.edges.has(i + w.length);
+          if (atEdge) edge.add(w);
+          if (atEdge && !everyday(w)) sure.add(w);
           else maybe.add(w);
         }
       }
     }
   }
   for (const w of sure) maybe.delete(w);
-  return { sure: [...sure], maybe: [...maybe] };
+  return { sure: [...sure], maybe: [...maybe], edge: [...edge] };
 }
 // Where a text names a person, for certain or maybe: their whole name; the
 // name run together as one word ("#TyNg", "JamieRivers": the whole token,
@@ -263,8 +268,9 @@ function idNames(textValue, people) {
     if (p.reviewer_name) look(p.reviewer_name, false);
   }
   // One word of a minor's name run into a word where a word starts or ends
-  // ("jordanquote_v2", "quotejordan").
-  for (const w of minorRunIns(raw, people).sure) out.add(w);
+  // ("jordanquote_v2", "quotejordan"), an everyday one too ("hopequote_v02"):
+  // a file name has no one to ask, and its everyday words count already.
+  for (const w of minorRunIns(raw, people).edge) out.add(w);
   return [...out];
 }
 // Names in a film's title. A title is read like a file name (any word of a
