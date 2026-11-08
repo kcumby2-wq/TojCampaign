@@ -85,22 +85,54 @@ function namesIn(textValue, people, { strong = false } = {}) {
   }
   return [...found];
 }
+// Two-letter words of a name that are also everyday words ("He", "Do",
+// "So"): a child named Bo He mustn't stop every note with "he" in it. These
+// count only written with a capital letter in the middle of a sentence
+// ("talked to He's mom"), and the database leaves them to the app.
+const EVERYDAY_2 = new Set(["he", "do", "an", "so", "go", "oh", "no", "me", "my", "we", "us", "it", "in", "on", "at", "to", "be", "by", "of",
+  "or", "up", "as", "is", "am", "if", "hi", "ok", "ah", "eh", "uh", "um", "yo", "ya", "ha", "ho", "lo", "la", "ma", "pa", "ye", "ow", "ox", "ax", "id", "re", "vs"]);
+function capitalizedMidSentence(raw, w) {
+  const re = /[\p{L}\p{M}]+/gu;
+  let m;
+  while ((m = re.exec(raw))) {
+    if (m[0].toLowerCase() !== w || m[0][0] === m[0][0].toLowerCase()) continue;
+    const before = raw.slice(0, m.index);
+    const gap = /\s*$/.exec(before)[0];
+    const prev = before.slice(0, before.length - gap.length);
+    if (!prev || gap.includes("\n") || /[.!?:;"“(\[—–-]$/.test(prev)) continue;
+    return true;
+  }
+  return false;
+}
 // The words of a minor's name that a text has (two letters or more), and
 // the name run together. A note never keeps one, whatever its writer says:
 // there's no "it isn't a name here" for a child's name (the database refuses
 // it too, migration 039's studio_names_in).
 function minorWords(textValue, people) {
-  const hay = " " + String(textValue || "").toLowerCase().replace(/[^\p{L}\p{M}]+/gu, " ") + " ";
+  const raw = String(textValue || "");
+  const hay = " " + raw.toLowerCase().replace(/[^\p{L}\p{M}]+/gu, " ") + " ";
   const letters = hay.replace(/ /g, "");
   const found = new Set();
   for (const p of people || []) {
     if (!p || !p.is_minor) continue;
     const parts = nameParts(p.name);
-    for (const w of parts) if (Array.from(w).length >= 2 && hay.includes(" " + w + " ")) found.add(w);
+    for (const w of parts) {
+      if (Array.from(w).length < 2) continue;
+      if (EVERYDAY_2.has(w)) {
+        if (capitalizedMidSentence(raw, w)) found.add(w);
+      } else if (hay.includes(" " + w + " ")) found.add(w);
+    }
     const joined = parts.join("");
     if (parts.length > 1 && Array.from(joined).length >= 5 && letters.includes(joined)) found.add(joined);
   }
   return [...found];
+}
+// The strict screen, for what's shown or sent beyond the cards (a title, the
+// one-sentence story the speaker's page shows, a file name): any word of a
+// name of three letters or more, a whole name or one run together, and any
+// word of a minor's name.
+function strictNames(textValue, people) {
+  return [...new Set([...namesIn(textValue, people), ...minorWords(textValue, people)])];
 }
 // The words a writer said aren't names here ({ names_ok: ["will"] }), as a
 // set of lower-case words. Anything else (true, a string) acknowledges nothing.
@@ -147,7 +179,7 @@ function filmInput(raw, { partial = false, people = [] } = {}) {
   if (want("title")) {
     v.title = clean(r.title, 120);
     if (!v.title) errors.push("title");
-    else if (namesIn(v.title, people).length) errors.push("title_has_name");
+    else if (strictNames(v.title, people).length) errors.push("title_has_name");
   }
   if (want("lane")) {
     v.lane = clean(r.lane, 20).toLowerCase();
@@ -164,7 +196,7 @@ function filmInput(raw, { partial = false, people = [] } = {}) {
   if (has(r, "one_sentence")) {
     // The story is on the speaker's review page: never a name.
     v.one_sentence = clean(r.one_sentence, 300) || null;
-    if (v.one_sentence && namesIn(v.one_sentence, people).length) errors.push("story_has_name");
+    if (v.one_sentence && strictNames(v.one_sentence, people).length) errors.push("story_has_name");
   }
   if (has(r, "post_date")) {
     v.post_date = r.post_date ? day(r.post_date) : null;
@@ -281,7 +313,7 @@ function cutInput(raw, { people = [], filmPeople = [] } = {}) {
   const ext = (/\.([a-z0-9]{2,4})$/i.exec(v.file_name) || [])[1];
   v.ext = ext ? ext.toLowerCase() : "";
   if (!v.file_name || !CONTENT_TYPES[v.ext]) errors.push("file_name");
-  else if (namesIn(v.file_name.replace(/\.[a-z0-9]+$/i, ""), filmPeople).length) errors.push("file_name_has_name");
+  else if (strictNames(v.file_name.replace(/\.[a-z0-9]+$/i, ""), filmPeople).length) errors.push("file_name_has_name");
   v.content_type = CONTENT_TYPES[v.ext] || null;
   v.bytes = Number(r.bytes);
   if (!Number.isInteger(v.bytes) || v.bytes <= 0) errors.push("bytes");
@@ -382,6 +414,8 @@ module.exports = {
   nameWords,
   namesIn,
   minorWords,
+  strictNames,
+  EVERYDAY_2,
   namesOkWords,
   planInput,
   filmInput,

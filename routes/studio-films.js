@@ -310,7 +310,7 @@ router.get("/films/:id", member, withDb(async (req, res, sb) => {
       ...c,
       watch_url: c.preview_key ? signed[c.preview_key] || null : null,
       poster_url: c.poster_key ? signed[c.poster_key] || null : null,
-      warnings: [...(U.namesIn(String(c.file_name || "").replace(/\.[a-z0-9]+$/i, ""), people).length ? ["The file name has a name in it: rename the export, the kit's way"] : []), ...U.nameWarnings(c.file_name, film, c)],
+      warnings: [...(U.strictNames(String(c.file_name || "").replace(/\.[a-z0-9]+$/i, ""), people).length ? ["The file name has a name in it: rename the export, the kit's way"] : []), ...U.nameWarnings(c.file_name, film, c)],
     })),
     reviews: (reviews || []).map((r) => reviewView(r)),
     posts: posts || [],
@@ -376,8 +376,8 @@ router.post("/films/:id/people", member, withDb(async (req, res, sb) => {
   if (value.reconsent_note && !isProducer(req)) return res.status(403).json({ error: "producer_only" });
   // The title and the story never carry a name: if they have this one, they
   // change first.
-  if (U.namesIn(film.title, [value]).length) return res.status(409).json({ error: "title_has_name" });
-  if (film.one_sentence && U.namesIn(film.one_sentence, [value]).length) return res.status(409).json({ error: "story_has_name" });
+  if (U.strictNames(film.title, [value]).length) return res.status(409).json({ error: "title_has_name" });
+  if (film.one_sentence && U.strictNames(film.one_sentence, [value]).length) return res.status(409).json({ error: "story_has_name" });
   try {
     const person = await run(sb.from("studio_film_people").insert({ ...value, film_id: film.id, created_by: me(req) }).select().single());
     res.json({ person: { ...person, gaps: U.clearanceGaps(person) } });
@@ -401,8 +401,8 @@ router.patch("/films/:id/people/:pid", member, withDb(async (req, res, sb) => {
   const reviewerChanged = ["reviewer_relation", "reviewer_name", "reviewer_email"].some((k) => k in value && value[k] !== current[k]);
   if (reviewerChanged && !isProducer(req)) return res.status(403).json({ error: "producer_only" });
   const next = { ...current, ...value };
-  if ((value.name || value.reviewer_name) && U.namesIn(film.title, [next]).length) return res.status(409).json({ error: "title_has_name" });
-  if ((value.name || value.reviewer_name) && film.one_sentence && U.namesIn(film.one_sentence, [next]).length) return res.status(409).json({ error: "story_has_name" });
+  if ((value.name || value.reviewer_name || "is_minor" in value) && U.strictNames(film.title, [next]).length) return res.status(409).json({ error: "title_has_name" });
+  if ((value.name || value.reviewer_name || "is_minor" in value) && film.one_sentence && U.strictNames(film.one_sentence, [next]).length) return res.status(409).json({ error: "story_has_name" });
   if (!Object.keys(value).length) return res.json({ person: current });
   try {
     const rows = await rpcRows(sb, "studio_card_save", { p_person: current.id, p_seen: body.seen, p_patch: value, p_by: me(req) });
