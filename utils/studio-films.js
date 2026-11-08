@@ -173,11 +173,19 @@ function minorMaybe(textValue, people) {
   return [...out];
 }
 // The strict screen, for what's shown or sent beyond the cards (a title, the
-// one-sentence story the speaker's page shows, a file name): any word of a
-// name of three letters or more, a whole name or one run together, and any
-// word of a minor's name.
+// one-sentence story the speaker's page shows, a file name): a card's whole
+// name or one run together, a word of it of three letters or more (two, for
+// a minor), the reviewer's name too. An everyday word ("will", "he") counts
+// only with a capital mid-sentence.
 function strictNames(textValue, people) {
-  return [...new Set([...namesIn(textValue, people), ...minorWords(textValue, people)])];
+  const out = new Set();
+  for (const p of people || []) {
+    if (!p) continue;
+    const minor = !!p.is_minor;
+    for (const w of nameHits(textValue, p, { minRun: minor ? 4 : 5, minWord: minor ? 2 : 3 }).sure) out.add(w);
+    if (p.reviewer_name) for (const w of nameHits(textValue, { name: p.reviewer_name }).sure) out.add(w);
+  }
+  return [...out];
 }
 // The words a writer said aren't names here ({ names_ok: ["will"] }), as a
 // set of lower-case words. Anything else (true, a string) acknowledges nothing.
