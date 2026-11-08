@@ -27,6 +27,20 @@ const { renderDocument } = require("../agents/studio/kit-render");
 const T = require("../utils/team");
 const P = require("../utils/push");
 const isPerson = (e) => !!e && e !== "api-key" && e.includes("@");
+const H = require("../utils/pylon-http");
+// A write that marks a brief (set aside, or started from it) is JSON from
+// the app's own pages: another site can't send one through a signed-in browser.
+function sameSiteJson(req, res) {
+  if (!req.is("application/json")) {
+    res.status(415).json({ error: "json_only" });
+    return false;
+  }
+  if (!H.originOk(req)) {
+    res.status(403).json({ error: "wrong_origin" });
+    return false;
+  }
+  return true;
+}
 
 const router = express.Router();
 const STUDIO_ROLES = ["kit-builder", "kit-refresher"];
@@ -235,9 +249,26 @@ router.post("/run", member, async (req, res) => {
   const direction = Number.isInteger(body.direction) && body.direction >= 1 && body.direction <= 3 ? body.direction : null;
   if (allowLocked && req._apiKeyAuth) return res.status(403).json({ error: "rule_changes_need_a_person" });
   if (allowLocked && !(req.team && req.team.owner)) return res.status(403).json({ error: "rule_changes_need_the_owner" });
+  if (fromBrief && !sameSiteJson(req, res)) return;
 
   const sb = getSupabase();
   if (!sb) return res.status(503).json({ error: "supabase_unavailable" });
+
+  // Started from a brief: a Brief Writer run that came back, yours (or the
+  // producer's to start). The first start is kept as it was.
+  let briefMark = null;
+  if (fromBrief) {
+    const { data: br, error: bErr } = await sb.from("agent_runs").select("id,role,status,created_by").eq("id", fromBrief).maybeSingle();
+    if (bErr) return fail(res, bErr, "start_run");
+    if (!br || br.role !== "brief-writer" || !["completed", "waiting"].includes(br.status)) return res.status(400).json({ error: "not_a_brief" });
+    if (br.created_by !== who(req) && !(req.team && T.can(req.team, "studio", "approver"))) return res.status(403).json({ error: "not_your_brief" });
+    try {
+      const { data: m } = await sb.from("studio_brief_marks").select("started_at").eq("brief_run_id", fromBrief).maybeSingle();
+      briefMark = m || null;
+    } catch (e) {
+      briefMark = null;
+    }
+  }
 
   let scope;
   try {
@@ -264,7 +295,7 @@ router.post("/run", member, async (req, res) => {
     return fail(res, e, "start_run");
   }
 
-  const task = S.buildTask({
+  const task = (fromBrief ? `(Started from brief ${fromBrief}${direction ? `, direction ${direction}` : ""}.)\n\n` : "") + S.buildTask({
     mode: scope.mode,
     slug,
     brief,
@@ -283,11 +314,13 @@ router.post("/run", member, async (req, res) => {
     .single();
   if (insErr) return fail(res, insErr, "start_run");
 
-  if (fromBrief) {
-    // Today stops listing the brief, before the answer goes back. Before
-    // migration 041 there's no table: the brief stays on Today.
+  if (fromBrief && !(briefMark && briefMark.started_at)) {
+    // Today stops listing the brief, before the answer goes back. A brief
+    // started again keeps its first start (that run and its direction); the
+    // new run's task says where it came from. Before migration 041 there's no
+    // table: the brief stays on Today.
     try {
-      const { error: mErr } = await sb.from("studio_brief_marks").upsert({ brief_run_id: fromBrief, started_run_id: runRow.id, direction, started_by: who(req), started_at: new Date().toISOString() }, { onConflict: "brief_run_id" });
+      const { error: mErr } = await sb.from("studio_brief_marks").upsert({ brief_run_id: fromBrief, started_run_id: runRow.id, direction, started_by: who(req), started_at: new Date().toISOString(), set_aside_at: null, set_aside_by: null }, { onConflict: "brief_run_id" });
       if (mErr) console.warn("[studio-agents] brief not marked started:", mErr.code || mErr.message);
     } catch (e) {
       /* no table yet */
@@ -461,33 +494,42 @@ router.get("/briefs/unstarted", viewer, async (req, res) => {
   const mine = who(req);
   if (!isPerson(mine)) return res.json({ briefs: [] });
   const since = new Date(Date.now() - 60 * 86400000).toISOString();
-  const { data, error } = await sb
-    .from("agent_runs")
-    .select("id,status,task,output,created_at")
-    .eq("role", "brief-writer")
-    .eq("created_by", mine)
-    .in("status", ["completed", "waiting"])
-    .gte("created_at", since)
-    .order("created_at", { ascending: false })
-    .limit(40);
-  if (error) return fail(res, error, "unstarted_briefs");
-  const ids = (data || []).map((r) => r.id);
-  let marked = new Set();
-  if (ids.length) {
-    try {
-      const { data: marks, error: mErr } = await sb.from("studio_brief_marks").select("brief_run_id").in("brief_run_id", ids);
-      // Before migration 041, nothing is marked: every brief counts.
-      if (!mErr) marked = new Set((marks || []).map((m) => m.brief_run_id));
-    } catch (e) {
-      marked = new Set();
+  // Page back through the 60 days until ten unmarked briefs are found, so an
+  // older one never started doesn't drop off behind newer, started ones.
+  const open = [];
+  for (let from = 0; from < 400 && open.length < 10; from += 40) {
+    const { data, error } = await sb
+      .from("agent_runs")
+      .select("id,status,task,output,created_at")
+      .eq("role", "brief-writer")
+      .eq("created_by", mine)
+      .in("status", ["completed", "waiting"])
+      .gte("created_at", since)
+      .order("created_at", { ascending: false })
+      .range(from, from + 39);
+    if (error) return fail(res, error, "unstarted_briefs");
+    const page = data || [];
+    const ids = page.map((r) => r.id);
+    let marked = new Set();
+    if (ids.length) {
+      try {
+        const { data: marks, error: mErr } = await sb.from("studio_brief_marks").select("brief_run_id").in("brief_run_id", ids);
+        // Before migration 041, nothing is marked: every brief counts.
+        if (!mErr) marked = new Set((marks || []).map((m) => m.brief_run_id));
+      } catch (e) {
+        marked = new Set();
+      }
     }
+    open.push(...page.filter((r) => !marked.has(r.id)));
+    if (page.length < 40) break;
   }
   res.json({
-    briefs: (data || []).filter((r) => !marked.has(r.id)).slice(0, 10).map((r) => ({ id: r.id, status: r.status, created_at: r.created_at, label: runLabel({ role: "brief-writer", task: r.task, output: r.output }) })),
+    briefs: open.slice(0, 10).map((r) => ({ id: r.id, status: r.status, created_at: r.created_at, label: runLabel({ role: "brief-writer", task: r.task, output: r.output }) })),
   });
 });
 
 router.post("/briefs/:id/set-aside", member, async (req, res) => {
+  if (!sameSiteJson(req, res)) return;
   const sb = getSupabase();
   if (!sb) return res.status(503).json({ error: "supabase_unavailable" });
   if (!S.isUuid(req.params.id)) return res.status(404).json({ error: "not_found" });

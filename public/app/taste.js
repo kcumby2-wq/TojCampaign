@@ -15,7 +15,8 @@
   var MSG = {
     title: "Give it a title.",
     url: "Add the link to the work (https://…).",
-    url_is_an_image: "That's a link to an image file. Link to the page the work is on instead: the library keeps notes and links, never pictures.",
+    url_is_an_image: "That's a link to a picture or a video file. Link to the page the work is on instead: the library keeps notes and links, never copies of the work.",
+    taste_has_name: "A name on a film's cards is in it, and every film reads the library. Leave names out: say what the work does instead.",
     note: "Say what it is and why it's worth learning from.",
     banned_words: "A word on the TOJ banned list is in it. Say the concrete thing instead.",
     changed_meanwhile: "Someone changed it while you were editing. Open it again.",

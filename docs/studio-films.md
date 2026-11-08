@@ -103,17 +103,21 @@ A takedown's lines lock the takedown as they're marked down, so the last line al
 The film's room → **Real words** (`public/app/film-words.js`, API `routes/studio-words.js`, migration 041).
 
 **Transcripts.** Export the interview's transcript from Resolve: subtitles (`.srt` or `.vtt`), or text with a timecode on each line. A timecode that counts frames needs the timeline's frame rate. The file is read on the phone (`public/app/transcript-parse.js`), and only the speaker's lines go to the server:
-- In a file with speaker labels ("Coach:", a voice tag, "Speaker 1"), you pick which label is the speaker. The interviewer's questions and everyone else's lines stay on the phone.
-- In a file without labels, every line goes as the speaker's words, so you confirm only their words are in it.
-- You pick whose card the words belong to, and give it a label with no name in it ("Interview 1").
+- In a file with speaker labels ("Coach:", "JOSÉ:", a voice tag, "Speaker 1"), you pick which label is the speaker. The interviewer's questions and everyone else's lines stay on the phone. A subtitle with two voices or two labels in it is split between them, its time shared by their words, and a line with no label is a voice the file doesn't name: "(no label)" sends only those lines.
+- In a file without labels, every line goes as the speaker's words, so you confirm only their words are in it. A subtitle with two voices in it (the "- " lines) stays on the phone.
+- You pick whose card the words belong to (nothing is picked for you), and give it a label with no name in it ("Interview 1").
+- A line that comes after someone else's (a question left out) or after a pause of more than three seconds is marked, and no kept line reaches back across it. "[inaudible]" and "[crosstalk]" stay in the words as ⟨…⟩, and no line reaches across that either.
+- Timecodes read to the frame (rounded). A transcript past ten hours is refused with a note on how to export it.
 
 Limits: 5,000 lines, 2,000 characters a line, 300,000 characters in all.
 
 **Adults first.** Only a cleared adult speaker's words can be used: a speaker card, not a minor, cleared, consent standing, the release covering their voice. Anyone else's card says why not. When a card changes so their words can't be used (consent pulled, marked a minor, no longer a speaker, voice no longer covered), the database removes their transcripts and every line kept from them.
 
-**Lines by hand.** Open a transcript, tap the line where the words start and the one where they end (12 at most), and trim the words to the line you want. They have to be the speaker's own, word for word: the server finds them in the transcript and works out when they're said. The database checks the quote and its times again. A line that names someone on the cards (a whole name, one run together, any word of a minor's name) or has a banned word is refused. A caption opens on the speaker's line and runs under 60 words; your words after it carry no names, no banned words, no promise of reach and no emoji chains.
+**Lines by hand.** The film's director, editor or producer opens a transcript (everyone else reads it), taps the line where the words start and the one where they end (12 at most), and trims the words to the line they want. They have to be the speaker's own, word for word, from a whole word to a whole word (not "4 forty" out of "4.4 forty"): the server finds them in the transcript and works out when they're said. Words said twice in the lines picked have to be picked from the one cue. The database checks the quote again, whole words, gaps and all, and that its times fall inside its cues (it doesn't work the times out again). A line that names someone on the cards (a whole name, one run together, any word of a minor's name) or has a banned word is refused; a line with one word of an adult's name ("Darnell taught me everything") is asked about, and kept once you say it isn't a name there. A caption opens on the speaker's line and runs under 60 words; that line and your words after it carry no promise of reach (views, followers, being noticed by recruiters, an offer) and no emoji chains (🔥🔥🔥, 🔥.🔥.🔥, flags), and your words carry no names (any word of one) and no line written for someone in quotes of any kind.
 
-**Claude** reads the transcripts only once Kyron turns on *Claude reads transcripts*. The film's director, editor or producer asks. Claude reads every transcript whose words can be used, with people as code and role, and hands back:
+**When a card changes.** A card added, renamed or corrected to a minor whose name is in a kept line, a caption, a title or note of ours, a transcript's label or the directions waits: remove those first (the database holds this). A release taken off file, like a release no longer covering the voice, takes the speaker's transcripts and their lines with it.
+
+**Claude** reads the transcripts only once Kyron turns on *Claude reads transcripts*. The film's director, editor or producer asks, one run at a time for a film. Claude reads every transcript whose words can be used, with people as code and role and every name said in them as a code ("WJ01 gets up at five"). Before each page it reads, the switch, the film, the transcript and its speaker's card are checked again: the first "no" stops the run, no judge reads it, and nothing is kept. Claude can't be asked "is that a name here?", so a line or note of Claude's with any word of a card's name is refused. It hands back:
 - up to 12 strongest lines;
 - two or three structures (3 to 12 beats, the speaker's lines in order);
 - up to 6 cutdowns whose first line lands in the first two seconds (up to 5 lines after it);
@@ -127,13 +131,14 @@ Every quote goes through the same checks as a line picked by hand. A new set rep
 - three must-have shots;
 - why it fits, and the risks.
 
-It writes no lines for anyone: a quoted line of three words or more is refused, since only real words are used. Two directions that are nearly the same film are refused too. The producer picks one, and *Use its must-haves* puts its three shots on the board.
+It writes no lines for anyone: a quoted run of three words or more, in quotes of any kind or after "says:", is refused, since only real words are used. Two directions that are nearly the same film are refused too. A taste note it cites is kept as its number, title, link and the use made of it. The producer picks one, and *Use its must-haves* puts its three shots on the board.
 
-**The Brief Writer** hands back three directions too, each a whole brief, and says which it would pick and why. You pick one, edit it, and start the kit run with it; the run records which direction it came from. Or you set the brief aside. **Today lists your briefs that came back and were neither started nor set aside** (the last 60 days). A started brief stays started.
+**The Brief Writer** hands back three directions too, each a whole brief, and says which it would pick and why. Whoever asked for it (or the producer) picks one, edits it, and starts the kit run with it; the run's task says which brief and direction it came from. Or you set the brief aside (your edits stay on the screen). **Today lists your briefs that came back and were neither started nor set aside** (the last 60 days). A started brief stays started, with its first run and direction: starting it again makes another run and leaves that as it was.
 
 **The taste library** (Studio → *Taste library*, `public/app/taste.js`, API `routes/studio-taste.js`) keeps notes on work worth learning from:
 - a link to the work, what it is, what to take and what to leave, and tags;
-- never a picture or a copy of the work: a link to an image file is refused, by the app and by the database;
+- never a picture or a copy of the work: a link to an image or video file (by its ending, in any case, behind ";v=2" or "%2E" too), to an image service's own address, or with format=jpg in it, is refused, by the app and by the database (a link that redirects to a picture can't be told);
+- no name on any film's cards (a whole name, one run together, any word of a minor's), since every film reads it; agents read it with names as codes;
 - a number for each note ("Taste 12"), which briefs and directions cite; Claude checks a cited note exists;
 - search by words (any form) or by tag.
 
@@ -187,7 +192,7 @@ Real words (`/api/studio-words`, members with Studio; "the film's people" are it
 | GET | `/films/:id` (transcripts without their words, the lines kept, directions, runs), `/transcripts/:tid` (its lines), `/runs/:rid` | members |
 | POST | `/films/:id/transcripts` `{ person_id, label, frames, fps, cues }` | members |
 | DELETE | `/transcripts/:tid` | whoever added it, the producer |
-| POST | `/films/:id/lines` `{ transcript_id, from_cue, to_cue, quote, note, kind, after }` | members |
+| POST | `/films/:id/lines` `{ transcript_id, from_cue, to_cue, quote, note, kind, after, names_ok }` | the film's people |
 | DELETE | `/words/:wid` | the film's people |
 | POST | `/films/:id/ask-claude` | the film's people, with *Claude reads transcripts* on |
 | POST | `/films/:id/directions` | the producer, the film's director |

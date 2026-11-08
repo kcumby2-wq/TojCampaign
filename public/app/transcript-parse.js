@@ -6,8 +6,14 @@
  * the computer. The server keeps nothing it can't check with this same code
  * (utils/studio-words.js requires this file).
  *
- *   parse(text, { fps })          → { ok, format, frames, cues: [{ n, s, e, t, who }], speakers: [{ who, cues }], error }
- *   only(cues, who)               → that speaker's cues (all of them when who is null), numbered again from 1
+ *   parse(text, { fps })          → { ok, format, frames, cues: [{ n, s, e, t, who, gap }], speakers: [{ who, cues }], mixed, error }
+ *   only(cues, who)               → that speaker's cues, numbered again from 1; a cue after
+ *                                   someone else's (a question) is marked gap: a line never bridges it
+ *
+ * who: a speaker's label; "" for a line whose voice the file doesn't say
+ * (no label in a file that has labels, or a "- " line of two voices in one
+ * subtitle); null only in a file with no labels at all. A subtitle with
+ * two voices or two labels in it is split into one cue for each.
  *   find(cues, from, to, quote)   → the quote's exact words in cues from..to, and when they're said
  *   tc(ms, { frames, fps })       → "00:01:23.4", or "00:01:23:10" for a frame-based transcript
  *
@@ -49,27 +55,85 @@
     return null;
   }
 
+  // Words the transcript says are missing ("[inaudible]", "[crosstalk]"):
+  // kept as a mark a line never reaches across.
+  var MISSING = "\u27e8\u2026\u27e9";
+  var MISSING_RE = /\[\s*(?:inaudible|unintelligible|crosstalk|cross[- ]talk|overlapping|overtalk|indistinct|unclear|garbled|muffled|\?+)[^\]]{0,40}\]/gi;
+  // A pause this long between two of a speaker's cues: a line doesn't reach
+  // across it (something may have been said in between and cut).
+  var PAUSE_MS = 3000;
   // What a line of a cue says: tags, positions, sound notes and music out.
   function cleanText(s) {
     return String(s || "")
       .replace(/\{\\[^}]*\}/g, " ")
-      .replace(/<\/?(?:i|b|u|c|font|ruby|rt|lang|span)\b[^>]*>/gi, "")
+      .replace(/<\/?(?:i|b|u|c|v|font|ruby|rt|lang|span)\b[^>]*>/gi, "")
       .replace(/<\d{1,2}:\d{2}[^>]*>/g, "")
+      .replace(MISSING_RE, " " + MISSING + " ")
       .replace(/\[[^\]]{0,60}\]/g, " ")
       .replace(/[♪♫]+/g, " ")
       .replace(/[\u0000-\u0008\u000b-\u001f\u007f]/g, " ")
       .replace(/\s+/g, " ")
       .trim();
   }
-  // A speaker's label the editor typed: "Speaker 1:", "COACH:", "Pat R.:".
-  var LABEL = /^\s*(?:-\s*)?([A-Za-z][A-Za-z0-9 .'’-]{0,38}?)\s*:\s+(\S.*)$/;
-  var VOICE = /^\s*<v(?:\.[^\s>]+)*\s+([^>]{1,40})>\s*(.*)$/i;
+  // A speaker's label the editor typed: "Speaker 1:", "COACH:", "Pat R.:",
+  // "JOSÉ:" (any alphabet).
+  var LABEL = /^\s*(\p{L}[\p{L}\p{M}\p{N} .'’-]{0,38}?)\s*:\s+(\S.*)$/u;
+  // A voice tag, anywhere in a line: <v Coach>, <v.loud Coach>.
+  var VOICE_ANY = /<v(?:\.[^\s>]+)*\s+([^>]{1,40})>/gi;
+  // A line of a subtitle with two voices in it: "- Were you nervous?"
+  var DASH = /^\s*[-–—]\s+(\S.*)$/;
+  var SPEAKER_N = /^\s*(speaker\s*\d{1,2})\s*$/i;
+
+  // One subtitle's lines, split where the voice changes: a voice tag, a
+  // "Speaker 1" line, a typed label, a "- " line. Each part: { kind, who,
+  // text } (kind null: no mark, the voice goes on from before).
+  function partsOf(lines) {
+    var out = [];
+    var cur = null;
+    function begin(kind, who) { cur = { kind: kind, who: who, text: [] }; out.push(cur); }
+    lines.forEach(function (raw, idx) {
+      // Split the line at each voice tag.
+      var segs = [];
+      var at = 0;
+      var m;
+      VOICE_ANY.lastIndex = 0;
+      while ((m = VOICE_ANY.exec(raw))) {
+        segs.push({ who: null, text: raw.slice(at, m.index) });
+        segs.push({ who: cleanText(m[1]) || "?", text: "" });
+        at = m.index + m[0].length;
+      }
+      segs.push({ who: null, text: raw.slice(at) });
+      segs.forEach(function (seg, k) {
+        if (seg.who) {
+          // The voice's words are the segment after the tag.
+          begin("voice", seg.who);
+          return;
+        }
+        var t = seg.text;
+        if (!t.trim()) return;
+        if (k === 0) {
+          // Only a whole line (or what comes before a tag) can start with a
+          // mark of its own.
+          if (SPEAKER_N.test(t) && idx < lines.length - 1) { begin("speaker", SPEAKER_N.exec(t)[1].replace(/\s+/g, " ").replace(/^speaker/i, "Speaker")); return; }
+          var dash = DASH.exec(t);
+          var body = dash ? dash[1] : t;
+          var lab = LABEL.exec(body);
+          if (lab) { begin("label", lab[1].trim()); cur.dash = !!dash; cur.text.push(lab[2]); return; }
+          if (dash) { begin("dash", ""); cur.text.push(body); return; }
+        }
+        if (!cur) begin(null, undefined);
+        cur.text.push(t);
+      });
+    });
+    return out;
+  }
 
   function parse(text, opts) {
     var fps = opts && FPS.indexOf(Number(opts.fps)) >= 0 ? Number(opts.fps) : null;
     var src = String(text || "").replace(/^﻿/, "").replace(/\r\n?/g, "\n");
     if (!src.trim()) return { ok: false, error: "empty" };
     var lines = src.split("\n");
+    var drop = /\d{1,2}:\d{2}:\d{2};\d{2}/.test(src);
     var raw = []; // { s, e (or null), lines: [] }
     var format = /^\s*WEBVTT\b/.test(lines[0]) ? "vtt" : null;
     var frames = false;
@@ -119,66 +183,92 @@
     }
     // Speakers: a voice tag, "Speaker 1" on its own line, or a typed label
     // ("Coach:"). A label typed only once in a file with no other labels is
-    // more likely someone saying "Listen: ...". A cue with no label is the
-    // last speaker's.
+    // more likely someone saying "Listen: ...". A subtitle with more than one
+    // voice or label is split into one part for each, its time shared out by
+    // their words. A part with no mark is the voice before it's.
     var counts = {};
-    var parts = raw.map(function (c) {
-      var who = null;
-      var body = [];
-      var firstLine = true;
-      c.lines.forEach(function (l) {
-        var v = VOICE.exec(l);
-        if (v) { who = cleanText(v[1]); l = v[2]; }
-        else if (firstLine) {
-          var sp = /^\s*(speaker\s*\d{1,2}|SPEAKER\s*\d{1,2})\s*$/i.exec(l);
-          if (sp && c.lines.length > 1) { who = sp[1].replace(/\s+/g, " ").replace(/^speaker/i, "Speaker"); firstLine = false; return; }
-          var lab = LABEL.exec(l);
-          if (lab) { who = "?" + lab[1].trim(); l = lab[2]; }
-        }
-        firstLine = false;
-        body.push(l);
+    var split = [];
+    raw.forEach(function (c) {
+      var ps = partsOf(c.lines).map(function (pt) { return { kind: pt.kind, who: pt.who, dash: !!pt.dash, text: pt.text.join(" ") }; })
+        .filter(function (pt) { return /[\p{L}\p{N}]/u.test(cleanText(pt.text)); });
+      if (!ps.length) return;
+      ps.forEach(function (pt) {
+        if (pt.kind === "voice" || pt.kind === "speaker") counts[pt.who] = (counts[pt.who] || 0) + 1;
+        if (pt.kind === "label") counts["?" + pt.who] = (counts["?" + pt.who] || 0) + 1;
       });
-      if (who) counts[who] = (counts[who] || 0) + 1;
-      return { s: c.s, e: c.e, who: who, text: body.join(" ") };
+      // The subtitle's time, shared by how many words each part has.
+      var n = ps.map(function (pt) { return Math.max(1, (cleanText(pt.text).match(/[\p{L}\p{N}]+/gu) || []).length); });
+      var all = n.reduce(function (a, b) { return a + b; }, 0);
+      var acc = 0;
+      ps.forEach(function (pt, k) {
+        var a = c.s == null ? null : Math.round(c.s + ((c.e - c.s) * acc) / all);
+        acc += n[k];
+        var b = c.s == null ? null : k === ps.length - 1 ? c.e : Math.round(c.s + ((c.e - c.s) * acc) / all);
+        split.push({ s: a, e: b, kind: pt.kind, who: pt.who, dash: pt.dash, text: pt.text, sub: ps.length > 1 });
+      });
     });
     // Once the file uses labels (a voice tag, "Speaker 1", or any typed label
     // used twice), every typed label counts: an interviewer asking once is
-    // still the interviewer, not the speaker.
+    // still the interviewer, not the speaker. In such a file a line with no
+    // label before any label, or a "- " line, is a voice the file doesn't name ("").
     var labelled = Object.keys(counts).some(function (k) { return k.charAt(0) !== "?" || counts[k] >= 2; });
-    var last = null;
+    var last = labelled ? "" : null;
     var cues = [];
     var total = 0;
-    for (i = 0; i < parts.length; i++) {
-      var p = parts[i];
-      var who = p.who;
-      if (who && who.charAt(0) === "?") {
-        if (labelled) who = who.slice(1);
-        else { p.text = who.slice(1) + ": " + p.text; who = null; }
-      }
-      if (who) last = who;
+    var mixed = 0;
+    var late = 0;
+    for (i = 0; i < split.length; i++) {
+      var p = split[i];
+      var who;
+      if (p.kind === "voice" || p.kind === "speaker") who = p.who;
+      else if (p.kind === "label") {
+        if (labelled) who = p.who;
+        else { p.text = p.who + ": " + p.text; who = p.dash ? "" : last; }
+      } else if (p.kind === "dash") who = "";
       else who = last;
+      // In a file with no labels, a "- " line is the other voice of its
+      // subtitle: kept out of the speaker's words, and the file's voice
+      // goes on after it.
+      if (p.kind === "dash" || (p.kind === "label" && !labelled && p.dash)) mixed++;
+      if (labelled || who !== "") last = who;
       var tx = cleanText(p.text);
       if (!tx || !/[\p{L}\p{N}]/u.test(tx)) continue;
-      if (p.s == null || p.e == null || p.s < 0 || p.e < p.s || p.e > MAX_MS) continue;
+      if (p.s != null && p.e != null && p.e > MAX_MS) { late++; continue; }
+      if (p.s == null || p.e == null || p.s < 0 || p.e < p.s) continue;
       if (tx.length > MAX_CUE) return { ok: false, error: "cue_too_long", at: cues.length + 1 };
       total += tx.length;
-      cues.push({ n: cues.length + 1, s: p.s, e: p.e, t: tx, who: who || null });
+      cues.push({ n: cues.length + 1, s: p.s, e: p.e, t: tx, who: who === undefined ? null : who });
     }
+    if (late) return { ok: false, error: "past_ten_hours", format: format, late: late };
     if (!cues.length) return { ok: false, error: "no_words", format: format };
     if (cues.length > MAX_CUES) return { ok: false, error: "too_many_cues", max: MAX_CUES };
     if (total > MAX_TOTAL) return { ok: false, error: "too_long", max: MAX_TOTAL };
     var seen = {};
     var speakers = [];
     cues.forEach(function (c) {
-      var k = c.who || "";
+      var k = c.who === null ? "\u0000all" : "=" + c.who;
       if (!(k in seen)) { seen[k] = speakers.length; speakers.push({ who: c.who, cues: 0 }); }
       speakers[seen[k]].cues++;
     });
-    return { ok: true, format: format, frames: frames, fps: frames ? fps : null, cues: cues, speakers: speakers };
+    return { ok: true, format: format, frames: frames, fps: frames ? fps : null, drop: frames && drop, cues: cues, speakers: speakers, labelled: labelled, mixed: mixed };
   }
 
+  // A speaker's cues, numbered again from 1. A cue that comes after someone
+  // else's (a question, another voice) is marked gap: a line never reaches
+  // back across it. who null: a file with no labels (its lines with no other
+  // voice in them).
   function only(cues, who) {
-    return (cues || []).filter(function (c) { return who == null || c.who === who; }).map(function (c, k) { return { n: k + 1, s: c.s, e: c.e, t: c.t }; });
+    var out = [];
+    var prevIdx = -2;
+    (cues || []).forEach(function (c, idx) {
+      if (c.who !== (who === undefined ? null : who)) return;
+      var x = { n: out.length + 1, s: c.s, e: c.e, t: c.t };
+      var prev = out[out.length - 1];
+      if (prev && (idx !== prevIdx + 1 || c.s - prev.e > PAUSE_MS)) x.gap = true;
+      out.push(x);
+      prevIdx = idx;
+    });
+    return out;
   }
 
   // Words for matching: letters and numbers, an apostrophe inside a word
@@ -213,14 +303,23 @@
     var hay = tokens(joined);
     var q = tokens(String(quote || ""));
     if (!q.length) return { ok: false, why: "empty" };
-    var at = -1;
-    for (var i = 0; i + q.length <= hay.length && at < 0; i++) {
+    var hits = [];
+    for (var i = 0; i + q.length <= hay.length; i++) {
       var j = 0;
       while (j < q.length && hay[i + j].w === q[j].w) j++;
-      if (j === q.length) at = i;
+      if (j === q.length) hits.push(i);
     }
-    if (at < 0) return { ok: false, why: "not_verbatim" };
+    if (!hits.length) return { ok: false, why: "not_verbatim" };
+    var at = hits[0];
     var first = hay[at], lastT = hay[at + q.length - 1];
+    // A line starts and ends on whole words: not inside "4.4", "1,000",
+    // "can‘t" or "well-known".
+    var JOIN = /[.,'’‘`\-\/]/;
+    var WORDCH = /[\p{L}\p{M}\p{N}]/u;
+    if ((first.a >= 2 && JOIN.test(joined.charAt(first.a - 1)) && WORDCH.test(joined.charAt(first.a - 2))) ||
+        (JOIN.test(joined.charAt(lastT.b)) && WORDCH.test(joined.charAt(lastT.b + 1)))) return { ok: false, why: "part_of_a_word" };
+    // Nor across words the transcript marks as missing.
+    if (joined.slice(first.a, lastT.b).indexOf(MISSING) >= 0) return { ok: false, why: "missing_words" };
     function cueOf(tok) {
       for (var k = 0; k < spans.length; k++) if (tok.a >= spans[k].a && tok.a < spans[k].b) return k;
       return spans.length - 1;
@@ -235,6 +334,11 @@
       return Math.round(sp.c.s + (sp.c.e - sp.c.s) * share);
     }
     var kFrom = cueOf(first), kTo = cueOf(lastT);
+    // Said more than once in these cues, in different cues: which one is
+    // meant isn't clear (its times would be the first one's).
+    if (hits.some(function (h) { return cueOf(hay[h]) !== kFrom; })) return { ok: false, why: "said_twice" };
+    // Nor across someone else's words (a question), or a long pause.
+    for (var g = kFrom + 1; g <= kTo; g++) if (range[g].gap) return { ok: false, why: "across_a_gap" };
     return {
       ok: true,
       quote: joined.slice(first.a, lastT.b),
@@ -247,13 +351,22 @@
   }
 
   function pad(n, w) { n = String(n); while (n.length < (w || 2)) n = "0" + n; return n; }
+  // A time as a timecode: to the frame (rounded, carried into the second)
+  // for a frame-based transcript, ";" before the frames when it's drop-frame;
+  // otherwise to the tenth of a second.
   function tc(ms, opts) {
     ms = Math.max(0, Math.round(Number(ms) || 0));
-    var h = Math.floor(ms / 3600000), m = Math.floor(ms / 60000) % 60, s = Math.floor(ms / 1000) % 60;
-    var base = pad(h) + ":" + pad(m) + ":" + pad(s);
-    if (opts && opts.frames && opts.fps) return base + ":" + pad(Math.min(Math.round(opts.fps) - 1, Math.floor(((ms % 1000) / 1000) * opts.fps)));
-    return base + "." + Math.floor((ms % 1000) / 100);
+    var secs = Math.floor(ms / 1000);
+    var tail;
+    if (opts && opts.frames && opts.fps) {
+      var nominal = Math.round(opts.fps);
+      var f = Math.round(((ms % 1000) / 1000) * opts.fps);
+      if (f >= nominal) { f = 0; secs += 1; }
+      tail = (opts.drop ? ";" : ":") + pad(f);
+    } else tail = "." + Math.floor((ms % 1000) / 100);
+    var h = Math.floor(secs / 3600), m = Math.floor(secs / 60) % 60, s = secs % 60;
+    return pad(h) + ":" + pad(m) + ":" + pad(s) + tail;
   }
 
-  return { parse: parse, only: only, find: find, tokens: tokens, tc: tc, FPS: FPS, MAX_CUES: MAX_CUES, MAX_CUE: MAX_CUE, MAX_TOTAL: MAX_TOTAL, MAX_MS: MAX_MS };
+  return { parse: parse, only: only, find: find, tokens: tokens, tc: tc, FPS: FPS, MAX_CUES: MAX_CUES, MAX_CUE: MAX_CUE, MAX_TOTAL: MAX_TOTAL, MAX_MS: MAX_MS, MISSING: MISSING, PAUSE_MS: PAUSE_MS };
 });

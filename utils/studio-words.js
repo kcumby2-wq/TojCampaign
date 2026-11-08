@@ -22,10 +22,38 @@ const CAPTION_WORDS = 60;
 // A cutdown's first line lands in the first two seconds.
 const HOOK_MS = 2000;
 const LIMITS = Object.freeze({ lines: 12, structures: 3, beats: [3, 12], cutdowns: 6, then: 5, captions: 6 });
-// The TOJ voice: never a promise of reach.
-const PROMISE_RE = /\b(go(?:es|ing)?\s+viral|viral|followers?|exposure|blow(?:s|ing)?\s+up|famous|clout)\b/gi;
-// Emoji one after another ("🔥🔥🔥"): an emoji chain.
-const EMOJI_RUN = /\p{Extended_Pictographic}[\u{FE0F}\u{200D}\u{1F3FB}-\u{1F3FF}]*\s*\p{Extended_Pictographic}/u;
+// The TOJ voice: never a promise of reach (views, followers, being noticed
+// by recruiters, an offer).
+const PROMISE_RE = new RegExp(
+  "\\b(go(?:es|ing)?\\s+viral|viral|followers?|subscribers?|exposure|clout|famous|fame|blow(?:s|ing)?\\s+up|" +
+    "(?:more|bigger|wider|huge|massive|real|your|our|extra|national|nationwide)\\s+(?:reach|visibility|attention|buzz)|reach\\s+(?:more|thousands|millions|recruiters|scouts|coaches|colleges)|" +
+    "(?:thousands|millions|hundreds|tons|lots|more|\\d[\\d,.]*\\s*[km]?)\\s+(?:of\\s+)?(?:views|likes|impressions|plays|eyes|fans)|" +
+    "get(?:s|ting)?\\s+(?:you\\s+|him\\s+|her\\s+|them\\s+)?(?:noticed|seen|discovered|recruited|an?\\s+offer|offers|a\\s+scholarship)|" +
+    "(?:recruiters?|scouts?|coaches|colleges?|schools?|teams?)\\s+(?:will|are\\s+going\\s+to|gonna)\\s+(?:notice|see|find|call|watch|come|reach\\s+out)|" +
+    "(?:will|guaranteed\\s+to)\\s+(?:get|land|earn)\\s+(?:you\\s+|him\\s+|her\\s+|them\\s+)?(?:an?\\s+)?(?:offers?|scholarships?|recruited|noticed|signed))\\b",
+  "giu"
+);
+// One emoji: a picture (with its skin tone or joins), a flag, a keycap.
+const EMOJI = "(?:\\p{Extended_Pictographic}[\\u{FE0F}\\u{20E3}\\u{200D}\\u{1F3FB}-\\u{1F3FF}\\p{Extended_Pictographic}]*|\\p{Regional_Indicator}{2}|[0-9#*]\\u{FE0F}?\\u{20E3})";
+// Emoji one after another, whatever's between them but words ("🔥🔥🔥",
+// "🔥.🔥.🔥", "🇺🇸 🇺🇸"): an emoji chain.
+const EMOJI_RUN = new RegExp(`${EMOJI}[\\s\\p{P}\\p{Z}]*${EMOJI}`, "u");
+// A line written for someone: a run of three words or more in quotes of any
+// kind (“ ” " " ‘ ’ ' ' « » „ “ ‹ › 「 」), or put after "says:" / "the
+// line:". Real words only: describe the kind of line instead.
+const QUOTED_RUNS = [
+  /[“"„«»‹›「『]([^“”"„«»‹›「」『』]{1,400})[”"“»«›‹」』]/gu,
+  /(?:^|[\s(\[—–-])['‘]([^'‘’\n]{1,400}?)['’](?=$|[\s.,;:!?)\]—–-])/gu,
+  /\b(?:says?|said|saying|tells?|told|line|quote|goes)\s*[:—–]\s*([^\n.!?]{1,400})/giu,
+];
+function writtenLines(text) {
+  const out = [];
+  for (const re of QUOTED_RUNS) {
+    re.lastIndex = 0;
+    for (const m of String(text || "").matchAll(re)) if (wordCount(m[1]) >= 3) out.push(m[1].trim());
+  }
+  return out;
+}
 
 const clean = (s, max) => U.clean(s, max);
 const wordCount = (s) => TP.tokens(String(s || "")).length;
@@ -67,7 +95,11 @@ function transcriptInput(raw) {
         break;
       }
       total += t.length;
-      cues.push({ n: cues.length + 1, s, e, t });
+      // A cue after someone else's words (the browser marks it: a question
+      // left out), or after a long pause: a line doesn't reach back across it.
+      const prev = cues[cues.length - 1];
+      const gap = !!prev && (c.gap === true || s - prev.e > TP.PAUSE_MS || s < prev.s);
+      cues.push(gap ? { n: cues.length + 1, s, e, t, gap: true } : { n: cues.length + 1, s, e, t });
     }
     if (total > TP.MAX_TOTAL) errors.push("too_long");
     value.cues = cues;
@@ -82,6 +114,11 @@ function transcriptInput(raw) {
 function namesTrouble(text, people) {
   return U.namesIn(text, people, { strong: true }).length > 0 || U.minorWords(text, people).length > 0;
 }
+// A word of a card's name (an adult's too), for certain or to ask about:
+// the strict screen titles and stories use. { sure, maybe }.
+function nameWords(text, people) {
+  return { sure: U.strictNames(text, people), maybe: U.strictMaybe(text, people) };
+}
 function voiceTrouble(text) {
   const t = String(text || "");
   const out = [];
@@ -95,6 +132,15 @@ function voiceTrouble(text) {
 
 // One quoted line, checked: { ok, value } or { ok: false, issue }.
 //   pick = { transcript: "T1" | id, from_cue, to_cue, quote }
+// ctx.byClaude: Claude can't be asked, so a word of a card's name is a
+// refusal; for a person it's a question (ctx.asks), kept once they say it
+// isn't a name here (ctx.namesOk).
+function askOrRefuse(words, ctx, where, issues, what) {
+  const open = words.filter((w) => !(ctx.namesOk && ctx.namesOk.has(w)));
+  if (!open.length) return;
+  if (ctx.byClaude || !ctx.asks) issues.push({ where, issue: `${what} has "${open.join('", "')}", a word of a name on the film's cards: pick another` });
+  else for (const w of open) ctx.asks.add(w);
+}
 function checkQuote(pick, ctx, where) {
   const p = pick && typeof pick === "object" ? pick : {};
   const tr = (ctx.transcripts || []).find((t) => t.ref === p.transcript || t.id === p.transcript);
@@ -106,10 +152,20 @@ function checkQuote(pick, ctx, where) {
       too_many_cues: "a line spans 12 cues at most",
       empty: "the quote is empty",
       not_verbatim: `those aren't the speaker's exact words in ${tr.ref}#${p.from_cue}–${p.to_cue}: copy them word for word, nothing added, changed or joined from elsewhere`,
+      part_of_a_word: "a line starts and ends on whole words (not inside \"4.4\", \"1,000\" or \"can't\")",
+      missing_words: "the transcript marks words as missing there: a line doesn't reach across them",
+      across_a_gap: "a line doesn't reach across someone else's words or a long pause: pick it from one side",
+      said_twice: "those words are said more than once in those cues: name only the cue it's in",
     }[found.why] || "not found";
     return { ok: false, issue: { where, issue: why } };
   }
   if (namesTrouble(found.quote, ctx.people)) return { ok: false, issue: { where, issue: "this line names someone on the film's cards (or a word of a minor's name): pick another" } };
+  // One word of an adult's name ("Darnell taught me everything"): Claude
+  // picks another; a person is asked.
+  const nw = nameWords(found.quote, ctx.people);
+  const held = [];
+  askOrRefuse([...nw.sure, ...nw.maybe], ctx, where, held, "this line");
+  if (held.length) return { ok: false, issue: held[0] };
   const voice = K.lintWords(found.quote, where);
   if (voice.length) return { ok: false, issue: { where, issue: `${voice[0].issue} (on screen the kit allows none): pick another line` } };
   return {
@@ -118,10 +174,21 @@ function checkQuote(pick, ctx, where) {
   };
 }
 
+// Our own words about a line (a why, what's under it, a title, a logline,
+// what follows a caption's quote): no names (a word of anyone's, read
+// strictly), no line written for someone, the TOJ voice.
 function ownWords(text, max, where, ctx, issues) {
   const t = clean(text, max * 2);
   if (t && t.length > max) issues.push({ where, issue: `${max} characters at most` });
-  if (t && namesTrouble(t, ctx.people)) issues.push({ where, issue: "no names here: the code or the role instead" });
+  if (t) {
+    const nw = nameWords(t, ctx.people);
+    if (namesTrouble(t, ctx.people) || nw.sure.length) issues.push({ where, issue: "no names here: the code or the role instead" });
+    else askOrRefuse(nw.maybe, ctx, where, issues, "this");
+    for (const q of writtenLines(t)) {
+      issues.push({ where, issue: `"${q.slice(0, 60)}" reads as a line written for someone. Real words only: quote the transcript (pick it as a line), or describe the kind of line` });
+      break;
+    }
+  }
   for (const v of t ? voiceTrouble(t) : []) issues.push({ where, issue: v });
   return t ? t.slice(0, max) : null;
 }
@@ -194,12 +261,14 @@ function checkWords(input, ctx) {
     const where = `captions[${i}]`;
     const lead = checkQuote(c && c.lead, ctx, `${where}.lead`);
     if (!lead.ok) return issues.push(lead.issue);
-    const after = clean(c && c.after, 600) || "";
+    // A caption is post text: its opening line keeps the TOJ voice too.
+    for (const v of voiceTrouble(lead.value.quote)) issues.push({ where: `${where}.lead`, issue: `${v} (a caption goes out as ours): pick another line` });
+    const before = issues.length;
+    const after = ownWords(c && c.after, 600, `${where}.after`, ctx, issues) || "";
     const text = `“${lead.value.quote}”${after ? " " + after : ""}`;
     const n = wordCount(text);
     if (n >= CAPTION_WORDS) issues.push({ where, issue: `${n} words: a caption is under ${CAPTION_WORDS}` });
-    if (after && namesTrouble(after, ctx.people)) issues.push({ where: `${where}.after`, issue: "no names here: the code or the role instead" });
-    for (const v of voiceTrouble(after)) issues.push({ where: `${where}.after`, issue: v });
+    void before;
     value.captions.push({ ...lead.value, text, note: null });
   });
   return { issues, value };
@@ -225,12 +294,13 @@ function rowsFor(value) {
   return rows;
 }
 
-// A transcript as Claude reads it: numbered cues with their times.
+// A transcript as Claude reads it: numbered cues with their times, the
+// names in them as codes (tr.shown, when the route masked them).
 function transcriptText(tr, { from = 1, to = Infinity } = {}) {
   const opts = { frames: !!tr.frames, fps: tr.fps };
-  return tr.cues
+  return (tr.shown || tr.cues)
     .filter((c) => c.n >= from && c.n <= to)
-    .map((c) => `${tr.ref}#${c.n} [${TP.tc(c.s, opts)}–${TP.tc(c.e, opts)}] ${c.t}`)
+    .map((c) => `${tr.ref}#${c.n} [${TP.tc(c.s, opts)}–${TP.tc(c.e, opts)}]${c.gap ? " (after a question or a pause: a line doesn't reach back across it)" : ""} ${c.t}`)
     .join("\n");
 }
 
@@ -245,11 +315,18 @@ function speakerLabel(p) {
 // with every card's name replaced by its code, before an agent reads it:
 // agents see people by code and role only.
 function maskNames(text, people) {
-  let out = String(text || "");
+  let out = String(text || "").replace(/[\u0001\u0002]/g, " ");
   if (!out) return out;
   const esc = (w) => w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  // Codes go in as marks, and are written out last, so a code's own letters
+  // ("TY1") are never read as a name.
+  const codes = [];
+  const mark = (by) => {
+    codes.push(by);
+    return `\u0001${codes.length - 1}\u0002`;
+  };
   const swap = (word, by) => {
-    out = out.replace(new RegExp(`(?<![\\p{L}\\p{M}])${esc(word)}(?![\\p{L}\\p{M}])`, "giu"), by);
+    out = out.replace(new RegExp(`(?<![\\p{L}\\p{M}])${esc(word)}(?![\\p{L}\\p{M}])`, "giu"), () => mark(by));
   };
   const subjects = [];
   for (const p of people || []) {
@@ -258,18 +335,28 @@ function maskNames(text, people) {
   }
   // Whole names first, longest first; then each word of a name.
   subjects.sort((a, b) => b.full.length - a.full.length).forEach((x) => swap(x.full.trim(), x.by));
+  // A name run together, anywhere in a word: "@jamierivers", "#JamieRivers2026",
+  // "TyNg" (five letters or more; four for a minor).
+  for (const x of subjects) {
+    const parts = x.full.toLowerCase().split(/[^\p{L}\p{M}]+/u).filter(Boolean);
+    const joined = parts.join("");
+    if (parts.length > 1 && Array.from(joined).length >= (x.minor ? 4 : 5)) out = out.replace(new RegExp(esc(joined), "giu"), () => ` ${mark(x.by)} `);
+  }
   for (const x of subjects) {
     for (const w of x.full.split(/[^\p{L}\p{M}]+/u).filter(Boolean)) {
       const n = Array.from(w).length;
       if (n >= 3 || (x.minor && n === 2 && !U.EVERYDAY_2.has(w.toLowerCase()))) swap(w, x.by);
     }
   }
-  return out;
+  return out.replace(/\u0001(\d+)\u0002/g, (_, k) => codes[Number(k)]);
 }
 
 module.exports = {
   TP,
   maskNames,
+  writtenLines,
+  nameWords,
+  EMOJI_RUN,
   LIMITS,
   CAPTION_WORDS,
   HOOK_MS,

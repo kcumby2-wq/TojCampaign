@@ -155,6 +155,9 @@ function createOrchestrator({ namespace, baseDir, tools, defaultModel = DEFAULT_
     const trace = [];
     let final = null;
     let pauses = 0;
+    // A tool can stop the run (scope.control.stopped: a reason): the loop
+    // ends at the next message, and nothing more is asked of the model.
+    const stoppedNow = () => !!(scope && scope.control && scope.control.stopped);
     for await (const message of runner) {
       for (const block of message.content) {
         if (block.type === "text") trace.push({ type: "text", text: block.text });
@@ -171,6 +174,10 @@ function createOrchestrator({ namespace, baseDir, tools, defaultModel = DEFAULT_
         continue;
       }
       if (message.stop_reason === "end_turn") final = message;
+      if (stoppedNow()) {
+        final = { content: [{ type: "text", text: `Stopped: ${scope.control.stopped}.` }], stop_reason: "stopped", usage: message.usage };
+        break;
+      }
     }
     if (!final) final = await runner.done();
 
@@ -201,9 +208,14 @@ function createOrchestrator({ namespace, baseDir, tools, defaultModel = DEFAULT_
     let lastResult = null;
     let lastEval = null;
 
+    const stoppedRun = () => !!(scope && scope.control && scope.control.stopped);
     while (attempt < MAX_EVAL_RETRIES) {
       attempt++;
       lastResult = await _invokeAgentOnce({ role, task: currentTask, client_id, scope, attachments });
+      // Stopped by a tool: no judge reads it, and no retry.
+      if (stoppedRun()) {
+        return { namespace, ...lastResult, skills_loaded: cfg.skills || [], eval_status: "stopped", retry_count: attempt - 1, eval_history: evalHistory };
+      }
 
       // If no eval spec, ship immediately
       if (!EVAL_SPEC) {
