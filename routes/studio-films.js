@@ -340,7 +340,7 @@ router.get("/films/:id", member, withDb(async (req, res, sb) => {
       poster_url: c.poster_key ? signed[c.poster_key] || null : null,
       watch_url: c.kind === "slides" ? null : c.preview_key ? signed[c.preview_key] || null : null,
       slide_urls: c.status === "ready" ? U.slideCopyKeys(c).map((k) => signed[k] || null) : [],
-      warnings: [...(U.strictNames(String(c.file_name || "").replace(/\.[a-z0-9]+$/i, ""), people).length ? ["The file name has a name in it: rename the export, the kit's way"] : []), ...(c.kind === "video" ? U.nameWarnings(c.file_name, film, c) : [])],
+      warnings: [...(U.idNames(String(c.file_name || "").replace(/\.[a-z0-9]+$/i, ""), people).length ? ["The file name has a name in it: rename the export, the kit's way"] : []), ...(c.kind === "video" ? U.nameWarnings(c.file_name, film, c) : [])],
     })),
     notes: notes || [],
     delivery_checks: checks || [],
@@ -358,8 +358,8 @@ router.patch("/films/:id", member, withDb(async (req, res, sb) => {
   const body = bodyOf(req);
   if (typeof body.seen !== "string") return res.status(400).json({ error: "invalid", fields: ["seen"] });
   const people = await peopleOf(sb, film.id);
-  const { errors, value } = U.filmInput(body, { partial: true, people });
-  if (errors.length) return res.status(400).json({ error: "invalid", fields: errors });
+  const { errors, value, asks } = U.filmInput(body, { partial: true, people, namesOk: U.namesOkWords(body.names_ok) });
+  if (errors.length) return res.status(400).json({ error: "invalid", fields: errors, ...(asks.length ? { words: asks } : {}) });
   if (!isProducer(req) && ("director_email" in value || "editor_email" in value)) return res.status(403).json({ error: "producer_only" });
   if (!Object.keys(value).length) return res.json({ film });
   try {
@@ -408,7 +408,7 @@ router.post("/films/:id/people", member, withDb(async (req, res, sb) => {
   if (value.reconsent_note && !isProducer(req)) return res.status(403).json({ error: "producer_only" });
   // The title and the story never carry a name: if they have this one, they
   // change first.
-  if (U.strictNames(film.title, [value]).length) return res.status(409).json({ error: "title_has_name" });
+  if (U.idNames(film.title, [value]).length) return res.status(409).json({ error: "title_has_name" });
   if (film.one_sentence && U.strictNames(film.one_sentence, [value]).length) return res.status(409).json({ error: "story_has_name" });
   try {
     const person = await run(sb.from("studio_film_people").insert({ ...value, film_id: film.id, created_by: me(req) }).select().single());
@@ -433,7 +433,7 @@ router.patch("/films/:id/people/:pid", member, withDb(async (req, res, sb) => {
   const reviewerChanged = ["reviewer_relation", "reviewer_name", "reviewer_email"].some((k) => k in value && value[k] !== current[k]);
   if (reviewerChanged && !isProducer(req)) return res.status(403).json({ error: "producer_only" });
   const next = { ...current, ...value };
-  if ((value.name || value.reviewer_name || "is_minor" in value) && U.strictNames(film.title, [next]).length) return res.status(409).json({ error: "title_has_name" });
+  if ((value.name || value.reviewer_name || "is_minor" in value) && U.idNames(film.title, [next]).length) return res.status(409).json({ error: "title_has_name" });
   if ((value.name || value.reviewer_name || "is_minor" in value) && film.one_sentence && U.strictNames(film.one_sentence, [next]).length) return res.status(409).json({ error: "story_has_name" });
   if (!Object.keys(value).length) return res.json({ person: current });
   try {

@@ -26,6 +26,7 @@
     tool_off: "Review copies are off until Kyron approves storing them (Studio → Films → Tool approvals).",
     title_has_name: "Titles never carry a name. Use the athlete ID instead.",
     story_has_name: "The one-sentence story goes on the speaker's review page: no names in it. Use the athlete ID or \"he\" or \"she\".",
+    story_may_have_name: "A word in the story is also a name on a card. If it isn't a name here, save again.",
     note_has_name: "The history keeps no names: write the note with the code instead.",
     note_may_have_name: "A word in the note is also a name on a card. If it isn't a name here, send it again.",
     note_has_minor_name: "That's part of a minor's name on this film. The history never keeps a child's name: write the code instead.",
@@ -99,9 +100,9 @@
   // server asks first. Sending the same text again says those exact words
   // aren't names here; once the text changes, nothing is acknowledged and the
   // server asks again. A minor's name is never kept, so there's no asking.
-  function nameAsk(btn, e, text) {
+  function nameAsk(btn, e, text, field) {
     var d = e && e.data;
-    if (!btn || !d || d.error !== "invalid" || (d.fields || []).indexOf("note_may_have_name") < 0) return false;
+    if (!btn || !d || d.error !== "invalid" || (d.fields || []).indexOf(field || "note_may_have_name") < 0) return false;
     btn.dataset.namesOk = JSON.stringify({ text: String(text || ""), words: namesOk(btn, text).concat(d.words || []) });
     btn.disabled = false;
     T().toast("“" + (d.words || []).join("”, “") + "” is also a name on a card. If it isn't a name here, send it again.");
@@ -501,10 +502,11 @@
         references: splitLines("eRefs").map(function (l) { var i = l.indexOf("|"); var u = (i >= 0 ? l.slice(0, i) : l).trim(); var n = i >= 0 ? l.slice(i + 1).trim() : ""; return /^https:\/\//.test(u) ? { url: u, note: n } : { url: null, note: l }; }),
         song: v("eSong") || null,
       };
-      var body = { seen: f.updated_at, title: v("eTitle"), one_sentence: v("eStory") || null, post_date: v("ePost") || null, board_url: v("eBoard") || null, plan: plan };
+      var story = v("eStory");
+      var body = { seen: f.updated_at, title: v("eTitle"), one_sentence: story || null, post_date: v("ePost") || null, board_url: v("eBoard") || null, plan: plan, names_ok: namesOk(btn, story) };
       if (d.can.producer) { body.director_email = v("eDir") || null; body.editor_email = v("eEd") || null; }
       btn.disabled = true;
-      try { await t.post("/api/studio-films/films/" + f.id, body, "PATCH"); t.toast("Saved."); T().go("#film/" + f.id); } catch (e) { btn.disabled = false; say("editMsg", why(e), true); }
+      try { await t.post("/api/studio-films/films/" + f.id, body, "PATCH"); t.toast("Saved."); T().go("#film/" + f.id); } catch (e) { if (nameAsk(btn, e, story, "story_may_have_name")) return; btn.disabled = false; say("editMsg", why(e), true); }
     });
   }
 
