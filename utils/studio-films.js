@@ -437,7 +437,12 @@ function placeWords(locations) {
         for (const w of words) if (ownWord(w)) out.add(w.toLowerCase());
         continue;
       }
-      if (!caps) {
+      // Typed all in lower case, or in sentence case ("Park high school gym":
+      // a capital on its first word only, two words or more): can't be told
+      // from a name, so every word but the small ones counts.
+      const plain = words.filter((w) => !PLACE_GLUE.has(w.toLowerCase()));
+      const sentence = plain.length >= 2 && /^\p{Lu}/u.test(words[0]) && plain.slice(1).every((w) => !/^\p{Lu}/u.test(w));
+      if (!caps || sentence) {
         for (const w of words) {
           const lw = w.toLowerCase();
           if (!PLACE_GLUE.has(lw) && Array.from(lw).length >= 3) out.add(lw);
@@ -571,6 +576,53 @@ function shoutOuts(all) {
   for (const tag of String(all || "").match(TAG) || []) read(tagWords(tag).toLowerCase().split(/\n+/).filter((w) => /^[\p{L}\p{M}]+$/u.test(w)), false);
   return out;
 }
+// A tag typed all in lower case has no words to read: a shout-out's own
+// letters right before a name word that ends the tag (or before it and a
+// last "go") name them ("#happybirthdaygrace", "#gohope", "#gohopego",
+// "#thankscoachrivers").
+const SHOUT_RUN = /(?:birthday|bday|congrats|congratulations|thanks|thankyou|thanku|loveyou|missyou|proudofyou|coach|dear|hey|go)$/;
+function lowerTagShouts(all, p) {
+  const names = nameParts(p && p.name).filter((w) => Array.from(w).length >= 3);
+  if (!names.length) return [];
+  const out = new Set();
+  for (const tag of String(all || "").match(TAG) || []) {
+    for (const piece of tagWords(tag).toLowerCase().split(/\n+/)) {
+      if (!/^[\p{L}\p{M}]+$/u.test(piece)) continue;
+      for (const w of names) {
+        for (const end of [w, w + "go"]) {
+          if (piece.length > end.length && piece.endsWith(end) && SHOUT_RUN.test(piece.slice(0, piece.length - end.length))) out.add(w);
+        }
+      }
+    }
+  }
+  return [...out];
+}
+// An adult's name word (four letters or more) run into a word of a tag: the
+// name where it ends the word ("#teamrivers", "#coachrivers"), or starts it
+// before a tag's usual last word ("#riversstrong", "#riversnation"); asked
+// where it starts another word ("#riverside") or is an everyday one. Tags only.
+const TAG_TAILS = new Set(("strong nation fam family gang forever crew squad army pride power time era way life season szn mode legacy love fans " +
+  "team stan nation club world vibes energy effect magic made pride proud hype goat goats").split(" "));
+function tagRunIns(all, p) {
+  const sure = new Set();
+  const maybe = new Set();
+  const names = nameParts(p && p.name).filter((w) => Array.from(w).length >= 4);
+  for (const tag of String(all || "").match(TAG) || []) {
+    for (const piece of tagWords(tag).toLowerCase().split(/\n+/)) {
+      if (!/^[\p{L}\p{M}]+$/u.test(piece)) continue;
+      for (const w of names) {
+        if (piece === w) continue;
+        const atEnd = piece.endsWith(w);
+        const atStart = piece.startsWith(w);
+        if (!atEnd && !atStart) continue;
+        if (!everyday(w) && (atEnd || TAG_TAILS.has(piece.slice(w.length)))) sure.add(w);
+        else maybe.add(w);
+      }
+    }
+  }
+  for (const w of sure) maybe.delete(w);
+  return { sure: [...sure], maybe: [...maybe] };
+}
 // A minor's three-letter name run into a word of a tag, where that word
 // starts or ends ("#samstrong", "#teamsam", "#prayformia"): asked, never
 // refused (four letters and more: minorRunIns).
@@ -641,9 +693,13 @@ function publicNames(all, p) {
   const minor = !!p.is_minor;
   if (strictNames(publicText(all), [{ name: p.name, is_minor: minor }]).length > 0 || !!inTags(all, p.name, minor ? 4 : 5).sure) return true;
   // A word of the name in a Title Case shout-out ("Way To Go Hope", "Thank
-  // You Coach Will"): the name, for anyone the graphic can't name.
+  // You Coach Will"), or in a lower-case tag's ("#happybirthdaygrace"): the
+  // name, for anyone the graphic can't name.
   const shouted = shoutOuts(all);
   if (nameParts(p.name).some((w) => Array.from(w).length >= (minor ? 2 : 3) && shouted.has(w))) return true;
+  if (lowerTagShouts(all, p).length) return true;
+  // An adult's name run into a tag ("#teamrivers").
+  if (!minor && tagRunIns(all, p).sure.length) return true;
   // A minor: one word of their name run into a tag or a word where a word
   // starts or ends ("#jordanstrong", "#teamjordan").
   return minor && minorRunIns(all, [p]).sure.length > 0;
@@ -681,6 +737,8 @@ function graphicsAsks(texts, people, { format = null, ok = new Set() } = {}) {
       // One word of a minor's name inside a word, or an everyday one run in
       // ("#hopestrong"), or a three-letter one run into a tag ("#samstrong"): asked.
       if (p.is_minor) for (const w of [...minorRunIns(raw, [p]).maybe, ...shortTagRunIns(raw, p)]) out.add(w);
+      // An adult's everyday-word name run into a tag ("#hopestrong" for a Hope): asked.
+      else for (const w of tagRunIns(raw, p).maybe) out.add(w);
     }
     if (p.reviewer_name && p.reviewer_relation !== "self") {
       for (const w of nameHits(all, { name: p.reviewer_name }).maybe) out.add(w);

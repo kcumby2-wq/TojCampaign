@@ -554,6 +554,13 @@ test("a tag or a Title Case line reads each word as a sentence start; a whole na
     { person_code: "CY2", name: "Chase Young", is_minor: true }, { person_code: "WY1", name: "Will Young", is_minor: true }];
   for (const t of ["#WayToGoHope", "#HappyBirthdayGrace", "#GoHopeGo", "#WeLoveYouGrace", "#ProudOfYouChase", "#ThankYouCoachWill"]) assert.equal(judge(t, shout), "refused", t);
   for (const [t, want] of [["#NeverLoseHope", "asked hope"], ["#GoChaseYourDreams", "asked chase"]]) assert.equal(judge(t, shout), want, t);
+  // A tag typed all in lower case: a shout-out's own letters before a name that ends it.
+  for (const t of ["#happybirthdaygrace", "#gohope", "#weloveyougrace", "#proudofyouchase", "#congratsgrace", "#gohopego"]) assert.equal(judge(t, shout), "refused", t);
+  assert.equal(judge("#nevergiveup", shout), "passes");
+  // An adult the release doesn't let a graphic name: their name run into a tag.
+  const rivers = [{ person_code: "JR9", name: "Jamie Rivers", is_minor: false }];
+  for (const t of ["#thankscoachrivers", "#coachrivers", "#teamrivers", "#riversstrong", "#dearjamie"]) assert.equal(judge(t, rivers), "refused", t);
+  assert.equal(judge("#riverside", rivers), "asked rivers", "another word that starts with it: asked");
   // "you", "love" and a "go" before more words aren't shout-outs alone: asked.
   for (const [t, want] of [["You Will Never Walk Alone", "asked will"], ["Love Will Find A Way", "asked will"], ["Go Chase Your Dreams", "asked chase"]]) assert.equal(judge(t, shout), want, t);
 });
@@ -572,6 +579,10 @@ test("the phone keeps an ordinary shot line, and a place's own name stays online
   // A place that's only ordinary words, typed with its capitals, keeps them all.
   for (const [place, line] of [["Park High School", "park high school at dawn"], ["Court Street Park", "court street park, wide"], ["Home Field", "home field lights"],
     ["The Rowe house on High Street", "the bus down high street"], ["Home Field, Riverside", "home field lights at dawn"], ["park high school gym", "after the gym, warm-up"]]) {
+    assert.equal(U.offlineSafe(line, people, { places: [place] }), false, place);
+  }
+  // Typed in sentence case, a place made of ordinary words keeps them too.
+  for (const [place, line] of [["Park high school gym", "warm-up at park high"], ["Home field, Riverside", "home field lights at dawn"], ["Court street park", "court street park at dusk"], ["The Rowe house on High street", "the bus down high street"]]) {
     assert.equal(U.offlineSafe(line, people, { places: [place] }), false, place);
   }
   // Ordinary words that describe a place (lower case, or one alone) don't keep a line off the phone.
