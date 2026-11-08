@@ -181,7 +181,7 @@
   // decide what it's given, and what's folded in once it saves a draft.
   function compose(d, ticked) {
     var max = (d.brief_max || 6000) - 200;
-    var head = "Monthly refresh of " + d.kit.title + " (v" + d.kit.version + "), " + monthName(d.month) + ": fold in what the team learned" + (d.last_monthly ? " since " + day(d.last_monthly.started_at) : "") + ".\n\n" +
+    var head = "Monthly refresh of " + d.kit.title + " (v" + d.kit.version + "), " + monthName(d.month) + ": fold in what the team learned" + (d.last_ran ? " since " + day(d.last_ran.started_at) : "") + ".\n\n" +
       "Change only what these ask for, card by card. Keep every rule card as it is, and date anything that changes. Where you don't make a change one of them asks for, say why in the draft's notes.\n";
     var text = head;
     var used = { wraps: [], suggestions: [], labels: [] };
@@ -277,7 +277,7 @@
       t.show(null,
         '<div class="screen">' + back +
         '<div><p class="kicker">Monthly refresh · ' + h(monthName(d.month)) + '</p><h1 class="title sm">' + h(d.kit.title) + "</h1>" +
-        '<p class="lede" style="font-size:15px">What the team learned' + (d.last_monthly ? " since " + h(day(d.last_monthly.started_at)) : "") + ', as a brief for the Kit Refresher. Untick what shouldn\'t go in. It makes a draft, and nothing changes until Kyron approves it. What\'s ticked is folded in once it saves a draft; if it doesn\'t, it all stays here.</p></div>' +
+        '<p class="lede" style="font-size:15px">What the team learned' + (d.last_ran ? " since " + h(day(d.last_ran.started_at)) : "") + ', as a brief for the Kit Refresher. Untick what shouldn\'t go in. It makes a draft, and nothing changes until Kyron approves it. What\'s ticked is folded in once it saves a draft; if it doesn\'t, it all stays here.</p></div>' +
         state() + heldNote() +
         sec("Suggested edits", d.suggestions, d.suggestions.map(function (x) { return tick("suggestions:" + x.id, x.column_name + " › " + x.card_title, x.suggestion, (x.why ? "Why: " + x.why + " · " : "") + String(x.created_by || "").replace(/@.*/, "") + " · " + day(x.created_at), true); }).join("")) +
         sec("Wrap-ups", d.wraps, d.wraps.map(function (x) { return tick("wraps:" + x.id, fmt(d.kit.slug, x.film.format) + " · " + x.film.athlete_id, "Worked: " + x.worked + (x.missed ? "\nMissed: " + x.missed : "") + (x.change ? "\nChange: " + x.change : ""), (x.card_title ? "Card: " + x.card_title + " · " : "") + String(x.created_by || "").replace(/@.*/, "") + " · " + day(x.created_at), false); }).join("")) +
@@ -307,6 +307,7 @@
       if (rb) rb.addEventListener("click", rebuild);
       var cr = document.getElementById("mCheckRebuild");
       if (cr) cr.addEventListener("click", rebuild);
+      if (mustCheck && cr && cr.scrollIntoView) cr.scrollIntoView({ block: "center" });
       var co = document.getElementById("mCheckOut");
       if (co) co.addEventListener("click", function () { mustCheck = null; paint(); });
       var note = document.getElementById("decNote");
@@ -357,6 +358,10 @@
           document.getElementById("mMissing").innerHTML = '<div class="card tight" role="alert" style="gap:8px"><p class="body" style="margin:0;font-size:14px">' + h(missing.length + (missing.length === 1 ? " ticked item isn't" : " ticked items aren't") + " in the brief as written. It would be folded in without the Kit Refresher reading it. Build the brief again, untick it, or start anyway.") + '</p><div class="btn-row"><button type="button" class="btn small" id="mMissRebuild">Build it again from the ticks</button><button type="button" class="btn ghost small" id="mMissGo">Start anyway</button></div></div>';
           document.getElementById("mMissRebuild").addEventListener("click", rebuild);
           document.getElementById("mMissGo").addEventListener("click", function () { missingAsked = true; document.getElementById("mMissing").innerHTML = ""; btn.click(); });
+          // Where it can be seen, above the Start button.
+          var box = document.getElementById("mMissing");
+          if (box.scrollIntoView) box.scrollIntoView({ block: "center" });
+          document.getElementById("mMissGo").focus({ preventScroll: true });
           return;
         }
         btn.disabled = true; btn.textContent = "Starting…";
@@ -368,6 +373,8 @@
         } catch (e) {
           btn.disabled = false; btn.textContent = d.done_this_month ? "Start another refresh this month" : "Start the monthly refresh";
           say("mMsg", (e.data && e.data.error === "brief_too_long" ? "The brief is over " + e.data.max + " characters: untick some, or shorten it." : why(e)), true);
+          var m = document.getElementById("mMsg");
+          if (m && m.scrollIntoView) m.scrollIntoView({ block: "center" });
         }
       });
     }

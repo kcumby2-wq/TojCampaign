@@ -369,6 +369,8 @@ router.get("/monthly/:slug", member, withDb(async (req, res, sb) => {
     kit: { slug, title: kit.kit.title || slug, version: kit.version },
     month: thisMonth(),
     last_monthly: markView(state.last),
+    // The last one that ran through: what's here came in since then.
+    last_ran: markView(monthly.find((m) => RAN.has(m.outcome)) || null),
     running: markView(state.running),
     done_this_month: !!state.ran,
     last_gear: markView(gear[0]),
