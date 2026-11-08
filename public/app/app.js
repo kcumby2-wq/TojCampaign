@@ -526,18 +526,31 @@
     app.querySelectorAll("[data-suggest]").forEach(function (b) {
       b.addEventListener("click", function () { var box = app.querySelector('[data-suggestbox="' + b.dataset.suggest + '"]'); box.hidden = !box.hidden; if (!box.hidden) document.getElementById("sg" + b.dataset.suggest).focus(); });
     });
+    // Words the server asked about, by card: "it isn't a name here" goes
+    // with that exact suggestion only.
+    var askedSug = {};
     app.querySelectorAll("[data-suggestsend]").forEach(function (b) {
       b.addEventListener("click", async function () {
         var j = b.dataset.suggestsend, card = c.cards[Number(j)], msg = document.getElementById("sm" + j);
+        var body = { slug: row.slug, column: c.name, card_title: card.title, suggestion: document.getElementById("sg" + j).value.trim(), why: document.getElementById("sw" + j).value.trim() };
+        var text = body.suggestion + "\n" + body.why;
+        if (askedSug[j] && askedSug[j].text === text) body.names_ok = askedSug[j].words;
         b.disabled = true;
         try {
-          await post("/api/studio-learn/suggestions", { slug: row.slug, column: c.name, card_title: card.title, suggestion: document.getElementById("sg" + j).value.trim(), why: document.getElementById("sw" + j).value.trim() });
+          await post("/api/studio-learn/suggestions", body);
           toast("Sent. It goes into the month's kit refresh.");
           kit(id);
         } catch (e) {
           b.disabled = false;
           var f = e.data && e.data.fields || [];
-          msg.innerHTML = '<span class="err">' + h(f.indexOf("suggestion_has_name") >= 0 ? "A kit never carries a name: write it without one." : f.indexOf("card_is_a_rule") >= 0 ? "That card is one of the kit's rules: a refresh can't change it. Talk to Kyron." : f.indexOf("banned_words") >= 0 ? "A word on the TOJ banned list is in it. Say the concrete thing instead." : f.indexOf("suggestion") >= 0 ? "Say what the card should say." : e.message) + "</span>";
+          var words = (e.data && e.data.words) || [];
+          var q = words.map(function (w) { return "“" + w + "”"; }).join(", ");
+          if (f.indexOf("suggestion_may_have_name") >= 0) {
+            askedSug[j] = { text: text, words: (body.names_ok || []).concat(words) };
+            msg.innerHTML = "<span>" + h(q + (words.length === 1 ? " is also a name on a card. If it isn't a name here, send it again." : " are also names on cards. If they aren't names here, send it again.")) + "</span>";
+            return;
+          }
+          msg.innerHTML = '<span class="err">' + h(f.indexOf("suggestion_has_name") >= 0 ? "A kit never carries a name: write it without one." + (q ? " It read " + q + " as " + (words.length === 1 ? "a name" : "names") + " on a card." : "") : f.indexOf("card_is_a_rule") >= 0 ? "That card is one of the kit's rules: a refresh can't change it. Talk to Kyron." : f.indexOf("banned_words") >= 0 ? "A word on the TOJ banned list is in it. Say the concrete thing instead." : f.indexOf("suggestion") >= 0 ? "Say what the card should say." : e.message) + "</span>";
         }
       });
     });
@@ -832,19 +845,27 @@
         document.getElementById("briefMsg").innerHTML = '<span class="err">' + h(e.data && e.data.error === "already_started" ? "That brief was started: it stays started." : e.message) + "</span>";
       }
     });
+    // A gear re-check's brief is read for names (routes/studio-agents.js):
+    // words you said aren't names here go with that exact brief.
+    var askedBrief = { text: "", words: [] };
     startBtn.addEventListener("click", async function () {
       var btn = this;
       var body = { role: b.mode === "build" ? "kit-builder" : "kit-refresher", slug: b.slug, brief: area.value.trim(), from_brief: runId };
       if (dirs) body.direction = sel;
       if (b.purpose === "gear" && b.mode === "refresh" && b.slug === "same-work") body.purpose = "gear";
       if (needsSource) body.source_text = document.getElementById("srcText").value.trim();
+      if (body.purpose && askedBrief.text === body.brief && askedBrief.words.length) body.names_ok = askedBrief.words;
       btn.disabled = true; btn.textContent = "Starting…";
       try {
         var r = await post("/api/studio-agents/run", body);
         go("#run/" + r.run_id);
       } catch (e) {
         btn.disabled = false; btn.textContent = startLabel();
-        document.getElementById("briefMsg").innerHTML = '<span class="err">' + h(e.message) + (e.data && e.data.hint ? " " + h(e.data.hint) + "." : "") + "</span>";
+        var de = (e && e.data) || {};
+        if (de.error === "brief_may_have_name") askedBrief = { text: body.brief, words: (body.names_ok || []).concat(de.words || []) };
+        // The refresh's own reasons in words (learn.js); anything else as it came.
+        var said = window.TOJLearn && window.TOJLearn.runError ? window.TOJLearn.runError(e) : null;
+        document.getElementById("briefMsg").innerHTML = '<span class="' + (de.error === "brief_may_have_name" ? "" : "err") + '">' + h(said || e.message) + (!said && de.hint ? " " + h(de.hint) + "." : "") + "</span>";
       }
     });
   }
@@ -927,8 +948,8 @@
       go("#kit/" + id);
     });
     armed(document.getElementById("discard"), "Tap again to discard", async function () {
-      await post("/api/studio-agents/kits/" + encodeURIComponent(id) + "/discard");
-      toast("Discarded.");
+      var dd = await post("/api/studio-agents/kits/" + encodeURIComponent(id) + "/discard");
+      toast(dd && dd.given_back ? "Discarded. What its refresh folded in is open again for the next one." : "Discarded.");
       go("#studio");
     });
   }

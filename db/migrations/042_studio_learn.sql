@@ -17,6 +17,8 @@
 --     needs no change, leaves it all open for the next one.
 --   * Rules in the making are counted per kit (a label on that kit's films),
 --     and every decision about one is kept.
+--   * A draft Kyron discards gives back what its refresh folded in: open
+--     again for the next one (studio_refresh_unfold, from studio_kits).
 
 -- ── Wrap-ups ──────────────────────────────────────────────────────────────
 create table if not exists public.studio_film_wraps (
@@ -67,7 +69,9 @@ create table if not exists public.studio_label_marks (
   id uuid primary key default gen_random_uuid(),
   kit_slug text not null check (kit_slug ~ '^[a-z0-9][a-z0-9-]{1,62}$'),
   label text not null check (label = lower(label) and char_length(label) between 2 and 60),
-  status text not null check (status in ('folded', 'declined')),
+  -- Folded into a refresh, declined, or open again (the draft that refresh
+  -- made was discarded).
+  status text not null constraint studio_label_marks_status check (status in ('folded', 'declined', 'reopened')),
   -- How many of the kit's notes had it when it was decided: a declined one
   -- comes back after three more.
   uses_at int not null check (uses_at >= 0),
@@ -92,7 +96,11 @@ create table if not exists public.studio_refresh_marks (
   -- it runs (a run quiet for 90 minutes counts as ended without a draft).
   outcome text check (outcome in ('drafted', 'no_changes', 'failed')),
   ended_at timestamptz,
-  constraint studio_refresh_marks_ended check ((outcome is null) = (ended_at is null))
+  -- Its draft was discarded: what it folded in is open again, and it
+  -- doesn't count as the month's (or the gear's) having run.
+  undone_at timestamptz,
+  constraint studio_refresh_marks_ended check ((outcome is null) = (ended_at is null)),
+  constraint studio_refresh_marks_undone check (undone_at is null or outcome = 'drafted')
 );
 create index if not exists studio_refresh_marks_kind_idx on public.studio_refresh_marks (kit_slug, kind, started_at desc);
 alter table public.studio_refresh_marks enable row level security;
@@ -130,6 +138,14 @@ begin
       raise exception 'wrap-up % keeps its film and who wrote it', old.id;
     end if;
     if old.folded_at is not null then
+      -- Open again, as it was: the draft its refresh made was discarded
+      -- (studio_refresh_unfold, for that refresh only).
+      if new.folded_at is null and new.folded_run_id is null and old.folded_run_id is not null
+         and current_setting('studio.unfolding', true) = old.folded_run_id::text
+         and row(new.worked, new.missed, new.change, new.card_title) is not distinct from row(old.worked, old.missed, old.change, old.card_title) then
+        new.updated_at := now();
+        return new;
+      end if;
       -- Only its run going (agent_runs on delete set null) changes it now.
       if row(new.worked, new.missed, new.change, new.card_title, new.folded_at)
          is distinct from row(old.worked, old.missed, old.change, old.card_title, old.folded_at)
@@ -156,7 +172,7 @@ begin
     new.folded_at := null;
   elsif new.folded_at is not null and (new.folded_run_id is null or not exists (
           select 1 from public.studio_refresh_sources x join public.studio_refresh_marks m on m.run_id = x.run_id
-           where x.run_id = new.folded_run_id and x.kind = 'wrap' and x.ref_id = new.id and m.outcome = 'drafted')) then
+           where x.run_id = new.folded_run_id and x.kind = 'wrap' and x.ref_id = new.id and m.outcome = 'drafted' and m.undone_at is null)) then
     -- Folded only into a refresh that was given it and saved a draft.
     raise exception 'a wrap-up is folded into a refresh it was given to, once it saved a draft';
   end if;
@@ -186,6 +202,13 @@ begin
     raise exception 'suggested edit % stays as it was written', old.id;
   end if;
   if old.status <> 'open' then
+    -- Open again: the draft its refresh made was discarded
+    -- (studio_refresh_unfold, for that refresh only).
+    if old.status = 'folded' and new.status = 'open' and old.folded_run_id is not null and new.folded_run_id is null
+       and new.decided_by is null and new.decided_at is null and new.decided_note is null
+       and current_setting('studio.unfolding', true) = old.folded_run_id::text then
+      return new;
+    end if;
     -- Only its run going (agent_runs on delete set null) changes it now.
     if row(new.status, new.decided_by, new.decided_at, new.decided_note) is distinct from row(old.status, old.decided_by, old.decided_at, old.decided_note)
        or new.folded_run_id is not null and new.folded_run_id is distinct from old.folded_run_id then
@@ -203,7 +226,7 @@ begin
     end if;
     if new.status = 'folded' and (new.folded_run_id is null or not exists (
           select 1 from public.studio_refresh_sources x join public.studio_refresh_marks m on m.run_id = x.run_id
-           where x.run_id = new.folded_run_id and x.kind = 'suggestion' and x.ref_id = new.id and m.outcome = 'drafted')) then
+           where x.run_id = new.folded_run_id and x.kind = 'suggestion' and x.ref_id = new.id and m.outcome = 'drafted' and m.undone_at is null)) then
       raise exception 'a suggested edit is folded into a refresh it was given to, once it saved a draft';
     end if;
   end if;
@@ -223,18 +246,31 @@ begin
     end if;
     raise exception 'a rule decision is kept as it was made: decide again instead';
   end if;
-  if public.studio_names_in_any(concat_ws(' ', new.label, new.note)) then
+  -- No names in a decision's reason, nor in the label of a rule folded into
+  -- a kit (a declined one, or one open again, stays out of every kit: one
+  -- that names someone on a card added since can still be declined).
+  if public.studio_names_in_any(new.note) or (new.status = 'folded' and public.studio_names_in_any(new.label)) then
     raise exception 'a rule decision keeps no names';
   end if;
   -- Declined by a person; folded only into a refresh of the kit that was
-  -- given it and saved a draft.
+  -- given it and saved a draft; open again only when that draft is
+  -- discarded (studio_refresh_unfold), after that refresh folded it.
   if new.status = 'declined' and new.run_id is not null then
     raise exception 'a declined rule isn''t part of a refresh';
   end if;
   if new.status = 'folded' and (new.run_id is null or not exists (
        select 1 from public.studio_refresh_sources x join public.studio_refresh_marks m on m.run_id = x.run_id
-        where x.run_id = new.run_id and x.kind = 'label' and x.label = new.label and m.kit_slug = new.kit_slug and m.outcome = 'drafted')) then
+        where x.run_id = new.run_id and x.kind = 'label' and x.label = new.label and m.kit_slug = new.kit_slug
+          and m.outcome = 'drafted' and m.undone_at is null)) then
     raise exception 'a rule is folded into a refresh of its kit it was given to, once it saved a draft';
+  end if;
+  if new.status = 'reopened' and (new.run_id is null or new.note is not null
+       or current_setting('studio.unfolding', true) is distinct from new.run_id::text
+       or not exists (select 1 from (select x.status, x.run_id from public.studio_label_marks x
+                                      where x.kit_slug = new.kit_slug and x.label = new.label
+                                      order by x.decided_at desc, x.id limit 1) l
+                       where l.status = 'folded' and l.run_id = new.run_id)) then
+    raise exception 'a rule is open again only when the draft its refresh made is discarded';
   end if;
   new.decided_at := now();
   return new;
@@ -251,10 +287,22 @@ begin
     return old;
   end if;
   if tg_op = 'UPDATE' then
+    if row(new.run_id, new.kit_slug, new.kind, new.month, new.started_by, new.started_at)
+       is distinct from row(old.run_id, old.kit_slug, old.kind, old.month, old.started_by, old.started_at) then
+      raise exception 'a refresh mark is kept as it was made';
+    end if;
+    if old.outcome is not null then
+      -- Undone, once: the draft it made was discarded (studio_refresh_unfold).
+      if old.outcome = 'drafted' and old.undone_at is null and new.undone_at is not null
+         and new.outcome = old.outcome and new.ended_at is not distinct from old.ended_at
+         and current_setting('studio.unfolding', true) = old.run_id::text then
+        new.undone_at := now();
+        return new;
+      end if;
+      raise exception 'a refresh mark is kept as it was made';
+    end if;
     -- How it ended, once; nothing else changes.
-    if old.outcome is not null or new.outcome is null
-       or row(new.run_id, new.kit_slug, new.kind, new.month, new.started_by, new.started_at)
-          is distinct from row(old.run_id, old.kit_slug, old.kind, old.month, old.started_by, old.started_at) then
+    if new.outcome is null or new.undone_at is not null then
       raise exception 'a refresh mark is kept as it was made';
     end if;
     new.ended_at := now();
@@ -264,6 +312,7 @@ begin
   new.month := date_trunc('month', now() at time zone 'America/Chicago')::date;
   new.outcome := null;
   new.ended_at := null;
+  new.undone_at := null;
   return new;
 end $$;
 
@@ -279,6 +328,13 @@ begin
   end if;
   if tg_op = 'UPDATE' then
     raise exception 'what a refresh was given is kept';
+  end if;
+  -- Given only as it starts (studio_refresh_start, which checked each one):
+  -- in the transaction that made its mark, while it runs.
+  if current_setting('studio.refresh_starting', true) is distinct from new.run_id::text
+     or not exists (select 1 from public.studio_refresh_marks m
+                     where m.run_id = new.run_id and m.outcome is null and m.started_at = now()) then
+    raise exception 'a refresh is given what it draws on as it starts, and only then';
   end if;
   return new;
 end $$;
@@ -304,7 +360,8 @@ end $$;
 
 -- ── What the server calls ─────────────────────────────────────────────────
 -- A kit's rules in the making: labels on its films' review notes, used three
--- times or more, never decided, or declined and used three more times since.
+-- times or more, never decided, declined and used three more times since, or
+-- open again (the draft the refresh that folded it made was discarded).
 create or replace function public.studio_rule_candidates(p_slug text)
 returns table (label text, notes int, films int, declined_before boolean, samples text[])
 language sql stable set search_path = '' as $$
@@ -319,9 +376,11 @@ language sql stable set search_path = '' as $$
       from public.studio_label_marks m where m.kit_slug = p_slug
      order by m.label, m.decided_at desc, m.id
   )
-  select u.label, u.notes, u.films, l.label is not null, u.samples
+  select u.label, u.notes, u.films,
+         exists (select 1 from public.studio_label_marks d where d.kit_slug = p_slug and d.label = u.label and d.status = 'declined'),
+         u.samples
     from used u left join latest l on l.label = u.label
-   where u.notes >= 3 and (l.label is null or (l.status = 'declined' and u.notes >= l.uses_at + 3))
+   where u.notes >= 3 and (l.label is null or l.status = 'reopened' or (l.status = 'declined' and u.notes >= l.uses_at + 3))
    order by u.notes desc, u.label
 $$;
 
@@ -381,7 +440,7 @@ begin
   if p_kind = 'monthly' then
     if not coalesce(p_again, false) and exists (
          select 1 from public.studio_refresh_marks m where m.kit_slug = p_slug and m.kind = 'monthly'
-            and m.month = this_month and m.outcome in ('drafted', 'no_changes')) then
+            and m.month = this_month and m.outcome in ('drafted', 'no_changes') and m.undone_at is null) then
       raise exception 'this month''s refresh has run already: start another on purpose';
     end if;
     if cardinality(w) + cardinality(sg) + cardinality(lb) = 0 then
@@ -412,10 +471,12 @@ begin
   end if;
   insert into public.studio_refresh_marks (run_id, kit_slug, kind, started_by) values (p_run, p_slug, p_kind, p_by);
   if p_kind = 'monthly' then
+    perform set_config('studio.refresh_starting', p_run::text, true);
     insert into public.studio_refresh_sources (run_id, kind, ref_id) select p_run, 'wrap', x from unnest(w) as x;
     insert into public.studio_refresh_sources (run_id, kind, ref_id) select p_run, 'suggestion', x from unnest(sg) as x;
     insert into public.studio_refresh_sources (run_id, kind, label, uses)
     select p_run, 'label', c.label, c.notes from public.studio_rule_candidates(p_slug) c where c.label = any (lb);
+    perform set_config('studio.refresh_starting', '', true);
   end if;
   return query select n;
 end $$;
@@ -445,6 +506,15 @@ begin
     raise exception 'that refresh has ended already';
   end if;
   update public.studio_refresh_marks set outcome = p_outcome where run_id = p_run;
+  -- Its draft discarded before it ended (studio_refresh_unfold found it
+  -- still running): undone now, and nothing is folded in.
+  if p_outcome = 'drafted' and exists (select 1 from public.studio_kits k where k.source_run_id = p_run and k.status = 'discarded') then
+    perform set_config('studio.unfolding', p_run::text, true);
+    update public.studio_refresh_marks set undone_at = now() where run_id = p_run;
+    perform set_config('studio.unfolding', '', true);
+    return query select 0, 0;
+    return;
+  end if;
   if m.kind = 'monthly' and p_outcome = 'drafted' then
     for x in select s.ref_id from public.studio_refresh_sources s where s.run_id = p_run and s.kind = 'wrap' order by s.ref_id loop
       begin
@@ -479,6 +549,66 @@ begin
   return query select f, sk;
 end $$;
 
+-- A draft discarded: what the refresh that made it folded in is open again,
+-- as it was, for the next one (wrap-ups, suggested edits, and rules, with a
+-- decision that says so), and the refresh is undone: it no longer counts as
+-- the month's, or the gear's, having run. Under the kit's lock, as a start
+-- and an end take it. One still running is left to studio_refresh_end,
+-- which sees its draft discarded. Returns how many came back.
+create or replace function public.studio_refresh_unfold(p_run uuid, p_by text)
+returns table (reopened int)
+language plpgsql volatile set search_path = '' as $$
+declare
+  m public.studio_refresh_marks;
+  n int := 0;
+  k int;
+begin
+  select * into m from public.studio_refresh_marks where run_id = p_run;
+  if m.run_id is null then
+    return query select 0;
+    return;
+  end if;
+  perform pg_advisory_xact_lock(hashtextextended('studio.refresh:' || m.kit_slug, 0));
+  select * into m from public.studio_refresh_marks where run_id = p_run for update;
+  if m.outcome is distinct from 'drafted' or m.undone_at is not null then
+    return query select 0;
+    return;
+  end if;
+  perform set_config('studio.unfolding', p_run::text, true);
+  update public.studio_refresh_marks set undone_at = now() where run_id = p_run;
+  update public.studio_film_wraps set folded_run_id = null, folded_at = null where folded_run_id = p_run and folded_at is not null;
+  get diagnostics k = row_count;
+  n := n + k;
+  update public.studio_kit_suggestions set status = 'open', folded_run_id = null, decided_by = null, decided_at = null, decided_note = null
+   where folded_run_id = p_run and status = 'folded';
+  get diagnostics k = row_count;
+  n := n + k;
+  insert into public.studio_label_marks (kit_slug, label, status, uses_at, run_id, decided_by)
+  select l.kit_slug, l.label, 'reopened', l.uses_at, p_run,
+         case when char_length(btrim(coalesce(p_by, ''))) >= 3 then btrim(p_by) else m.started_by end
+    from (select distinct on (x.label) x.kit_slug, x.label, x.status, x.uses_at, x.run_id
+            from public.studio_label_marks x where x.kit_slug = m.kit_slug
+           order by x.label, x.decided_at desc, x.id) l
+   where l.status = 'folded' and l.run_id = p_run;
+  get diagnostics k = row_count;
+  n := n + k;
+  perform set_config('studio.unfolding', '', true);
+  return query select n;
+end $$;
+
+-- Discarding a draft (routes/studio-agents.js) gives back what its refresh
+-- folded in, in the same transaction.
+create or replace function public.studio_kits_discarded() returns trigger
+language plpgsql set search_path = '' as $$
+begin
+  if new.status = 'discarded' and old.status is distinct from 'discarded' and new.source_run_id is not null then
+    perform public.studio_refresh_unfold(new.source_run_id, new.discarded_by);
+  end if;
+  return null;
+end $$;
+create or replace trigger studio_kits_discarded after update of status on public.studio_kits
+  for each row execute function public.studio_kits_discarded();
+
 -- An approver declines a rule in the making for a kit, with a reason: a new
 -- decision (the earlier ones are kept). Not while a running refresh has it.
 create or replace function public.studio_label_decline(p_slug text, p_label text, p_note text, p_by text)
@@ -510,7 +640,8 @@ begin
     'public.studio_refresh_marks_gate()', 'public.studio_refresh_sources_gate()', 'public.studio_rule_candidates(text)',
     'public.studio_open_wraps(text)', 'public.studio_refresh_live(public.studio_refresh_marks)',
     'public.studio_refresh_start(uuid, text, text, text, uuid[], uuid[], text[], boolean)', 'public.studio_refresh_end(uuid, text)',
-    'public.studio_refresh_holds(text, uuid, text, text)', 'public.studio_label_decline(text, text, text, text)'] loop
+    'public.studio_refresh_holds(text, uuid, text, text)', 'public.studio_label_decline(text, text, text, text)',
+    'public.studio_refresh_unfold(uuid, text)', 'public.studio_kits_discarded()'] loop
     execute format('revoke all on function %s from public', fn);
     foreach r in array array['anon', 'authenticated'] loop
       if exists (select 1 from pg_roles where rolname = r) then
@@ -531,6 +662,7 @@ begin
     execute 'grant execute on function public.studio_rule_candidates(text), public.studio_open_wraps(text), '
       'public.studio_refresh_live(public.studio_refresh_marks), '
       'public.studio_refresh_start(uuid, text, text, text, uuid[], uuid[], text[], boolean), public.studio_refresh_end(uuid, text), '
-      'public.studio_refresh_holds(text, uuid, text, text), public.studio_label_decline(text, text, text, text) to service_role';
+      'public.studio_refresh_holds(text, uuid, text, text), public.studio_label_decline(text, text, text, text), '
+      'public.studio_refresh_unfold(uuid, text) to service_role';
   end if;
 end $$;

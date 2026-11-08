@@ -82,11 +82,25 @@ async function peopleOf(sb, filmId) {
   return (await run(sb.from("studio_film_people").select("name,reviewer_name,is_minor,person_code").eq("film_id", filmId))) || [];
 }
 // Every card on every film, for what every film shares (a kit, a label, the
-// month's refresh).
-async function everyCard(sb) {
-  return (await run(sb.from("studio_film_people").select("name,reviewer_name,is_minor").limit(10000))) || [];
+// month's refresh), every page of them (utils/studio-films.js everyCardRows).
+const everyCard = (sb) => U.everyCardRows(sb);
+// What every film shares is read against every card (utils/studio-films.js
+// kitNames): a name for certain holds it back.
+const named = (text, everyone) => U.kitNames(text, everyone).sure.length > 0;
+// Before something is kept for the kit: a name for certain is refused, with
+// the words read as one; a word that may be a name is asked about first
+// ({ names_ok }, for this exact text). A wrap-up is also read against its
+// film's cards ({ film }): a minor's name there is refused as a minor's, and
+// any word of a name on them is asked about, in any case.
+function checkNames(text, everyone, body, prefix, film) {
+  const k = U.kitNames(text, everyone, { film: film || [] });
+  if (film && k.minor.length) return { error: "invalid", fields: [prefix + "_has_minor_name"], words: k.minor.slice(0, 10) };
+  if (k.sure.length) return { error: "invalid", fields: [prefix + "_has_name"], words: k.sure.slice(0, 10) };
+  const ok = U.namesOkWords(body && body.names_ok);
+  const words = [...new Set([...(film ? U.namesIn(text, film) : []), ...k.maybe])].filter((w) => !ok.has(w));
+  if (words.length) return { error: "invalid", fields: [prefix + "_may_have_name"], words: words.slice(0, 10) };
+  return null;
 }
-const named = (text, everyone) => U.namesAnyone(text, everyone).length > 0;
 // The month it is in Texas, as YYYY-MM-01.
 function thisMonth(now = new Date()) {
   const p = Object.fromEntries(new Intl.DateTimeFormat("en-CA", { timeZone: TZ, year: "numeric", month: "2-digit" }).formatToParts(now).map((x) => [x.type, x.value]));
@@ -95,19 +109,10 @@ function thisMonth(now = new Date()) {
 const clean = (v, max) => U.clean(v, max) || null;
 
 // A wrap-up's names. It goes into the kit's refresh, so it's held to what a
-// kit holds: a name of anyone on any film's cards is refused (a word of one,
-// a minor's from two letters or run into a tag, the whole name, one run
-// together), as a suggested edit is. A word that's also a name (on this
-// film's cards, or an everyday one that starts a sentence on anyone's) is
-// asked about first ({ names_ok }, for this exact text).
+// kit holds, as a suggested edit is: a name of anyone on any film's cards is
+// refused (checkNames), and a word that may be one is asked about first.
 function wrapNames(text, people, everyone, body) {
-  const all = [...(people || []), ...(everyone || [])];
-  if (U.minorWords(text, all).length || U.minorRunIns(text, all).sure.length) return { error: "invalid", fields: ["wrap_has_minor_name"] };
-  if (named(text, all)) return { error: "invalid", fields: ["wrap_has_name"] };
-  const ok = U.namesOkWords(body && body.names_ok);
-  const words = [...new Set([...U.namesIn(text, people), ...U.minorMaybe(text, all), ...U.strictMaybe(text, all), ...U.minorRunIns(text, all).maybe])].filter((w) => !ok.has(w));
-  if (words.length) return { error: "invalid", fields: ["wrap_may_have_name"], words: words.slice(0, 10) };
-  return null;
+  return checkNames(text, everyone, body, "wrap", people || []);
 }
 function wrapInput(raw) {
   const r = raw && typeof raw === "object" ? raw : {};
@@ -233,7 +238,8 @@ router.post("/suggestions", member, withDb(async (req, res, sb) => {
   const words = [suggestion, why].filter(Boolean).join("\n");
   if (K.lintWords(words, "x").length) return res.status(400).json({ error: "invalid", fields: ["banned_words"] });
   // A kit never carries a name: checked against every film's cards.
-  if (named(words, await everyCard(sb))) return res.status(400).json({ error: "invalid", fields: ["suggestion_has_name"] });
+  const asked = checkNames(words, await everyCard(sb), b, "suggestion");
+  if (asked) return res.status(400).json(asked);
   try {
     const row = await run(sb.from("studio_kit_suggestions").insert({ kit_slug: slug, kit_version: kit.version, column_name: col.name, card_title: String(b.card_title), suggestion, why, created_by: me(req) }).select().single());
     await T.logActivity(me(req), "studio_kit_suggestion", slug, { card: row.card_title });
@@ -246,9 +252,11 @@ router.post("/suggestions", member, withDb(async (req, res, sb) => {
 router.post("/suggestions/:id/decline", member, withDb(async (req, res, sb) => {
   if (!isProducer(req)) return res.status(403).json({ error: "producer_only" });
   if (!idOk(req.params.id)) return res.status(404).json({ error: "not_found" });
-  const note = clean(bodyOf(req).note, 300);
+  const body = bodyOf(req);
+  const note = clean(body.note, 300);
   if (!note || note.length < 3) return res.status(400).json({ error: "invalid", fields: ["note"] });
-  if (named(note, await everyCard(sb))) return res.status(400).json({ error: "invalid", fields: ["note_has_name"] });
+  const asked = checkNames(note, await everyCard(sb), body, "note");
+  if (asked) return res.status(400).json(asked);
   try {
     const rows = await run(sb.from("studio_kit_suggestions").update({ status: "declined", decided_by: me(req), decided_at: new Date().toISOString(), decided_note: note }).eq("id", req.params.id).eq("status", "open").select());
     if (!rows || !rows.length) return res.status(409).json({ error: "decided_already" });
@@ -260,15 +268,16 @@ router.post("/suggestions/:id/decline", member, withDb(async (req, res, sb) => {
 
 // ── Rules in the making ──────────────────────────────────────────────────
 // A kit's: labels on its films' notes used three times or more, not decided
-// yet (or declined three uses ago), 042's studio_rule_candidates. A label or
-// a sample note that names someone on a card added since is held back.
+// yet (or declined three uses ago, or back from a discarded draft), 042's
+// studio_rule_candidates. A label that names someone on a card added since
+// is held back (it can still be declined); so is a sample note that does.
 async function ruleCandidates(sb, slug, everyone) {
   const rows = (await run(sb.rpc("studio_rule_candidates", { p_slug: slug }))) || [];
   const out = [];
-  let held = 0;
+  const held = [];
   for (const x of rows) {
     if (named(x.label, everyone)) {
-      held += 1;
+      held.push({ label: x.label, notes: x.notes, films: x.films, declined_before: !!x.declined_before });
       continue;
     }
     out.push({
@@ -291,7 +300,8 @@ router.post("/labels/decline", member, withDb(async (req, res, sb) => {
   if (!K.SLUG_RE.test(slug)) return res.status(400).json({ error: "invalid", fields: ["slug"] });
   if (!label) return res.status(400).json({ error: "invalid", fields: ["label"] });
   if (!note || note.length < 3) return res.status(400).json({ error: "invalid", fields: ["note"] });
-  if (named(note, await everyCard(sb))) return res.status(400).json({ error: "invalid", fields: ["note_has_name"] });
+  const asked = checkNames(note, await everyCard(sb), b, "note");
+  if (asked) return res.status(400).json(asked);
   try {
     // A new decision, kept with the earlier ones (042's studio_label_decline).
     const rows = await run(sb.rpc("studio_label_decline", { p_slug: slug, p_label: label, p_note: note, p_by: me(req) }));
@@ -303,27 +313,27 @@ router.post("/labels/decline", member, withDb(async (req, res, sb) => {
 
 // ── The month's refresh ──────────────────────────────────────────────────
 async function marksOf(sb, slug, kind) {
-  return (await run(sb.from("studio_refresh_marks").select("run_id,month,started_at,started_by,outcome,ended_at").eq("kit_slug", slug).eq("kind", kind).order("started_at", { ascending: false }).limit(20))) || [];
+  return (await run(sb.from("studio_refresh_marks").select("run_id,month,started_at,started_by,outcome,ended_at,undone_at").eq("kit_slug", slug).eq("kind", kind).order("started_at", { ascending: false }).limit(20))) || [];
 }
 const live = (m) => !m.outcome && Date.now() - new Date(m.started_at).getTime() < LIVE_MS;
-const RAN = new Set(["drafted", "no_changes"]);
-// This month's refresh: running, or ran through (a draft, or nothing needed
-// changing); a run that failed or went quiet leaves it due.
+// Ran through: a draft (not discarded since), or nothing needed changing.
+const ran = (m) => (m.outcome === "drafted" && !m.undone_at) || m.outcome === "no_changes";
+// This month's refresh: running, or ran through; a run that failed or went
+// quiet, or whose draft was discarded, leaves it due.
 function monthState(list) {
   const month = thisMonth();
   const mine = list.filter((m) => m.month === month);
   const running = mine.find(live) || null;
-  const ran = mine.find((m) => RAN.has(m.outcome)) || null;
-  return { running, ran, last: list[0] || null };
+  return { running, ran: mine.find(ran) || null, last: list[0] || null };
 }
 // The gear re-check: due a month after the last one that ran through.
 function gearState(list) {
   const running = list.find(live) || null;
-  const last = list.find((m) => RAN.has(m.outcome)) || null;
+  const last = list.find(ran) || null;
   const due = !running && (!last || Date.now() - new Date(last.started_at).getTime() > GEAR_DAYS * 86400000);
   return { last_at: last ? last.started_at : null, running: !!running, due };
 }
-const markView = (m) => (m ? { run_id: m.run_id, month: m.month, started_at: m.started_at, started_by: m.started_by, outcome: m.outcome || (live(m) ? "running" : "failed") } : null);
+const markView = (m) => (m ? { run_id: m.run_id, month: m.month, started_at: m.started_at, started_by: m.started_by, outcome: m.undone_at ? "discarded" : m.outcome || (live(m) ? "running" : "failed") } : null);
 // A kit's open wrap-ups (042's studio_open_wraps), and which now name someone
 // on a card added since (held back: edit it on its film).
 async function openWraps(sb, slug, everyone) {
@@ -337,9 +347,12 @@ async function openWraps(sb, slug, everyone) {
   }
   return { wraps, held };
 }
+// A kit's open suggested edits, and which now name someone on a card added
+// since (held back: they can't be edited, so an approver declines them).
 async function openSuggestions(sb, slug, everyone) {
   const rows = (await run(sb.from("studio_kit_suggestions").select("*").eq("kit_slug", slug).eq("status", "open").order("created_at", { ascending: true }).limit(200))) || [];
-  return { suggestions: rows.filter((x) => !named([x.suggestion, x.why].filter(Boolean).join("\n"), everyone)), held: rows.filter((x) => named([x.suggestion, x.why].filter(Boolean).join("\n"), everyone)).length };
+  const isHeld = (x) => named([x.suggestion, x.why].filter(Boolean).join("\n"), everyone);
+  return { suggestions: rows.filter((x) => !isHeld(x)), held: rows.filter(isHeld) };
 }
 // What a running refresh was given (it keeps those as it read them).
 async function heldByRunning(sb, slug, list) {
@@ -370,15 +383,20 @@ router.get("/monthly/:slug", member, withDb(async (req, res, sb) => {
     month: thisMonth(),
     last_monthly: markView(state.last),
     // The last one that ran through: what's here came in since then.
-    last_ran: markView(monthly.find((m) => RAN.has(m.outcome)) || null),
+    last_ran: markView(monthly.find(ran) || null),
     running: markView(state.running),
     done_this_month: !!state.ran,
     last_gear: markView(gear[0]),
     wraps: w.wraps.filter((x) => !taken("wrap", x.id)),
     suggestions: sg.suggestions.filter((x) => !taken("suggestion", x.id)),
     rules: r.rules.filter((x) => !taken("label", x.label)),
-    // Held back: they name someone on a card added since (edit them first).
-    held: { wraps: w.held, suggestions: sg.held, rules: r.held },
+    // Held back: they name someone on a card added since. A wrap-up is
+    // edited on its film; a suggested edit or a rule can be declined.
+    held: {
+      wraps: w.held.filter((x) => !taken("wrap", x.id)),
+      suggestions: sg.held.filter((x) => !taken("suggestion", x.id)),
+      rules: r.held.filter((x) => !taken("label", x.label)),
+    },
     brief_max: S.BRIEF_MAX,
   });
 }));

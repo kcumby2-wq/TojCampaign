@@ -29,6 +29,7 @@ const P = require("../utils/push");
 const isPerson = (e) => !!e && e !== "api-key" && e.includes("@");
 const H = require("../utils/pylon-http");
 const U = require("../utils/studio-films");
+const F = require("../agents/studio/films");
 // A write that marks a brief (set aside, or started from it) or starts a
 // refresh from what the team learned is JSON from the app's own pages:
 // another site can't send one through a signed-in browser.
@@ -137,6 +138,45 @@ function refreshRefused(res, error) {
   if (error && error.code === "P0001") return res.status(409).json({ error: "refresh_refused", reason: String(error.message || "").slice(0, 300) });
   console.error("[studio] refresh not started:", (error && (error.code || error.message)) || error);
   return res.status(503).json({ error: "refresh_unavailable" });
+}
+// What the app writes into a refresh's brief: the kit's title, its columns'
+// and cards' titles, its films' formats and lanes (and dates, which
+// utils/studio-films.js withoutKnown takes out itself). The name check reads
+// what's left, what a person wrote: "Same Work Milanote Kit" is the kit's
+// name, never a Mila's.
+async function appWords(sb, slug) {
+  const out = [slug];
+  try {
+    const base = await S.approvedKit(sb, slug);
+    const kit = base && base.kit;
+    if (kit) {
+      out.push(kit.title);
+      for (const c of kit.columns || []) {
+        out.push(c.name);
+        for (const x of c.cards || []) out.push(x.title);
+      }
+    }
+  } catch (e) {
+    /* no kit: the run itself says so */
+  }
+  const t = F.templateFor(slug);
+  if (t) {
+    out.push(t.name);
+    for (const f of Object.values(t.formats || {})) out.push(f.label);
+    for (const l of Object.values(t.lanes || {})) out.push(l.label);
+  }
+  return out;
+}
+// A refresh's brief, against every card: a name for certain is refused, with
+// the words read as one; a word that may be one is asked about first
+// ({ names_ok }, for this exact brief).
+function briefNames(brief, everyone, known, namesOk) {
+  const k = U.kitNames(U.withoutKnown(brief, known), everyone);
+  if (k.sure.length) return { error: "brief_has_name", words: k.sure.slice(0, 10) };
+  const ok = U.namesOkWords(namesOk);
+  const words = k.maybe.filter((w) => !ok.has(w));
+  if (words.length) return { error: "brief_may_have_name", words: words.slice(0, 10) };
+  return null;
 }
 async function refreshEnd(sb, run, outcome) {
   try {
@@ -257,11 +297,23 @@ router.post("/kits/:id/discard", approver, async (req, res) => {
       .update({ status: "discarded", discarded_by: who(req), discarded_at: new Date().toISOString() })
       .eq("id", req.params.id)
       .eq("status", "draft")
-      .select("id,slug,version,status");
+      .select("id,slug,version,status,source_run_id");
     if (error) throw new Error(error.message);
     if (!data || !data.length) return res.status(409).json({ error: "not_a_draft" });
-    await T.logActivity(who(req), "discarded_kit", `${data[0].slug} v${data[0].version}`, { kit_id: data[0].id });
-    res.json({ ok: true, ...data[0] });
+    const { source_run_id: runId, ...kit } = data[0];
+    // A draft from a refresh started from what the team learned: what it
+    // folded in is open again (migration 042's studio_kits_discarded).
+    let givenBack = false;
+    if (runId) {
+      try {
+        const { data: m } = await sb.from("studio_refresh_marks").select("undone_at").eq("run_id", runId).maybeSingle();
+        givenBack = !!(m && m.undone_at);
+      } catch (e) {
+        /* before migration 042 */
+      }
+    }
+    await T.logActivity(who(req), "discarded_kit", `${kit.slug} v${kit.version}`, { kit_id: kit.id });
+    res.json({ ok: true, ...kit, given_back: givenBack });
   } catch (e) {
     fail(res, e, "discard_kit");
   }
@@ -319,11 +371,11 @@ router.post("/run", member, async (req, res) => {
   if (!sb) return res.status(503).json({ error: "supabase_unavailable" });
 
   if (purpose) {
-    // The brief draws on every film's work: no name of anyone on any card.
+    // The brief draws on every film's work: no name of anyone on any card,
+    // in what a person wrote into it (briefNames).
     try {
-      const { data: everyone, error: pErr } = await sb.from("studio_film_people").select("name,reviewer_name,is_minor").limit(10000);
-      if (pErr) throw pErr;
-      if (U.namesAnyone(brief, everyone || []).length) return res.status(400).json({ error: "brief_has_name" });
+      const asked = briefNames(brief, await U.everyCardRows(sb), await appWords(sb, slug), body.names_ok);
+      if (asked) return res.status(400).json(asked);
     } catch (e) {
       return fail(res, e, "start_run");
     }

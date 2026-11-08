@@ -37,11 +37,26 @@
     storage_unavailable: "The server can't reach its database right now.",
     not_found: "Not found. It may have been removed.",
   };
+  function quoted(words) { return (words || []).map(function (w) { return "“" + w + "”"; }).join(", "); }
+  // "“mark” is also a name on a card. If it isn't a name here, save again."
+  function maybeName(words, verb) { return quoted(words) + ((words || []).length === 1 ? " is" : " are") + " also a name on a card. If " + ((words || []).length === 1 ? "it isn't a name" : "they aren't names") + " here, " + verb + " again."; }
   function why(e) {
     var d = (e && e.data) || {};
     if ((d.error === "refused" || d.error === "refresh_refused") && d.reason) return d.reason.charAt(0).toUpperCase() + d.reason.slice(1) + ".";
-    if (d.error === "invalid" && d.fields) return d.fields.map(function (f) { return MSG[f] || "Check the " + f.replace(/_/g, " ") + "."; }).join(" ");
+    // Which words it read as a name, so there's something to change.
+    var read = d.words && d.words.length ? " It read " + quoted(d.words) + " as " + (d.words.length === 1 ? "a name" : "names") + " on a card." : "";
+    if (d.error === "invalid" && d.fields) return d.fields.map(function (f) { return (MSG[f] || "Check the " + f.replace(/_/g, " ") + ".") + (/_has_(minor_)?name$/.test(f) ? read : ""); }).join(" ");
+    if (d.error === "brief_has_name") return "The brief names someone on a card" + (d.words && d.words.length ? ": " + quoted(d.words) : "") + ". Write the code instead, then start it.";
+    if (d.error === "brief_may_have_name") return maybeName(d.words, "start it");
     return MSG[d.error] || (e && e.message) || "That didn't work.";
+  }
+  // Why a kit run didn't start, in words, for the brief screen (app.js) too:
+  // null where it's not one of the refresh's own reasons.
+  function runError(e) {
+    var d = (e && e.data) || {};
+    if (d.error === "refresh_refused") return d.reason ? why(e) : "It couldn't start. Open it again.";
+    if (["brief_has_name", "brief_may_have_name", "refresh_needs_a_person", "refresh_unavailable", "producer_only"].indexOf(d.error) >= 0) return why(e);
+    return null;
   }
   function guard(level) { if (!T().atLeast(level || "member") || !T().hasTool("studio")) { T().go("#studio"); return false; } return true; }
   function say(id, text, bad) { var el = document.getElementById(id); if (el) el.innerHTML = '<span class="' + (bad ? "err" : "") + '">' + h(text) + "</span>"; }
@@ -166,7 +181,7 @@
           var dd = e && e.data;
           if (dd && dd.error === "invalid" && (dd.fields || []).indexOf("wrap_may_have_name") >= 0) {
             asked = { text: text, words: body.names_ok.concat(dd.words || []) };
-            return say("wMsg", "“" + (dd.words || []).join("”, “") + "” is also a name on a card. If it isn't a name here, save again.");
+            return say("wMsg", maybeName(dd.words, "save"));
           }
           say("wMsg", why(e), true);
         }
@@ -179,15 +194,21 @@
   // The brief, from what's ticked, under the kit run's limit (with room left
   // for your edits): what doesn't fit is left for next month. The ticks
   // decide what it's given, and what's folded in once it saves a draft.
+  // The brief's own dates, in English whatever the phone's language (the
+  // server reads them as the app's, not a person's: routes/studio-agents.js).
+  function monthEn(ym) { return new Date(ym + "T12:00:00Z").toLocaleDateString("en-US", { month: "long", year: "numeric", timeZone: "UTC" }); }
+  function dayEn(iso) { return new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "America/Chicago" }); }
   function compose(d, ticked) {
     var max = (d.brief_max || 6000) - 200;
-    var head = "Monthly refresh of " + d.kit.title + " (v" + d.kit.version + "), " + monthName(d.month) + ": fold in what the team learned" + (d.last_ran ? " since " + day(d.last_ran.started_at) : "") + ".\n\n" +
+    var head = "Monthly refresh of " + d.kit.title + " (v" + d.kit.version + "), " + monthEn(d.month) + ": fold in what the team learned" + (d.last_ran ? " since " + dayEn(d.last_ran.started_at) : "") + ".\n\n" +
       "Change only what these ask for, card by card. Keep every rule card as it is, and date anything that changes. Where you don't make a change one of them asks for, say why in the draft's notes.\n";
     var text = head;
     var used = { wraps: [], suggestions: [], labels: [] };
     var lines = {}; // what's ticked and in the brief: its line, by tick key
+    var all = {}; // every item's line, ticked or not, by tick key
     var left = 0;
     function section(title, items, line, key, idOf) {
+      items.forEach(function (x) { all[key + ":" + idOf(x)] = "- " + line(x); });
       var picked = items.filter(function (x) { return ticked[key + ":" + idOf(x)]; });
       if (!picked.length) return;
       var block = "\n## " + title + "\n";
@@ -209,7 +230,7 @@
       return "“" + x.label + "” came up in " + x.notes + " review notes on " + x.films + (x.films === 1 ? " film" : " films") + ". Propose a rule card for it in the right column, or say why not." + (x.samples && x.samples.length ? " For example: “" + cut(x.samples[0], 160) + "”" : "");
     }, "labels", function (x) { return x.label; });
     if (left) text += "\n(" + left + " more didn't fit: they stay for next month.)\n";
-    return { text: text.trim(), used: used, left: left, lines: lines };
+    return { text: text.trim(), used: used, left: left, lines: lines, all: all };
   }
   // A line taken out of a brief, with its line break.
   function withoutLine(text, line) {
@@ -243,29 +264,43 @@
     // A declined item whose line couldn't be found in an edited brief: Start
     // waits until it's built again, or you say it's out.
     var mustCheck = null;
-    // Ticked items whose lines aren't in the brief as written: asked at Start.
+    // At Start: ticked items whose lines aren't in the brief as written, and
+    // unticked ones whose lines still are. Asked once.
     var missingAsked = false;
+    // Words the server asked about, and what they were asked about in
+    // ({ names_ok } goes with that exact text only).
+    var askedBrief = { text: "", words: [] };
+    var askedNote = { key: "", text: "", words: [] };
+    heldLists(); // d.held, with its lists
+    function heldLists() { d.held = d.held || {}; ["wraps", "suggestions", "rules"].forEach(function (k) { if (!Array.isArray(d.held[k])) d.held[k] = []; }); }
+    function declineUi(key) {
+      return declining === key
+        ? '<div class="row" style="gap:8px"><label class="sr" for="decNote">Why not</label><input class="input grow" id="decNote" maxlength="300" placeholder="Why not (a few words)" value="' + h(declineNote) + '"><button type="button" class="btn small" data-decline-go="' + h(key) + '">Decline</button><button type="button" class="btn ghost small" id="decCancel">Not now</button></div>'
+        : '<div class="btn-row" style="justify-content:flex-end"><button type="button" class="btn ghost small" data-decline="' + h(key) + '" style="flex:0 0 auto">Decline…</button></div>';
+    }
     function tick(key, title, body, sub, declinable) {
       return '<div class="card tight" style="gap:6px"><label class="row" style="gap:10px;align-items:flex-start;cursor:pointer"><input type="checkbox" class="switch" data-tick="' + h(key) + '"' + (ticked[key] ? " checked" : "") + ' style="width:22px;height:22px;margin-top:2px"><div class="grow"><div class="name" style="font-size:14.5px">' + h(title) + '</div><p class="body" style="margin:2px 0 0;font-size:14px;white-space:pre-line">' + h(body) + "</p>" + (sub ? '<div class="sub">' + h(sub) + "</div>" : "") + "</div></label>" +
-        (declinable ? (declining === key
-          ? '<div class="row" style="gap:8px"><label class="sr" for="decNote">Why not</label><input class="input grow" id="decNote" maxlength="300" placeholder="Why not (a few words)" value="' + h(declineNote) + '"><button type="button" class="btn small" data-decline-go="' + h(key) + '">Decline</button><button type="button" class="btn ghost small" id="decCancel">Not now</button></div>'
-          : '<div class="btn-row" style="justify-content:flex-end"><button type="button" class="btn ghost small" data-decline="' + h(key) + '" style="flex:0 0 auto">Decline…</button></div>') : "") + "</div>";
+        (declinable ? declineUi(key) : "") + "</div>";
+    }
+    // Held back from the brief (it names someone on a card added since): no
+    // tick, but a suggested edit or a rule can still be declined.
+    function heldCard(key, title, body, sub) {
+      return '<div class="card tight" style="gap:6px"><div class="name" style="font-size:14.5px">' + h(title) + '</div>' + (body ? '<p class="body" style="margin:0;font-size:14px;white-space:pre-line">' + h(body) + "</p>" : "") + (sub ? '<div class="sub">' + h(sub) + "</div>" : "") + declineUi(key) + "</div>";
     }
     function heldNote() {
-      var hw = (d.held && d.held.wraps) || [], hs = (d.held && d.held.suggestions) || 0, hr = (d.held && d.held.rules) || 0;
-      if (!hw.length && !hs && !hr) return "";
-      var bits = [];
-      if (hw.length) bits.push(hw.length + (hw.length === 1 ? " wrap-up" : " wrap-ups"));
-      if (hs) bits.push(hs + (hs === 1 ? " suggested edit" : " suggested edits"));
-      if (hr) bits.push(hr + (hr === 1 ? " rule in the making" : " rules in the making"));
-      var one = hw.length + hs + hr === 1;
-      return '<div class="card tight" style="gap:8px"><p class="body" style="font-size:14px;margin:0">' + h("Held back: " + bits.join(", ") + (one ? " names" : " name") + " someone on a card added since, so " + (one ? "it stays" : "they stay") + " out of the brief." + (hw.length ? " Edit " + (hw.length === 1 ? "the wrap-up on its film:" : "the wrap-ups on their films:") : "")) + "</p>" +
-        (hw.length ? '<div class="btn-row">' + hw.slice(0, 6).map(function (w) { return '<a class="btn soft small" href="#film-wraps/' + h(w.film.id) + '">' + h(fmt(d.kit.slug, w.film.format) + " · " + w.film.athlete_id) + "</a>"; }).join("") + "</div>" : "") + "</div>";
+      var hw = d.held.wraps, hs = d.held.suggestions, hr = d.held.rules;
+      if (!hw.length && !hs.length && !hr.length) return "";
+      var n = hw.length + hs.length + hr.length;
+      return '<section class="sec"><h2 class="sec-h">' + h("Held back (" + n + ")") + '</h2><p class="body" style="font-size:14px;margin:0">' + h((n === 1 ? "It names" : "These name") + " someone on a card added since, so " + (n === 1 ? "it stays" : "they stay") + " out of the brief. Edit a wrap-up on its film; decline a suggested edit or a rule if it shouldn't come back.") + "</p>" +
+        (hw.length ? '<div class="btn-row">' + hw.slice(0, 6).map(function (w) { return '<a class="btn soft small" href="#film-wraps/' + h(w.film.id) + '">' + h("Wrap-up · " + fmt(d.kit.slug, w.film.format) + " · " + w.film.athlete_id) + "</a>"; }).join("") + "</div>" : "") +
+        hs.map(function (x) { return heldCard("suggestions:" + x.id, x.column_name + " › " + x.card_title, x.suggestion, (x.why ? "Why: " + x.why + " · " : "") + String(x.created_by || "").replace(/@.*/, "") + " · " + day(x.created_at)); }).join("") +
+        hr.map(function (x) { return heldCard("labels:" + x.label, "“" + x.label + "”", x.notes + " review notes on " + x.films + (x.films === 1 ? " film" : " films") + (x.declined_before ? ", declined once before" : ""), ""); }).join("") + "</section>";
     }
     function state() {
       if (d.running) return '<div class="card tight"><p class="body" style="font-size:14px;margin:0">This month\'s refresh is running (started ' + h(day(d.running.started_at)) + '). What it was given stays as it read it until it ends.</p><div class="btn-row"><a class="btn soft small" href="#run/' + h(d.running.run_id) + '">Open that run</a></div></div>';
       if (d.done_this_month && d.last_monthly) return '<div class="card tight"><p class="body" style="font-size:14px;margin:0">This month\'s refresh ran ' + h(day(d.last_monthly.started_at)) + (d.last_monthly.outcome === "no_changes" ? " and found nothing to change" : "") + '. What came in since waits for next month, or start another.</p><div class="btn-row"><a class="btn soft small" href="#run/' + h(d.last_monthly.run_id) + '">Open that run</a></div></div>';
       if (d.last_monthly && d.last_monthly.month === d.month && d.last_monthly.outcome === "failed") return '<div class="card tight"><p class="body" style="font-size:14px;margin:0">The refresh started ' + h(day(d.last_monthly.started_at)) + " didn't save a draft, so everything it was given is still here.</p></div>";
+      if (d.last_monthly && d.last_monthly.month === d.month && d.last_monthly.outcome === "discarded") return '<div class="card tight"><p class="body" style="font-size:14px;margin:0">The draft from the refresh started ' + h(day(d.last_monthly.started_at)) + " was discarded, so what it was given is back here.</p></div>";
       return "";
     }
     function paint() {
@@ -320,31 +355,47 @@
       Array.prototype.forEach.call(document.querySelectorAll("[data-decline-go]"), function (b) {
         b.addEventListener("click", async function () {
           var key = b.dataset.declineGo, note = declineNote.trim();
-          // Its line as the brief has it now, to take it out of an edited one.
-          var line = compose(d, ticked).lines[key] || null;
-          var title = key.indexOf("suggestions:") === 0
-            ? (function (x) { return x ? "the suggested edit to " + x.card_title : "a suggested edit"; })(d.suggestions.find(function (x) { return "suggestions:" + x.id === key; }))
+          // Its line as the brief has it now (ticked or not), to take it out
+          // of an edited one.
+          var c0 = compose(d, ticked);
+          var line = edited ? c0.all[key] || null : null;
+          var isSug = key.indexOf("suggestions:") === 0;
+          var title = isSug
+            ? (function (x) { return x ? "the suggested edit to " + x.card_title : "a suggested edit"; })(d.suggestions.concat(d.held.suggestions).find(function (x) { return "suggestions:" + x.id === key; }))
             : "the rule “" + key.slice(7) + "”";
+          var body = isSug ? { note: note } : { slug: d.kit.slug, label: key.slice(7), note: note };
+          if (askedNote.key === key && askedNote.text === note) body.names_ok = askedNote.words;
           b.disabled = true;
           try {
-            if (key.indexOf("suggestions:") === 0) {
-              await t.post("/api/studio-learn/suggestions/" + encodeURIComponent(key.slice(12)) + "/decline", { note: note });
+            if (isSug) {
+              await t.post("/api/studio-learn/suggestions/" + encodeURIComponent(key.slice(12)) + "/decline", body);
               d.suggestions = d.suggestions.filter(function (x) { return "suggestions:" + x.id !== key; });
+              d.held.suggestions = d.held.suggestions.filter(function (x) { return "suggestions:" + x.id !== key; });
             } else {
-              await t.post("/api/studio-learn/labels/decline", { slug: d.kit.slug, label: key.slice(7), note: note });
+              await t.post("/api/studio-learn/labels/decline", body);
               d.rules = d.rules.filter(function (x) { return "labels:" + x.label !== key; });
+              d.held.rules = d.held.rules.filter(function (x) { return "labels:" + x.label !== key; });
             }
             delete ticked[key];
             declining = null; declineNote = "";
-            if (edited && line) {
+            askedNote = { key: "", text: "", words: [] };
+            var outOfBrief = false;
+            if (line && briefText.indexOf(line) >= 0) {
               // Out of your edited brief too: its line as written, or ask.
               var out = withoutLine(briefText, line);
-              if (out != null) briefText = out;
-              else mustCheck = { key: key, title: title };
-            }
+              if (out != null) { briefText = out; outOfBrief = true; } else mustCheck = { key: key, title: title };
+            } else if (edited && c0.lines[key]) mustCheck = { key: key, title: title };
             paint();
-            t.toast(edited && line && !mustCheck ? "Declined, and taken out of the brief." : "Declined, with your reason.");
-          } catch (e) { b.disabled = false; say("mMsg", why(e), true); }
+            t.toast(outOfBrief ? "Declined, and taken out of the brief." : "Declined, with your reason.");
+          } catch (e) {
+            b.disabled = false;
+            var dd = e && e.data;
+            if (dd && dd.error === "invalid" && (dd.fields || []).indexOf("note_may_have_name") >= 0) {
+              askedNote = { key: key, text: note, words: (body.names_ok || []).concat(dd.words || []) };
+              return say("mMsg", maybeName(dd.words, "decline"));
+            }
+            say("mMsg", why(e), true);
+          }
         });
       });
       document.getElementById("mStart").addEventListener("click", async function () {
@@ -352,10 +403,16 @@
         var c = compose(d, ticked);
         var brief = document.getElementById("mBrief").value.trim();
         // What's ticked but not in the brief as written would be folded in
-        // without the run reading it: asked once.
+        // without the run reading it; what's unticked but still in it would
+        // be read, and stay open for next month. Asked once.
         var missing = Object.keys(c.lines).filter(function (k) { return brief.indexOf(c.lines[k]) < 0; });
-        if (missing.length && !missingAsked) {
-          document.getElementById("mMissing").innerHTML = '<div class="card tight" role="alert" style="gap:8px"><p class="body" style="margin:0;font-size:14px">' + h(missing.length + (missing.length === 1 ? " ticked item isn't" : " ticked items aren't") + " in the brief as written. It would be folded in without the Kit Refresher reading it. Build the brief again, untick it, or start anyway.") + '</p><div class="btn-row"><button type="button" class="btn small" id="mMissRebuild">Build it again</button><button type="button" class="btn ghost small" id="mMissGo">Start anyway</button></div></div>';
+        var stray = Object.keys(c.all).filter(function (k) { return !ticked[k] && brief.indexOf(c.all[k]) >= 0; });
+        if ((missing.length || stray.length) && !missingAsked) {
+          var say1 = [];
+          if (missing.length) say1.push(missing.length + (missing.length === 1 ? " ticked item isn't in the brief as written. It would be folded in without the Kit Refresher reading it." : " ticked items aren't in the brief as written. They would be folded in without the Kit Refresher reading them."));
+          if (stray.length) say1.push(stray.length + (stray.length === 1 ? " unticked item is still in the brief as written. The Kit Refresher would read it, and it would stay open for next month." : " unticked items are still in the brief as written. The Kit Refresher would read them, and they would stay open for next month."));
+          say1.push("Build the brief again, change the ticks, or start anyway.");
+          document.getElementById("mMissing").innerHTML = '<div class="card tight" role="alert" style="gap:8px"><p class="body" style="margin:0;font-size:14px">' + h(say1.join(" ")) + '</p><div class="btn-row"><button type="button" class="btn small" id="mMissRebuild">Build it again</button><button type="button" class="btn ghost small" id="mMissGo">Start anyway</button></div></div>';
           document.getElementById("mMissRebuild").addEventListener("click", rebuild);
           document.getElementById("mMissGo").addEventListener("click", function () { missingAsked = true; document.getElementById("mMissing").innerHTML = ""; btn.click(); });
           // Where it can be seen, above the Start button.
@@ -368,11 +425,15 @@
         try {
           var body = { role: "kit-refresher", slug: d.kit.slug, brief: brief, purpose: "monthly", sources: c.used };
           if (d.done_this_month) body.again = true;
+          // Words you said aren't names here, for this exact brief.
+          if (askedBrief.text === brief && askedBrief.words.length) body.names_ok = askedBrief.words;
           var r = await t.post("/api/studio-agents/run", body);
           t.go("#run/" + r.run_id);
         } catch (e) {
           btn.disabled = false; btn.textContent = d.done_this_month ? "Start another refresh this month" : "Start the monthly refresh";
-          say("mMsg", (e.data && e.data.error === "brief_too_long" ? "The brief is over " + e.data.max + " characters: untick some, or shorten it." : why(e)), true);
+          var de = (e && e.data) || {};
+          if (de.error === "brief_may_have_name") askedBrief = { text: brief, words: (body && body.names_ok || []).concat(de.words || []) };
+          say("mMsg", (de.error === "brief_too_long" ? "The brief is over " + de.max + " characters: untick some, or shorten it." : why(e)), de.error !== "brief_may_have_name");
           var m = document.getElementById("mMsg");
           // Something changed since the page opened: open it again (your edits go).
           if (m && e.data && e.data.error === "refresh_refused") {
@@ -405,6 +466,6 @@
     return { needs: needs, count: count };
   }
 
-  window.TOJLearn = { todayParts: todayParts };
+  window.TOJLearn = { todayParts: todayParts, runError: runError };
   window.TOJScreens = Object.assign(window.TOJScreens || {}, { "film-wraps": wraps, monthly: monthly });
 })();

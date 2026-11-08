@@ -158,19 +158,25 @@ Migration 042, API `routes/studio-learn.js`, screens in `public/app/learn.js` an
 - Whoever wrote one edits it; they or an approver can remove it, until it's folded into a refresh. After that it's kept as it was. While a refresh is running with it, it stays as that refresh read it.
 
 **Suggest an edit** (a card on the kit page): what the card should say and why.
-- It names a card in the approved kit, not one of its locked rule cards (a refresh can't change those), and carries no name: a kit never does. It's checked against every film's cards, by the app and by the database, the reason for a decline too.
+- It names a card in the approved kit, not one of its locked rule cards (a refresh can't change those), and carries no name: a kit never does. It's checked against every film's cards, by the app and by the database, the reason for a decline too. A name for certain is refused, and the app says which word it read as one; a word that may be a name (an everyday word that's a name too, with a capital: "Mark IV", "In April") is asked about, and kept once you say it isn't one here.
 - It stays open until an approver folds it into a refresh or declines it, with a reason. Never deleted. The kit page shows how many are waiting on each card.
 
 **Copy the whole column** (the kit page): every card in the column at once, in order, to paste onto the Milanote board.
 
 **Rules in the making.** A review-note label used on three notes of a kit's films is proposed as a rule for that kit. An approver folds it into a refresh or declines it, with a reason. A declined one comes back after three more uses. Every decision is kept: declining it again adds a decision, it doesn't rewrite the first.
 
+**Names in what every film shares.** Wrap-ups, suggested edits, rule labels, decline reasons and the month's brief are read against every card on every film (all of them, page by page), so the check tells a name from an ordinary word that holds one:
+- A name for certain: a whole name, or one run together ("JamieRivers"); a word of a name that's no everyday word ("Jordan", "Dana"); a minor's name run into a tag, a handle, a link or a file name ("#jordanstrong", "@jordan.hoops", "jordan_final_v2"), or where camelCase starts or ends it ("JordanStrong"); and, in a wrap-up, an everyday word that's the name of a minor on that film's cards, with a capital mid-sentence ("talked to Will after"). Refused, with the word.
+- Asked: an everyday word that's a name, with a capital ("Mark IV", "Hope never quits"), a month's or a day's name ("In April"), an everyday-word name run into a tag ("#hopestrong"), and an adult's name run into one ("#teamrivers").
+- Not read: a name inside an ordinary word ("Milanote" for a Mila, "state" for a Tate, "label" for an Abel), and everyday words in lower case.
+
 **The month's refresh.** Today shows approvers *This month's kit refresh* when there's something new for a kit and its refresh hasn't run this month (and isn't running).
-- *Open the month's brief* lists the wrap-ups, suggested edits and rules in the making, each ticked, and builds the Kit Refresher's brief from them. Anything that names someone on a card added since is held back, with a link to fix it.
-- Untick what shouldn't go in; edit the brief if you like. Your edits stay until you build it again from the ticks. The ticks decide what the run is given; at Start, a ticked item whose line isn't in the brief as written is asked about. Declining something takes its line out of an edited brief (or asks you to). The composed brief stays under 5,800 characters, leaving room for your edits (a kit run takes 6,000); what doesn't fit waits for next month.
-- *Start the monthly refresh* starts a kit run like any other, and it makes a draft only: nothing changes until Kyron approves it. The brief can't name anyone on any card.
+- *Open the month's brief* lists the wrap-ups, suggested edits and rules in the making, each ticked, and builds the Kit Refresher's brief from them. Anything that names someone on a card added since is held back: a wrap-up with a link to edit it on its film, a suggested edit or a rule (which can't be edited) with *Decline…*.
+- Untick what shouldn't go in; edit the brief if you like. Your edits stay until you build it again from the ticks. The ticks decide what the run is given; at Start, a ticked item whose line isn't in the brief as written is asked about, and so is an unticked one whose line still is (the run would read it, and it would stay open). Declining something takes its line out of an edited brief (or asks you to). The composed brief stays under 5,800 characters, leaving room for your edits (a kit run takes 6,000); what doesn't fit waits for next month.
+- *Start the monthly refresh* starts a kit run like any other, and it makes a draft only: nothing changes until Kyron approves it. The brief can't name anyone on any card: what a person wrote into it is read (the kit's title, its columns' and cards' titles, the formats' names and the dates the app writes aren't), a name for certain is refused with the word, and a word that may be one is asked about first.
 - The run is marked with what it was given, under the kit's lock: one at a time, and only what's still open and in no other running refresh (or nothing starts, with the reason). A second one in a month is started on purpose (*Start another refresh this month*).
 - What it was given is folded in, each once, only when it saves a draft. A run that fails, goes quiet for 90 minutes, or finds nothing to change leaves it all open for the next one. Something that can't be folded by then (a name came on a card since) stays open, and the run says how many.
+- Kyron discards the draft: what its refresh folded in is open again, as it was, for the next one (a rule gets a decision saying so), and that refresh no longer counts as the month's having run. A draft discarded while its refresh still runs folds nothing in.
 
 **The gear re-check.** Today shows *Gear re-check due* a month after the last one that ran through (a draft, or nothing to change), or when there's never been one. *Re-check gear* goes through the Brief Writer as before, and the run it starts (on the Same Work kit only) is marked as the gear re-check.
 
@@ -235,12 +241,12 @@ The kit learns (`/api/studio-learn`):
 | GET/POST | `/films/:id/wraps` `{ worked, missed, change, card_title, names_ok }` | members |
 | PATCH | `/wraps/:wid` | whoever wrote it, until it's folded |
 | DELETE | `/wraps/:wid` | whoever wrote it or an approver, until it's folded |
-| GET/POST | `/suggestions?slug=&status=`, `/suggestions` `{ slug, column, card_title, suggestion, why }` | members |
-| POST | `/suggestions/:id/decline` `{ note }`, `/labels/decline` `{ slug, label, note }` | approvers |
+| GET/POST | `/suggestions?slug=&status=`, `/suggestions` `{ slug, column, card_title, suggestion, why, names_ok }` | members |
+| POST | `/suggestions/:id/decline` `{ note, names_ok }`, `/labels/decline` `{ slug, label, note, names_ok }` | approvers |
 | GET | `/monthly/:slug` | approvers |
 | GET | `/today` | members (the month's refresh: approvers only) |
 
-A kit run takes `{ purpose: "monthly", sources: { wraps, suggestions, labels }, again }` (approvers) or `{ purpose: "gear" }` (the Same Work kit), as JSON from the app's own pages, from a person (not the automation key). It answers 409 `refresh_refused` with the reason when it can't start (running already, run this month without `again`, or something picked was decided, folded or taken meanwhile), and 400 `brief_has_name`.
+A kit run takes `{ purpose: "monthly", sources: { wraps, suggestions, labels }, again }` (approvers) or `{ purpose: "gear" }` (the Same Work kit), as JSON from the app's own pages, from a person (not the automation key). It answers 409 `refresh_refused` with the reason when it can't start (running already, run this month without `again`, or something picked was decided, folded or taken meanwhile), 400 `brief_has_name` with the `words` read as names, and 400 `brief_may_have_name` with the `words` to ask about (send them back as `names_ok` with the same brief). A name check that refuses answers `{ error: "invalid", fields: ["…_has_name"], words }`; one that asks, `fields: ["…_may_have_name"]`. Discarding a draft answers `given_back: true` when its refresh's items are open again.
 
 The taste library (`/api/studio-taste`): GET `?q=&tag=&limit=`, GET `/tags`, GET `/:id`, POST (members); PATCH `/:id` with `seen`, POST `/:id/archive` (whoever added it, the producer). Briefs: GET `/api/studio-agents/briefs/unstarted`; POST `/api/studio-agents/briefs/:id/set-aside` `{ aside }`; a kit run started from a brief sends `{ from_brief, direction }`.
 
@@ -268,6 +274,7 @@ The speakers' page: `POST /api/studio-review/view {token}` and `POST /api/studio
 - The month's refresh is started by an approver from Today, not on a timer: nothing runs a model on its own. The automation key can't start it or the gear re-check.
 - Declining a suggested edit or a rule while a refresh is running with it waits until that run ends.
 - A wrap-up's card is free text (with the kit's titles offered); a title that isn't a card's is kept as written.
+- A word that's a name on any card and something else too (a town, a school, a camera: "Austin", "Madison", "Alexa") is refused in what every film shares once someone with that name is on a card, as a name would be: the app says which word, so it can be written another way. A minor's name is never kept on a writer's say-so.
 - The phone's copy of the shoot sheet drops lines that read like a name or a place by their capitals, the cards and *Locations*; a name typed all in lower case, of someone not on the cards, can't be told from other words. Keep names on the cards and places under *Locations*. A line may start with a capital only on an ordinary word (the app's list: family, gear, the field and the shot) or one the kit itself uses; a place's ordinary words ("practice field", "high school", "park") don't keep a line off the phone, its own name ("Westlake") does; a place made only of ordinary words ("Park High School", "Home Field") keeps them all, and each part of a location is a place of its own ("The Rowe house on High Street", "Home Field, Riverside").
 - A minor's name run together ("tyng") is caught by the app from four letters; the database's own screen starts at five.
 - The still check reads a slide's pixels in the web server's own process: about a tenth of a second for the largest it takes (3000 × 2000), a few hundredths for the kit's sizes.

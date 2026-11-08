@@ -383,7 +383,11 @@ test("a declined rule in the making comes back after three more uses", async () 
   assert.deepEqual(kept.map((x) => [x.status, x.uses_at, x.note]), [["declined", 3, "The edit decides this, not the kit"], ["declined", 6, "Still the edit's call"]]);
   await assert.rejects(pool.query("delete from studio_label_marks where label = 'late cut'"), /is kept/);
   await assert.rejects(pool.query("update studio_label_marks set status = 'folded', note = null where label = 'late cut'"), /kept as it was made/);
-  await assert.rejects(pool.query("insert into studio_label_marks (kit_slug, label, status, uses_at, note, decided_by) values ('same-work', 'ty ng drill', 'declined', 3, 'no', 'lead@toj.test')"), /keeps no names/);
+  // A decision's reason keeps no names; nor does the label of a rule folded
+  // into a kit (a declined one may: it stays out of every kit).
+  await assert.rejects(pool.query("insert into studio_label_marks (kit_slug, label, status, uses_at, note, decided_by) values ('same-work', 'late cut', 'declined', 3, 'Ty Ng says no', 'lead@toj.test')"), /keeps no names/);
+  const someRun = (await pool.query("select id from agent_runs limit 1")).rows[0].id;
+  await assert.rejects(pool.query("insert into studio_label_marks (kit_slug, label, status, uses_at, run_id, decided_by) values ('same-work', 'ty ng drill', 'folded', 3, $1, 'lead@toj.test')", [someRun]), /keeps no names/);
   // Another kit's: counted on its own films only, so none of these are its.
   assert.equal((await pool.query("select count(*)::int as n from studio_rule_candidates('pylon-events')")).rows[0].n, 0);
   const other = (await pool.query("select id from agent_runs limit 1")).rows[0].id;
@@ -417,4 +421,151 @@ test("a brief from the gear preset carries its purpose, only aimed at Same Work"
   assert.equal(BR.parseBriefRequest({ idea: "Re-check the gear against current sources", purpose: "monthly" }).purpose, null, "only gear comes from a brief");
   assert.equal(BR.parseBriefRequest({ idea: "Re-check the gear against current sources", target: { mode: "build" }, purpose: "gear" }).purpose, null, "aimed at a new kit, it's an ordinary brief");
   assert.equal(BR.parseBriefRequest({ idea: "Re-check the gear against current sources", target: { mode: "refresh", slug: "pylon-events" }, purpose: "gear" }).purpose, null, "aimed at another kit too");
+});
+
+test("what every film shares is read against every card for names, not for ordinary words that hold one", () => {
+  const U = require("../utils/studio-films");
+  const cards = [
+    { name: "Mila Reyes", is_minor: true }, { name: "Kit Ramos" }, { name: "Ana Ruiz", is_minor: true, reviewer_name: "April Stone" },
+    { name: "Tate Owens", is_minor: true }, { name: "Kate Lin", is_minor: true }, { name: "Mark Diaz" }, { name: "Abel Cruz", is_minor: true },
+    { name: "Jordan Kidd", is_minor: true }, { name: "Hope Lane", is_minor: true }, { name: "Dana Rivers" }, { name: "Will Park", is_minor: true },
+  ];
+  const read = (t, o) => U.kitNames(t, cards, o);
+  // Ordinary words that hold a name: never read as one.
+  for (const t of ["Pin the shot list to the Milanote board", "The state finals b-roll carried the open", "The skate park b-roll", "Every review-note label came up twice", "Jordanian tea at craft services"]) {
+    assert.deepEqual(read(t), { sure: [], maybe: [], minor: [] }, t);
+  }
+  // An everyday word that's a name, with a capital: asked, unless it's a
+  // minor's on the film it's written about; a month or a day, always asked.
+  assert.deepEqual(read("The Canon 5D Mark IV held up"), { sure: [], maybe: ["mark"], minor: [] });
+  assert.deepEqual(read("talked to Will after"), { sure: [], maybe: ["will"], minor: [] });
+  assert.deepEqual(read("talked to Will after", { film: [{ name: "Will Park", is_minor: true }] }).minor, ["will"]);
+  assert.deepEqual(read("We shot in April", { film: [{ name: "April Moss", is_minor: true }] }), { sure: [], maybe: ["april"], minor: [] });
+  assert.deepEqual(read("in lower case: will, hope, mark, kit"), { sure: [], maybe: [], minor: [] });
+  // A name for certain: a word of one that's no everyday word, a whole name,
+  // one run together, a minor's run into a tag, a handle, a file name or camelCase.
+  assert.deepEqual(read("Talked to Jordan after").minor, ["jordan"]);
+  assert.deepEqual(read("coach Dana gave notes"), { sure: ["dana"], maybe: [], minor: [] });
+  for (const t of ["#jordanstrong worked", "@jordan.hoops reposted it", "jordan_final_v2.mp4 was the cut", "the JordanStrong graphic", "instagram.com/jordanhoops"]) assert.deepEqual(read(t).minor, ["jordan"], t);
+  const sorted = (r) => ({ sure: [...r.sure].sort(), maybe: [...r.maybe].sort(), minor: [...r.minor].sort() });
+  assert.deepEqual(sorted(read("#hopestrong and #ourjordanfam")), { sure: [], maybe: ["hope", "jordan"], minor: [] });
+  assert.deepEqual(read("#teamrivers"), { sure: [], maybe: ["rivers"], minor: [] });
+  // Certain only where a tag's own word is beside the name: "#teamtate", but
+  // "#teamstate" (a Tate, or "team state") and "#dallascowboys" are asked.
+  assert.deepEqual(read("#teamtate").minor, ["tate"]);
+  assert.deepEqual(read("#teamstate"), { sure: [], maybe: ["tate"], minor: [] });
+  assert.deepEqual(U.kitNames("#dallascowboys", [{ name: "Dallas Cole", is_minor: true }]), { sure: [], maybe: ["dallas"], minor: [] });
+  // An ordinary word holds a name only beside a tag's word: "Jordanstrong", "teamjordan".
+  assert.deepEqual(read("Jordanstrong all season").minor, ["jordan"]);
+  assert.deepEqual(read("the teamjordan shirts").minor, ["jordan"]);
+  // What the app wrote is taken out before a brief is read.
+  const head = "Monthly refresh of Same Work Milanote Kit (v3), April 2027: fold in what the team learned since Oct 3, 2026.";
+  assert.deepEqual(read(U.withoutKnown(head, ["Same Work Milanote Kit", "same-work"])), { sure: [], maybe: [], minor: [] });
+  assert.deepEqual(read(head).maybe.sort(), ["april", "kit"]);
+});
+
+test("the month's brief is read for what a person wrote: the kit's own words pass, a name is refused with the word, and a maybe is asked", async () => {
+  agentsRouter._setDeps({ run: agent("same") });
+  const { film } = await aFilm();
+  // Cards on other films: a minor Mila, an adult Kit, a parent April, a coach Mark.
+  await aFilm([{ person_code: "L9301", name: "Mila Reyes", role: "athlete", is_minor: true, release_on_file: true, covers: { voice: true } }]);
+  await aFilm([{ person_code: "L9302", name: "Kit Ramos", role: "other", release_on_file: true, covers: { voice: true } },
+    { person_code: "L9303", name: "Ana Ruiz", role: "athlete", is_minor: true, release_on_file: true, covers: { voice: true }, reviewer_relation: "parent", reviewer_name: "April Stone", reviewer_email: "april@toj.test" },
+    { person_code: "L9304", name: "Mark Diaz", role: "coach", release_on_file: true, covers: { voice: true } }]);
+  // Ordinary words in wrap-ups and suggestions are kept.
+  const w = ok(await learn("POST", `/films/${film.id}/wraps`, { worked: "Pin the shot list to the Milanote board before the shoot", missed: "The state finals b-roll ran long" }, "dir"), "wrap").wrap;
+  ok(await learn("POST", "/suggestions", { slug: "same-work", column: "Gear", card_title: "Cameras", suggestion: "Add a Milanote checklist card for the skate park shoot" }, "ed"), "suggestion");
+  // A word that may be a name is asked about, and kept once you say it isn't one.
+  const asked = await learn("POST", "/suggestions", { slug: "same-work", column: "Gear", card_title: "Cameras", suggestion: "Keep the Canon 5D Mark IV for low light" }, "ed");
+  assert.deepEqual([asked.status, asked.data.fields, asked.data.words], [400, ["suggestion_may_have_name"], ["mark"]]);
+  ok(await learn("POST", "/suggestions", { slug: "same-work", column: "Gear", card_title: "Cameras", suggestion: "Keep the Canon 5D Mark IV for low light", names_ok: ["mark"] }, "ed"), "kept");
+  const sure = await learn("POST", "/suggestions", { slug: "same-work", column: "Gear", card_title: "Cameras", suggestion: "Ask Mila about the FX3" }, "ed");
+  assert.deepEqual([sure.data.fields, sure.data.words], [["suggestion_has_name"], ["mila"]]);
+  // The brief as the app writes it: the kit's title and the month aren't names.
+  const m = ok(await learn("GET", "/monthly/same-work", undefined, "lead"), "monthly");
+  const head = `Monthly refresh of ${m.kit.title} (v${m.kit.version}), April 2027: fold in what the team learned.\n\n`;
+  const brief = head + "## Wrap-ups from films\n- Hero film " + film.athlete_id + ": worked: Pin the shot list to the Milanote board before the shoot";
+  const body = { brief, purpose: "monthly", sources: { wraps: [w.id] }, again: true };
+  const r = ok(await startRun(body), "the app's own words start").run_id;
+  assert.equal(await ended(r), "no_changes");
+  // A name typed in is refused, with the word; a maybe is asked, then starts.
+  const named = await startRun({ ...body, brief: brief + "\nMila liked the open." });
+  assert.deepEqual([named.status, named.data.error, named.data.words], [400, "brief_has_name", ["mila"]]);
+  const maybe = await startRun({ ...body, brief: brief + "\nIn April we moved the shoot." });
+  assert.deepEqual([maybe.data.error, maybe.data.words], ["brief_may_have_name", ["april"]]);
+  const r2 = ok(await startRun({ ...body, brief: brief + "\nIn April we moved the shoot.", names_ok: ["april"] }), "said it isn't").run_id;
+  assert.equal(await ended(r2), "no_changes");
+});
+
+test("held back for a name on a card added since: a suggested edit and a rule can still be declined", async () => {
+  const { film } = await aFilm();
+  const sg = ok(await learn("POST", "/suggestions", { slug: "same-work", column: "Gear", card_title: "Audio", suggestion: "Rhea taught us the two-lav trick" }, "ed"), "suggestion").suggestion;
+  for (let i = 0; i < 3; i++) ok(await films("POST", `/films/${film.id}/cut-notes`, { note: `The rhea drill ran long ${i}`, label: "rhea drill" }, "lead"), "note");
+  await aFilm([{ person_code: "L9401", name: "Rhea Banks", role: "athlete", is_minor: true, release_on_file: true, covers: { voice: true } }]);
+  const m = ok(await learn("GET", "/monthly/same-work", undefined, "lead"), "monthly");
+  assert.ok(!m.suggestions.some((x) => x.id === sg.id) && !m.rules.some((x) => x.label === "rhea drill"), "out of the brief");
+  assert.ok(m.held.suggestions.some((x) => x.id === sg.id), "listed, to decline");
+  assert.ok(m.held.rules.some((x) => x.label === "rhea drill"), "listed, to decline");
+  ok(await learn("POST", `/suggestions/${sg.id}/decline`, { note: "It's about one athlete" }, "lead"), "declined");
+  ok(await learn("POST", "/labels/decline", { slug: "same-work", label: "rhea drill", note: "It's about one athlete" }, "lead"), "rule declined");
+  const after = ok(await learn("GET", "/monthly/same-work", undefined, "lead"), "after");
+  assert.ok(!after.held.suggestions.some((x) => x.id === sg.id) && !after.held.rules.some((x) => x.label === "rhea drill"));
+  // A decline's note is asked about too.
+  const s2 = ok(await learn("POST", "/suggestions", { slug: "same-work", column: "Gear", card_title: "Audio", suggestion: "Add a deadcat to the audio list" }, "ed"), "s2").suggestion;
+  const q = await learn("POST", `/suggestions/${s2.id}/decline`, { note: "Rhea's call, not the kit's" }, "lead");
+  assert.deepEqual([q.data.fields, q.data.words], [["note_has_name"], ["rhea"]]);
+});
+
+test("a discarded draft gives back what its refresh folded in, and its refresh no longer counts as run", async () => {
+  agentsRouter._setDeps({ run: agent("draft") });
+  const { film } = await aFilm();
+  const w = ok(await learn("POST", `/films/${film.id}/wraps`, { worked: "A slate on every take saved the sync" }, "dir"), "wrap").wrap;
+  const sg = ok(await learn("POST", "/suggestions", { slug: "same-work", column: "Gear", card_title: "Audio", suggestion: "Put a slate on the audio list" }, "ed"), "suggestion").suggestion;
+  for (let i = 0; i < 3; i++) ok(await films("POST", `/films/${film.id}/cut-notes`, { note: `No slate on take ${i}`, label: "missing slate" }, "lead"), "note");
+  const run = ok(await startRun({ brief: BRIEF, purpose: "monthly", sources: { wraps: [w.id], suggestions: [sg.id], labels: ["missing slate"] }, again: true }), "start").run_id;
+  assert.equal(await ended(run), "drafted");
+  const draft = (await pool.query("select id from studio_kits where source_run_id = $1", [run])).rows[0].id;
+  const folded = async () => [
+    !!(await pool.query("select folded_at from studio_film_wraps where id = $1", [w.id])).rows[0].folded_at,
+    (await pool.query("select status from studio_kit_suggestions where id = $1", [sg.id])).rows[0].status,
+    (await pool.query("select count(*)::int as n from studio_rule_candidates('same-work') where label = 'missing slate'")).rows[0].n,
+  ];
+  assert.deepEqual(await folded(), [true, "folded", 0]);
+  // Only the refresh that folded it gives it back, by its draft being discarded.
+  await assert.rejects(pool.query("update studio_film_wraps set folded_at = null, folded_run_id = null where id = $1", [w.id]), /stays as it was/);
+  const d = ok(await call("POST", `/api/studio-agents/kits/${draft}/discard`, {}, "kyron"), "discard");
+  assert.equal(d.given_back, true);
+  assert.deepEqual(await folded(), [false, "open", 1]);
+  const mark = (await pool.query("select outcome, undone_at from studio_refresh_marks where run_id = $1", [run])).rows[0];
+  assert.deepEqual([mark.outcome, !!mark.undone_at], ["drafted", true]);
+  const rule = (await pool.query("select status, run_id from studio_label_marks where kit_slug = 'same-work' and label = 'missing slate' order by decided_at desc, id limit 1")).rows[0];
+  assert.deepEqual([rule.status, rule.run_id], ["reopened", run]);
+  // Back on the month's page, and a refresh can fold them in again.
+  const m = ok(await learn("GET", "/monthly/same-work", undefined, "lead"), "monthly");
+  assert.ok(m.wraps.some((x) => x.id === w.id) && m.suggestions.some((x) => x.id === sg.id) && m.rules.some((x) => x.label === "missing slate"));
+  const r2 = ok(await startRun({ brief: BRIEF, purpose: "monthly", sources: { wraps: [w.id], suggestions: [sg.id], labels: ["missing slate"] }, again: true }), "again").run_id;
+  assert.equal(await ended(r2), "drafted");
+  assert.deepEqual(await folded(), [true, "folded", 0]);
+  // A draft discarded while its refresh still runs: nothing is folded in.
+  const w2 = ok(await learn("POST", `/films/${film.id}/wraps`, { worked: "Room tone first, every location" }, "dir"), "wrap 2").wrap;
+  const r3 = (await pool.query("insert into agent_runs (role, task, status, created_by) values ('kit-refresher', 'x', 'running', 'lead@toj.test') returning id")).rows[0].id;
+  await pool.query("select * from studio_refresh_start($1, 'same-work', 'monthly', 'lead@toj.test', array[$2::uuid], '{}', '{}', true)", [r3, w2.id]);
+  const k3 = (await pool.query("select kit from studio_kits where id = $1", [draft])).rows[0].kit;
+  const d3 = (await pool.query("insert into studio_kits (slug, version, title, status, kit, source_run_id, created_by) select slug, (select max(version) + 1 from studio_kits where slug = 'same-work'), title, 'draft', $1, $2, 'lead@toj.test' from studio_kits where id = $3 returning id", [k3, r3, draft])).rows[0].id;
+  await pool.query("update studio_kits set status = 'discarded', discarded_by = 'kyron@toj.test', discarded_at = now() where id = $1", [d3]);
+  assert.deepEqual((await pool.query("select * from studio_refresh_end($1, 'drafted')", [r3])).rows[0], { folded: 0, skipped: 0 });
+  assert.equal((await pool.query("select folded_at from studio_film_wraps where id = $1", [w2.id])).rows[0].folded_at, null);
+  assert.ok((await pool.query("select undone_at from studio_refresh_marks where run_id = $1", [r3])).rows[0].undone_at);
+});
+
+test("what a refresh draws on is given only as it starts", async () => {
+  const { film } = await aFilm();
+  const w = ok(await learn("POST", `/films/${film.id}/wraps`, { worked: "Two cards per camera, always" }, "dir"), "wrap").wrap;
+  const r = (await pool.query("insert into agent_runs (role, task, status, created_by) values ('kit-refresher', 'x', 'running', 'lead@toj.test') returning id")).rows[0].id;
+  await pool.query("select * from studio_refresh_start($1, 'same-work', 'gear', 'lead@toj.test', '{}', '{}', '{}', false)", [r]);
+  await assert.rejects(pool.query("insert into studio_refresh_sources (run_id, kind, ref_id) values ($1, 'wrap', $2)", [r, w.id]), /as it starts, and only then/);
+  await pool.query("select * from studio_refresh_end($1, 'drafted')", [r]);
+  await assert.rejects(pool.query("insert into studio_refresh_sources (run_id, kind, ref_id) values ($1, 'wrap', $2)", [r, w.id]), /as it starts, and only then/);
+  // So a wrap-up can't be folded into a refresh that never had it.
+  await assert.rejects(pool.query("update studio_film_wraps set folded_run_id = $2, folded_at = now() where id = $1", [w.id, r]), /folded into a refresh it was given to/);
 });
