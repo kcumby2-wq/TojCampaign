@@ -222,6 +222,9 @@ router.get("/meta", member, withDb(async (req, res, sb) => {
     platforms: U.PLATFORMS,
     // The TOJ banned list, for words on graphics (the kit: none on screen).
     banned: { words: K.BANNED_RE.source, phrases: K.BANNED_PHRASES_RE.source },
+    // Two-letter name words that are everyday words: a minor's counts only
+    // with a capital mid-sentence (utils/studio-films.js minorWords).
+    everyday_2: [...U.EVERYDAY_2],
     // The export sizes the kit names, for the delivery check and graphics.
     sizes: U.KIT_SIZES,
     can: { producer: isProducer(req), owner: isOwner(req) },
@@ -327,7 +330,7 @@ router.get("/films/:id", member, withDb(async (req, res, sb) => {
       poster_url: c.poster_key ? signed[c.poster_key] || null : null,
       watch_url: c.kind === "slides" ? null : c.preview_key ? signed[c.preview_key] || null : null,
       slide_urls: c.status === "ready" ? U.slideCopyKeys(c).map((k) => signed[k] || null) : [],
-      warnings: [...(U.namesIn(String(c.file_name || "").replace(/\.[a-z0-9]+$/i, ""), people).length ? ["The file name has a name in it: rename the export, the kit's way"] : []), ...(c.kind === "video" ? U.nameWarnings(c.file_name, film, c) : [])],
+      warnings: [...(U.strictNames(String(c.file_name || "").replace(/\.[a-z0-9]+$/i, ""), people).length ? ["The file name has a name in it: rename the export, the kit's way"] : []), ...(c.kind === "video" ? U.nameWarnings(c.file_name, film, c) : [])],
     })),
     notes: notes || [],
     delivery_checks: checks || [],
@@ -395,8 +398,8 @@ router.post("/films/:id/people", member, withDb(async (req, res, sb) => {
   if (value.reconsent_note && !isProducer(req)) return res.status(403).json({ error: "producer_only" });
   // The title and the story never carry a name: if they have this one, they
   // change first.
-  if (U.namesIn(film.title, [value]).length) return res.status(409).json({ error: "title_has_name" });
-  if (film.one_sentence && U.namesIn(film.one_sentence, [value]).length) return res.status(409).json({ error: "story_has_name" });
+  if (U.strictNames(film.title, [value]).length) return res.status(409).json({ error: "title_has_name" });
+  if (film.one_sentence && U.strictNames(film.one_sentence, [value]).length) return res.status(409).json({ error: "story_has_name" });
   try {
     const person = await run(sb.from("studio_film_people").insert({ ...value, film_id: film.id, created_by: me(req) }).select().single());
     res.json({ person: { ...person, gaps: U.clearanceGaps(person) } });
@@ -420,8 +423,8 @@ router.patch("/films/:id/people/:pid", member, withDb(async (req, res, sb) => {
   const reviewerChanged = ["reviewer_relation", "reviewer_name", "reviewer_email"].some((k) => k in value && value[k] !== current[k]);
   if (reviewerChanged && !isProducer(req)) return res.status(403).json({ error: "producer_only" });
   const next = { ...current, ...value };
-  if ((value.name || value.reviewer_name) && U.namesIn(film.title, [next]).length) return res.status(409).json({ error: "title_has_name" });
-  if ((value.name || value.reviewer_name) && film.one_sentence && U.namesIn(film.one_sentence, [next]).length) return res.status(409).json({ error: "story_has_name" });
+  if ((value.name || value.reviewer_name || "is_minor" in value) && U.strictNames(film.title, [next]).length) return res.status(409).json({ error: "title_has_name" });
+  if ((value.name || value.reviewer_name || "is_minor" in value) && film.one_sentence && U.strictNames(film.one_sentence, [next]).length) return res.status(409).json({ error: "story_has_name" });
   if (!Object.keys(value).length) return res.json({ person: current });
   try {
     const rows = await rpcRows(sb, "studio_card_save", { p_person: current.id, p_seen: body.seen, p_patch: value, p_by: me(req) });
@@ -860,7 +863,7 @@ router.post("/films/:id/cut-notes", member, withDb(async (req, res, sb) => {
   const people = await peopleOf(sb, film.id);
   const why = noteNames(note, people, body);
   if (why) return res.status(400).json(why);
-  if (lab && U.namesIn(lab, people).length) return res.status(400).json({ error: "invalid", fields: ["label_has_name"] });
+  if (lab && U.strictNames(lab, people).length) return res.status(400).json({ error: "invalid", fields: ["label_has_name"] });
   try {
     const row = await run(sb.from("studio_notes").insert({ film_id: film.id, cut_id: cutId, at_ms: atMs, note, label: lab, created_by: me(req) }).select().single());
     res.json({ note: row });
@@ -953,7 +956,7 @@ function slidesInput(body, filmPeople) {
   if (!v.made_with) errors.push("made_with");
   if (!v.slides.length || v.slides.length > MAX_SLIDES || v.slides.some((x) => !SLIDE_TYPES[x])) errors.push("slides");
   if (!v.file_name) errors.push("file_name");
-  else if (U.namesIn(v.file_name, filmPeople).length) errors.push("file_name_has_name");
+  else if (U.strictNames(v.file_name, filmPeople).length) errors.push("file_name_has_name");
   const ids = new Set(filmPeople.map((p) => p.id));
   v.people = Array.isArray(body.people) ? [...new Set(body.people.slice(0, 50).map((x) => String(x).toLowerCase()))] : [];
   if (v.people.some((x) => !ids.has(x))) errors.push("people");

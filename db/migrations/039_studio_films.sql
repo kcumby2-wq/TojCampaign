@@ -380,7 +380,9 @@ $$;
 -- minor's name ("Jamie's mom called"), as its minorWords does. Such a note
 -- stays out of the history. A single word of an adult's name ("Will",
 -- "Mark") is the app's to ask about, not the database's to refuse; a child's
--- name has no such question.
+-- name has no such question. Two-letter name words that are everyday words
+-- ("he" for a child named Bo He) are left to the app, which counts them only
+-- with a capital mid-sentence; the whole name is refused here regardless.
 create or replace function public.studio_names_in(p_film uuid, p_text text) returns boolean
 language sql stable set search_path = '' as $$
   with hay as (
@@ -393,6 +395,9 @@ language sql stable set search_path = '' as $$
   ), minor_words as (
     select w from names, lateral regexp_split_to_table(names.spaced, ' ') as w
      where names.minor and char_length(w) >= 2
+       and not (char_length(w) = 2 and w = any (array['he', 'do', 'an', 'so', 'go', 'oh', 'no', 'me', 'my', 'we', 'us', 'it', 'in', 'on',
+         'at', 'to', 'be', 'by', 'of', 'or', 'up', 'as', 'is', 'am', 'if', 'hi', 'ok', 'ah', 'eh', 'uh', 'um', 'yo', 'ya', 'ha', 'ho', 'lo',
+         'la', 'ma', 'pa', 'ye', 'ow', 'ox', 'ax', 'id', 're', 'vs']))
   )
   select p_text is not null and p_film is not null and (exists (
     select 1 from names, hay

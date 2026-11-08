@@ -496,14 +496,33 @@
       if (named && g.creditAs === "first") return p.name.split(/\s+/)[0] + " · Coached by Hooks";
       return "A Coached by Hooks " + (ROLE[p.role] || "athlete");
     }
-    // What the words may not carry: a name a release doesn't cover, or a banned word.
+    // What the words may not carry: a name a release doesn't cover, or a
+    // banned word. A minor's name, even a two-letter word of it ("Bo"); a
+    // two-letter everyday word ("He" in Bo He) only with a capital mid-sentence.
+    var everyday = {};
+    (meta.everyday_2 || []).forEach(function (w) { everyday[w] = true; });
+    function capitalMid(raw, w) {
+      var re = /[\p{L}\p{M}]+/gu, m;
+      while ((m = re.exec(raw))) {
+        if (m[0].toLowerCase() !== w || m[0][0] === m[0][0].toLowerCase()) continue;
+        var before = raw.slice(0, m.index), gap = /\s*$/.exec(before)[0], prev = before.slice(0, before.length - gap.length);
+        if (!prev || gap.indexOf("\n") >= 0 || /[.!?:;"“(\[—–-]$/.test(prev)) continue;
+        return true;
+      }
+      return false;
+    }
     function problems(texts) {
       var out = [];
       var all = texts.join("\n");
       d.people.forEach(function (p) {
-        var mayName = !p.is_minor && !p.texas_youth && p.covers && p.covers.name;
+        var minor = !!(p.is_minor || p.texas_youth);
+        var mayName = !minor && p.covers && p.covers.name;
         var hay = " " + all.toLowerCase().replace(/[^\p{L}\p{M}]+/gu, " ") + " ";
-        var hit = String(p.name || "").toLowerCase().split(/[^\p{L}\p{M}]+/u).filter(function (w) { return Array.from(w).length >= 3 && hay.indexOf(" " + w + " ") >= 0; }).length;
+        var hit = String(p.name || "").toLowerCase().split(/[^\p{L}\p{M}]+/u).filter(function (w) {
+          var len = Array.from(w).length;
+          if (minor && len === 2 && everyday[w]) return capitalMid(all, w);
+          return len >= (minor ? 2 : 3) && hay.indexOf(" " + w + " ") >= 0;
+        }).length;
         if (hit && !mayName) out.push("The words name " + p.person_code + ", whose card doesn't cover their name. Use the credit line the release allows.");
       });
       banned.forEach(function (re) { re.lastIndex = 0; if (re.test(all)) out.push("A word on the TOJ banned list is in the words. Say the concrete thing instead."); });

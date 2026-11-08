@@ -178,6 +178,32 @@ test("a word of an adult's name is asked about, then kept for those words in tha
   await assert.rejects(pool.query("insert into studio_events (film_id, kind, by_staff, note) values ($1, 'note', 'lead@toj.test', 'Grace Hunter said yes')", [film.id]), /keeps no names/);
 });
 
+test("a minor's two-letter name is kept out of titles, stories and file names; an everyday word in it isn't", async () => {
+  const code = "B" + String(7000 + ++n);
+  let film = ok(await films("POST", "/films", { kit_slug: "same-work", title: `${code} hero`, lane: "youth", athlete_id: code, format: "hero", one_sentence: "He ran this drill at nine. He runs it now." }, "lead"), "start").film;
+  const card = { person_code: code, name: "Bo He", role: "athlete", is_minor: true, speaker: true, release_on_file: true, covers: { voice: true }, reviewer_relation: "parent", reviewer_name: "Pat Roe", reviewer_email: "pat@roe.test" };
+  const p = ok(await films("POST", `/films/${film.id}/people`, card, "lead"), "card: the story's \"He\" starts its sentences").person;
+  const people = [p];
+  assert.deepEqual(U.filmInput({ title: "Bo hero" }, { partial: true, people }).errors, ["title_has_name"]);
+  assert.deepEqual(U.filmInput({ one_sentence: "Bo learned this drill at nine." }, { partial: true, people }).errors, ["story_has_name"]);
+  assert.deepEqual(U.filmInput({ one_sentence: "Then He came back to it." }, { partial: true, people }).errors, ["story_has_name"]);
+  assert.deepEqual(U.filmInput({ one_sentence: "He came back to it, and he stayed." }, { partial: true, people }).errors, []);
+  const patched = await films("PATCH", `/films/${film.id}`, { seen: film.updated_at, title: "Bo hero" }, "lead");
+  assert.deepEqual([patched.status, patched.data.fields], [400, ["title_has_name"]]);
+  assert.ok(U.cutInput({ format: "hero", ratio: "9x16", version: 1, file_name: `SW_YTH_${code}_BO_9x16_v01_20261117.mp4`, people: [p.id] }, { filmPeople: people }).errors.includes("file_name_has_name"));
+  // Notes: "he" is an everyday word, so it counts only with a capital mid-sentence.
+  ok(await films("POST", `/films/${film.id}/notes`, { note: "He was great today, and he wants another take" }, "lead"), "an everyday he");
+  assert.deepEqual((await films("POST", `/films/${film.id}/notes`, { note: "Talked to He's mom about Saturday" }, "lead")).data.fields, ["note_has_minor_name"]);
+  assert.deepEqual((await films("POST", `/films/${film.id}/notes`, { note: "Bo was great" }, "lead")).data.fields, ["note_has_minor_name"]);
+  await pool.query("insert into studio_events (film_id, kind, by_staff, note) values ($1, 'note', 'lead@toj.test', 'he was great')", [film.id]);
+  await assert.rejects(pool.query("insert into studio_events (film_id, kind, by_staff, note) values ($1, 'note', 'lead@toj.test', 'Bo was great')", [film.id]), /keeps no names/);
+  await assert.rejects(pool.query("insert into studio_events (film_id, kind, by_staff, note) values ($1, 'note', 'lead@toj.test', 'Bo He was great')", [film.id]), /keeps no names/);
+  // A card renamed to a name the title or story has is refused too.
+  film = ok(await films("POST", "/films", { kit_slug: "same-work", title: `${code} Ty cut`, lane: "youth", athlete_id: code, format: "cutdown" }, "lead"), "start 2").film;
+  const q = ok(await films("POST", `/films/${film.id}/people`, { ...card, name: "Sam Roe" }, "lead"), "card 2").person;
+  assert.equal((await films("PATCH", `/films/${film.id}/people/${q.id}`, { seen: q.updated_at, name: "Ty Roe" }, "lead")).data.error, "title_has_name");
+});
+
 test("an approval comes from the reviewer the card names now; a card change stops its links", async () => {
   const { film, p } = await aFilm();
   const cut = await aCut(film, [p.id]);
