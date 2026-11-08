@@ -369,7 +369,12 @@ test("brief: photos go to the agent, never to the database; the poll returns the
         mode: "refresh",
         slug: "same-work",
         title: "Add a fine grain look",
-        brief: "Goal: Add a fine film-grain look as a proposed option.\n\nKit: Same Work (refresh)\n\nDo:\n1. The look and sound › Vintage looks: three ways to get them: add the grain from Image 1, marked (proposed).\n\nLeave alone:\n- Every locked rule card.\n\nDone when:\n- One card changed.",
+        directions: [
+          { name: "The close one", angle: "One look card.", brief: "Goal: Add a fine film-grain look as a proposed option.\n\nKit: Same Work (refresh)\n\nDo:\n1. The look and sound › Vintage looks: three ways to get them: add the grain from Image 1, marked (proposed).\n\nLeave alone:\n- Every locked rule card.\n\nDone when:\n- One card changed." },
+          { name: "Push it", angle: "A Super 8 section.", brief: "Goal: A full Super 8 season look, proposed.\n\nKit: Same Work (refresh)\n\nDo:\n1. The look and sound › Vintage looks: a Super 8 section with gate weave and warm highlights.\n2. Gear › Cameras: Resolve emulation settings, dated.\n\nLeave alone:\n- Every locked rule card.\n\nDone when:\n- Two cards changed." },
+          { name: "Another way in", angle: "A delivery step.", brief: "Goal: Grain as an optional delivery step for archive-heavy cuts, no new look.\n\nKit: Same Work (refresh)\n\nDo:\n1. Handoffs and checklists › Edit delivery: an optional fine grain step.\n\nLeave alone:\n- The look and sound column.\n\nDone when:\n- One checklist step added." },
+        ],
+        recommended: 1,
         references: [
           { ref: "Image 1", what_it_shows: "Fine even grain.", take: "Grain size.", seen: "fully" },
           { ref: "Link 1", what_it_shows: "A grain walkthrough.", take: "Settings.", seen: "partly" },

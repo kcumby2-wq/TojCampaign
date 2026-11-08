@@ -99,12 +99,47 @@ Leave alone:
 Done when:
 - One card changed and Sources has the new link.`;
 
+// Three directions, each a whole brief: the close one, pushed, another way in.
+const BOLD_BRIEF = `Goal: Give Same Work a full Super 8 season look, proposed for Kyron and Hooks.
+
+Kit: Same Work (refresh)
+
+Do:
+1. The look and sound › Vintage looks: a Super 8 section (grain, gate weave, warm highlights) from Image 1 and Video 1, marked "(proposed)".
+2. Gear › Cameras: the Super 8 emulation settings in DaVinci Resolve, checked and dated.
+3. Handoffs and checklists › Edit delivery: a grain check before export.
+
+Leave alone:
+- Every locked rule card; the honesty rule for vintage looks applies.
+
+Done when:
+- Three cards changed, each with a dated source.`;
+const OTHER_BRIEF = `Goal: Keep the look as it is and make grain a choice at delivery instead.
+
+Kit: Same Work (refresh)
+
+Do:
+1. Handoffs and checklists › Edit delivery: one optional step, "fine grain at 10%", for archive-heavy cuts only.
+2. Handoffs and checklists › Sources: the Resolve walkthrough from Link 1, dated today.
+
+Leave alone:
+- The look and sound column entirely.
+
+Done when:
+- One checklist step added; no look card touched.`;
+const DIRECTIONS = [
+  { name: "The close one", angle: "One look card, the smallest change.", brief: GOOD_BRIEF },
+  { name: "Push it", angle: "A whole Super 8 look across three cards.", brief: BOLD_BRIEF },
+  { name: "Another way in", angle: "Grain as a delivery choice, not a look.", brief: OTHER_BRIEF },
+];
 function goodSubmit(extra = {}) {
   return {
     mode: "refresh",
     slug: "same-work",
     title: "Add a fine grain look",
-    brief: GOOD_BRIEF,
+    directions: DIRECTIONS,
+    recommended: 1,
+    why_recommended: "It's what the idea asked for, in one card.",
     references: [
       { ref: "Link 1", what_it_shows: "A Resolve grain walkthrough.", take: "The grain settings.", leave: "The LUT pack.", seen: "partly" },
       { ref: "Image 1", what_it_shows: "Fine even grain, lifted blacks.", take: "Grain size.", leave: "", seen: "fully" },
@@ -136,8 +171,10 @@ test("submit_brief: every reference accounted for, no unknown ones, no banned wo
   assert.match(noKit, /no approved kit "other-kit"/);
   const taken = await tools.submit_brief(goodSubmit({ mode: "build", slug: "same-work" }));
   assert.match(taken, /already exists/);
-  const short = await tools.submit_brief(goodSubmit({ brief: "Make it grainy." }));
+  const short = await tools.submit_brief(goodSubmit({ directions: [{ ...DIRECTIONS[0], brief: "Make it grainy." }, DIRECTIONS[1], DIRECTIONS[2]] }));
   assert.match(short, /too short/);
+  const one = await tools.submit_brief(goodSubmit({ directions: [DIRECTIONS[0]] }));
+  assert.match(one, /exactly 3/);
   assert.equal(stage().submitted, null);
   assert.match(await tools.submit_brief(goodSubmit()), /^Submitted "Add a fine grain look"/);
   assert.equal(stage().submitted.references.length, 4);
@@ -158,7 +195,8 @@ test("judge view: the idea as given (banned words masked), the references and th
   assert.match(view, /Idea: Make our \[banned word\] look/);
   assert.match(view, /- Image 1 \(image\): "this grain"/);
   assert.match(view, /## What I took from your references\n- Link 1 \(partly\)/);
-  assert.match(view, /\[brief\] submitted$/);
+  assert.match(view, /## Direction 2: Push it/);
+  assert.match(view, /\[brief\] submitted \[directions\] 3$/);
   assert.deepEqual(autoFails(view), []);
 });
 

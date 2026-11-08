@@ -96,13 +96,54 @@ The files of those films (uploads, review copies, posters) are listed for remova
 
 A takedown's lines lock the takedown as they're marked down, so the last line always closes it; the worker closes any takedown with nothing left on it, as a safety net.
 
+## Real words and three directions
+
+The film's room → **Real words** (`public/app/film-words.js`, API `routes/studio-words.js`, migration 041).
+
+**Transcripts.** Export the interview's transcript from Resolve: subtitles (`.srt` or `.vtt`), or text with a timecode on each line. A timecode that counts frames needs the timeline's frame rate. The file is read on the phone (`public/app/transcript-parse.js`), and only the speaker's lines go to the server:
+- In a file with speaker labels ("Coach:", a voice tag, "Speaker 1"), you pick which label is the speaker. The interviewer's questions and everyone else's lines stay on the phone.
+- In a file without labels, every line goes as the speaker's words, so you confirm only their words are in it.
+- You pick whose card the words belong to, and give it a label with no name in it ("Interview 1").
+
+Limits: 5,000 lines, 2,000 characters a line, 300,000 characters in all.
+
+**Adults first.** Only a cleared adult speaker's words can be used: a speaker card, not a minor, cleared, consent standing, the release covering their voice. Anyone else's card says why not. When a card changes so their words can't be used (consent pulled, marked a minor, no longer a speaker, voice no longer covered), the database removes their transcripts and every line kept from them.
+
+**Lines by hand.** Open a transcript, tap the line where the words start and the one where they end (12 at most), and trim the words to the line you want. They have to be the speaker's own, word for word: the server finds them in the transcript and works out when they're said. The database checks the quote and its times again. A line that names someone on the cards (a whole name, one run together, any word of a minor's name) or has a banned word is refused. A caption opens on the speaker's line and runs under 60 words; your words after it carry no names, no banned words, no promise of reach and no emoji chains.
+
+**Claude** reads the transcripts only once Kyron turns on *Claude reads transcripts*. The film's director, editor or producer asks. Claude reads every transcript whose words can be used, with people as code and role, and hands back:
+- up to 12 strongest lines;
+- two or three structures (3 to 12 beats, the speaker's lines in order);
+- up to 6 cutdowns whose first line lands in the first two seconds (up to 5 lines after it);
+- up to 6 captions.
+
+Every quote goes through the same checks as a line picked by hand. A new set replaces Claude's last one, and lines people kept stay. The run's record keeps no words: counts, and which tools ran.
+
+**Three directions for a film.** The producer or the director asks. Three Directions reads the board (names as codes), the cards by code and role, the kit's cards and the taste library. It hands back three different ways to make the film, each with:
+- a logline and 3 to 8 beats;
+- the look and the sound;
+- three must-have shots;
+- why it fits, and the risks.
+
+It writes no lines for anyone: a quoted line of three words or more is refused, since only real words are used. Two directions that are nearly the same film are refused too. The producer picks one, and *Use its must-haves* puts its three shots on the board.
+
+**The Brief Writer** hands back three directions too, each a whole brief, and says which it would pick and why. You pick one, edit it, and start the kit run with it; the run records which direction it came from. Or you set the brief aside. **Today lists your briefs that came back and were neither started nor set aside** (the last 60 days). A started brief stays started.
+
+**The taste library** (Studio → *Taste library*, `public/app/taste.js`, API `routes/studio-taste.js`) keeps notes on work worth learning from:
+- a link to the work, what it is, what to take and what to leave, and tags;
+- never a picture or a copy of the work: a link to an image file is refused, by the app and by the database;
+- a number for each note ("Taste 12"), which briefs and directions cite; Claude checks a cited note exists;
+- search by words (any form) or by tag.
+
+Whoever added a note, or the producer, edits or archives it. Archived notes are kept, never deleted, and searches skip them.
+
 ## Tool approvals
 
 The kit's rule: a tool touches footage only once the producer has checked its terms and added it, with a one-line reason. Three switches start **off**; only Kyron turns them on, and the reason is kept:
 
 - **Review copies in storage**: needed for uploads and review links. Turning it off stops every live link.
-- **Claude reads transcripts**: for the real-words tools (next PR).
-- **The graphics system**: once Kyron and Coach Hooks approve the type system (next PR).
+- **Claude reads transcripts**: Claude reads the cleared adult speakers' transcripts for the real-words tools. Off, lines are picked by hand.
+- **The graphics system**: once Kyron and Coach Hooks approve the type system.
 
 ## The history
 
@@ -137,13 +178,28 @@ All under `/api/studio-films` (team members with Studio; writes are JSON from th
 | POST | `/films/:id/delivery-checks` `{ file_name, format, ratio, duration_ms, width, height, bytes }` | members |
 | POST | `/films/:id/slides/upload`, `/films/:id/slides` `{ format, ratio, version, file_name, people, slides, made_with }` | members |
 
+Real words (`/api/studio-words`, members with Studio; "the film's people" are its director, editor and the producer):
+
+| Method | Path | Who |
+|---|---|---|
+| GET | `/films/:id` (transcripts without their words, the lines kept, directions, runs), `/transcripts/:tid` (its lines), `/runs/:rid` | members |
+| POST | `/films/:id/transcripts` `{ person_id, label, frames, fps, cues }` | members |
+| DELETE | `/transcripts/:tid` | whoever added it, the producer |
+| POST | `/films/:id/lines` `{ transcript_id, from_cue, to_cue, quote, note, kind, after }` | members |
+| DELETE | `/words/:wid` | the film's people |
+| POST | `/films/:id/ask-claude` | the film's people, with *Claude reads transcripts* on |
+| POST | `/films/:id/directions` | the producer, the film's director |
+| POST | `/directions/:did/pick` `{ n }` | producer |
+
+The taste library (`/api/studio-taste`): GET `?q=&tag=&limit=`, GET `/tags`, GET `/:id`, POST (members); PATCH `/:id` with `seen`, POST `/:id/archive` (whoever added it, the producer). Briefs: GET `/api/studio-agents/briefs/unstarted`; POST `/api/studio-agents/briefs/:id/set-aside` `{ aside }`; a kit run started from a brief sends `{ from_brief, direction }`.
+
 The speakers' page: `POST /api/studio-review/view {token}` and `POST /api/studio-review/decide {token, decision, name, note, confirm}` (POST and JSON only, from the site's own pages, 30 tries per visitor per 10 minutes).
 
 ## Setup
 
-1. Apply `db/migrations/039_studio_films.sql` (tables, rules, the bucket `studio-films`), then `040_studio_craft.sql` (notes, delivery checks, stills and slides). Neither has been applied anywhere yet: 040 goes on fresh, after 039 (it isn't written to upgrade an earlier draft of itself).
+1. Apply `db/migrations/039_studio_films.sql` (tables, rules, the bucket `studio-films`), then `040_studio_craft.sql` (notes, delivery checks, stills and slides), then `041_studio_words.sql` (transcripts, lines, directions, the taste library, brief marks). None has been applied anywhere yet: each goes on fresh, in order (040 isn't written to upgrade an earlier draft of itself).
 2. Optional settings on Render: `STUDIO_SITE_BASE` (default `https://www.tojcampaign.com`), `STUDIO_REVIEW_REPLY_TO`, `STUDIO_REVIEW_MAX_MB` (raise it after the Supabase Pro upgrade), `STUDIO_REVIEW_WORKER=off` to stop the worker on a server.
-3. Kyron turns on *Review copies in storage* (Studio → Films → Tool approvals) once he's checked Supabase's terms.
+3. Kyron turns on *Review copies in storage* (Studio → Films → Tool approvals) once he's checked Supabase's terms, and *Claude reads transcripts* once he's checked Anthropic's terms for interview transcripts.
 4. Email works as for the rest of the app (`EMAIL_USER`/`EMAIL_PASS` or `SMTP_*`); without it, review links aren't made.
 
 ## Known limits
@@ -154,7 +210,10 @@ The speakers' page: `POST /api/studio-review/view {token}` and `POST /api/studio
 - The speakers' page limits tries per visitor by `X-Forwarded-For`, which a caller reaching Render directly can set. The per-connection limit and the 256-bit tokens still hold.
 - If the phone closes the app with no signal, the app opens at sign-in until there's a signal again: open shoot mode before the signal goes.
 - The end card is a type stand-in until the Coached by Hooks mark file is added to the app.
-- The graphics read the speaker's line as typed: the real-words tools (next PR) will offer lines straight from the transcript.
+- The graphics read the speaker's line as typed: copy a kept line from Real words into the graphic.
+- A line is checked against the transcript, not the sound: a word Resolve misheard is kept as Resolve wrote it. Fix it in Resolve and add the transcript again.
+- A line's start and end inside one transcript line are estimated from where its words fall in that line, so they can be off by a fraction of a second; a cutdown's two seconds are measured the same way.
+- A minor's words can't be used at all yet (adults first): their review comes later.
 - The phone's copy of the shoot sheet drops lines that read like a name or a place by their capitals, the cards and *Locations*; a name typed all in lower case, of someone not on the cards, can't be told from other words. Keep names on the cards and places under *Locations*.
 - A minor's name run together ("tyng") is caught by the app from four letters; the database's own screen starts at five.
 - The still check reads a slide's pixels in the web server's own process: about a tenth of a second for the largest it takes (3000 × 2000), a few hundredths for the kit's sizes.
