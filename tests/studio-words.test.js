@@ -229,7 +229,7 @@ test("dashed subtitles are two voices, with or without a space; a label is read 
   const two = [{ s: 0, e: 1000, t: "a" }, { s: 5000, e: 6000, t: "b" }];
   assert.deepEqual(W.transcriptInput({ labelled: true, voices: 2, cues: two }).value.cues.map((c) => !!c.gap), [false, false]);
   assert.deepEqual(W.transcriptInput({ labelled: true, voices: 1, cues: two }).value.cues.map((c) => !!c.gap), [false, true]);
-  assert.deepEqual(W.transcriptInput({ labelled: true, cues: two }).value.cues.map((c) => !!c.gap), [false, false], "an older phone: as it read the file");
+  assert.deepEqual(W.transcriptInput({ labelled: true, cues: two }).value.cues.map((c) => !!c.gap), [false, true], "an older phone sends no count: a pause is a gap");
   assert.deepEqual(W.transcriptInput({ cues: two }).value.cues.map((c) => !!c.gap), [false, true]);
 });
 

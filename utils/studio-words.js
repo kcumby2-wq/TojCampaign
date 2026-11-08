@@ -88,9 +88,10 @@ function transcriptInput(raw) {
   // other voices' lines, so a pause alone isn't a gap there
   // (public/app/transcript-parse.js pausesFor). One whose only label is the
   // speaker's may have had its questions cut out. An older phone sends no
-  // count: two, as it read the file then.
+  // count: one, so a pause is a gap (a line can't bridge it; nothing goes
+  // that shouldn't).
   value.labelled = r.labelled === true;
-  value.voices = Number.isInteger(r.voices) && r.voices >= 0 && r.voices <= 500 ? r.voices : value.labelled ? 2 : 1;
+  value.voices = Number.isInteger(r.voices) && r.voices >= 0 && r.voices <= 500 ? r.voices : 1;
   const pauses = TP.pausesFor({ labelled: value.labelled, voices: value.voices });
   const list = Array.isArray(r.cues) ? r.cues : null;
   if (!list || !list.length) errors.push("cues");
