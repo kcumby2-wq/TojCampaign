@@ -232,6 +232,47 @@ function idNames(textValue, people) {
   }
   return [...out];
 }
+// Names in a film's title. A title is read like a file name (any word of a
+// card's name, in any case; a name run together), but it's words someone
+// chose, so the screen asks where a word could be the everyday one: a word
+// that's also an everyday word ("Game day" for a Dan Day, "Young and hungry"
+// for a Chase Young), and a name run together inside a word, short of seven
+// letters ("The walkout" for an Al Ko, "Redline" for an Ed Li). Sure: the
+// whole name, any other word of it, a name run together from a word's start
+// or of seven letters or more ("tynghero", "Jordankidd"). { sure, maybe }.
+function titleNames(textValue, people) {
+  const raw = String(textValue || "");
+  const hay = " " + splitWords(raw).toLowerCase().replace(/[^\p{L}\p{M}]+/gu, " ") + " ";
+  const tokens = raw.toLowerCase().split(/[^\p{L}\p{M}]+/u).filter(Boolean);
+  const sure = new Set();
+  const maybe = new Set();
+  const look = (name, minor) => {
+    const parts = nameParts(name);
+    if (!parts.length) return;
+    const joined = parts.join("");
+    const len = Array.from(joined).length;
+    if (parts.length > 1 && hay.includes(" " + parts.join(" ") + " ")) sure.add(parts.join(" "));
+    if (parts.length > 1 && len >= (minor ? 4 : 5)) {
+      for (const t of tokens) {
+        const i = t.indexOf(joined);
+        if (i < 0) continue;
+        if (i === 0 || len >= 7) sure.add(joined);
+        else maybe.add(joined);
+      }
+    }
+    for (const w of parts) {
+      if (Array.from(w).length < (minor ? 2 : 3) || EVERYDAY_2.has(w) || !hay.includes(" " + w + " ")) continue;
+      (EVERYDAY_NAMES.has(w) ? maybe : sure).add(w);
+    }
+  };
+  for (const p of people || []) {
+    if (!p) continue;
+    look(p.name, !!p.is_minor);
+    if (p.reviewer_name) look(p.reviewer_name, false);
+  }
+  for (const w of sure) maybe.delete(w);
+  return { sure: [...sure], maybe: [...maybe] };
+}
 // The words a writer said aren't names here ({ names_ok: ["will"] }), as a
 // set of lower-case words. Anything else (true, a string) acknowledges nothing.
 function namesOkWords(v) {
@@ -269,7 +310,10 @@ function planInput(raw) {
 
 // ── A film ───────────────────────────────────────────────────────────────
 // partial: only the fields sent (an edit); otherwise a new film.
-function filmInput(raw, { partial = false, people = [], namesOk = new Set() } = {}) {
+// current: the film as it is (an edit). A title or a story sent unchanged
+// isn't read again: it was read when it was saved, and a card added or
+// changed since was read against it.
+function filmInput(raw, { partial = false, people = [], namesOk = new Set(), current = null } = {}) {
   const r = raw && typeof raw === "object" ? raw : {};
   const errors = [];
   const asks = [];
@@ -278,7 +322,18 @@ function filmInput(raw, { partial = false, people = [], namesOk = new Set() } = 
   if (want("title")) {
     v.title = clean(r.title, 120);
     if (!v.title) errors.push("title");
-    else if (idNames(v.title, people).length) errors.push("title_has_name");
+    else if (!(current && current.title === v.title)) {
+      const t = titleNames(v.title, people);
+      if (t.sure.length) errors.push("title_has_name");
+      else {
+        // An everyday word that's also a name: asked.
+        const maybe = t.maybe.filter((w) => !namesOk.has(w));
+        if (maybe.length) {
+          errors.push("title_may_have_name");
+          asks.push(...maybe);
+        }
+      }
+    }
   }
   if (want("lane")) {
     v.lane = clean(r.lane, 20).toLowerCase();
@@ -295,8 +350,10 @@ function filmInput(raw, { partial = false, people = [], namesOk = new Set() } = 
   if (has(r, "one_sentence")) {
     // The story is on the speaker's review page: never a name.
     v.one_sentence = clean(r.one_sentence, 300) || null;
-    if (v.one_sentence && strictNames(v.one_sentence, people).length) errors.push("story_has_name");
-    else if (v.one_sentence) {
+    if (!v.one_sentence || (current && current.one_sentence === v.one_sentence)) {
+      // nothing to read
+    } else if (strictNames(v.one_sentence, people).length) errors.push("story_has_name");
+    else {
       // An everyday word that's also a name, starting a sentence: asked.
       const maybe = strictMaybe(v.one_sentence, people).filter((w) => !namesOk.has(w));
       if (maybe.length) {
@@ -325,6 +382,30 @@ function filmInput(raw, { partial = false, people = [], namesOk = new Set() } = 
   }
   if (has(r, "plan")) v.plan = planInput(r.plan);
   return { errors, value: v, asks: [...new Set(asks)] };
+}
+
+// A new or changed card, read against the film's title and story: a sure
+// name in either stops it (they change first); an everyday word that's also
+// this card's name is asked about ({ fields, words }), and the writer's "not a
+// name here" (names_ok) counts for those words. Null when it's fine.
+function cardAgainstFilm(film, person, namesOk = new Set()) {
+  const t = titleNames(film && film.title, [person]);
+  if (t.sure.length) return { error: "title_has_name" };
+  const story = film && film.one_sentence;
+  if (story && strictNames(story, [person]).length) return { error: "story_has_name" };
+  const fields = [];
+  const words = [];
+  const tm = t.maybe.filter((w) => !namesOk.has(w));
+  if (tm.length) {
+    fields.push("title_may_have_name");
+    words.push(...tm);
+  }
+  const sm = story ? strictMaybe(story, [person]).filter((w) => !namesOk.has(w)) : [];
+  if (sm.length) {
+    fields.push("story_may_have_name");
+    words.push(...sm);
+  }
+  return fields.length ? { error: "invalid", fields, words: [...new Set(words)] } : null;
 }
 
 // ── A clearance card ─────────────────────────────────────────────────────
@@ -526,6 +607,8 @@ module.exports = {
   strictNames,
   strictMaybe,
   idNames,
+  titleNames,
+  cardAgainstFilm,
   EVERYDAY_2,
   EVERYDAY_NAMES,
   namesOkWords,

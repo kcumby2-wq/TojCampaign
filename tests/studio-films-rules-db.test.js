@@ -236,7 +236,16 @@ test("a title or a file name is read harder than a sentence: run-together, camel
     assert.ok(U.idNames(t, people).length, t);
   }
   for (const t of ["SW_YTH_A0142_QUOTE_4x5_v01_20261107", "Gate at dawn, hands on the sled", "In an hour", "A0142 hero"]) assert.deepEqual(U.idNames(t, people), [], t);
-  assert.deepEqual(U.filmInput({ title: "Hope's first season" }, { partial: true, people }).errors, ["title_has_name"]);
+  // A title is words someone chose: an everyday word that's also a name, or a
+  // short name run together inside a word, is asked about; the rest is sure.
+  const hopeTitle = U.filmInput({ title: "Hope's first season" }, { partial: true, people });
+  assert.deepEqual([hopeTitle.errors, hopeTitle.asks], [["title_may_have_name"], ["hope"]]);
+  assert.deepEqual(U.filmInput({ title: "Hope's first season" }, { partial: true, people, namesOk: new Set(["hope"]) }).errors, []);
+  for (const t of ["Lopez's first season", "TyNg first season", "Hope Field's first season", "tynghero", "JamieCarter drive"]) assert.deepEqual(U.filmInput({ title: t }, { partial: true, people }).errors, ["title_has_name"], t);
+  assert.deepEqual(U.titleNames("The walkout", [{ name: "Al Ko", is_minor: true }]), { sure: [], maybe: ["alko"] });
+  assert.deepEqual(U.titleNames("Jordankidd drive", [{ name: "Jordan Kidd", is_minor: true }]).sure, ["jordankidd"]);
+  // A title or story sent unchanged isn't read again.
+  assert.deepEqual(U.filmInput({ title: "Hope's first season", one_sentence: "Hope never quits." }, { partial: true, people, current: { title: "Hope's first season", one_sentence: "Hope never quits." } }).errors, []);
   assert.ok(U.cutInput({ format: "hero", ratio: "9x16", version: 1, file_name: "TyNgQuoteCard.mp4", people: [] }, { filmPeople: people }).errors.includes("file_name_has_name"));
   // A story is a sentence: an everyday-word name starting one is asked about, and kept once the writer says it isn't a name here.
   const story = U.filmInput({ one_sentence: "Hope never quits, even in the rain." }, { partial: true, people });
@@ -250,7 +259,29 @@ test("a title or a file name is read harder than a sentence: run-together, camel
   const asked = await films("PATCH", `/films/${film.id}`, { seen: film.updated_at, one_sentence: "Hope never quits, even in the rain." }, "lead");
   assert.deepEqual([asked.status, asked.data.fields, asked.data.words], [400, ["story_may_have_name"], ["hope"]]);
   ok(await films("PATCH", `/films/${film.id}`, { seen: film.updated_at, one_sentence: "Hope never quits, even in the rain.", names_ok: ["hope"] }, "lead"), "kept");
-  assert.deepEqual((await films("PATCH", `/films/${film.id}`, { seen: film.updated_at, title: "hope hero" }, "lead")).data.fields, ["title_has_name"]);
+  let f = (await room(film.id)).film;
+  assert.deepEqual((await films("PATCH", `/films/${film.id}`, { seen: f.updated_at, title: "HopeField hero" }, "lead")).data.fields, ["title_has_name"]);
+  const titleAsk = await films("PATCH", `/films/${film.id}`, { seen: f.updated_at, title: "Field day" }, "lead");
+  assert.deepEqual([titleAsk.data.fields, titleAsk.data.words], [["title_may_have_name"], ["field"]]);
+  ok(await films("PATCH", `/films/${film.id}`, { seen: f.updated_at, title: "Field day", names_ok: ["field"] }, "lead"), "title kept");
+  // The edit screen sends the title and story with every save: unchanged, they aren't asked again.
+  f = (await room(film.id)).film;
+  ok(await films("PATCH", `/films/${film.id}`, { seen: f.updated_at, title: f.title, one_sentence: f.one_sentence, post_date: "2026-12-01" }, "lead"), "an unchanged title and story");
+
+  // A card added after the story and title: asked about there, and kept once the writer says.
+  const code2 = "H" + String(7000 + ++n);
+  let film2 = ok(await films("POST", "/films", { kit_slug: "same-work", title: "Game day", lane: "youth", athlete_id: code2, format: "hero" }, "lead"), "start 2").film;
+  film2 = ok(await films("PATCH", `/films/${film2.id}`, { seen: film2.updated_at, one_sentence: "Will never quits, even in the rain." }, "lead"), "story 2").film;
+  const kid = { person_code: code2, name: "Will Day", role: "athlete", is_minor: true, release_on_file: true, covers: { voice: true } };
+  const askedCard = await films("POST", `/films/${film2.id}/people`, kid, "lead");
+  assert.deepEqual([askedCard.status, askedCard.data.fields, askedCard.data.words], [400, ["title_may_have_name", "story_may_have_name"], ["day", "will"]]);
+  assert.deepEqual((await films("POST", `/films/${film2.id}/people`, { ...kid, names_ok: ["day"] }, "lead")).data.fields, ["story_may_have_name"]);
+  const added = ok(await films("POST", `/films/${film2.id}/people`, { ...kid, names_ok: ["day", "will"] }, "lead"), "card kept").person;
+  // A sure name still stops it, whatever the writer says.
+  assert.equal((await films("POST", `/films/${film2.id}/people`, { person_code: "Q1235", name: "Game Day", role: "coach", names_ok: ["game", "day", "game day"] }, "lead")).data.error, "title_has_name");
+  // A card's name changed later is read the same way.
+  const changed = await films("PATCH", `/films/${film2.id}/people/${added.id}`, { seen: added.updated_at, name: "Will Grant", names_ok: [] }, "lead");
+  assert.deepEqual([changed.status, changed.data.fields], [400, ["story_may_have_name"]]);
 });
 
 test("an approval comes from the reviewer the card names now; a card change stops its links", async () => {
