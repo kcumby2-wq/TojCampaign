@@ -187,6 +187,51 @@ function strictNames(textValue, people) {
   }
   return [...out];
 }
+// The words of a card's name a sentence may hold, to ask about: an everyday
+// word that's also a name, with a capital at the start of a sentence ("Hope
+// never quits"). strictNames has the sure ones.
+function strictMaybe(textValue, people) {
+  const out = new Set();
+  for (const p of people || []) {
+    if (!p) continue;
+    const minor = !!p.is_minor;
+    for (const w of nameHits(textValue, p, { minRun: minor ? 4 : 5, minWord: minor ? 2 : 3 }).maybe) out.add(w);
+    if (p.reviewer_name) for (const w of nameHits(textValue, { name: p.reviewer_name }).maybe) out.add(w);
+  }
+  return [...out];
+}
+// Names in a label or a file name (a title, a cut's or a set's file name):
+// it isn't a sentence, so it's read harder. Its words are split where they
+// run together (camelCase, digits, _ - .); any word of a card's name counts
+// in any case, an everyday word too ("hope_quote_v02"), but a two-letter
+// everyday one ("in", "an"); and a name run together counts anywhere inside
+// a word ("tyngquotecard"), from five letters (four for a minor).
+function splitWords(raw) {
+  return String(raw || "").replace(/(\p{Ll})(\p{Lu})/gu, "$1 $2").replace(/(\p{Lu})(\p{Lu}\p{Ll})/gu, "$1 $2");
+}
+function idNames(textValue, people) {
+  const raw = String(textValue || "");
+  const hay = " " + splitWords(raw).toLowerCase().replace(/[^\p{L}\p{M}]+/gu, " ") + " ";
+  const tokens = raw.toLowerCase().split(/[^\p{L}\p{M}]+/u).filter(Boolean);
+  const out = new Set();
+  const look = (name, minor) => {
+    const parts = nameParts(name);
+    if (!parts.length) return;
+    const joined = parts.join("");
+    if (parts.length > 1 && hay.includes(" " + parts.join(" ") + " ")) out.add(parts.join(" "));
+    if (parts.length > 1 && Array.from(joined).length >= (minor ? 4 : 5) && tokens.some((t) => t.includes(joined))) out.add(joined);
+    for (const w of parts) {
+      if (Array.from(w).length < (minor ? 2 : 3) || EVERYDAY_2.has(w)) continue;
+      if (hay.includes(" " + w + " ")) out.add(w);
+    }
+  };
+  for (const p of people || []) {
+    if (!p) continue;
+    look(p.name, !!p.is_minor);
+    if (p.reviewer_name) look(p.reviewer_name, false);
+  }
+  return [...out];
+}
 // The words a writer said aren't names here ({ names_ok: ["will"] }), as a
 // set of lower-case words. Anything else (true, a string) acknowledges nothing.
 function namesOkWords(v) {
@@ -224,15 +269,16 @@ function planInput(raw) {
 
 // ── A film ───────────────────────────────────────────────────────────────
 // partial: only the fields sent (an edit); otherwise a new film.
-function filmInput(raw, { partial = false, people = [] } = {}) {
+function filmInput(raw, { partial = false, people = [], namesOk = new Set() } = {}) {
   const r = raw && typeof raw === "object" ? raw : {};
   const errors = [];
+  const asks = [];
   const v = {};
   const want = (k) => !partial || has(r, k);
   if (want("title")) {
     v.title = clean(r.title, 120);
     if (!v.title) errors.push("title");
-    else if (strictNames(v.title, people).length) errors.push("title_has_name");
+    else if (idNames(v.title, people).length) errors.push("title_has_name");
   }
   if (want("lane")) {
     v.lane = clean(r.lane, 20).toLowerCase();
@@ -250,6 +296,14 @@ function filmInput(raw, { partial = false, people = [] } = {}) {
     // The story is on the speaker's review page: never a name.
     v.one_sentence = clean(r.one_sentence, 300) || null;
     if (v.one_sentence && strictNames(v.one_sentence, people).length) errors.push("story_has_name");
+    else if (v.one_sentence) {
+      // An everyday word that's also a name, starting a sentence: asked.
+      const maybe = strictMaybe(v.one_sentence, people).filter((w) => !namesOk.has(w));
+      if (maybe.length) {
+        errors.push("story_may_have_name");
+        asks.push(...maybe);
+      }
+    }
   }
   if (has(r, "post_date")) {
     v.post_date = r.post_date ? day(r.post_date) : null;
@@ -270,7 +324,7 @@ function filmInput(raw, { partial = false, people = [] } = {}) {
     if (r.gfs_event_id && !v.gfs_event_id) errors.push("gfs_event_id");
   }
   if (has(r, "plan")) v.plan = planInput(r.plan);
-  return { errors, value: v };
+  return { errors, value: v, asks: [...new Set(asks)] };
 }
 
 // ── A clearance card ─────────────────────────────────────────────────────
@@ -366,7 +420,7 @@ function cutInput(raw, { people = [], filmPeople = [] } = {}) {
   const ext = (/\.([a-z0-9]{2,4})$/i.exec(v.file_name) || [])[1];
   v.ext = ext ? ext.toLowerCase() : "";
   if (!v.file_name || !CONTENT_TYPES[v.ext]) errors.push("file_name");
-  else if (strictNames(v.file_name.replace(/\.[a-z0-9]+$/i, ""), filmPeople).length) errors.push("file_name_has_name");
+  else if (idNames(v.file_name.replace(/\.[a-z0-9]+$/i, ""), filmPeople).length) errors.push("file_name_has_name");
   v.content_type = CONTENT_TYPES[v.ext] || null;
   v.bytes = Number(r.bytes);
   if (!Number.isInteger(v.bytes) || v.bytes <= 0) errors.push("bytes");
@@ -470,6 +524,8 @@ module.exports = {
   minorMaybe,
   nameHits,
   strictNames,
+  strictMaybe,
+  idNames,
   EVERYDAY_2,
   EVERYDAY_NAMES,
   namesOkWords,

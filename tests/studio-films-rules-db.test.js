@@ -225,6 +225,34 @@ test("a minor's name that's an everyday word counts only as a name: a capital mi
   await assert.rejects(pool.query("insert into studio_events (film_id, kind, by_staff, note) values ($1, 'note', 'lead@toj.test', 'ed li too')", [film.id]), /keeps no names/);
 });
 
+test("a title or a file name is read harder than a sentence: run-together, camelCase and everyday-word names count", async () => {
+  const people = [
+    { name: "Hope Field", is_minor: true, texas_youth: true, reviewer_name: "Maria Lopez" },
+    { name: "Ty Ng", is_minor: true, reviewer_name: "Ann Ng" },
+    { name: "Will Smith", is_minor: false },
+    { name: "Jamie Carter", is_minor: false, reviewer_name: "Jamie Carter" },
+  ];
+  for (const t of ["hope_quote_v02", "Hope_quote_v02", "TyNgQuoteCard", "SW_YTH_TyNgQuote_v01_20261107", "tyngquotecard", "smith interview final", "Carter_quote_card", "JamieCarterQuote", "Hope's first season", "smith family hero", "Carter comeback", "lopez_hero"]) {
+    assert.ok(U.idNames(t, people).length, t);
+  }
+  for (const t of ["SW_YTH_A0142_QUOTE_4x5_v01_20261107", "Gate at dawn, hands on the sled", "In an hour", "A0142 hero"]) assert.deepEqual(U.idNames(t, people), [], t);
+  assert.deepEqual(U.filmInput({ title: "Hope's first season" }, { partial: true, people }).errors, ["title_has_name"]);
+  assert.ok(U.cutInput({ format: "hero", ratio: "9x16", version: 1, file_name: "TyNgQuoteCard.mp4", people: [] }, { filmPeople: people }).errors.includes("file_name_has_name"));
+  // A story is a sentence: an everyday-word name starting one is asked about, and kept once the writer says it isn't a name here.
+  const story = U.filmInput({ one_sentence: "Hope never quits, even in the rain." }, { partial: true, people });
+  assert.deepEqual([story.errors, story.asks], [["story_may_have_name"], ["hope"]]);
+  assert.deepEqual(U.filmInput({ one_sentence: "Hope never quits, even in the rain." }, { partial: true, people, namesOk: new Set(["hope"]) }).errors, []);
+  assert.deepEqual(U.filmInput({ one_sentence: "We ran it with Hope every Sunday." }, { partial: true, people }).errors, ["story_has_name"]);
+  // Through the route: asked, then kept.
+  const code = "H" + String(7000 + ++n);
+  const film = ok(await films("POST", "/films", { kit_slug: "same-work", title: `${code} hero`, lane: "youth", athlete_id: code, format: "hero" }, "lead"), "start").film;
+  ok(await films("POST", `/films/${film.id}/people`, { person_code: code, name: "Hope Field", role: "athlete", is_minor: true, release_on_file: true, covers: { voice: true } }, "lead"), "card");
+  const asked = await films("PATCH", `/films/${film.id}`, { seen: film.updated_at, one_sentence: "Hope never quits, even in the rain." }, "lead");
+  assert.deepEqual([asked.status, asked.data.fields, asked.data.words], [400, ["story_may_have_name"], ["hope"]]);
+  ok(await films("PATCH", `/films/${film.id}`, { seen: film.updated_at, one_sentence: "Hope never quits, even in the rain.", names_ok: ["hope"] }, "lead"), "kept");
+  assert.deepEqual((await films("PATCH", `/films/${film.id}`, { seen: film.updated_at, title: "hope hero" }, "lead")).data.fields, ["title_has_name"]);
+});
+
 test("an approval comes from the reviewer the card names now; a card change stops its links", async () => {
   const { film, p } = await aFilm();
   const cut = await aCut(film, [p.id]);
