@@ -772,7 +772,7 @@
       '<div class="screen">' + backBtn("#today", "Today") +
       "<div>" + (d.status === "waiting" ? '<span class="badge warn">Didn\'t pass its own check, read closely</span>' : '<span class="badge ok">' + I.check + "Brief ready</span>") +
       '<h1 class="title sm" style="margin-top:12px">' + h(b.title) + '</h1><p class="lede">' + (b.mode === "refresh" ? "Refresh · " : "New kit · ") + h(b.slug) + "</p></div>" +
-      markHtml +
+      '<div id="markBox">' + markHtml + "</div>" +
       (dirs ? '<section class="sec"><h2 class="sec-h">Three directions</h2><p class="body" style="font-size:14px;margin:0">I\'d pick ' + b.recommended + (b.why_recommended ? ": " + h(b.why_recommended) : ".") + '</p><div role="radiogroup" aria-label="The three directions" style="display:flex;flex-direction:column;gap:8px">' + dirs.map(function (x, i) {
         return '<button type="button" class="radio" role="radio" data-dir="' + (i + 1) + '" aria-checked="' + (sel === i + 1) + '"><span class="r"></span><div class="grow"><div class="name" style="font-size:15px">' + (i + 1) + ". " + h(x.name) + '</div><div class="sub">' + h(x.angle || "") + "</div></div>" + (b.recommended === i + 1 ? '<span class="badge gold">Recommended</span>' : "") + "</button>";
       }).join("") + "</div></section>" : "") +
@@ -781,7 +781,7 @@
       (taste ? '<section class="sec"><h2 class="sec-h">From the taste library</h2>' + taste + "</section>" : "") +
       (qs ? '<section class="card" style="background:#182A3F"><div class="name" style="font-size:15px">Questions for you</div><ul class="body" style="margin:0;padding-left:20px">' + qs + '</ul><p class="sub" style="margin:0">Answer them in the brief above, or leave them; it works without.</p></section>' : "") +
       (needsSource ? '<div class="field"><label class="label" for="srcText">The playbook <small>(source material)</small></label><textarea class="textarea" id="srcText" placeholder="Paste the playbook text here.">' + h(state.lastFiles || "") + "</textarea></div>" : "") +
-      (started ? "" : '<div class="btn-row"><button type="button" class="btn ghost small" id="setAside">' + (aside ? "Bring it back to Today" : "Set it aside") + '</button></div><p class="sub" style="margin:0">' + (aside ? "" : "Not going ahead with it? Setting it aside takes it off Today.") + "</p>") +
+      (started ? "" : '<div class="btn-row"><button type="button" class="btn ghost small" id="setAside">' + (aside ? "Bring it back to Today" : "Set it aside") + '</button></div><p class="sub" id="asideNote" style="margin:0">' + (aside ? "" : "Not going ahead with it? Setting it aside takes it off Today.") + "</p>") +
       '<p id="briefMsg" class="body" role="status"></p></div>' +
       '<div class="dock"><div class="dock-inner"><button type="button" class="btn block" id="startRun"></button><span class="note">Makes a draft. Nothing changes until it\'s approved.</span></div></div>');
     var area = document.getElementById("bwText");
@@ -794,13 +794,19 @@
     area.addEventListener("input", function () { texts[dirs ? sel - 1 : 0] = area.value; });
     Array.prototype.forEach.call(document.querySelectorAll("[data-dir]"), function (x) { x.addEventListener("click", function () { sel = Number(x.dataset.dir); paintDir(); }); });
     paintDir();
+    radios();
     var setAside = document.getElementById("setAside");
+    // Set aside or brought back in place: the brief as you've edited it stays.
     if (setAside) setAside.addEventListener("click", async function () {
       setAside.disabled = true;
       try {
         await post("/api/studio-agents/briefs/" + encodeURIComponent(runId) + "/set-aside", { aside: !aside });
-        toast(aside ? "It's back on Today." : "Set aside: it's off Today.");
-        brief(runId);
+        aside = !aside;
+        toast(aside ? "Set aside: it's off Today." : "It's back on Today.");
+        setAside.textContent = aside ? "Bring it back to Today" : "Set it aside";
+        setAside.disabled = false;
+        document.getElementById("asideNote").textContent = aside ? "" : "Not going ahead with it? Setting it aside takes it off Today.";
+        document.getElementById("markBox").innerHTML = aside ? '<div class="card tight"><p class="body" style="font-size:14px;margin:0">Set aside just now: it\'s off Today.</p></div>' : "";
       } catch (e) {
         setAside.disabled = false;
         document.getElementById("briefMsg").innerHTML = '<span class="err">' + h(e.data && e.data.error === "already_started" ? "That brief was started: it stays started." : e.message) + "</span>";
@@ -1256,10 +1262,35 @@
     toast(dropped ? "Added what was shared. " + dropped + " item" + (dropped > 1 ? "s" : "") + " didn't fit in one brief." : "Added what you shared. Add your idea and write the brief.");
   }
 
+  // A radiogroup that works from the keyboard: one tab stop (the chosen
+  // one, or the first), the arrow keys move and choose. Call it after the
+  // group is drawn; a click on a radio still does what its own handler says.
+  function radios(root) {
+    Array.prototype.forEach.call((root || document).querySelectorAll('[role="radiogroup"]'), function (g) {
+      var items = Array.prototype.filter.call(g.querySelectorAll('[role="radio"]'), function (b) { return b.closest('[role="radiogroup"]') === g; });
+      if (!items.length) return;
+      var on = items.filter(function (b) { return b.getAttribute("aria-checked") === "true"; })[0] || items[0];
+      items.forEach(function (b) { b.tabIndex = b === on ? 0 : -1; });
+      if (g.dataset.keys) return;
+      g.dataset.keys = "1";
+      g.addEventListener("keydown", function (e) {
+        var list = Array.prototype.filter.call(g.querySelectorAll('[role="radio"]'), function (b) { return b.closest('[role="radiogroup"]') === g && b.getAttribute("aria-disabled") !== "true"; });
+        var i = list.indexOf(document.activeElement);
+        if (i < 0) return;
+        var step = e.key === "ArrowDown" || e.key === "ArrowRight" ? 1 : e.key === "ArrowUp" || e.key === "ArrowLeft" ? -1 : 0;
+        if (!step) return;
+        e.preventDefault();
+        var next = list[(i + step + list.length) % list.length];
+        next.focus();
+        next.click();
+      });
+    });
+  }
+
   // ── Start ────────────────────────────────────────────────────────────
   if ("serviceWorker" in navigator) {
     window.addEventListener("load", function () { navigator.serviceWorker.register("/app/sw.js", { scope: "/app/" }).catch(function () {}); });
   }
-  window.TOJ = { api: api, post: post, toast: toast, state: state, h: h, show: show, go: go, later: later, backBtn: backBtn, I: I, atLeast: atLeast, isOwner: isOwner, hasTool: hasTool, ago: ago, copy: copy, friendly: friendly };
+  window.TOJ = { api: api, post: post, toast: toast, state: state, h: h, show: show, go: go, later: later, backBtn: backBtn, I: I, atLeast: atLeast, isOwner: isOwner, hasTool: hasTool, ago: ago, copy: copy, friendly: friendly, radios: radios };
   render();
 })();

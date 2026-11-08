@@ -29,6 +29,7 @@
     not_your_film: "Only the film's director, editor or the producer can do that.",
     remove_the_whole_structure: "A beat goes with its whole structure: remove the structure.",
     no_transcripts: "Add a cleared adult speaker's transcript first.",
+    already_running: "One is already being written for this film: it's below. Ask again once it's back.",
     producer_only: "Only the producer (or the film's director, for directions) can do that.",
     changed_meanwhile: "The board changed while you were looking. Open it again.",
   };
@@ -193,6 +194,7 @@
       var shown = set.picked || set.recommended || 1;
       var paint = function () {
         Array.prototype.forEach.call(document.querySelectorAll("[data-dir]"), function (b) { b.setAttribute("aria-checked", String(Number(b.dataset.dir) === shown)); });
+        if (t.radios) t.radios();
         var x = set.directions[shown - 1];
         var picked = set.picked === shown;
         document.getElementById("dirPanel").innerHTML = '<article class="card" style="gap:12px">' +
@@ -252,6 +254,7 @@
     cue_too_long: "One line is over 2,000 characters: is this a transcript?",
     too_many_cues: "That's more than 5,000 lines: split the transcript.",
     too_long: "That transcript is too long for one go: split it.",
+    past_ten_hours: "Its timecodes run past ten hours. Export it again with the timeline starting at 00:00:00:00 or 01:00:00:00.",
   };
   async function addTranscript(id) {
     if (!F().guard()) return;
@@ -261,9 +264,9 @@
     try { d = await t.api("/api/studio-words/films/" + encodeURIComponent(id)); } catch (e) { if (e.stale) throw e; return F().failed(back, e); }
     if (d.film.closed) return F().failed(back, { data: { error: "film_closed" } });
     var people = d.people || [];
+    // Nothing is chosen for you: the speaker's lines and whose words they
+    // are are both picked by hand.
     var s = { text: null, name: "", fps: null, parsed: null, who: undefined, person: null, label: "Interview " + ((d.transcripts || []).length + 1), only: false };
-    var ok = people.filter(function (p) { return !p.why_not; });
-    if (ok.length === 1) s.person = ok[0].id;
 
     function chosen() { return s.parsed && s.parsed.ok && s.who !== undefined ? P().only(s.parsed.cues, s.who) : []; }
     function paint() {
@@ -274,27 +277,28 @@
       } else if (p && !p.ok) {
         body += '<p class="body err">' + h(PARSE_MSG[p.error] || "That file couldn't be read as a transcript.") + "</p>";
       } else if (p && p.ok) {
-        var labelled = p.speakers.some(function (x) { return x.who; });
+        var labelled = p.labelled;
         body += '<p class="sub" style="margin:0">' + h(p.cues.length + " lines read" + (p.frames ? " at " + p.fps + " fps" : "") + ".") + "</p>";
         if (labelled) {
-          body += '<div class="field"><span class="label">Whose lines in the file are the speaker\'s?</span><div style="display:flex;flex-direction:column;gap:8px">' + p.speakers.map(function (x, i) {
+          body += '<div class="field"><span class="label" id="whoLabel">Whose lines in the file are the speaker\'s?</span><div role="radiogroup" aria-labelledby="whoLabel" style="display:flex;flex-direction:column;gap:8px">' + p.speakers.map(function (x, i) {
             var first = p.cues.find(function (c) { return c.who === x.who; });
-            return '<button type="button" class="radio" role="radio" aria-checked="' + (s.who === x.who) + '" data-who="' + i + '"><span class="r"></span><div class="grow"><div class="name" style="font-size:15px">' + h(x.who || "(no label)") + '</div><div class="sub">' + h(x.cues + " lines · “" + (first ? first.t.slice(0, 70) : "") + (first && first.t.length > 70 ? "…" : "") + "”") + "</div></div></button>";
-          }).join("") + '</div><p class="sub" style="margin:4px 0 0">The other voices\' lines stay on this phone.</p></div>';
+            return '<button type="button" class="radio" role="radio" aria-checked="' + (s.who === x.who) + '" data-who="' + i + '"><span class="r"></span><div class="grow"><div class="name" style="font-size:15px">' + h(x.who || "(no label: a voice the file doesn't name)") + '</div><div class="sub">' + h(x.cues + " lines · “" + (first ? first.t.slice(0, 70) : "") + (first && first.t.length > 70 ? "…" : "") + "”") + "</div></div></button>";
+          }).join("") + '</div><p class="sub" style="margin:4px 0 0">Only those lines go. The other voices\' lines stay on this phone, and a subtitle with two voices in it is split between them.</p></div>';
         } else {
           s.who = null;
-          body += '<div class="card tight" style="border-color:#5A4A2A"><p class="body" style="font-size:14px;margin:0">This file has no speaker labels, so every line in it goes as the speaker\'s words. If the questions are in it, export it again with speaker names, or take them out first.</p>' +
+          body += '<div class="card tight" style="border-color:#5A4A2A"><p class="body" style="font-size:14px;margin:0">This file has no speaker labels, so every line in it goes as the speaker\'s words. If the questions are in it, export it again with speaker names, or take them out first.' + (p.mixed ? " " + h(p.mixed + " line" + (p.mixed === 1 ? "" : "s") + " from subtitles with two voices in them (the “- ” lines) stay on this phone.") : "") + "</p>" +
             '<label class="row" style="gap:10px;cursor:pointer;min-height:40px"><input type="checkbox" class="switch" id="onlyThem"' + (s.only ? " checked" : "") + '><span class="body" style="font-size:14px;color:var(--ink)">Only the speaker\'s words are in this file</span></label></div>';
         }
-        body += '<div class="field"><span class="label">Whose words are they?</span>' + (people.length ? '<div style="display:flex;flex-direction:column;gap:8px">' + people.map(function (x) {
+        body += '<div class="field"><span class="label" id="personLabel">Whose words are they?</span>' + (people.length ? '<div role="radiogroup" aria-labelledby="personLabel" style="display:flex;flex-direction:column;gap:8px">' + people.map(function (x) {
           return '<button type="button" class="radio" role="radio" aria-checked="' + (s.person === x.id) + '" data-person="' + h(x.id) + '"' + (x.why_not ? ' aria-disabled="true" style="opacity:.6;cursor:not-allowed"' : "") + '><span class="r"></span><div class="grow"><div class="name" style="font-size:15px">' + h(x.code + " · " + x.role) + "</div>" + (x.why_not ? '<div class="sub">' + h("Not now: " + hold(x.why_not)) + "</div>" : "") + "</div></button>";
         }).join("") + "</div>" : '<p class="empty">No cards on this film yet.</p>') + "</div>";
         body += '<div class="field"><label class="label" for="trLabel">Label <small>(no names: "Interview 1", "Walk and talk")</small></label><input class="input" id="trLabel" maxlength="60" value="' + h(s.label) + '"></div>';
         var c = chosen();
-        if (c.length) body += '<section class="sec"><h2 class="sec-h">What goes to the server</h2><div class="card tight" style="gap:8px">' + c.slice(0, 3).map(function (x) { return '<div><div ' + TC + ">" + h(P().tc(x.s, { frames: p.frames, fps: p.fps })) + '</div><div class="body" style="font-size:14px;color:var(--ink)">' + h(x.t) + "</div></div>"; }).join("") + (c.length > 3 ? '<p class="sub" style="margin:0">' + h("…and " + (c.length - 3) + " more of their lines.") + "</p>" : "") + "</div></section>";
+        var whose = people.find(function (x) { return x.id === s.person; });
+        if (c.length) body += '<section class="sec"><h2 class="sec-h">What goes to the server' + (whose ? h(", as " + whose.code + " · " + whose.role + "'s words") : "") + '</h2><div class="card tight" style="gap:8px">' + c.slice(0, 3).map(function (x) { return '<div><div ' + TC + ">" + h(P().tc(x.s, { frames: p.frames, fps: p.fps, drop: p.drop })) + '</div><div class="body" style="font-size:14px;color:var(--ink)">' + h(x.t) + "</div></div>"; }).join("") + (c.length > 3 ? '<p class="sub" style="margin:0">' + h("…and " + (c.length - 3) + " more of their lines.") + "</p>" : "") + "</div></section>";
       }
       var c2 = chosen();
-      var ready = p && p.ok && c2.length && s.person && (s.who !== null || s.only || p.speakers.some(function (x) { return x.who; }));
+      var ready = p && p.ok && c2.length && s.person && (p.labelled ? s.who !== undefined && s.who !== null : s.only);
       t.show(null,
         '<div class="screen">' + back +
         '<div><p class="kicker">Add a transcript</p><h1 class="title sm">' + h(d.film.title) + '</h1><p class="lede" style="font-size:15px">Export the interview\'s transcript from Resolve: subtitles (.srt), or text with a timecode on each line. It\'s read on this phone, and only the speaker\'s lines go to the server.</p></div>' +
@@ -303,14 +307,15 @@
         body + '<p id="trMsg" class="body" role="status"></p></div>' +
         '<div class="dock"><div class="dock-inner"><button type="button" class="btn block" id="trSend"' + (ready ? "" : " disabled") + ">" + (c2.length ? "Send " + c2.length + " lines" : "Send the speaker's lines") + "</button></div></div>");
       wire();
+      if (T().radios) T().radios();
     }
     function read() {
       var r = P().parse(s.text, { fps: s.fps });
       s.parsed = r;
       if (r.ok) {
-        var labels = r.speakers.filter(function (x) { return x.who; });
-        // One label in the whole file: that's the speaker. Otherwise ask.
-        s.who = labels.length === 1 && r.speakers.length === 1 ? labels[0].who : labels.length ? undefined : null;
+        // One voice in the whole file, and it's named: that's the speaker.
+        // Otherwise ask.
+        s.who = r.labelled ? (r.speakers.length === 1 ? r.speakers[0].who : undefined) : null;
       }
       paint();
     }
@@ -342,7 +347,8 @@
       document.getElementById("trSend").addEventListener("click", async function () {
         var btn = this;
         var p = s.parsed;
-        var cues = chosen().map(function (c) { return { s: c.s, e: c.e, t: c.t }; });
+        // gap: this line came after someone else's (left out) or a long pause.
+        var cues = chosen().map(function (c) { return c.gap ? { s: c.s, e: c.e, t: c.t, gap: true } : { s: c.s, e: c.e, t: c.t }; });
         btn.disabled = true; btn.textContent = "Sending…";
         try {
           await T().post("/api/studio-words/films/" + encodeURIComponent(id) + "/transcripts", { person_id: s.person, label: (s.label || "").trim(), frames: !!p.frames, fps: p.frames ? p.fps : null, cues: cues });
@@ -444,6 +450,10 @@
         btn.disabled = true;
         var body = { transcript_id: tr.id, from_cue: s.from, to_cue: s.to, quote: s.text.trim(), kind: s.kind };
         if (s.kind === "caption") body.after = s.after.trim(); else body.note = s.note.trim();
+        // A word that's also a name on a card was asked about: sent again for
+        // the same words, it's the writer's "not a name here".
+        var sig = JSON.stringify([body.from_cue, body.to_cue, body.quote, body.note || "", body.after || "", body.kind]);
+        if (s.asked && s.asked.sig === sig) body.names_ok = s.asked.words;
         try {
           var r = await t.post("/api/studio-words/films/" + encodeURIComponent(tr.film_id) + "/lines", body);
           var kept = r.line;
@@ -453,6 +463,11 @@
           paint(true);
         } catch (e) {
           btn.disabled = false;
+          var dd = (e && e.data) || {};
+          if (dd.error === "invalid" && (dd.fields || []).indexOf("may_have_name") >= 0) {
+            s.asked = { sig: sig, words: (body.names_ok || []).concat(dd.words || []) };
+            return F().say("kMsg", "“" + (dd.words || []).join("”, “") + "” is also a name on a card. If it isn't a name here, tap Keep again.", true);
+          }
           F().say("kMsg", why(e), true);
         }
       });

@@ -27,6 +27,7 @@
     title_has_name: "Titles never carry a name. Use the athlete ID instead.",
     story_has_name: "The one-sentence story goes on the speaker's review page: no names in it. Use the athlete ID or \"he\" or \"she\".",
     story_may_have_name: "A word in the story is also a name on a card. If it isn't a name here, save again.",
+    title_may_have_name: "A word in the title is also a name on a card. If it isn't a name here, save again.",
     note_has_name: "The history keeps no names: write the note with the code instead.",
     note_may_have_name: "A word in the note is also a name on a card. If it isn't a name here, send it again.",
     note_has_minor_name: "That's part of a minor's name on this film. The history never keeps a child's name: write the code instead.",
@@ -100,11 +101,17 @@
   // server asks first. Sending the same text again says those exact words
   // aren't names here; once the text changes, nothing is acknowledged and the
   // server asks again. A minor's name is never kept, so there's no asking.
+  // field: the question (or questions) this save can be asked. When every
+  // problem is one of them, the words are kept for the same text and the
+  // writer sends it again; with other problems too, those show as well.
   function nameAsk(btn, e, text, field) {
     var d = e && e.data;
-    if (!btn || !d || d.error !== "invalid" || (d.fields || []).indexOf(field || "note_may_have_name") < 0) return false;
+    var asks = [].concat(field || "note_may_have_name");
+    var fields = (d && d.fields) || [];
+    if (!btn || !d || d.error !== "invalid" || !fields.some(function (f) { return asks.indexOf(f) >= 0; })) return false;
     btn.dataset.namesOk = JSON.stringify({ text: String(text || ""), words: namesOk(btn, text).concat(d.words || []) });
     btn.disabled = false;
+    if (!fields.every(function (f) { return asks.indexOf(f) >= 0; })) return false;
     T().toast("“" + (d.words || []).join("”, “") + "” is also a name on a card. If it isn't a name here, send it again.");
     return true;
   }
@@ -503,10 +510,11 @@
         song: v("eSong") || null,
       };
       var story = v("eStory");
-      var body = { seen: f.updated_at, title: v("eTitle"), one_sentence: story || null, post_date: v("ePost") || null, board_url: v("eBoard") || null, plan: plan, names_ok: namesOk(btn, story) };
+      var asked = v("eTitle") + "\n" + story;
+      var body = { seen: f.updated_at, title: v("eTitle"), one_sentence: story || null, post_date: v("ePost") || null, board_url: v("eBoard") || null, plan: plan, names_ok: namesOk(btn, asked) };
       if (d.can.producer) { body.director_email = v("eDir") || null; body.editor_email = v("eEd") || null; }
       btn.disabled = true;
-      try { await t.post("/api/studio-films/films/" + f.id, body, "PATCH"); t.toast("Saved."); T().go("#film/" + f.id); } catch (e) { if (nameAsk(btn, e, story, "story_may_have_name")) return; btn.disabled = false; say("editMsg", why(e), true); }
+      try { await t.post("/api/studio-films/films/" + f.id, body, "PATCH"); t.toast("Saved."); T().go("#film/" + f.id); } catch (e) { if (nameAsk(btn, e, asked, ["story_may_have_name", "title_may_have_name"])) return; btn.disabled = false; say("editMsg", why(e), true); }
     });
   }
 
@@ -578,12 +586,16 @@
       if (!lockReviewer) Object.assign(body, { reviewer_relation: hasReviewer ? (minor ? (s.reviewer_relation === "guardian" ? "guardian" : "parent") : "self") : null, reviewer_name: hasReviewer ? s.reviewer_name : null, reviewer_email: hasReviewer ? s.reviewer_email : null });
       if (!p && (s.reconsent_note || "").trim()) body.reconsent_note = s.reconsent_note.trim();
       var btn = document.getElementById("savePerson");
+      // The film's title and story are read against this card's names: an
+      // everyday word that's also one of them is asked about.
+      var asked = [s.name, s.reviewer_name, minor ? "minor" : ""].join("\n");
+      body.names_ok = namesOk(btn, asked);
       btn.disabled = true;
       try {
         if (p) { body.seen = p.updated_at; var r = await t.post("/api/studio-films/films/" + id + "/people/" + p.id, body, "PATCH"); t.toast(r.uncleared ? "Saved. It needs clearing again." : "Saved."); }
         else { body.person_code = s.person_code; await t.post("/api/studio-films/films/" + id + "/people", body); t.toast("Card added."); }
         T().go("#film/" + id);
-      } catch (e) { btn.disabled = false; say("pMsg", why(e), true); }
+      } catch (e) { if (nameAsk(btn, e, asked, ["title_may_have_name", "story_may_have_name"])) return; btn.disabled = false; say("pMsg", why(e), true); }
     }
     draw();
   }

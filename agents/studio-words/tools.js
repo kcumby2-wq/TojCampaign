@@ -42,7 +42,10 @@ function toolsFor(ctx) {
   const stage = { submitted: null, rows: null, submits: 0 };
   if (typeof scope.onStage === "function") scope.onStage(stage);
   const film = scope.film || {};
-  const checkCtx = { transcripts: scope.transcripts, people: scope.people || [] };
+  // Claude can't be asked "is that a name here?": a word of a card's name is a refusal.
+  const checkCtx = { transcripts: scope.transcripts, people: scope.people || [], byClaude: true };
+  const control = scope.control || { stopped: null };
+  const stopNote = () => `Stopped: ${control.stopped}. Don't read or hand back anything more; say that the run stopped.`;
 
   const list = betaTool({
     name: "words_transcripts",
@@ -70,8 +73,15 @@ function toolsFor(ctx) {
       required: ["transcript"],
     },
     run: async ({ transcript, from_cue }) => {
+      if (control.stopped) return stopNote();
       const t = scope.transcripts.find((x) => x.ref === transcript);
       if (!t) return refused(`no transcript "${transcript}". Call words_transcripts.`);
+      // Read again, now: the switch, the film, the transcript, its speaker.
+      const why = typeof scope.recheck === "function" ? await scope.recheck(t.id) : null;
+      if (why) {
+        control.stopped = why;
+        return stopNote();
+      }
       const from = Math.max(1, Math.floor(Number(from_cue) || 1));
       const to = from + PAGE - 1;
       const body = W.transcriptText(t, { from, to });
@@ -151,6 +161,7 @@ function toolsFor(ctx) {
       required: ["lines", "structures"],
     },
     run: async (input) => {
+      if (control.stopped) return stopNote();
       const { issues, value } = W.checkWords(input, checkCtx);
       if (issues.length) return refused("fix these and send the whole set again.", issues);
       stage.submits++;

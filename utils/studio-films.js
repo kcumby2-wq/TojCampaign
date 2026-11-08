@@ -133,6 +133,38 @@ function capitalizedAtStart(raw, w) {
   }
   return false;
 }
+// One word of a minor's name (four letters or more) run into other letters
+// ("#jordanstrong", "#teamjordan", "kiddquote", "Kiddstrong season"):
+// { sure, maybe }. Where a word of the run starts or ends (its first or last
+// letter, or a capital after a small letter), it's the name for certain,
+// unless it's also an everyday word ("#hopestrong" for a Hope: asked); inside
+// a word, asked ("#ourjordanfam"). The word alone is read by the other screens.
+function minorRunIns(textValue, people) {
+  const sure = new Set();
+  const maybe = new Set();
+  const runs = [];
+  for (const m of String(textValue || "").matchAll(/[\p{L}\p{M}]+/gu)) {
+    const tok = m[0];
+    const edges = new Set([0, tok.length]);
+    for (let i = 1; i < tok.length; i++) if (/\p{Lu}/u.test(tok[i]) && /\p{Ll}/u.test(tok[i - 1])) edges.add(i);
+    runs.push({ low: tok.toLowerCase(), edges });
+  }
+  for (const p of people || []) {
+    if (!p || !p.is_minor) continue;
+    for (const w of nameParts(p.name)) {
+      if (Array.from(w).length < 4) continue;
+      for (const r of runs) {
+        if (r.low === w) continue;
+        for (let i = r.low.indexOf(w); i >= 0; i = r.low.indexOf(w, i + 1)) {
+          if ((r.edges.has(i) || r.edges.has(i + w.length)) && !everyday(w)) sure.add(w);
+          else maybe.add(w);
+        }
+      }
+    }
+  }
+  for (const w of sure) maybe.delete(w);
+  return { sure: [...sure], maybe: [...maybe] };
+}
 // Where a text names a person, for certain or maybe: their whole name; the
 // name run together as one word ("#TyNg", "JamieRivers": the whole token,
 // from minRun letters); a word of their name that's no everyday word, in any
@@ -230,7 +262,68 @@ function idNames(textValue, people) {
     look(p.name, !!p.is_minor);
     if (p.reviewer_name) look(p.reviewer_name, false);
   }
+  // One word of a minor's name run into a word where a word starts or ends
+  // ("jordanquote_v2", "quotejordan").
+  for (const w of minorRunIns(raw, people).sure) out.add(w);
   return [...out];
+}
+// Names in a film's title. A title is read like a file name (any word of a
+// card's name, in any case; a name run together), but it's words someone
+// chose, so the screen asks where a word could be the everyday one: a word
+// that's also an everyday word ("Game day" for a Dan Day, "Young and hungry"
+// for a Chase Young), and a name run together inside a word, short of seven
+// letters ("The walkout" for an Al Ko, "Redline" for an Ed Li). Sure: the
+// whole name, any other word of it, a name run together from a word's start
+// or of seven letters or more ("tynghero", "Jordankidd"). { sure, maybe }.
+function titleNames(textValue, people) {
+  const raw = String(textValue || "");
+  const hay = " " + splitWords(raw).toLowerCase().replace(/[^\p{L}\p{M}]+/gu, " ") + " ";
+  const tokens = raw.toLowerCase().split(/[^\p{L}\p{M}]+/u).filter(Boolean);
+  const sure = new Set();
+  const maybe = new Set();
+  const look = (name, minor) => {
+    const parts = nameParts(name);
+    if (!parts.length) return;
+    const joined = parts.join("");
+    const len = Array.from(joined).length;
+    if (parts.length > 1 && hay.includes(" " + parts.join(" ") + " ")) sure.add(parts.join(" "));
+    if (parts.length > 1 && len >= (minor ? 4 : 5)) {
+      for (const t of tokens) {
+        const i = t.indexOf(joined);
+        if (i < 0) continue;
+        if (i === 0 || len >= 7) sure.add(joined);
+        else maybe.add(joined);
+      }
+    }
+    for (const w of parts) {
+      if (Array.from(w).length < (minor ? 2 : 3) || EVERYDAY_2.has(w) || !hay.includes(" " + w + " ")) continue;
+      if (!EVERYDAY_NAMES.has(w)) sure.add(w);
+      // A minor's everyday-word name reads as a story's would: with a capital
+      // in the middle of a title that isn't in Title Case ("Go Hope go",
+      // "Thanks, Hope"), or as a possessive ("Hope's first season"), it's
+      // the name; otherwise asked.
+      else if (minor && (new RegExp(`(?<![\\p{L}\\p{M}])${w}['’]s(?![\\p{L}\\p{M}])`, "iu").test(raw) || (capitalizedMidSentence(raw, w) && !titleCase(raw)))) sure.add(w);
+      else maybe.add(w);
+    }
+  };
+  for (const p of people || []) {
+    if (!p) continue;
+    look(p.name, !!p.is_minor);
+    if (p.reviewer_name) look(p.reviewer_name, false);
+  }
+  const runIn = minorRunIns(raw, people);
+  for (const w of runIn.sure) sure.add(w);
+  for (const w of runIn.maybe) maybe.add(w);
+  for (const w of sure) maybe.delete(w);
+  return { sure: [...sure], maybe: [...maybe] };
+}
+// A title or line in Title Case or capitals: three words or more, each with
+// a capital but the small ones ("Keep the Faith", "GAME DAY GRIND").
+const TITLE_SMALL = new Set("a an and as at but by for from in into nor of off on or over per the to up vs via with".split(" "));
+function titleCase(line) {
+  const words = String(line || "").replace(/[#@][\p{L}\p{M}\p{N}_.]+/gu, " ").match(/[\p{L}\p{M}][\p{L}\p{M}'’]*/gu) || [];
+  const caps = words.filter((w) => /^\p{Lu}/u.test(w));
+  return words.length >= 3 && caps.length >= 2 && words.every((w) => /^\p{Lu}/u.test(w) || TITLE_SMALL.has(w.toLowerCase()));
 }
 // The words a writer said aren't names here ({ names_ok: ["will"] }), as a
 // set of lower-case words. Anything else (true, a string) acknowledges nothing.
@@ -293,13 +386,23 @@ function contactIn(text) {
 // 12 Oak St": rivers, family, driveway, oak, st), in any case, but the
 // ordinary small ones ("the", "at") and three letters or fewer typed in
 // lower case.
-const PLACE_SKIP = new Set(["the", "a", "an", "at", "of", "on", "in", "by", "and", "to", "for", "from", "near", "with", "s"]);
+// Words a place's name has that don't say which place ("Westlake High School
+// practice field" is Westlake's): a line with "after practice" or "on the
+// field" stays on the phone; "westlake gym" doesn't.
+const PLACE_SKIP = new Set(("the a an at of on in by and to for from near with s st street road rd ave avenue " +
+  "high middle school practice field fields track gym court courts park family home").split(" "));
+// A place's ordinary words are skipped only when it has a word of its own
+// ("Westlake" in "Westlake High School practice field"): "Park High School"
+// or "Court Street Park" is all ordinary words, so they all count.
+const PLACE_GLUE = new Set(["the", "a", "an", "at", "of", "on", "in", "by", "and", "to", "for", "from", "near", "with", "s"]);
 function placeWords(locations) {
   const out = new Set();
   for (const l of Array.isArray(locations) ? locations : []) {
-    for (const w of String(l || "").match(/[\p{L}\p{M}]+/gu) || []) {
+    const words = String(l || "").match(/[\p{L}\p{M}]+/gu) || [];
+    const own = words.some((w) => !PLACE_SKIP.has(w.toLowerCase()) && (/^\p{Lu}/u.test(w) || Array.from(w).length >= 4));
+    for (const w of words) {
       const lw = w.toLowerCase();
-      if (PLACE_SKIP.has(lw)) continue;
+      if (own ? PLACE_SKIP.has(lw) : PLACE_GLUE.has(lw)) continue;
       if (/^\p{Lu}/u.test(w) || Array.from(lw).length >= 4) out.add(lw);
     }
   }
@@ -314,10 +417,25 @@ const COMMON_FIRST = new Set(("i we he she they it the a an his her their our my
   "kids players team coach coaches parents crowd fans ball cones sled bench stands bleachers scoreboard whistle helmet cleats gloves tape " +
   "hands feet eyes shoulders breath sweat rain snow mud sun shadow shadows light lights silhouette reflection archive photo phone " +
   "drill drills rep reps sprint sprints run runs walk walks warmup warm stretch huddle practice game field court track gym gate door " +
-  "b broll insert inserts cutaway cutaways establishing aerial overhead handheld locked static push pull pan tilt dolly track tracking").split(/\s+/));
+  "b broll insert inserts cutaway cutaways establishing aerial overhead handheld locked static push pull pan tilt dolly track tracking " +
+  // Family, crew and the things a shot list starts with (none of them a
+  // common name: those stay out, so a line that starts with one is kept online).
+  "dad dads mom moms mother father mothers fathers grandma grandpa grandmother grandfather uncle aunt brother brothers sister sisters son daughter " +
+  "cousin cousins teammate teammates captain captains trainer trainers ref refs referee referees official officials " +
+  "laces lace shoe shoes sneakers socks jersey jerseys uniform uniforms hat helmets mouthguard pads shoulder knee knees wrist wrists ankle ankles " +
+  "headphones earbuds water bottle bottles towel towels bag bags backpack car truck van keys bus locker lockers hallway stairs steps stadium " +
+  "fence net nets goal goals hoop rim bat bats glove mitt base bases plate plates mound dugout sideline sidelines endzone yard yards line lines " +
+  "chains pylon pylons hurdle hurdles ladder ladders rope ropes tire tires band bands dumbbell dumbbells barbell rack bar mat mats chalk " +
+  "clock timer stopwatch flag flags banner trophy trophies medal medals letter letters envelope notebook playbook clipboard whiteboard " +
+  "screen laptop tablet camera mic microphone slate turf grass dirt sand pool steam fog wind clouds ice weight weights handshake handshakes " +
+  "hug hugs footwork lap laps warmups cooldown stance snap snaps kickoff whistles timeout halftime overtime pregame postgame victory win wins " +
+  "tears smile smiles laughter silence noise closeup timelapse macro detail details " +
+  "kneeling running jogging sprinting lifting stretching throwing catching kicking jumping walking standing sitting waiting breathing tying " +
+  "lacing praying laughing talking listening watching cheering clapping hugging dribbling shooting passing tackling blocking spinning " +
+  "bouncing loading pushing pulling dripping rising falling").split(/\s+/));
 function offlineSafe(text, people, { places = [], vocab = null } = {}) {
   const t = String(text || "").trim();
-  if (!t || t.includes("@") || /\d/.test(t) || contactIn(t) || idNames(t, people).length) return false;
+  if (!t || t.includes("@") || /\d/.test(t) || contactIn(t) || idNames(t, people).length || minorRunIns(t, people).maybe.length) return false;
   const words = t.match(/[\p{L}\p{M}'’]+/gu) || [];
   const at = placeWords(places);
   if (words.some((w) => at.has(w.toLowerCase().replace(/['’]s?$/u, "")))) return false;
@@ -363,17 +481,51 @@ function graphicsCredit(p, as, format) {
 // (#TyNgNeverQuit, @tyng23): its words are also read with the capitals in a
 // run split apart, and a name run together counts anywhere inside a hashtag
 // or a handle.
-// A hashtag or handle starts a sentence of its own ("#HopeIsAPlan" reads
-// "Hope Is A Plan", asked about like any sentence start).
+// Every word of a hashtag or a handle has its capital, and so does every
+// word of a line of three words or more in Title Case or capitals ("Never
+// Lose Hope", "GAME DAY GRIND"): a capital there says nothing, so each of
+// those words reads as the start of a sentence ("#NeverLoseHope" asks about
+// "hope", as "Hope never quits" does). A whole name is still a whole name
+// ("#HopeFieldStrong"), and a short line keeps its reading ("Thanks Will").
+const TAG = /[#@][\p{L}\p{M}\p{N}_.]+/gu;
+// (Title Case as titles read it: titleCase, above.)
+const titleCaseLine = (line) => titleCase(line);
+// A shout-out ends on the name ("Way To Go Hope", "Happy Birthday Grace"):
+// the last word of each line in Title Case.
+function shoutOuts(all) {
+  const out = new Set();
+  for (const line of String(all || "").split(/\r?\n/)) {
+    if (!titleCaseLine(line)) continue;
+    const words = line.replace(TAG, " ").match(/[\p{L}\p{M}][\p{L}\p{M}'’]*/gu) || [];
+    if (words.length) out.add(words[words.length - 1].toLowerCase().replace(/['’]s$/u, ""));
+  }
+  return out;
+}
+function tagWords(tag) {
+  return tag
+    .slice(1)
+    .replace(/(\p{Ll})(\p{Lu})/gu, "$1\n$2")
+    .replace(/(\p{Lu})(\p{Lu}\p{Ll})/gu, "$1\n$2")
+    .replace(/(\p{L})(\p{N})|(\p{N})(\p{L})/gu, "$1$3\n$2$4")
+    .replace(/[_.]+/g, "\n");
+}
 function publicText(all) {
-  const split = all.replace(/[#@]/g, "\n").replace(/(\p{Ll})(\p{Lu})/gu, "$1 $2").replace(/(\p{Lu})(\p{Lu}\p{Ll})/gu, "$1 $2").replace(/(\p{L})(\p{N})|(\p{N})(\p{L})/gu, "$1$3 $2$4");
-  return all + "\n" + split;
+  // Lines in Title Case: a word to a line. Tags: read from the split copy only.
+  const lines = String(all || "").split(/\r?\n/).map((l) => (titleCaseLine(l) ? l.replace(/[^\S\n]+/g, "\n") : l)).join("\n");
+  const split = lines
+    .replace(TAG, (t) => "\n" + tagWords(t))
+    .replace(/(\p{Ll})(\p{Lu})/gu, "$1 $2")
+    .replace(/(\p{Lu})(\p{Lu}\p{Ll})/gu, "$1 $2")
+    .replace(/(\p{L})(\p{N})|(\p{N})(\p{L})/gu, "$1$3 $2$4");
+  return lines.replace(TAG, " ") + "\n" + split;
 }
 // A name run together inside a hashtag or handle: { sure } when it starts
 // where a word of the tag starts (its first letter, a capital after a small
 // letter, a letter after a digit or "_": "#tyngneverquit", "@tyng23",
-// "#GoTyNg"), { ask } (the tag) when it's inside a word ("edli" in
-// "#SpeedLimit"), or nothing.
+// "#GoTyNg"), when it ends where the tag or a word of it ends ("#teamtyng"),
+// or when it's seven letters or more, too long to be chance
+// ("#gojordankidd"); { ask } (the tag) when it's a short one inside a word
+// ("edli" in "#SpeedLimit", "alko" in "#WalkOff"); or nothing.
 function inTags(all, name, minRun) {
   const parts = nameParts(name);
   const joined = parts.join("");
@@ -391,8 +543,10 @@ function inTags(all, name, minRun) {
       }
       prev = ch;
     }
+    const len = joined.length;
     for (let i = letters.indexOf(joined); i >= 0; i = letters.indexOf(joined, i + 1)) {
-      if (starts.has(i)) sure = true;
+      // A word of the tag ends where the next one starts, or at its end.
+      if (starts.has(i) || starts.has(i + len) || i + len === letters.length || Array.from(joined).length >= 7) sure = true;
       else ask.push(tag.toLowerCase());
     }
   }
@@ -400,7 +554,14 @@ function inTags(all, name, minRun) {
 }
 function publicNames(all, p) {
   const minor = !!p.is_minor;
-  return strictNames(publicText(all), [{ name: p.name, is_minor: minor }]).length > 0 || !!inTags(all, p.name, minor ? 4 : 5).sure;
+  if (strictNames(publicText(all), [{ name: p.name, is_minor: minor }]).length > 0 || !!inTags(all, p.name, minor ? 4 : 5).sure) return true;
+  if (!minor) return false;
+  // A minor: one word of their name run into a tag or a word where a word
+  // starts or ends ("#jordanstrong", "#teamjordan"), or an everyday-word name
+  // ending a line in Title Case (a shout-out: "Way To Go Hope").
+  if (minorRunIns(all, [p]).sure.length) return true;
+  const ends = shoutOuts(all);
+  return nameParts(p.name).some((w) => ends.has(w));
 }
 // What a graphic's words may not carry (the same rules as titles and file
 // names, read as above): the name of anyone the release doesn't let it name,
@@ -432,6 +593,9 @@ function graphicsAsks(texts, people, { format = null, ok = new Set() } = {}) {
     if (!mayName(p, format)) {
       for (const w of nameHits(all, p, p.is_minor ? { minRun: 4, minWord: 2 } : {}).maybe) out.add(w);
       for (const tag of inTags(raw, p.name, p.is_minor ? 4 : 5).ask || []) out.add(tag);
+      // One word of a minor's name inside a word, or an everyday one run in
+      // ("#hopestrong"): asked.
+      if (p.is_minor) for (const w of minorRunIns(raw, [p]).maybe) out.add(w);
     }
     if (p.reviewer_name && p.reviewer_relation !== "self") {
       for (const w of nameHits(all, { name: p.reviewer_name }).maybe) out.add(w);
@@ -443,7 +607,10 @@ function graphicsAsks(texts, people, { format = null, ok = new Set() } = {}) {
 
 // ── A film ───────────────────────────────────────────────────────────────
 // partial: only the fields sent (an edit); otherwise a new film.
-function filmInput(raw, { partial = false, people = [], namesOk = new Set() } = {}) {
+// current: the film as it is (an edit). A title or a story sent unchanged
+// is read for certain names only: its questions were answered when it was
+// saved, and a card added or changed since was read against it.
+function filmInput(raw, { partial = false, people = [], namesOk = new Set(), current = null } = {}) {
   const r = raw && typeof raw === "object" ? raw : {};
   const errors = [];
   const asks = [];
@@ -452,7 +619,19 @@ function filmInput(raw, { partial = false, people = [], namesOk = new Set() } = 
   if (want("title")) {
     v.title = clean(r.title, 120);
     if (!v.title) errors.push("title");
-    else if (idNames(v.title, people).length) errors.push("title_has_name");
+    else {
+      const t = titleNames(v.title, people);
+      const same = current && current.title === v.title;
+      if (t.sure.length) errors.push("title_has_name");
+      else if (!same) {
+        // An everyday word that's also a name: asked.
+        const maybe = t.maybe.filter((w) => !namesOk.has(w));
+        if (maybe.length) {
+          errors.push("title_may_have_name");
+          asks.push(...maybe);
+        }
+      }
+    }
   }
   if (want("lane")) {
     v.lane = clean(r.lane, 20).toLowerCase();
@@ -469,8 +648,11 @@ function filmInput(raw, { partial = false, people = [], namesOk = new Set() } = 
   if (has(r, "one_sentence")) {
     // The story is on the speaker's review page: never a name.
     v.one_sentence = clean(r.one_sentence, 300) || null;
-    if (v.one_sentence && strictNames(v.one_sentence, people).length) errors.push("story_has_name");
-    else if (v.one_sentence) {
+    const same = current && current.one_sentence === v.one_sentence;
+    if (!v.one_sentence) {
+      // nothing to read
+    } else if (strictNames(v.one_sentence, people).length) errors.push("story_has_name");
+    else if (!same) {
       // An everyday word that's also a name, starting a sentence: asked.
       const maybe = strictMaybe(v.one_sentence, people).filter((w) => !namesOk.has(w));
       if (maybe.length) {
@@ -499,6 +681,30 @@ function filmInput(raw, { partial = false, people = [], namesOk = new Set() } = 
   }
   if (has(r, "plan")) v.plan = planInput(r.plan);
   return { errors, value: v, asks: [...new Set(asks)] };
+}
+
+// A new or changed card, read against the film's title and story: a sure
+// name in either stops it (they change first); an everyday word that's also
+// this card's name is asked about ({ fields, words }), and the writer's "not a
+// name here" (names_ok) counts for those words. Null when it's fine.
+function cardAgainstFilm(film, person, namesOk = new Set()) {
+  const t = titleNames(film && film.title, [person]);
+  if (t.sure.length) return { error: "title_has_name" };
+  const story = film && film.one_sentence;
+  if (story && strictNames(story, [person]).length) return { error: "story_has_name" };
+  const fields = [];
+  const words = [];
+  const tm = t.maybe.filter((w) => !namesOk.has(w));
+  if (tm.length) {
+    fields.push("title_may_have_name");
+    words.push(...tm);
+  }
+  const sm = story ? strictMaybe(story, [person]).filter((w) => !namesOk.has(w)) : [];
+  if (sm.length) {
+    fields.push("story_may_have_name");
+    words.push(...sm);
+  }
+  return fields.length ? { error: "invalid", fields, words: [...new Set(words)] } : null;
 }
 
 // ── A clearance card ─────────────────────────────────────────────────────
@@ -777,6 +983,10 @@ module.exports = {
   strictNames,
   strictMaybe,
   idNames,
+  titleNames,
+  titleCase,
+  minorRunIns,
+  cardAgainstFilm,
   EVERYDAY_2,
   EVERYDAY_NAMES,
   namesOkWords,
