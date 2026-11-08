@@ -1,0 +1,122 @@
+# Studio films: a room for every film
+
+A Studio kit is the playbook (agents/studio, migration 018). A **film** is one piece of work made from it. Starting a film turns the kit's ten handoff steps into that film's steps, each with its owner, and the rules the kit asks people to follow by hand are held by the database (migration 039).
+
+In the TOJ app: Studio → **Films**. API: `routes/studio-films.js` (team) and `routes/studio-review.js` (the speakers' links). Template: `agents/studio/films.js`.
+
+## The ten steps
+
+From the Same Work kit's *Handoffs and checklists* column, in its order. One step at a time; the database refuses a step before the one ahead of it.
+
+| Step | Owner | Done when |
+|---|---|---|
+| Brief | Producer | The director can say the story back in one sentence (the film needs its one-sentence story) |
+| Board | Director | The producer can fill the clearance card |
+| Clearance card | Producer | **No card, no shoot**: everyone on camera has a cleared card |
+| Shoot | Director | Cards copied twice; everyone still cleared |
+| Selects | Director | The editor can cut without calling the director |
+| Rough cut | Editor | The review copy is uploaded with everyone in it listed |
+| Speaker review | Producer | Every speaker in the cuts that go on said yes to those exact files (the producer names the cuts: a hero film's 9:16 and its 4:5, say) |
+| Rights check | Producer | What's on screen in those cuts matches each release |
+| Final sign-off | Producer and Coach Hooks | Both say yes, or it waits. The producer records Hooks's yes and how it came, once the rights check is done |
+| Publish | Kyron | Every post recorded, so a takedown can find it |
+
+*Producer* means an approver or Kyron. The film's director and editor (assigned by the producer) finish their own steps; the producer can finish any step but Publish. The checklists (*Shoot day: director*, *Edit delivery: editor*, *Release: producer*) are read from the approved kit, so a kit refresh updates them.
+
+The rights check and the final sign-off are for the cuts the speaker review named, and **only those cuts are posted**: a cut approved after the sign-off waits for the steps to run again. The producer can reopen the last done step (and so walk back), with a reason. Walking back past the rights check takes Hooks's yes with it (it was for the cuts as they were). A film with anything live isn't walked back (take the posts down first), a published film is never reopened (it's taken down), and a closed film isn't reopened at all.
+
+Each change to a film takes the film's lock first, so two changes that are each allowed alone can't both land: a post recorded while consent is being pulled waits for the pull, then is refused. The order is always the same: the person code (a card being added, a pull), then films in id order, then the film's rows, then takedowns in id order (a post's line coming down takes the post down, which ticks that post's line on every other takedown listing it, so all of them are locked up front). A change to a single row that a cascade can also reach (a card, a step, a review link, a post, a takedown line) goes through a database function that takes the film first. If two changes still collide in the same instant, the database rolls one back and the server tries it once more.
+
+## Clearance cards
+
+One per person on camera. The name stays on the card; everything else carries the **code** (the athlete ID; a parent adds `-P1`). The same person has the same code in every film: that's how a pulled consent finds them all.
+
+- What the release covers: face, name, jersey, voice, and which formats.
+- **Every minor is unidentifiable**: no face, no name, no jersey number (Kyron's rule; the kit's for Texas youth, who are minors until counsel clears otherwise). The form and the database both hold this.
+- A **speaker** (their words are in the film) approves the cut: an adult themselves, a minor's parent or legal guardian.
+- The producer clears a card. Changing a cleared card clears it again. A card in something live doesn't change or get uncleared at all (take the post down, or pull consent).
+- **Who approves** (the reviewer's name, email and relation) is the producer's to change. Any change to a card stops its live review links, and an approval counts only from the reviewer the card names now: an adult's own yes stops counting if the card is corrected to a minor whose parent approves.
+- Titles and file names never carry a name, and they're read harder than sentences:
+  - words that run together are split first (`TyNgQuoteCard`, `hope_quote_v02`);
+  - any word of a card's name counts, in any case, an everyday word too ("hope", "smith"): a word of three letters or more, two for a minor ("Bo"), but never a two-letter everyday word ("in", "an");
+  - a name run together counts anywhere inside a word (`tyngquotecard`), from five letters (four for a minor).
+  - one word of a minor's name (four letters or more) run into another word counts where a word starts or ends (`jordanquote_v2`, `quotejordan`, "Kiddstrong season"); one that's also an everyday word ("#hopestrong" for a Hope) is asked about where questions can be asked, and counts in a file name, which has no one to ask, beside a word file names use (`hopequote_v02`, `teamhope`; `hopeful_promo` and `kicking_drill` are ordinary words).
+  - A title is words someone chose, so two of those are asked about there rather than refused: an everyday word that's also a name ("Game day" for a Dan Day, "Young and hungry" for a Chase Young), and a short name run together inside a word ("The walkout" for an Al Ko). The title is kept once the writer says it isn't a name here. A name run together from a word's start, or of seven letters or more, is still refused, and so is a minor's everyday-word name read as in a story: a possessive ("Hope's first season") or a capital mid-title outside Title Case ("Go Hope go", "Thanks, Hope").
+  - A title or story sent unchanged (the edit screen sends both with every save) isn't asked about again, but a certain name in it still stops the save. The database holds the certain ones too (a whole name, one run together, any word of a minor's name), so a title and a card saved in the same instant can't both go through. A card added or changed later is read against both: a name from the film's cards in either stops the card until they change, and an everyday word that's also its name is asked about there.
+- The one-sentence story is a sentence: it never carries a card's name (a word of three letters or more, two for a minor, the whole name, or the name run together as one word, as in `JamieRivers`). A word that's also an everyday word ("he" in Bo He, "will", "hope", "field", "young": the app keeps the list) counts as a name with a capital in the middle of a sentence ("we ran it with Will"). At the start of a sentence ("Hope never quits") the app asks, and keeps it once the writer says it isn't a name here. In lower case it's the everyday word. An adult's lone two-letter name isn't caught.
+- Notes are screened the same way, with one difference: a single word of an adult's name ("will" for a Will, "mark" for a Mark), or a minor's everyday-word name at the start of a sentence ("Will you send it?"), is asked about, and kept once the writer says that word isn't a name here (the app sends back the exact words, for that exact text; change the text and it asks again). A whole name, one run together, or any other word of a minor's name is always refused, by the app and by the database: there's no "it isn't a name here" for a child. (The database leaves the everyday words to the app.)
+- **A pulled consent stays pulled.** A new card for that code is refused while its takedown is open, and after that until the producer records the family's new consent (how and when) on the first new card. A card being added while the pull runs waits for it, and is pulled with it.
+
+## Cuts, the clip log and review links
+
+An editor uploads a review copy (720p is plenty; up to `STUDIO_REVIEW_MAX_MB`, 50 MB by default, which is also Supabase's free-plan limit) and ticks everyone in it. **That list is the clip log** a takedown follows. The file goes straight to the private bucket `studio-films`; the worker (`utils/studio-review-worker.js`, ffmpeg) makes the copy speakers watch, at 720 on the short side, with its sound and *REVIEW COPY · NOT FOR SHARING* burned in. It takes the uploaded file's sha256 (the file that will post; every approval is for it) and the copy's own sha256, whose start names the copy in storage: a copy is never overwritten, and neither fingerprint changes once the cut is ready. Nothing is made for a pulled or archived film, and whatever the worker made for a cut that didn't make it is taken back out.
+
+The producer sends each speaker in the cut their link (`/film-review.html#t=…`, 7 days, one use). Like the Concierge's family approvals (migration 037), the token stays in the link's fragment, the server sends the database its proof, and the table keeps only the proof's hash: nobody who can read the table can answer for the speaker. The approval is for that exact file, from the reviewer the card names. A *change* answer needs a note and goes to the producer and the film's editor; the reviewer gets a receipt either way. If the email fails, the link is taken back. Replies go back to the reviewer (or `STUDIO_REVIEW_REPLY_TO`, an address nobody reads), never to staff: a reply quotes the link.
+
+Live links sit in more places than the app:
+- with Gmail as the app's mail account, the **Sent folder** keeps a copy of every review email, links included: whoever can open that account can see live links. Some sending services keep message bodies for days too (Postmark and Mailgun do): check yours, and keep whichever account sends to Kyron;
+- a **bounced** review email usually comes back whole, link included, to the sending account. The speaker never got it: **Cancel link** on that cut, check the address on the card, and send a new one.
+
+Once a link is out, who's in the cut is fixed. A speaker who takes their yes back is recorded by the producer ("They took it back"); that cut can't go out (a live post has to come down first).
+
+## Posting and takedowns
+
+Only Kyron records posts, after the final sign-off, and only cuts every speaker in them approved, with everyone in them cleared.
+
+**Consent pulled** (the producer, from the card): every card with that code is closed, every film they're in is pulled for good, live review links stop, and a takedown opens with a line for every live post plus one for everything outside the app (drives, the Milanote board, the editor's machine). **The 72-hour clock** starts at once and shows on Today. Marking a line down takes its post down; the last line closes the takedown.
+
+The files of those films (uploads, review copies, posters) are listed for removal by the database in the same change, and removed at once; anything storage refuses is tried again on the worker's next pass (`studio_storage_removals`). A deleted cut's files go the same way, and so do any the worker made for a cut that didn't make it. For three hours after a pull, the worker also empties the pulled film's whole folder on every pass (every pulled film, newest pull first, a page at a time): an upload link made just before the pull (they last two hours) can still land a file no row lists. A file in that folder that storage won't remove goes on the removal list, so it's tried again after the three hours; a folder storage won't list is looked at again on the next pass. The same pass closes any takedown with nothing left on it, one at a time, leaving one that someone is changing right now for the next pass.
+
+A takedown's lines lock the takedown as they're marked down, so the last line always closes it; the worker closes any takedown with nothing left on it, as a safety net.
+
+## Tool approvals
+
+The kit's rule: a tool touches footage only once the producer has checked its terms and added it, with a one-line reason. Three switches start **off**; only Kyron turns them on, and the reason is kept:
+
+- **Review copies in storage**: needed for uploads and review links. Turning it off stops every live link.
+- **Claude reads transcripts**: for the real-words tools (next PR).
+- **The graphics system**: once Kyron and Coach Hooks approve the type system (next PR).
+
+## The history
+
+Every step, card, cut, review, post, takedown and switch is written to `studio_events` by the database itself (a trigger running as the tables' owner, which no API session can be) and never changed. Staff add notes.
+
+**No names go in it**, or in the team activity log. A reviewer is written as who they are to the speaker ("their parent"), and a change note stays on the review, not in the history. A staff note (a step, a reopen, Hooks's yes, a pull, a takedown line) that names someone on the film's cards is refused by the app (or asked about, for a single word of an adult's name), and the database leaves out any note with a whole name, a run-together one or any word of a minor's name regardless. Who makes a change says so with that change (`changed_by` is taken by the database with each write, never carried over from the last one).
+
+Every Studio table refuses `TRUNCATE`, and the server's role (`service_role`) can read and write rows only: it can't empty a table, put a trigger on one, or point a foreign key at one.
+
+## Endpoints
+
+All under `/api/studio-films` (team members with Studio; writes are JSON from the app's own pages):
+
+| Method | Path | Who |
+|---|---|---|
+| GET | `/meta`, `/today`, `/films`, `/films/:id` | members |
+| POST | `/films` | members (the producer assigns director and editor) |
+| PATCH | `/films/:id` (with `seen`) | members |
+| POST | `/films/:id/archive`, `/films/:id/second-yes`, `/films/:id/steps/:step/reopen` | producer |
+| POST | `/films/:id/steps/:step/done` (Speaker review: `{ cut_ids }`) | the step's owner or the producer (Publish: Kyron) |
+| POST/PATCH/DELETE | `/films/:id/people[/:pid]` | members (who approves, and a new consent: the producer) |
+| POST | `/films/:id/people/:pid/clear`, `/people/pull` | producer |
+| POST | `/films/:id/cuts/upload`, `/films/:id/cuts`; PATCH/DELETE `/films/:id/cuts/:cid` | members |
+| POST | `/films/:id/cuts/:cid/reviews`, `/reviews/:rid/cancel-link`, `/reviews/:rid/withdraw` | producer |
+| POST | `/films/:id/posts` | Kyron |
+| POST | `/posts/:pid/removed`, GET `/takedowns`, POST `/takedowns/:tid/items`, `/takedown-items/:iid/done` | producer |
+| POST | `/tools/:tool` `{ on, note }` | Kyron |
+
+The speakers' page: `POST /api/studio-review/view {token}` and `POST /api/studio-review/decide {token, decision, name, note, confirm}` (POST and JSON only, from the site's own pages, 30 tries per visitor per 10 minutes).
+
+## Setup
+
+1. Apply `db/migrations/039_studio_films.sql` (tables, rules, the bucket `studio-films`).
+2. Optional settings on Render: `STUDIO_SITE_BASE` (default `https://www.tojcampaign.com`), `STUDIO_REVIEW_REPLY_TO`, `STUDIO_REVIEW_MAX_MB` (raise it after the Supabase Pro upgrade), `STUDIO_REVIEW_WORKER=off` to stop the worker on a server.
+3. Kyron turns on *Review copies in storage* (Studio → Films → Tool approvals) once he's checked Supabase's terms.
+4. Email works as for the rest of the app (`EMAIL_USER`/`EMAIL_PASS` or `SMTP_*`); without it, review links aren't made.
+
+## Known limits
+
+- The kit names only some file codes (YTH, HERO in its example). The other lane and format codes (`NFL`, `COL`, `PAR`, `CUT`, …) are the app's until the kit names them; the file-name check only warns.
+- Coach Hooks's yes is recorded by the producer with how it came (a text, an email), not by Hooks in the app.
+- The worker reads a review copy into memory to upload it (a 10-minute copy at 720p is tens of megabytes).
+- The speakers' page limits tries per visitor by `X-Forwarded-For`, which a caller reaching Render directly can set. The per-connection limit and the 256-bit tokens still hold.
+- Slides (In Their Own Words, quote cards) go through the same review links once the graphics templates land (next PR).
