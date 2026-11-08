@@ -520,6 +520,15 @@ begin
        select 1 from public.studio_film_steps s where s.film_id = old.id and s.step = 'clearance' and s.status = 'done') then
     raise exception 'film % was cleared: its athlete ID stays', old.id;
   end if;
+  -- A title or story never carries a name on the film's cards (the app reads
+  -- harder; this holds the certain ones when a title and a card are saved in
+  -- the same instant: a card takes the film's row lock first).
+  if new.title is distinct from old.title and public.studio_names_in(new.id, new.title) then
+    raise exception 'a title carries no name on the film''s cards: use the athlete ID';
+  end if;
+  if new.one_sentence is distinct from old.one_sentence and public.studio_names_in(new.id, new.one_sentence) then
+    raise exception 'the story carries no name on the film''s cards';
+  end if;
   if new.archived_at is distinct from old.archived_at then
     if new.archived_at is not null and old.archived_at is null then
       if new.archived_by is null then raise exception 'who archived film %', old.id; end if;
@@ -532,6 +541,27 @@ begin
     end if;
   end if;
   return new;
+end $$;
+
+-- A card added or renamed: the film's title and story are read against it
+-- (the card's gate took the film's row lock, so a title saved in the same
+-- instant waits, and is read against the card in turn).
+create or replace function public.studio_people_title_names() returns trigger
+language plpgsql set search_path = '' as $$
+declare
+  f public.studio_films%rowtype;
+begin
+  if tg_op = 'UPDATE' and row(new.name, new.reviewer_name, new.is_minor) is not distinct from row(old.name, old.reviewer_name, old.is_minor) then
+    return null;
+  end if;
+  select * into f from public.studio_films where id = new.film_id;
+  if public.studio_names_in(new.film_id, f.title) then
+    raise exception 'the film''s title has a name on this card: change the title first';
+  end if;
+  if f.one_sentence is not null and public.studio_names_in(new.film_id, f.one_sentence) then
+    raise exception 'the film''s story has a name on this card: change the story first';
+  end if;
+  return null;
 end $$;
 
 create or replace function public.studio_film_steps_gate() returns trigger
@@ -1392,6 +1422,8 @@ create or replace trigger studio_film_people_gate before insert or update or del
   for each row execute function public.studio_film_people_gate();
 create or replace trigger studio_film_people_then after update on public.studio_film_people
   for each row execute function public.studio_people_cascade();
+create or replace trigger studio_film_people_title_names after insert or update on public.studio_film_people
+  for each row execute function public.studio_people_title_names();
 create or replace trigger studio_film_people_log after insert or update on public.studio_film_people
   for each row execute function public.studio_log();
 
@@ -1746,7 +1778,7 @@ begin
     'public.studio_tool_approvals_gate()', 'public.studio_films_gate()', 'public.studio_film_steps_gate()',
     'public.studio_film_people_gate()', 'public.studio_film_cuts_gate()', 'public.studio_reviews_gate()',
     'public.studio_film_posts_gate()', 'public.studio_takedowns_gate()', 'public.studio_takedown_items_gate()',
-    'public.studio_films_steps()', 'public.studio_people_cascade()', 'public.studio_takedown_items_after()',
+    'public.studio_films_steps()', 'public.studio_people_cascade()', 'public.studio_people_title_names()', 'public.studio_takedown_items_after()',
     'public.studio_film_posts_after()', 'public.studio_log()', 'public.studio_events_gate()',
     'public.studio_names_in(uuid, text)', 'public.studio_cut_files(public.studio_film_cuts)', 'public.studio_film_steps_after()',
     'public.studio_film_cuts_deleted()', 'public.studio_tool_approvals_after()', 'public.studio_keep()',

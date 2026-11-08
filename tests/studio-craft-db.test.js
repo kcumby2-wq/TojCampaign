@@ -525,7 +525,7 @@ test("a tag or a Title Case line reads each word as a sentence start; a whole na
   for (const [t, want] of [["#GameDayGrind", "asked day"], ["#UpTheHill", "asked hill"], ["#StayYoung", "asked young"], ["#KeepTheFaith", "asked faith"],
     ["Game Day Grind", "asked day"], ["GAME DAY GRIND", "asked day"], ["game day grind", "passes"],
     // A Title Case line that ends on a minor's name is a shout-out: the name.
-    ["Keep the Faith", "refused"], ["Way To Go Ray", "refused"], ["Proud Of You Chase", "refused"],
+    ["Keep the Faith", "refused"], ["Way To Go Ray", "refused"], ["Proud Of You Chase", "refused"], ["Go Ray Go", "refused"],
     // A short line, a capital mid-sentence and a whole name keep their reading.
     ["Thanks Ray", "refused"], ["We ran it with Faith", "refused"], ["#RayHillStrong", "refused"], ["Go Ray Hill Go", "refused"]]) {
     assert.equal(judge(t, mids), want, t);
@@ -559,7 +559,8 @@ test("the phone keeps an ordinary shot line, and a place's own name stays online
     assert.equal(U.offlineSafe(line, people, { places }), false, line);
   }
   // A place that's only ordinary words keeps them all.
-  for (const [place, line] of [["Park High School", "park high school at dawn"], ["Court Street Park", "court street park, wide"], ["Home Field", "home field lights"]]) {
+  for (const [place, line] of [["Park High School", "park high school at dawn"], ["Court Street Park", "court street park, wide"], ["Home Field", "home field lights"],
+    ["The Rowe house on High Street", "the bus down high street"], ["Home Field, Riverside", "home field lights at dawn"]]) {
     assert.equal(U.offlineSafe(line, people, { places: [place] }), false, place);
   }
 });

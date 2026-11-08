@@ -291,6 +291,26 @@ test("a title or a file name is read harder than a sentence: run-together, camel
   assert.deepEqual([changed.status, changed.data.fields], [400, ["story_may_have_name"]]);
 });
 
+test("a title and a card saved in the same instant: the database lets one through, never a name in the title", async () => {
+  for (let i = 0; i < 6; i++) {
+    const code = "R" + String(8000 + ++n);
+    const film = ok(await films("POST", "/films", { kit_slug: "same-work", title: `${code} hero`, lane: "youth", athlete_id: code, format: "hero" }, "lead"), "start").film;
+    const [title, card] = await Promise.all([
+      films("PATCH", `/films/${film.id}`, { seen: film.updated_at, title: "Ty Ng first season" }, "lead"),
+      films("POST", `/films/${film.id}/people`, { person_code: code, name: "Ty Ng", role: "athlete", is_minor: true, release_on_file: true, covers: { voice: true } }, "lead"),
+    ]);
+    assert.ok(!(title.status === 200 && card.status === 200), `both went through: ${title.status} ${card.status}`);
+    const after = (await pool.query("select title from studio_films where id = $1", [film.id])).rows[0].title;
+    const cards = (await pool.query("select count(*)::int as n from studio_film_people where film_id = $1", [film.id])).rows[0].n;
+    assert.ok(!(after === "Ty Ng first season" && cards === 1), "the name stayed in the title with the card in");
+  }
+  // Straight to the tables, the same holds.
+  const code = "R" + String(8000 + ++n);
+  const film = ok(await films("POST", "/films", { kit_slug: "same-work", title: `${code} hero`, lane: "youth", athlete_id: code, format: "hero" }, "lead"), "start").film;
+  ok(await films("POST", `/films/${film.id}/people`, { person_code: code, name: "Ty Ng", role: "athlete", is_minor: true, release_on_file: true, covers: { voice: true } }, "lead"), "card");
+  await assert.rejects(pool.query("update studio_films set title = 'Ty Ng first season' where id = $1", [film.id]), /carries no name/);
+});
+
 test("an approval comes from the reviewer the card names now; a card change stops its links", async () => {
   const { film, p } = await aFilm();
   const cut = await aCut(film, [p.id]);
