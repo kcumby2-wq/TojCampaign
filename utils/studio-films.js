@@ -219,6 +219,14 @@ function strictNames(textValue, people) {
   }
   return [...out];
 }
+// Names anyone on the cards has for certain, for what's shared beyond one
+// film (a kit, the month's refresh, what's sent to a model for the kit): a
+// whole name or one run together, a word of one (three letters or more; a
+// minor's from two, and run into other letters from four), a reviewer's
+// name too. An everyday word counts only with a capital mid-sentence.
+function namesAnyone(textValue, people) {
+  return [...new Set([...strictNames(textValue, people), ...namesIn(textValue, people, { strong: true }), ...minorRunIns(textValue, people).sure])];
+}
 // The words of a card's name a sentence may hold, to ask about: an everyday
 // word that's also a name, with a capital at the start of a sentence ("Hope
 // never quits"). strictNames has the sure ones.
@@ -992,6 +1000,7 @@ module.exports = {
   nameHits,
   strictNames,
   strictMaybe,
+  namesAnyone,
   idNames,
   titleNames,
   titleCase,

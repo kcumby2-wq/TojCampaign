@@ -263,6 +263,18 @@
     gfs_creator_changed: "updated a creator",
     chat_removed_message: "removed a message in chat",
     tool_added: "added a tool to Tools",
+    started_film: "started a film",
+    published_film: "marked a film published",
+    pulled_consent: "recorded a pulled consent",
+    sent_review_link: "sent a review link",
+    studio_slides_uploaded: "uploaded slides to a film",
+    studio_transcript_added: "added a transcript to a film",
+    studio_transcript_removed: "removed a transcript from a film",
+    studio_words_claude: "asked Claude for a film's strongest lines",
+    studio_directions: "asked for three directions on a film",
+    studio_taste_added: "added to the taste library",
+    studio_wrap_added: "added a wrap-up to a film",
+    studio_kit_suggestion: "suggested an edit to",
   };
   function actorName(a) {
     if (a.actor && state.me && a.actor === state.me.email) return "You";
@@ -432,9 +444,11 @@
     if (k.type === "todo") return k.title + "\n\n" + (k.items || []).map(function (i) { return "☐ " + i; }).join("\n");
     return k.title + "\n\n" + toText(k.body);
   }
-  function cardRich(k) {
+  // withLink: a link card's own link too (the whole column's copy).
+  function cardRich(k, withLink) {
     if (k.type === "todo") return "<h3>" + h(k.title) + "</h3><ul>" + (k.items || []).map(function (i) { return "<li>" + h(i) + "</li>"; }).join("") + "</ul>";
-    return "<h3>" + h(k.title) + "</h3>" + safeHtml(k.body);
+    var link = withLink && k.type === "link" && /^https?:\/\//i.test(String(k.url || "")) ? '<p><a href="' + h(k.url) + '">' + h(k.url) + "</a></p>" : "";
+    return "<h3>" + h(k.title) + "</h3>" + safeHtml(k.body) + link;
   }
   async function copy(rich, plain) {
     try {
@@ -453,12 +467,14 @@
     show("studio", '<div class="screen">' + backBtn("#studio", "Studio") + '<div class="spin"></div></div>');
     var row = await api("/api/studio-agents/kits/" + encodeURIComponent(id));
     var k = row.kit;
-    // Suggested edits waiting on this kit's cards (migration 042), by title.
+    // Suggested edits waiting on this kit's cards (migration 042), by column
+    // and title (a title is one card only within its column).
     var waitingOn = {};
+    var cardKey = function (colName, title) { return colName + "\u0001" + title; };
     var canSuggest = row.status === "approved" && atLeast("member") && hasTool("studio");
     if (canSuggest) {
       try {
-        ((await api("/api/studio-learn/suggestions?slug=" + encodeURIComponent(row.slug))).suggestions || []).forEach(function (x) { waitingOn[x.card_title] = (waitingOn[x.card_title] || 0) + 1; });
+        ((await api("/api/studio-learn/suggestions?slug=" + encodeURIComponent(row.slug))).suggestions || []).forEach(function (x) { var key = cardKey(x.column_name, x.card_title); waitingOn[key] = (waitingOn[key] || 0) + 1; });
       } catch (e) { if (e.stale) throw e; waitingOn = {}; }
     }
     var col = Math.min(state.kitCol[id] || 0, k.columns.length - 1);
@@ -470,6 +486,9 @@
     }).join("");
     var cards = c.cards.map(function (card, j) {
       var kind = { note: "NOTE", link: "LINK", image: "IMG", todo: "TODO" }[card.type] + (card.locked ? "" : "");
+      // A locked rule card isn't the refresh's to change: no suggestions on it.
+      var suggest = canSuggest && !card.locked;
+      var waitN = waitingOn[cardKey(c.name, card.title)] || 0;
       var img = card.type === "image" && k.assets ? "/api/studio-agents/assets/" + encodeURIComponent(k.assets) + "/" + encodeURIComponent(card.img) + ".jpg" : "";
       var head = img ? '<img class="kind" src="' + h(img) + '" alt="" loading="lazy">' : '<span class="kind">' + (card.locked ? "RULE" : kind) + "</span>";
       var body = card.type === "todo" ? "<ul>" + card.items.map(function (i) { return "<li>" + h(i) + "</li>"; }).join("") + "</ul>" : safeHtml(card.body);
@@ -477,9 +496,9 @@
         (card.type === "link" ? '<button type="button" class="btn small" data-copylink="' + j + '">Copy link</button><a class="btn small ghost" href="' + h(card.url) + '" target="_blank" rel="noopener">Open</a><button type="button" class="btn small ghost" data-copy="' + j + '">Copy notes</button>' :
           card.type === "image" ? '<a class="btn small" href="' + h(img) + '" target="_blank" rel="noopener">Open image to save</a><button type="button" class="btn small ghost" data-copy="' + j + '">Copy notes</button>' :
           '<button type="button" class="btn small" data-copy="' + j + '">Copy card</button>') +
-        (canSuggest ? '<button type="button" class="btn small ghost" data-suggest="' + j + '">Suggest an edit</button>' : "") + "</div>" +
-        (canSuggest ? '<div data-suggestbox="' + j + '" hidden style="display:flex;flex-direction:column;gap:8px"><label class="sr" for="sg' + j + '">What it should say</label><textarea class="textarea" id="sg' + j + '" maxlength="1000" style="min-height:90px" placeholder="What the card should say, or what to change in it"></textarea><input class="input" id="sw' + j + '" maxlength="500" placeholder="Why (optional)"><div class="btn-row"><button type="button" class="btn small" data-suggestsend="' + j + '">Send the suggestion</button></div><p class="sub" role="status" id="sm' + j + '" style="margin:0">It goes into the month\'s kit refresh. An approver folds it in or says why not.</p></div>' : "");
-      var waits = waitingOn[card.title] ? '<span class="badge warn" style="flex:none">' + waitingOn[card.title] + (waitingOn[card.title] === 1 ? " suggestion" : " suggestions") + "</span>" : "";
+        (suggest ? '<button type="button" class="btn small ghost" data-suggest="' + j + '">Suggest an edit</button>' : "") + "</div>" +
+        (suggest ? '<div data-suggestbox="' + j + '" hidden style="display:flex;flex-direction:column;gap:8px"><label class="sr" for="sg' + j + '">What it should say</label><textarea class="textarea" id="sg' + j + '" maxlength="1000" style="min-height:90px" placeholder="What the card should say, or what to change in it"></textarea><input class="input" id="sw' + j + '" maxlength="500" placeholder="Why (optional)"><div class="btn-row"><button type="button" class="btn small" data-suggestsend="' + j + '">Send the suggestion</button></div><p class="sub" role="status" id="sm' + j + '" style="margin:0">It goes into the month\'s kit refresh. An approver folds it in or says why not.</p></div>' : "");
+      var waits = waitN ? '<span class="badge warn" style="flex:none">' + waitN + (waitN === 1 ? " suggestion" : " suggestions") + "</span>" : "";
       return '<details class="kcard"><summary>' + head + '<span class="kt">' + h(card.title) + "</span>" + waits + I.chev + '</summary><div class="kbody">' + (img ? '<img src="' + h(img) + '" alt="' + h(card.title) + '">' : "") + body + btns + "</div></details>";
     }).join("");
     show("studio",
@@ -502,7 +521,7 @@
     });
     // The whole column at once, in order, as Milanote takes a paste.
     document.getElementById("copyCol").addEventListener("click", function () {
-      copy(c.cards.map(cardRich).join("<p></p>"), c.cards.map(function (x) { return x.type === "link" ? cardPlain(x) + "\n" + x.url : cardPlain(x); }).join("\n\n———\n\n"));
+      copy(c.cards.map(function (x) { return cardRich(x, true); }).join("<p></p>"), c.cards.map(function (x) { return x.type === "link" ? cardPlain(x) + "\n" + x.url : cardPlain(x); }).join("\n\n———\n\n"));
     });
     app.querySelectorAll("[data-suggest]").forEach(function (b) {
       b.addEventListener("click", function () { var box = app.querySelector('[data-suggestbox="' + b.dataset.suggest + '"]'); box.hidden = !box.hidden; if (!box.hidden) document.getElementById("sg" + b.dataset.suggest).focus(); });
@@ -512,13 +531,13 @@
         var j = b.dataset.suggestsend, card = c.cards[Number(j)], msg = document.getElementById("sm" + j);
         b.disabled = true;
         try {
-          await post("/api/studio-learn/suggestions", { slug: row.slug, version: row.version, column: c.name, card_title: card.title, suggestion: document.getElementById("sg" + j).value.trim(), why: document.getElementById("sw" + j).value.trim() });
+          await post("/api/studio-learn/suggestions", { slug: row.slug, column: c.name, card_title: card.title, suggestion: document.getElementById("sg" + j).value.trim(), why: document.getElementById("sw" + j).value.trim() });
           toast("Sent. It goes into the month's kit refresh.");
           kit(id);
         } catch (e) {
           b.disabled = false;
           var f = e.data && e.data.fields || [];
-          msg.innerHTML = '<span class="err">' + h(f.indexOf("suggestion_has_name") >= 0 ? "A kit never carries a name: write it without one." : f.indexOf("banned_words") >= 0 ? "A word on the TOJ banned list is in it. Say the concrete thing instead." : f.indexOf("suggestion") >= 0 ? "Say what the card should say." : e.message) + "</span>";
+          msg.innerHTML = '<span class="err">' + h(f.indexOf("suggestion_has_name") >= 0 ? "A kit never carries a name: write it without one." : f.indexOf("card_is_a_rule") >= 0 ? "That card is one of the kit's rules: a refresh can't change it. Talk to Kyron." : f.indexOf("banned_words") >= 0 ? "A word on the TOJ banned list is in it. Say the concrete thing instead." : f.indexOf("suggestion") >= 0 ? "Say what the card should say." : e.message) + "</span>";
         }
       });
     });
@@ -583,7 +602,8 @@
       "</div>" +
       '<div class="dock"><div class="dock-inner"><button type="button" class="btn block" id="write">Write the brief</button><span class="note">Usually 1 to 3 minutes.</span></div></div>');
 
-    app.querySelectorAll("[data-target]").forEach(function (b) { b.addEventListener("click", function () { s.target = b.dataset.target; s.idea = document.getElementById("idea").value; drawIdea(); }); });
+    // A gear re-check is the Same Work kit's: aimed anywhere else, it's an ordinary brief.
+    app.querySelectorAll("[data-target]").forEach(function (b) { b.addEventListener("click", function () { if (b.dataset.target !== s.target) delete s.purpose; s.target = b.dataset.target; s.idea = document.getElementById("idea").value; drawIdea(); }); });
     document.getElementById("idea").addEventListener("input", function () { s.idea = this.value; });
     app.querySelectorAll("[data-pick]").forEach(function (inp) {
       inp.addEventListener("change", function () { s.idea = document.getElementById("idea").value; addFiles(Array.prototype.slice.call(inp.files || [])); inp.value = ""; });
@@ -726,7 +746,7 @@
     var btn = document.getElementById("write");
     btn.disabled = true; btn.textContent = "Sending…";
     try {
-      var d = await post("/api/studio-agents/brief", { idea: s.idea, target: target, links: links, images: images, files: files, purpose: s.purpose || null });
+      var d = await post("/api/studio-agents/brief", { idea: s.idea, target: target, links: links, images: images, files: files, purpose: s.purpose === "gear" && s.target === "refresh:same-work" ? "gear" : null });
       state.lastFiles = files.map(function (f) { return f.text; }).join("\n\n");
       state.idea = null;
       go("#brief/" + d.run_id);
@@ -816,7 +836,7 @@
       var btn = this;
       var body = { role: b.mode === "build" ? "kit-builder" : "kit-refresher", slug: b.slug, brief: area.value.trim(), from_brief: runId };
       if (dirs) body.direction = sel;
-      if (b.purpose === "gear") body.purpose = "gear";
+      if (b.purpose === "gear" && b.mode === "refresh" && b.slug === "same-work") body.purpose = "gear";
       if (needsSource) body.source_text = document.getElementById("srcText").value.trim();
       btn.disabled = true; btn.textContent = "Starting…";
       try {
