@@ -27,6 +27,7 @@ const { Readable } = require("stream");
 const { pipeline } = require("stream/promises");
 const media = require("./sm-market-media");
 const U = require("./studio-films");
+const Still = require("./studio-still");
 const { getSupabase } = require("./supabase");
 
 const MAX_ATTEMPTS = 3;
@@ -165,6 +166,11 @@ async function slideCopy(d, src, out, opts) {
   if (r.code !== 0 || !fs.existsSync(out) || fs.statSync(out).size === 0) throw new media.MediaError("Couldn't make the review copy of a slide: " + media.lastWords(r.stderr, opts.dir));
 }
 const setHash = (hashes) => crypto.createHash("sha256").update(hashes.join("\n"), "utf8").digest("hex");
+async function graphicsOn(d) {
+  const r = await q(d.sb.from("studio_tool_approvals").select("is_on").eq("tool", "graphics_system").maybeSingle());
+  return !!(r && r.is_on);
+}
+
 async function processSlides(row, d) {
   const dir = await fs.promises.mkdtemp(path.join(d.tmp, "studio-slides-"));
   try {
@@ -179,6 +185,14 @@ async function processSlides(row, d) {
       const src = path.join(dir, `slide-${i + 1}.${/\.jpg$/.test(keys[i]) ? "jpg" : "png"}`);
       await download(d, keys[i], src);
       bytes += (await fs.promises.stat(src)).size;
+      // One opaque still of a sane size (utils/studio-still.js), so the copy
+      // shows what the file shows; one the graphics system made doesn't go
+      // as an "upload" while that system is off.
+      const still = Still.check(await fs.promises.readFile(src));
+      if (!still.ok) throw new media.MediaError(`Slide ${i + 1}: ${still.why}.`, { final: true });
+      if (still.marked && row.made_with !== "graphics" && !(await graphicsOn(d))) {
+        throw new media.MediaError(`Slide ${i + 1} was made with the graphics system, which is off: it can't go to review as an upload.`, { final: true });
+      }
       hashes.push(await sha256File(src));
       const info = await d.media.probe(src, { dir });
       if (info.duration_ms && info.duration_ms > 100) throw new media.MediaError(`Slide ${i + 1} isn't a still image.`, { final: true });
@@ -467,4 +481,12 @@ function stop() {
   timer = null;
 }
 
-module.exports = { MAX_ATTEMPTS, STALE_MS, MAX_SECONDS, WATERMARK, start, stop, kick, drain, claim, recover, sweep, processOne, processSlides, sha256File };
+// Files a refused registration left in storage (the routes): removed now,
+// or put on the removal list if storage says no.
+async function forget(keys, over = {}) {
+  const d = defaults(over);
+  if (!d.sb || !d.sb.storage || !keys || !keys.length) return;
+  await takeBack(d, keys);
+}
+
+module.exports = { MAX_ATTEMPTS, STALE_MS, MAX_SECONDS, WATERMARK, start, stop, kick, drain, claim, recover, sweep, forget, processOne, processSlides, sha256File };

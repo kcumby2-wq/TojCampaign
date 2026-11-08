@@ -31,6 +31,7 @@ const push = require("../utils/push");
 const T = require("../utils/team");
 const U = require("../utils/studio-films");
 const W = require("../utils/studio-review-worker");
+const I = require("./helpers/images");
 
 let pool, sb, store, server, base;
 let mails = [];
@@ -186,9 +187,10 @@ test("stills and slides go to the speaker like a cut: marked copies, the files' 
   const up = ok(await films("POST", `/films/${film.id}/slides/upload`, { ...body, made_with: "upload" }, "ed"), "slide links");
   assert.deepEqual(up.uploads.map((x) => [x.key, x.content_type]), [[U.slideKey(film.id, up.id, 1, "png"), "image/png"], [U.slideKey(film.id, up.id, 2, "jpg"), "image/jpeg"]]);
   // Registered only once every slide is in storage.
-  store.put(U.BUCKET, up.uploads[0].key, Buffer.from("slide one"), "image/png");
+  const one = I.png(8, 10), two = I.jpeg(1080, 1350);
+  store.put(U.BUCKET, up.uploads[0].key, one, "image/png");
   assert.equal((await films("POST", `/films/${film.id}/slides`, { ...body, made_with: "upload", id: up.id }, "ed")).data.error, "not_uploaded");
-  store.put(U.BUCKET, up.uploads[1].key, Buffer.from("slide two"), "image/jpeg");
+  store.put(U.BUCKET, up.uploads[1].key, two, "image/jpeg");
   const cut = ok(await films("POST", `/films/${film.id}/slides`, { ...body, made_with: "upload", id: up.id }, "ed"), "register").cut;
   assert.equal(cut.kind, "slides");
   assert.equal(cut.made_with, "upload");
@@ -204,7 +206,7 @@ test("stills and slides go to the speaker like a cut: marked copies, the files' 
   assert.equal(pass.results.find((x) => x.id === cut.id).ok, true, JSON.stringify(pass));
   const row = (await pool.query("select status, sha256, preview_sha256, preview_key, poster_key from studio_film_cuts where id = $1", [cut.id])).rows[0];
   assert.equal(row.status, "ready");
-  assert.equal(row.sha256, crypto.createHash("sha256").update(sha(Buffer.from("slide one")) + "\n" + sha(Buffer.from("slide two")), "utf8").digest("hex"));
+  assert.equal(row.sha256, crypto.createHash("sha256").update(sha(one) + "\n" + sha(two), "utf8").digest("hex"));
   assert.equal(row.preview_key, U.slideCopyPrefix(film.id, cut.id, row.preview_sha256));
   for (const n of [1, 2]) assert.ok(store.has(U.BUCKET, `${row.preview_key}${n}.jpg`), `copy ${n}`);
   // The database holds the copies' place: under their own fingerprint.
@@ -231,7 +233,7 @@ test("stills and slides go to the speaker like a cut: marked copies, the files' 
 
   // A set nobody reviewed can be removed, with every file it made.
   const up2 = ok(await films("POST", `/films/${film.id}/slides/upload`, { ...body, version: 2, made_with: "upload", slides: ["png"] }, "ed"), "slide links 2");
-  store.put(U.BUCKET, up2.uploads[0].key, Buffer.from("draft"), "image/png");
+  store.put(U.BUCKET, up2.uploads[0].key, I.png(6, 6, { rgb: [1, 2, 3] }), "image/png");
   const cut2 = ok(await films("POST", `/films/${film.id}/slides`, { ...body, version: 2, made_with: "upload", slides: ["png"], id: up2.id }, "ed"), "register 2").cut;
   await W.drain({ media: fakeMedia(true), fetch: store.serve });
   const copy2 = (await pool.query("select preview_key from studio_film_cuts where id = $1", [cut2.id])).rows[0].preview_key + "1.jpg";
@@ -254,7 +256,7 @@ test("slides made in the app wait for the graphics system to be approved", async
   ok(await films("POST", "/tools/graphics_system", { on: true, note: "Kyron and Hooks approved the type system, Nov 18" }, "kyron"), "graphics on");
   const body = { format: "quote_card", ratio: "4x5", version: 1, file_name: "SW_COL_G0001_QUOTE_4x5_v01_20261118", people: [p.id], slides: ["png"], made_with: "graphics" };
   const up = ok(await films("POST", `/films/${film.id}/slides/upload`, body, "ed"), "links");
-  store.put(U.BUCKET, up.uploads[0].key, Buffer.from("quote"), "image/png");
+  store.put(U.BUCKET, up.uploads[0].key, I.png(4, 5, { mark: true }), "image/png");
   const cut = ok(await films("POST", `/films/${film.id}/slides`, { ...body, id: up.id }, "ed"), "register").cut;
   assert.equal(cut.made_with, "graphics");
   ok(await films("POST", "/tools/graphics_system", { on: false }, "kyron"), "graphics off");
@@ -262,7 +264,7 @@ test("slides made in the app wait for the graphics system to be approved", async
 });
 
 test("the shoot sheet: what the phone keeps for a dead signal has no names, contacts or places", async () => {
-  const { film } = await aFilm("H0001", "same_drill");
+  let { film } = await aFilm("H0001", "same_drill");
   ok(await films("POST", `/films/${film.id}/people`, { person_code: "H0002", name: "Jordan Kid", role: "athlete", texas_youth: true, release_on_file: true, covers: { voice: true }, reviewer_relation: "parent", reviewer_name: "Pat Kid", reviewer_email: "pat@kid.test" }, "dir"), "kid");
   const d = ok(await films("GET", `/films/${film.id}/shoot`, undefined, "dir"), "shoot");
   const kept = JSON.stringify(d.offline);
@@ -275,4 +277,123 @@ test("the shoot sheet: what the phone keeps for a dead signal has no names, cont
   // Online, the names and places are there for the director.
   assert.equal(Object.values(d.names).sort().join(","), "Alex Doe,Jordan Kid");
   assert.deepEqual(d.locations, ["The Rivers family's driveway, 12 Oak St"]);
+  // The board's lines that go on the phone carry codes, not a card's name,
+  // and no contacts or places, when they're saved.
+  const plan = (await room(film.id)).film.plan;
+  const patch = async (p2) => films("PATCH", `/films/${film.id}`, { seen: (await room(film.id)).film.updated_at, plan: { ...plan, ...p2 } }, "lead");
+  assert.deepEqual((await patch({ schedule: [{ time: "08:00", what: "Pick up Jordan" }] })).data.fields, ["board_has_name"]);
+  assert.deepEqual((await patch({ must_have: ["Wide at 12 Oak St", "x", "y"] })).data.fields, ["board_has_contact"]);
+  assert.deepEqual((await patch({ frame_pair: { opening: "Call 512-555-0199 first" } })).data.fields, ["board_has_contact"]);
+  // A name that isn't on a card can't be screened when it's typed, so the
+  // phone's copy leaves out a line that reads like a name or a place.
+  ok(await patch({ schedule: [{ time: "08:00", what: "Maria Lopez brings the sled" }, { time: "09:00", what: "The drill, wide" }] }), "board");
+  const again = ok(await films("GET", `/films/${film.id}/shoot`, undefined, "dir"), "shoot again");
+  assert.deepEqual(again.offline.schedule, [{ time: "08:00", what: null }, { time: "09:00", what: "The drill, wide" }]);
+  assert.equal(JSON.stringify(again.offline).includes("Maria"), false);
+  assert.deepEqual(again.details.schedule.map((x) => x.what), ["Maria Lopez brings the sled", "The drill, wide"]);
+});
+
+// A set of stills registered and (optionally) processed.
+async function aSet(film, people, { format = "quote_card", ratio = "4x5", version = 1, files = [I.png(4, 5)], made_with = "upload", drain = true } = {}) {
+  const exts = files.map((b) => (b[0] === 0xff ? "jpg" : "png"));
+  const body = { format, ratio, version, file_name: `SW_COL_${film.athlete_id}_QUOTE_${ratio}_v0${version}_20261118`, people, slides: exts, made_with };
+  const up = ok(await films("POST", `/films/${film.id}/slides/upload`, body, "ed"), "links");
+  up.uploads.forEach((u, i) => store.put(U.BUCKET, u.key, files[i], exts[i] === "jpg" ? "image/jpeg" : "image/png"));
+  const reg = await films("POST", `/films/${film.id}/slides`, { ...body, id: up.id }, "ed");
+  if (reg.status >= 300) return { reg, up };
+  if (drain) await W.drain({ media: fakeMedia(true), fetch: store.serve });
+  const row = (await pool.query("select status, error from studio_film_cuts where id = $1", [reg.data.cut.id])).rows[0];
+  return { reg, up, cut: reg.data.cut, row };
+}
+
+test("a slide is one opaque still of a sane size, so the copy shows what the file shows", async () => {
+  const { film, p } = await aFilm("T0001", "quote_card");
+  assert.equal((await aSet(film, [p.id], { files: [I.png(4, 5)] })).row.status, "ready", "an opaque PNG with an alpha channel (a canvas export) is fine");
+  const see = await aSet(film, [p.id], { version: 2, files: [I.png(4, 5, { alpha: 0 })] });
+  assert.deepEqual([see.row.status, /see-through/.test(see.row.error)], ["failed", true], see.row.error);
+  const anim = await aSet(film, [p.id], { version: 3, files: [I.png(4, 5, { animated: true })] });
+  assert.deepEqual([anim.row.status, /animated/.test(anim.row.error)], ["failed", true], anim.row.error);
+  const huge = await aSet(film, [p.id], { version: 4, files: [I.jpeg(16000, 16000)] });
+  assert.deepEqual([huge.row.status, /3000 pixels/.test(huge.row.error)], ["failed", true], huge.row.error);
+  // Slides are for still formats, in their ratios.
+  const body = { format: "hero", ratio: "9x16", version: 9, file_name: "SW_COL_T0001_HERO_9x16_v09_20261118", people: [p.id], slides: ["png"], made_with: "upload" };
+  assert.deepEqual((await films("POST", `/films/${film.id}/slides/upload`, body, "ed")).data.fields, ["format_not_stills"]);
+  assert.deepEqual((await films("POST", `/films/${film.id}/slides/upload`, { ...body, format: "own_words", ratio: "9x16" }, "ed")).data.fields, ["ratio_for_format"]);
+});
+
+test("a refused set takes its uploads with it, and nothing extra stays", async () => {
+  const { film, p } = await aFilm("V0001", "quote_card");
+  const first = await aSet(film, [p.id], { drain: false });
+  assert.equal(first.reg.status, 200);
+  // The same version again (two screens numbering from the same room).
+  const again = await aSet(film, [p.id], { drain: false });
+  assert.deepEqual([again.reg.status, again.reg.data.error], [409, "version_taken"]);
+  assert.equal(store.has(U.BUCKET, again.up.uploads[0].key), false, "its upload went");
+  // More slides uploaded than registered: the extra one goes.
+  const body = { format: "quote_card", ratio: "4x5", version: 2, file_name: "SW_COL_V0001_QUOTE_4x5_v02_20261118", people: [p.id], slides: ["png", "png"], made_with: "upload" };
+  const up = ok(await films("POST", `/films/${film.id}/slides/upload`, body, "ed"), "links");
+  for (const u of up.uploads) store.put(U.BUCKET, u.key, I.png(4, 5), "image/png");
+  ok(await films("POST", `/films/${film.id}/slides`, { ...body, slides: ["png"], id: up.id }, "ed"), "one of two registered");
+  assert.equal(store.has(U.BUCKET, up.uploads[0].key), true);
+  assert.equal(store.has(U.BUCKET, up.uploads[1].key), false, "the extra went");
+});
+
+test("the graphics switch is held by the database: no sets, no links while it's off, and off stops live links", async () => {
+  const { film, p } = await aFilm("K0001", "quote_card");
+  ok(await films("POST", "/tools/graphics_system", { on: true, note: "Kyron and Hooks approved the type system" }, "kyron"), "on");
+  const made = await aSet(film, [p.id], { made_with: "graphics", files: [I.png(4, 5, { mark: true })] });
+  assert.equal(made.row.status, "ready");
+  ok(await films("POST", `/films/${film.id}/cuts/${made.cut.id}/reviews`, { person_id: p.id }, "lead"), "link while on");
+  ok(await films("POST", "/tools/graphics_system", { on: false }, "kyron"), "off");
+  assert.equal((await pool.query("select count(*)::int as n from studio_reviews where cut_id = $1 and link_hash is not null", [made.cut.id])).rows[0].n, 0, "off stops the live link");
+  refused(await films("POST", `/films/${film.id}/cuts/${made.cut.id}/reviews`, { person_id: p.id }, "lead"), /graphics system is off/);
+  await assert.rejects(pool.query(`insert into studio_film_cuts (id, film_id, kind, format, ratio, version, file_name, slide_keys, made_with, created_by)
+      values ($1::uuid, $2::uuid, 'slides', 'quote_card', '4x5', 7, 'x', array['films/' || $2::text || '/slides/' || $1::text || '/1.png'], 'graphics', 'ed@toj.test')`, [crypto.randomUUID(), film.id]), /graphics system is off/);
+  // The app's own PNGs can't come back as an "upload" while it's off.
+  const back = await aSet(film, [p.id], { version: 2, files: [I.png(4, 5, { mark: true })] });
+  assert.deepEqual([back.row.status, /graphics system, which is off/.test(back.row.error)], ["failed", true], back.row.error);
+});
+
+test("the words on a graphic pass the server's name rules, and the credit goes only as far as the release", async () => {
+  const { film, p } = await aFilm("Q0001", "quote_card");
+  const kid = ok(await films("POST", `/films/${film.id}/people`, { person_code: "Q0002", name: "Ty Ng", role: "athlete", is_minor: true, release_on_file: true, covers: { voice: true }, reviewer_relation: "parent", reviewer_name: "Lin Ng", reviewer_email: "lin@x.test", speaker: true }, "lead"), "kid").person;
+  const check = (body) => films("POST", `/films/${film.id}/graphics/check`, { format: "quote_card", speaker_id: p.id, credit: "role", ...body }, "ed");
+  assert.equal((await check({ texts: ["We ran it every Sunday."] })).data.ok, true);
+  for (const words of ["Ty never quit", "#TyNg forever", "#TyNgNeverQuit", "Lin drove us", "His mom Lin Ng was there"]) {
+    const r = (await check({ texts: [words] })).data;
+    assert.equal(r.ok, false, words);
+  }
+  assert.match((await check({ texts: ["Alex Doe ran it"] })).data.problems[0], /doesn't let a graphic name them/);
+  // The release covers Alex's name, but not on this format: the credit stays a role.
+  assert.equal((await check({ texts: ["x"], credit: "full" })).data.credit, "A Coached by Hooks athlete");
+  let card = (await room(film.id)).people.find((x) => x.id === p.id);
+  card = ok(await films("PATCH", `/films/${film.id}/people/${p.id}`, { seen: card.updated_at, covers: { face: true, name: true, voice: true, formats: ["quote_card"] } }, "lead"), "covers").person;
+  ok(await films("POST", `/films/${film.id}/people/${p.id}/clear`, { seen: card.updated_at }, "lead"), "clear again");
+  assert.equal((await check({ texts: ["Alex Doe ran it"], credit: "full" })).data.credit, "Alex Doe · Coached by Hooks");
+  assert.equal((await check({ texts: ["Alex Doe ran it"] })).data.ok, true);
+  void kid;
+  // A closed film makes nothing more.
+  ok(await films("POST", "/people/pull", { person_code: "Q0001", confirm: true }, "lead"), "pull");
+  assert.equal((await check({ texts: ["x"] })).data.error, "film_closed");
+});
+
+test("notes: the film's editor marks them done, a label is checked against every film, a cut with notes can still go", async () => {
+  const { film, p } = await aFilm("L0001");
+  const cut = await videoCut(film, [p.id]);
+  const n = ok(await films("POST", `/films/${film.id}/cut-notes`, { cut_id: cut.id, at_ms: 5000, note: "A face shows here: this cut goes." }, "lead"), "note").note;
+  assert.equal(n.cut_label, "hero 9x16 v1");
+  assert.equal((await films("POST", `/cut-notes/${n.id}/resolve`, {}, "dir")).data.error, "editor_only");
+  // A label is shared by every film: a minor on another film's card counts.
+  const other = await aFilm("L0002");
+  ok(await films("POST", `/films/${other.film.id}/people`, { person_code: "L0003", name: "Bo Kidd", role: "athlete", is_minor: true, release_on_file: true, covers: { voice: true } }, "lead"), "kid elsewhere");
+  assert.deepEqual((await films("POST", `/films/${film.id}/cut-notes`, { note: "Tighten it", label: "bo too slow" }, "lead")).data.fields, ["label_has_name"]);
+  // The cut was never reviewed: it can go, and its note stays without it.
+  ok(await films("DELETE", `/films/${film.id}/cuts/${cut.id}`, {}, "ed"), "delete");
+  const kept = (await pool.query("select cut_id, at_ms, cut_label, note from studio_notes where id = $1", [n.id])).rows[0];
+  assert.deepEqual(kept, { cut_id: null, at_ms: null, cut_label: "hero 9x16 v1", note: "A face shows here: this cut goes." });
+  ok(await films("POST", `/cut-notes/${n.id}/resolve`, {}, "ed"), "the editor");
+  await assert.rejects(pool.query("truncate studio_notes"), /kept/);
+  // A delivery check's file name with a whole name in it is kept without it, by the database too.
+  await pool.query("insert into studio_delivery_checks (film_id, created_by, file_name, format, ratio, passed) values ($1, 'ed@toj.test', 'alex_doe_cut.mp4', 'hero', '9x16', false)", [film.id]);
+  assert.deepEqual((await pool.query("select file_name from studio_delivery_checks where film_id = $1 and created_by = 'ed@toj.test' order by created_at desc limit 1", [film.id])).rows[0], { file_name: "(a file name with a name in it)" });
 });

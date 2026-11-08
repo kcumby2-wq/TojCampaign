@@ -138,6 +138,9 @@ function refused(res, e) {
   return res.status(503).json({ error: "storage_unavailable" });
 }
 const bodyOf = H.bodyOf;
+const dbCode = (e) => String(((e && e.db) || e || {}).code || "");
+// The database said no for good (a rule, a duplicate, a bad value), not "try later".
+const refusal = (e) => /^(P0001|23|22)/.test(dbCode(e));
 const idOk = (s) => U.UUID.test(String(s || ""));
 // A note that names someone on the film's cards is refused: the history
 // keeps no names (the database leaves such a note out regardless).
@@ -164,6 +167,11 @@ async function filmById(sb, id) {
 }
 async function peopleOf(sb, filmId) {
   return (await run(sb.from("studio_film_people").select("*").eq("film_id", filmId).order("created_at", { ascending: true }))) || [];
+}
+// Every card on every film (names only), for what's shared by every film: a
+// note's label shows in every room.
+async function everyCard(sb) {
+  return (await run(sb.from("studio_film_people").select("name,reviewer_name,is_minor").limit(10000))) || [];
 }
 async function toolOn(sb, tool) {
   const row = await run(sb.from("studio_tool_approvals").select("is_on").eq("tool", tool).maybeSingle());
@@ -611,6 +619,9 @@ router.post("/films/:id/cuts", member, withDb(async (req, res, sb) => {
     worker.kick();
     res.json({ cut });
   } catch (e) {
+    // Refused for good: the uploaded file goes too (nothing else lists it).
+    if (refusal(e)) await worker.forget([body.key], { sb }).catch(() => {});
+    if (dbCode(e) === "23505") return res.status(409).json({ error: "version_taken" });
     refused(res, e);
   }
 }));
@@ -635,8 +646,11 @@ router.delete("/films/:id/cuts/:cid", member, withDb(async (req, res, sb) => {
   const film = await filmById(sb, req.params.id);
   if (!film || !idOk(req.params.cid)) return res.status(404).json({ error: "not_found" });
   try {
-    const rows = await run(sb.from("studio_film_cuts").delete().eq("id", req.params.cid).eq("film_id", film.id).select("id"));
-    if (!rows || !rows.length) return res.status(404).json({ error: "not_found" });
+    const cut = await run(sb.from("studio_film_cuts").select("id").eq("id", req.params.cid).eq("film_id", film.id).maybeSingle());
+    if (!cut) return res.status(404).json({ error: "not_found" });
+    // Film first (migration 040), as a note being added to it is.
+    const rows = await rpcRows(sb, "studio_cut_remove", { p_cut: cut.id });
+    if (!rows.length) return res.status(404).json({ error: "not_found" });
     // The database listed its files for removal in the same change.
     await worker.sweep({ sb }).catch(() => {});
     res.json({ ok: true });
@@ -863,7 +877,7 @@ router.post("/films/:id/cut-notes", member, withDb(async (req, res, sb) => {
   const people = await peopleOf(sb, film.id);
   const why = noteNames(note, people, body);
   if (why) return res.status(400).json(why);
-  if (lab && U.strictNames(lab, people).length) return res.status(400).json({ error: "invalid", fields: ["label_has_name"] });
+  if (lab && U.strictNames(lab, await everyCard(sb)).length) return res.status(400).json({ error: "invalid", fields: ["label_has_name"] });
   try {
     const row = await run(sb.from("studio_notes").insert({ film_id: film.id, cut_id: cutId, at_ms: atMs, note, label: lab, created_by: me(req) }).select().single());
     res.json({ note: row });
@@ -874,6 +888,11 @@ router.post("/films/:id/cut-notes", member, withDb(async (req, res, sb) => {
 
 router.post("/cut-notes/:nid/resolve", member, withDb(async (req, res, sb) => {
   if (!idOk(req.params.nid)) return res.status(404).json({ error: "not_found" });
+  const note = await run(sb.from("studio_notes").select("id,film_id").eq("id", req.params.nid).maybeSingle());
+  if (!note) return res.status(404).json({ error: "not_found" });
+  // The film's editor marks a note done (or the producer).
+  const film = await filmById(sb, note.film_id);
+  if (!(isProducer(req) || (film && film.editor_email && film.editor_email === me(req)))) return res.status(403).json({ error: "editor_only" });
   try {
     const rows = await run(sb.from("studio_notes").update({ resolved_at: nowIso(), resolved_by: me(req) }).eq("id", req.params.nid).is("resolved_at", null).select());
     if (!rows || !rows.length) return res.status(409).json({ error: "already_done" });
@@ -940,7 +959,7 @@ async function slidesAllowed(sb, res, film, madeWith) {
   }
   return true;
 }
-function slidesInput(body, filmPeople) {
+function slidesInput(body, filmPeople, film) {
   const errors = [];
   const v = {
     format: U.clean(body.format, 20).toLowerCase(),
@@ -952,6 +971,11 @@ function slidesInput(body, filmPeople) {
   };
   if (!U.FORMATS.includes(v.format)) errors.push("format");
   if (!U.RATIOS.includes(v.ratio)) errors.push("ratio");
+  // Stills and slides are for the formats the kit makes as stills or sets
+  // (a parent card, a quote card, a carousel), in that format's ratios.
+  const fmt = film ? (F.templateFor(film.kit_slug) || { formats: {} }).formats[v.format] : null;
+  if (film && U.FORMATS.includes(v.format) && !(fmt && (fmt.still || fmt.slides))) errors.push("format_not_stills");
+  else if (fmt && U.RATIOS.includes(v.ratio) && !fmt.ratios.includes(v.ratio)) errors.push("ratio_for_format");
   if (!Number.isInteger(v.version) || v.version < 1 || v.version > 999) errors.push("version");
   if (!v.made_with) errors.push("made_with");
   if (!v.slides.length || v.slides.length > MAX_SLIDES || v.slides.some((x) => !SLIDE_TYPES[x])) errors.push("slides");
@@ -967,7 +991,7 @@ router.post("/films/:id/slides/upload", member, withDb(async (req, res, sb) => {
   const film = await filmById(sb, req.params.id);
   if (!film) return res.status(404).json({ error: "not_found" });
   const people = await peopleOf(sb, film.id);
-  const { errors, value } = slidesInput(bodyOf(req), people);
+  const { errors, value } = slidesInput(bodyOf(req), people, film);
   if (errors.length) return res.status(400).json({ error: "invalid", fields: errors });
   if (!(await slidesAllowed(sb, res, film, value.made_with))) return;
   const id = crypto.randomUUID();
@@ -987,11 +1011,26 @@ router.post("/films/:id/slides", member, withDb(async (req, res, sb) => {
   if (!film) return res.status(404).json({ error: "not_found" });
   const body = bodyOf(req);
   const people = await peopleOf(sb, film.id);
-  const { errors, value } = slidesInput(body, people);
+  const { errors, value } = slidesInput(body, people, film);
   const id = String(body.id || "").toLowerCase();
   if (!idOk(id)) errors.push("id");
   if (errors.length) return res.status(400).json({ error: "invalid", fields: errors });
-  if (!(await slidesAllowed(sb, res, film, value.made_with))) return;
+  // Every file uploaded for this set, registered or not (a refused set's
+  // files, or more than it lists, go: nothing else would list them).
+  const folder = `films/${film.id}/slides/${id}`;
+  const uploaded = async () => {
+    try {
+      const { data } = await sb.storage.from(U.BUCKET).list(folder, { limit: 100 });
+      return (data || []).filter((x) => x && x.id).map((x) => `${folder}/${x.name}`);
+    } catch (e) {
+      // Not listed now: a pull's folder sweep, or the removal list, finds them.
+      return [];
+    }
+  };
+  if (!(await slidesAllowed(sb, res, film, value.made_with))) {
+    await worker.forget(await uploaded(), { sb }).catch(() => {});
+    return;
+  }
   const keys = [];
   for (let n = 1; n <= value.slides.length; n++) {
     const key = U.slideKey(film.id, id, n, value.slides[n - 1]);
@@ -1005,12 +1044,39 @@ router.post("/films/:id/slides", member, withDb(async (req, res, sb) => {
   }
   try {
     const cut = await run(sb.from("studio_film_cuts").insert({ id, film_id: film.id, kind: "slides", format: value.format, ratio: value.ratio, version: value.version, file_name: value.file_name, people: value.people, slide_keys: keys, made_with: value.made_with, created_by: me(req) }).select().single());
+    const extra = (await uploaded()).filter((k) => !keys.includes(k));
+    if (extra.length) await worker.forget(extra, { sb }).catch(() => {});
     await T.logActivity(me(req), "studio_slides_uploaded", film.id, { slides: keys.length, made_with: value.made_with });
     worker.kick();
     res.json({ cut });
   } catch (e) {
+    if (refusal(e)) await worker.forget(await uploaded(), { sb }).catch(() => {});
+    if (dbCode(e) === "23505") return res.status(409).json({ error: "version_taken" });
     refused(res, e);
   }
+}));
+
+// ── The words on a graphic ───────────────────────────────────────────────
+// The phone draws a graphic and sends only the finished PNGs; before it saves
+// or sends them it asks here, so the words and the credit pass the server's
+// rules (U.graphicsProblems, U.graphicsCredit). Nothing here is stored.
+router.post("/films/:id/graphics/check", member, withDb(async (req, res, sb) => {
+  const film = await filmById(sb, req.params.id);
+  if (!film) return res.status(404).json({ error: "not_found" });
+  if (film.pulled_at || film.archived_at) return res.status(409).json({ error: "film_closed" });
+  const body = bodyOf(req);
+  const texts = (Array.isArray(body.texts) ? body.texts : []).slice(0, 10).map((x) => String(x == null ? "" : x).slice(0, 4000));
+  const format = U.clean(body.format, 20).toLowerCase();
+  const people = await peopleOf(sb, film.id);
+  const sid = String(body.speaker_id || "").toLowerCase();
+  const speaker = sid ? people.find((p) => p.id === sid) : null;
+  const problems = [];
+  if (sid && !speaker) problems.push("That speaker isn't on this film's cards.");
+  if (speaker && (!speaker.cleared_at || speaker.consent_pulled_at)) problems.push(`${speaker.person_code}'s card isn't cleared (or their consent was pulled): their words don't go on a graphic.`);
+  const re = [new RegExp(K.BANNED_RE.source, "i"), new RegExp(K.BANNED_PHRASES_RE.source, "i")];
+  problems.push(...U.graphicsProblems(texts, people, { format, banned: (t) => re.some((r) => r.test(t)) }));
+  const credit = U.graphicsCredit(speaker && speaker.cleared_at && !speaker.consent_pulled_at ? speaker : null, String(body.credit || "role"), format);
+  res.json({ ok: !problems.length, problems, credit: speaker ? credit.text : "Coached by Hooks" });
 }));
 
 // ── Shoot mode ───────────────────────────────────────────────────────────

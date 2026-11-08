@@ -182,7 +182,7 @@ test("the worker refuses a moving picture in a set of slides", { skip: !ffmpeg &
     const { sb, updates } = memorySb(store, cutId);
     await assert.rejects(
       W.processOne({ id: cutId, film_id: filmId, kind: "slides", slide_keys: [key], attempts: 1 }, { sb, media, fetch: store.serve, tmp: dir, now: () => new Date() }),
-      (e) => e instanceof media.MediaError && e.final === true && /isn't a still image/.test(e.message)
+      (e) => e instanceof media.MediaError && e.final === true && /isn't a still image|isn't a PNG or a JPEG/.test(e.message)
     );
     assert.equal(updates.length, 0);
   } finally {

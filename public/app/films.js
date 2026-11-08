@@ -43,6 +43,12 @@
     too_many_links_today: "That address has had 20 links today. Try tomorrow, or call them.",
     no_reviewer: "That card doesn't say who approves the cut.",
     exists: "There's already a live link for that cut and reviewer.",
+    version_taken: "That version number was just used: open the film again and send it as the next version.",
+    editor_only: "Only the film's editor (or the producer) marks a note done.",
+    format_not_stills: "Stills and slides are for a parent card, a quote card or a carousel.",
+    ratio_for_format: "That ratio isn't one the kit makes for this format.",
+    board_has_name: "Call times, must-haves and the frame pair go on the director's phone: codes, not names.",
+    board_has_contact: "Call times, must-haves and the frame pair go on the director's phone: no phone numbers, emails, links or addresses (put places under Locations).",
     not_uploaded: "The file isn't in storage yet. Try the upload again.",
     film_closed: "This film is closed.",
     confirm_first: "Confirm first.",
@@ -68,7 +74,8 @@
     return (d && MSG[d.error]) || (e && e.message) || "That didn't work.";
   }
   var meta = null;
-  async function getMeta() { if (!meta) meta = await T().api("/api/studio-films/meta"); return meta; }
+  // fresh: read again (a switch may have changed since this session read it).
+  async function getMeta(fresh) { if (!meta || fresh) meta = await T().api("/api/studio-films/meta"); return meta; }
   function tpl(slug) { return meta && meta.templates[slug || "same-work"]; }
   function fmtLabel(slug, f) { var t = tpl(slug); return t && t.formats[f] ? t.formats[f].label : f; }
   function laneLabel(slug, l) { var t = tpl(slug); return t && t.lanes[l] ? t.lanes[l].label : l; }

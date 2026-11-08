@@ -19,6 +19,31 @@
   var F = function () { return window.TOJFilms; };
   var h = function (s) { return T().h(s); };
 
+  // ── PNG marks ────────────────────────────────────────────────────────
+  // A tEXt chunk ("Software: TOJ Studio graphics") right after the header:
+  // utils/studio-still.js reads it.
+  var CRC = (function () { var t = [], c, n, k; for (n = 0; n < 256; n++) { c = n; for (k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1; t[n] = c >>> 0; } return t; })();
+  function crc32(bytes) { var c = 0xffffffff; for (var i = 0; i < bytes.length; i++) c = CRC[(c ^ bytes[i]) & 255] ^ (c >>> 8); return (c ^ 0xffffffff) >>> 0; }
+  async function markPng(blob) {
+    if (!blob) return blob;
+    var buf = new Uint8Array(await blob.arrayBuffer());
+    var head = 8 + 25; // the signature, then IHDR (length, type, 13 bytes, CRC)
+    var text = "Software\u0000TOJ Studio graphics";
+    var body = new Uint8Array(4 + text.length);
+    body.set([0x74, 0x45, 0x58, 0x74]); // "tEXt"
+    for (var i = 0; i < text.length; i++) body[4 + i] = text.charCodeAt(i);
+    var chunk = new Uint8Array(8 + text.length + 4);
+    var dv = new DataView(chunk.buffer);
+    dv.setUint32(0, text.length);
+    chunk.set(body, 4);
+    dv.setUint32(8 + text.length, crc32(body));
+    var out = new Uint8Array(buf.length + chunk.length);
+    out.set(buf.subarray(0, head), 0);
+    out.set(chunk, head);
+    out.set(buf.subarray(head), head + chunk.length);
+    return new Blob([out], { type: "image/png" });
+  }
+
   // ── This phone's storage (never needed; always optional) ─────────────
   function lsGet(k) { try { var v = localStorage.getItem(k); return v ? JSON.parse(v) : null; } catch (e) { return null; } }
   function lsSet(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) { /* full or blocked: fine */ } }
@@ -145,8 +170,13 @@
 
     var cam = document.getElementById("gCam"), frame = document.getElementById("gFrame"), test = document.getElementById("gTest"), hint = document.getElementById("gHint");
     var urls = [];
+    // This screen's own flag: once it stops (left, or the app hidden while
+    // asking), a camera that answers late is stopped at once.
+    var live = true;
+    var halt = function (stream) { if (stream) stream.getTracks().forEach(function (k) { k.stop(); }); };
     function stop() {
-      if (st.stream) st.stream.getTracks().forEach(function (k) { k.stop(); });
+      live = false;
+      halt(st.stream);
       st.stream = null;
       urls.forEach(function (u) { URL.revokeObjectURL(u); });
       urls = [];
@@ -165,11 +195,15 @@
     look();
     document.getElementById("gStart").addEventListener("click", async function () {
       var btn = this;
-      if (st.stream) return;
+      if (st.stream || btn.dataset.asking) return;
       try {
         if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) throw new Error("no camera");
-        st.stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: "environment" }, width: { ideal: 1920 }, height: { ideal: 1080 } }, audio: false });
-        if (location.hash.indexOf("#film-ghost/") !== 0) return stop();
+        btn.dataset.asking = "1";
+        var stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: "environment" }, width: { ideal: 1920 }, height: { ideal: 1080 } }, audio: false });
+        delete btn.dataset.asking;
+        // Left, or hidden, while the phone asked: this answer is too late.
+        if (!live || !document.body.contains(cam) || document.visibilityState === "hidden") return halt(stream);
+        st.stream = stream;
         cam.srcObject = st.stream;
         test.hidden = true;
         hint.hidden = !!st.frame;
@@ -177,6 +211,8 @@
         btn.textContent = "Camera on";
         btn.disabled = true;
       } catch (e) {
+        delete btn.dataset.asking;
+        if (!live) return;
         document.getElementById("gFallback").hidden = false;
         hint.textContent = "No live camera here: take a test shot below.";
       }
@@ -481,7 +517,9 @@
     var t = T(), back = t.backBtn("#film/" + id, "Film");
     F().loading(back);
     var d, meta;
-    try { meta = await F().getMeta(); d = await t.api("/api/studio-films/films/" + encodeURIComponent(id)); } catch (e) { if (e.stale) throw e; return F().failed(back, e); }
+    // The switch is read fresh: an earlier answer may be from before Kyron changed it.
+    try { meta = await F().getMeta(true); d = await t.api("/api/studio-films/films/" + encodeURIComponent(id)); } catch (e) { if (e.stale) throw e; return F().failed(back, e); }
+    if (d.film.pulled_at || d.film.archived_at) return F().failed(back, { message: "This film is closed (consent pulled or archived): nothing more is made for it." });
     await loadFonts();
     var f = d.film, tp = F().tpl(f.kit_slug);
     var on = function (tool) { return (meta.tools || []).some(function (x) { return x.tool === tool && x.is_on; }); };
@@ -500,10 +538,16 @@
     g.people = g.speaker ? [g.speaker] : [];
     function keepDraft() { ssSet(DRAFT + id, { at: Date.now(), tpl: g.tpl, ratio: g.ratio, line: g.line, italic: g.italic, more: g.more, letters: g.letters, title: g.title, then: g.then, now: g.now, speaker: g.speaker, creditAs: g.creditAs }); }
     var ROLE = { athlete: "athlete", parent: "parent", guardian: "parent", coach: "coach", other: "family" };
+    // A graphic names someone only as far as their release goes: an adult,
+    // cleared, consent standing, the release covering their name and listing
+    // this format (the server checks the same before anything is saved).
+    function mayNameOn(p, format) {
+      return !!(p && p.id && !p.is_minor && !p.texas_youth && p.cleared_at && !p.consent_pulled_at && p.covers && p.covers.name === true && Array.isArray(p.covers.formats) && p.covers.formats.indexOf(format) >= 0);
+    }
     function credit() {
       var p = d.people.find(function (x) { return x.id === g.speaker; });
       if (!p) return "Coached by Hooks";
-      var named = !p.is_minor && !p.texas_youth && p.covers && p.covers.name;
+      var named = mayNameOn(p, TEMPLATES[g.tpl].format || f.format);
       if (named && g.creditAs === "full") return p.name + " · Coached by Hooks";
       if (named && g.creditAs === "first") return p.name.split(/\s+/)[0] + " · Coached by Hooks";
       return "A Coached by Hooks " + (ROLE[p.role] || "athlete");
@@ -570,7 +614,7 @@
     function draw() {
       var tm = TEMPLATES[g.tpl];
       var speakerCard = d.people.find(function (x) { return x.id === g.speaker; }) || {};
-      var mayName = speakerCard.id && !speakerCard.is_minor && !speakerCard.texas_youth && speakerCard.covers && speakerCard.covers.name;
+      var mayName = mayNameOn(speakerCard, TEMPLATES[g.tpl].format || f.format);
       var words = String(g.line || "").trim().split(/\s+/).filter(Boolean);
       var form = "";
       if (g.tpl === "quote" || g.tpl === "words") {
@@ -629,7 +673,22 @@
       });
       if (!canvases.length) box.innerHTML = '<p class="empty">Write the years to see the labels.</p>';
     }
-    function blobs() { return Promise.all(canvases.map(function (x) { return new Promise(function (r) { x.canvas.toBlob(function (b) { r(b); }, "image/png"); }); })); }
+    // The PNGs, each marked as made with the graphics system (a tEXt chunk the
+    // worker reads), so a set can't come back as an "upload" while it's off.
+    function blobs() { return Promise.all(canvases.map(function (x) { return new Promise(function (r) { x.canvas.toBlob(function (b) { r(b); }, "image/png"); }); })).then(function (list) { return Promise.all(list.map(markPng)); }); }
+    // Before anything is saved or sent: the switch read again, and the words
+    // and the credit checked by the server's rules. null when it can go.
+    async function cleared(forReview) {
+      var was = approved;
+      meta = await F().getMeta(true);
+      approved = on("graphics_system"); copiesOn = on("review_copies");
+      if (approved !== was) { draw(); return approved ? "The graphics system was just approved: look again, then tap again." : "The graphics system was just switched off: this now carries the PROPOSED band. Look again, then tap again."; }
+      var tm = TEMPLATES[g.tpl];
+      var r = await T().post("/api/studio-films/films/" + encodeURIComponent(f.id) + "/graphics/check", { texts: [g.line, g.more, g.letters, g.title], speaker_id: g.speaker, credit: g.creditAs, format: tm.format || f.format, for_review: !!forReview });
+      if (r.problems && r.problems.length) return r.problems[0];
+      if (r.credit && r.credit !== credit()) { g.creditAs = "role"; keepDraft(); draw(); return "The credit can only be what the release allows: it now reads \u201c" + r.credit + "\u201d. Look again, then tap again."; }
+      return null;
+    }
     function wire() {
       var val = function (x) { var el = document.getElementById(x); return el ? el.value : null; };
       var keep = function () {
@@ -679,6 +738,8 @@
         keep();
         var why = ready(false);
         if (why) return F().say("gMsg", why, true);
+        try { why = await cleared(false); } catch (e) { return F().say("gMsg", F().why(e), true); }
+        if (why) return F().say("gMsg", why, true);
         var list = await blobs();
         var base = TEMPLATES[g.tpl].format ? setName(TEMPLATES[g.tpl].format, g.ratio, nextVersion(TEMPLATES[g.tpl].format, g.ratio)) : f.athlete_id + "_" + g.tpl.toUpperCase() + "_9x16";
         list.forEach(function (b, i) {
@@ -702,6 +763,8 @@
         send.disabled = true;
         F().busy(1);
         try {
+          why = await cleared(true);
+          if (why) { send.disabled = false; F().busy(-1); return F().say("gMsg", why, true); }
           var list = await blobs();
           await F().uploadSet(f.id, { format: tm.format, ratio: g.ratio, version: v, file_name: setName(tm.format, g.ratio, v), people: g.people, made_with: "graphics" }, list, function (n, pr) { send.textContent = "Sending " + n + " of " + list.length + " · " + Math.round(pr * 100) + "%"; });
           ssDel(DRAFT + id);

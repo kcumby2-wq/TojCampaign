@@ -608,11 +608,17 @@ test("the worker's safety net closes what it can and leaves a takedown that's bu
 
 test("an upload that lands after a pull is swept from the pulled film's folder", async () => {
   const { film, p, code } = await aFilm();
-  const file_name = `SW_COL_${film.athlete_id}_HERO_9x16_v01_20261117.mp4`;
-  const up = ok(await films("POST", `/films/${film.id}/cuts/upload`, { format: "hero", ratio: "9x16", version: 1, file_name, bytes: 4096, people: [p.id] }, "ed"), "upload link");
+  const name = (v) => `SW_COL_${film.athlete_id}_HERO_9x16_v0${v}_20261117.mp4`;
+  const link = async (v) => ok(await films("POST", `/films/${film.id}/cuts/upload`, { format: "hero", ratio: "9x16", version: v, file_name: name(v), bytes: 4096, people: [p.id] }, "ed"), "upload link");
+  const up = await link(1);
+  const up2 = await link(2);
   ok(await films("POST", "/people/pull", { person_code: code, confirm: true }, "lead"), "pull");
+  // Registered after the pull, and refused: it goes with the refusal.
+  store.put(U.BUCKET, up2.key, Buffer.alloc(4096, 2), "video/mp4");
+  refused(await films("POST", `/films/${film.id}/cuts`, { id: up2.id, key: up2.key, format: "hero", ratio: "9x16", version: 2, file_name: name(2), bytes: 4096, people: [p.id] }, "ed"), /closed|pulled consent/);
+  assert.equal(store.has(U.BUCKET, up2.key), false);
+  // Never registered: the folder sweep finds it.
   store.put(U.BUCKET, up.key, Buffer.alloc(4096, 1), "video/mp4");
-  refused(await films("POST", `/films/${film.id}/cuts`, { id: up.id, key: up.key, format: "hero", ratio: "9x16", version: 1, file_name, bytes: 4096, people: [p.id] }, "ed"), /closed|pulled consent/);
   assert.ok(store.has(U.BUCKET, up.key));
   await W.sweep({ sb });
   assert.equal(store.has(U.BUCKET, up.key), false);

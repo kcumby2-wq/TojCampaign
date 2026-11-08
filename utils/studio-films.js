@@ -122,8 +122,9 @@ function minorWords(textValue, people) {
         if (capitalizedMidSentence(raw, w)) found.add(w);
       } else if (hay.includes(" " + w + " ")) found.add(w);
     }
+    // A child's name run together ("#TyNg") counts from four letters.
     const joined = parts.join("");
-    if (parts.length > 1 && Array.from(joined).length >= 5 && letters.includes(joined)) found.add(joined);
+    if (parts.length > 1 && Array.from(joined).length >= 4 && letters.includes(joined)) found.add(joined);
   }
   return [...found];
 }
@@ -202,6 +203,42 @@ function planProblems(plan, people) {
 function offlineSafe(text, people) {
   const t = String(text || "");
   return !!t && !strictNames(t, people).length && !contactIn(t) && !properNounsIn(t);
+}
+
+// ── Words on a graphic ───────────────────────────────────────────────────
+// Whether a graphic may name this person on this format: an adult (not a
+// Texas youth athlete), cleared, consent standing, the release covering
+// their name and listing the format.
+function mayName(p, format) {
+  return !!p && !p.is_minor && !p.texas_youth && !!p.cleared_at && !p.consent_pulled_at
+    && !!(p.covers && p.covers.name === true) && Array.isArray(p.covers.formats) && p.covers.formats.includes(format);
+}
+const CREDIT_ROLE = { athlete: "athlete", parent: "parent", guardian: "parent", coach: "coach", other: "family" };
+// The credit line a graphic may carry for its speaker (as: full | first | role).
+function graphicsCredit(p, as, format) {
+  if (!p) return { text: "Coached by Hooks", named: false };
+  if (mayName(p, format) && (as === "full" || as === "first")) {
+    return { text: `${as === "full" ? p.name : String(p.name).split(/\s+/)[0]} · Coached by Hooks`, named: true };
+  }
+  return { text: `A Coached by Hooks ${CREDIT_ROLE[p.role] || "athlete"}`, named: false };
+}
+// What a graphic's words may not carry (the same rules as titles and file
+// names): the name of anyone the release doesn't let it name, any word of a
+// minor's name, a parent's or guardian's name (never on a graphic), or a
+// banned word. Returns plain sentences.
+function graphicsProblems(texts, people, { format = null, banned = null } = {}) {
+  const all = (texts || []).filter(Boolean).join("\n");
+  const out = [];
+  for (const p of people || []) {
+    if (strictNames(all, [{ name: p.name, is_minor: p.is_minor }]).length && !mayName(p, format)) {
+      out.push(`The words name ${p.person_code}, whose release doesn't let a graphic name them on this format. Use the credit line the release allows.`);
+    }
+    if (p.reviewer_name && p.reviewer_relation !== "self" && strictNames(all, [{ name: p.reviewer_name }]).length) {
+      out.push(`The words name ${p.person_code}'s ${p.reviewer_relation}: a parent or guardian is never named on a graphic.`);
+    }
+  }
+  if (banned && banned(all)) out.push("A word on the TOJ banned list is in the words. Say the concrete thing instead.");
+  return [...new Set(out)];
 }
 
 // ── A film ───────────────────────────────────────────────────────────────
@@ -535,6 +572,9 @@ module.exports = {
   planInput,
   planProblems,
   offlineSafe,
+  mayName,
+  graphicsCredit,
+  graphicsProblems,
   contactIn,
   filmInput,
   coversInput,
