@@ -397,7 +397,12 @@ const PLACE_SKIP = new Set(("the a an at of on in by and to for from near with s
 const PLACE_GLUE = new Set(["the", "a", "an", "at", "of", "on", "in", "by", "and", "to", "for", "from", "near", "with", "s"]);
 function placeWords(locations) {
   const out = new Set();
-  for (const l of Array.isArray(locations) ? locations : []) {
+  // Each part of a location is a place of its own: "The Rowe house on High
+  // Street" is the Rowe house and High Street; "Home Field, Riverside" is
+  // Home Field and Riverside.
+  const parts = [];
+  for (const l of Array.isArray(locations) ? locations : []) parts.push(...String(l || "").split(/\s*[,;()/&|–—]\s*|\s+(?:on|at|near|off|by|in|and|of|behind|next to|across from)\s+/i));
+  for (const l of parts) {
     const words = String(l || "").match(/[\p{L}\p{M}]+/gu) || [];
     const own = words.some((w) => !PLACE_SKIP.has(w.toLowerCase()) && (/^\p{Lu}/u.test(w) || Array.from(w).length >= 4));
     for (const w of words) {
@@ -490,14 +495,19 @@ function graphicsCredit(p, as, format) {
 const TAG = /[#@][\p{L}\p{M}\p{N}_.]+/gu;
 // (Title Case as titles read it: titleCase, above.)
 const titleCaseLine = (line) => titleCase(line);
-// A shout-out ends on the name ("Way To Go Hope", "Happy Birthday Grace"):
-// the last word of each line in Title Case.
+// A shout-out names someone: in a line in Title Case, the last word ("Way
+// To Go Hope", "Happy Birthday Grace") and a word after a shout-out's own
+// word ("Go Hope Go", "Thank You Coach Will").
+const SHOUT_LEAD = new Set("go thanks thank you congrats congratulations birthday dear hey love coach mr mrs ms miss".split(" "));
 function shoutOuts(all) {
   const out = new Set();
   for (const line of String(all || "").split(/\r?\n/)) {
     if (!titleCaseLine(line)) continue;
-    const words = line.replace(TAG, " ").match(/[\p{L}\p{M}][\p{L}\p{M}'’]*/gu) || [];
-    if (words.length) out.add(words[words.length - 1].toLowerCase().replace(/['’]s$/u, ""));
+    const words = (line.replace(TAG, " ").match(/[\p{L}\p{M}][\p{L}\p{M}'’]*/gu) || []).map((w) => w.toLowerCase().replace(/['’]s$/u, ""));
+    if (words.length) out.add(words[words.length - 1]);
+    words.forEach((w, i) => {
+      if (i && SHOUT_LEAD.has(words[i - 1])) out.add(w);
+    });
   }
   return out;
 }
@@ -555,13 +565,13 @@ function inTags(all, name, minRun) {
 function publicNames(all, p) {
   const minor = !!p.is_minor;
   if (strictNames(publicText(all), [{ name: p.name, is_minor: minor }]).length > 0 || !!inTags(all, p.name, minor ? 4 : 5).sure) return true;
-  if (!minor) return false;
+  // A word of the name in a Title Case shout-out ("Way To Go Hope", "Thank
+  // You Coach Will"): the name, for anyone the graphic can't name.
+  const shouted = shoutOuts(all);
+  if (nameParts(p.name).some((w) => Array.from(w).length >= (minor ? 2 : 3) && shouted.has(w))) return true;
   // A minor: one word of their name run into a tag or a word where a word
-  // starts or ends ("#jordanstrong", "#teamjordan"), or an everyday-word name
-  // ending a line in Title Case (a shout-out: "Way To Go Hope").
-  if (minorRunIns(all, [p]).sure.length) return true;
-  const ends = shoutOuts(all);
-  return nameParts(p.name).some((w) => ends.has(w));
+  // starts or ends ("#jordanstrong", "#teamjordan").
+  return minor && minorRunIns(all, [p]).sure.length > 0;
 }
 // What a graphic's words may not carry (the same rules as titles and file
 // names, read as above): the name of anyone the release doesn't let it name,
