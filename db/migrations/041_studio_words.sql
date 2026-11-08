@@ -31,6 +31,8 @@ create table if not exists public.studio_transcripts (
   label text not null check (char_length(btrim(label)) between 1 and 60),
   frames boolean not null default false,
   fps numeric(6, 3) check (fps is null or fps in (23.976, 24, 25, 29.97, 30, 50, 59.94, 60)),
+  -- Drop-frame timecode (";" before the frames), as the file had it.
+  drop_frame boolean not null default false,
   -- [{ n, s, e, t, gap }]: the cue's number (1, 2, ...), its start and end
   -- in milliseconds, and its words; gap: true when it comes after someone
   -- else's words (a question the browser left out) or a long pause, which a
@@ -41,7 +43,8 @@ create table if not exists public.studio_transcripts (
   duration_ms int not null check (duration_ms between 0 and 36000000),
   created_by text not null check (char_length(created_by) between 3 and 200),
   created_at timestamptz not null default now(),
-  constraint studio_transcripts_fps check ((fps is not null) = frames)
+  constraint studio_transcripts_fps check ((fps is not null) = frames),
+  constraint studio_transcripts_drop check (not drop_frame or fps in (29.97, 59.94))
 );
 create index if not exists studio_transcripts_film_idx on public.studio_transcripts (film_id, created_at);
 create index if not exists studio_transcripts_person_idx on public.studio_transcripts (person_id);
@@ -232,8 +235,8 @@ begin
     return old;
   end if;
   if tg_op = 'UPDATE' then
-    if row(new.film_id, new.person_id, new.frames, new.fps, new.cues, new.cue_count, new.words, new.duration_ms, new.created_by, new.created_at)
-       is distinct from row(old.film_id, old.person_id, old.frames, old.fps, old.cues, old.cue_count, old.words, old.duration_ms, old.created_by, old.created_at) then
+    if row(new.film_id, new.person_id, new.frames, new.fps, new.drop_frame, new.cues, new.cue_count, new.words, new.duration_ms, new.created_by, new.created_at)
+       is distinct from row(old.film_id, old.person_id, old.frames, old.fps, old.drop_frame, old.cues, old.cue_count, old.words, old.duration_ms, old.created_by, old.created_at) then
       raise exception 'a transcript is kept as it came: remove it and add it again';
     end if;
     if public.studio_names_in(new.film_id, new.label) then
@@ -413,6 +416,13 @@ begin
   if exists (select 1 from public.studio_words w where w.film_id = new.film_id
                and public.studio_names_in(new.film_id, concat_ws(' ', w.quote, w.text, w.title, w.note)))
      or exists (select 1 from public.studio_transcripts t where t.film_id = new.film_id and public.studio_names_in(new.film_id, t.label))
+     -- A label carries no word of anyone's name at all (as when it's added).
+     or exists (select 1 from public.studio_transcripts t,
+                       lateral regexp_split_to_table(lower(concat_ws(' ', new.name, new.reviewer_name)), '[^[:alpha:]]+') as w
+                 where t.film_id = new.film_id
+                   and char_length(w) >= (case when new.is_minor then 2 else 3 end)
+                   and w <> all (array['he', 'do', 'an', 'so', 'go', 'oh', 'no', 'me', 'my', 'we', 'us', 'it', 'in', 'on', 'at', 'to', 'be', 'by', 'of', 'or', 'up', 'as', 'is', 'am', 'if'])
+                   and (' ' || btrim(regexp_replace(lower(regexp_replace(t.label, '([[:lower:]])([[:upper:]])', '\1 \2', 'g')), '[^[:alpha:]]+', ' ', 'g')) || ' ') like '% ' || w || ' %')
      or exists (select 1 from public.studio_film_directions d where d.film_id = new.film_id
                  and public.studio_names_in(new.film_id, public.studio_json_strings(d.directions) || ' ' || coalesce(d.why_recommended, '') || ' ' || public.studio_json_strings(d.questions))) then
     raise exception 'words kept on this film name someone on this card: remove those lines (Real words) first';
@@ -442,6 +452,8 @@ language sql immutable set search_path = '' as $$
     select url, query, host, replace(replace(path, '%2e', '.'), '%2f', '/') as path from u
   )
   select (rtrim(regexp_replace(path, ';[^/]*', '', 'g'), '/') ~ '\.(jpe?g|jpe|jfif|pjpeg|pjp|png|apng|gif|webp|heic|heif|avif|bmp|dib|tiff?|svgz?|ico|jxl|jp2|j2k|dng|cr2|nef|arw|raw|psd|mp4|m4v|mov|webm|mkv|avi|wmv|flv|mpe?g|3gp|ts|m3u8)$')
+      -- Instagram's /p/<id>/media/ address sends the picture itself.
+      or (host ~ '(^|\.)instagram\.com$' and rtrim(path, '/') ~ '^/(p|reel|tv)/[^/]+/media$')
       or query ~ '(^|&)(format|fm|ext|type|mime)=(jpe?g|png|gif|webp|avif|heic|svg|bmp|image%2f[a-z]+|image/[a-z]+)(&|$)'
       or host ~ '(^|\.)(pbs\.twimg\.com|images\.unsplash\.com|plus\.unsplash\.com|i\.imgur\.com|i\.redd\.it|preview\.redd\.it|lh[0-9]\.googleusercontent\.com|media\.licdn\.com|scontent[a-z0-9.-]*\.fbcdn\.net|scontent[a-z0-9.-]*\.cdninstagram\.com|i\.pinimg\.com|images\.squarespace-cdn\.com|cdn\.shopify\.com|i\.ytimg\.com|img\.youtube\.com|i\.vimeocdn\.com|media\.giphy\.com|i\.giphy\.com|images\.pexels\.com|cdn\.pixabay\.com|live\.staticflickr\.com|farm[0-9]+\.staticflickr\.com|upload\.wikimedia\.org|video\.twimg\.com|v[0-9]+\.cdninstagram\.com)$'
     from p

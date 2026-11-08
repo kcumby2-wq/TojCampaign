@@ -362,6 +362,12 @@
       var nominal = Math.round(opts.fps);
       var f = Math.round(((ms % 1000) / 1000) * opts.fps);
       if (f >= nominal) { f = 0; secs += 1; }
+      // Drop-frame skips the first frame numbers of every minute but each
+      // tenth (2 at 29.97, 4 at 59.94): those labels never show.
+      if (opts.drop) {
+        var skip = Math.round(opts.fps * 0.066666);
+        if (secs % 60 === 0 && Math.floor(secs / 60) % 10 !== 0 && f < skip) f = skip;
+      }
       tail = (opts.drop ? ";" : ":") + pad(f);
     } else tail = "." + Math.floor((ms % 1000) / 100);
     var h = Math.floor(secs / 3600), m = Math.floor(secs / 60) % 60, s = secs % 60;

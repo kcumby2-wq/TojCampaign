@@ -44,7 +44,9 @@ function fileLink(url) {
   }
   let path = u.pathname.toLowerCase().replace(/%2e/g, ".").replace(/%2f/g, "/");
   path = path.replace(/;[^/]*/g, "").replace(/\/+$/, "");
-  return FILE_END.test(path) || IMAGE_QUERY.test(u.search.replace(/^\?/, "").toLowerCase()) || IMAGE_HOST.test(u.hostname.toLowerCase());
+  // Instagram's /p/<id>/media/ address sends the picture itself.
+  const media = /(^|\.)instagram\.com$/.test(u.hostname.toLowerCase()) && /^\/(p|reel|tv)\/[^/]+\/media$/.test(path);
+  return FILE_END.test(path) || media || IMAGE_QUERY.test(u.search.replace(/^\?/, "").toLowerCase()) || IMAGE_HOST.test(u.hostname.toLowerCase());
 }
 
 router.use((req, res, next) => {

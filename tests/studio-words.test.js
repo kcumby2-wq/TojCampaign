@@ -221,6 +221,11 @@ test("timecodes round to the nearest frame; a transcript past ten hours says so"
     }
   }
   assert.equal(TP.tc(61500, { frames: true, fps: 29.97, drop: true }).includes(";"), true);
+  // Drop-frame never shows frames 00 and 01 at the start of a minute (but every tenth).
+  assert.equal(TP.tc(60000, { frames: true, fps: 29.97, drop: true }), "00:01:00;02");
+  assert.equal(TP.tc(600000, { frames: true, fps: 29.97, drop: true }), "00:10:00;00");
+  assert.equal(W.transcriptInput({ frames: true, fps: 29.97, drop: true, cues: [{ s: 0, e: 1000, t: "a" }] }).value.drop_frame, true);
+  assert.equal(W.transcriptInput({ frames: true, fps: 25, drop: true, cues: [{ s: 0, e: 1000, t: "a" }] }).value.drop_frame, false);
   assert.deepEqual(TP.parse("1\n10:00:01,000 --> 10:00:04,000\nLate words.\n").error, "past_ten_hours");
 });
 
@@ -235,7 +240,9 @@ test("agents read names as codes, run together and in handles too; a code is nev
 test("our own words: no promise of reach, no emoji chain, no line written for anyone, no word of a name", () => {
   for (const t of ["more reach with college coaches", "Millions of views", "Recruiters will notice you", "This will get you an offer"]) assert.ok(W.voiceTrouble(t).some((x) => /promises/.test(x)), t);
   for (const t of ["He reaches for the bar", "the views from the hill", "fire 🔥 and ice"]) assert.deepEqual(W.voiceTrouble(t), [], t);
-  for (const t of ["🔥.🔥.🔥", "🇺🇸 🇺🇸", "1️⃣2️⃣"]) assert.ok(W.voiceTrouble(t).includes("no emoji chains"), t);
+  for (const t of ["🔥.🔥.🔥", "🇺🇸 🇺🇸", "1️⃣2️⃣", "💯-💯"]) assert.ok(W.voiceTrouble(t).includes("no emoji chains"), t);
+  for (const t of ["👨‍👩‍👧 one family", "👍🏽 great work"]) assert.deepEqual(W.voiceTrouble(t), [], t);
+  for (const t of ["Your offer list starts here.", "Trending on every feed."]) assert.ok(W.voiceTrouble(t).some((x) => /promises/.test(x)), t);
   for (const t of ["He says: I do it for my mom", "A note with ‘it made me better’ inside", "'Never quit on the hill' he said", "«Je ne lâche rien jamais»"]) assert.ok(W.writtenLines(t).length, t);
   for (const t of ["don't stop, it's fine", "the coach's \"why\"", "Look: warm light, slow push"]) assert.deepEqual(W.writtenLines(t), [], t);
   // A word of an adult's name: Claude is refused; a person is asked.

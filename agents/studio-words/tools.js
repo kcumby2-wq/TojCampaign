@@ -182,7 +182,7 @@ function wordsText(v, transcripts = []) {
   const t = (id) => transcripts.find((x) => x.id === id) || {};
   const at = (q) => {
     const tr = t(q.transcript_id);
-    const opts = { frames: !!tr.frames, fps: tr.fps };
+    const opts = { frames: !!tr.frames, fps: tr.fps, drop: !!tr.drop_frame };
     return `${tr.ref || "?"}#${q.from_cue}${q.to_cue !== q.from_cue ? "–" + q.to_cue : ""} ${W.TP.tc(q.start_ms, opts)}–${W.TP.tc(q.end_ms, opts)}`;
   };
   const out = [];

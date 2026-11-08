@@ -30,11 +30,13 @@ const PROMISE_RE = new RegExp(
     "(?:thousands|millions|hundreds|tons|lots|more|\\d[\\d,.]*\\s*[km]?)\\s+(?:of\\s+)?(?:views|likes|impressions|plays|eyes|fans)|" +
     "get(?:s|ting)?\\s+(?:you\\s+|him\\s+|her\\s+|them\\s+)?(?:noticed|seen|discovered|recruited|an?\\s+offer|offers|a\\s+scholarship)|" +
     "(?:recruiters?|scouts?|coaches|colleges?|schools?|teams?)\\s+(?:will|are\\s+going\\s+to|gonna)\\s+(?:notice|see|find|call|watch|come|reach\\s+out)|" +
-    "(?:will|guaranteed\\s+to)\\s+(?:get|land|earn)\\s+(?:you\\s+|him\\s+|her\\s+|them\\s+)?(?:an?\\s+)?(?:offers?|scholarships?|recruited|noticed|signed))\\b",
+    "(?:will|guaranteed\\s+to)\\s+(?:get|land|earn)\\s+(?:you\\s+|him\\s+|her\\s+|them\\s+)?(?:an?\\s+)?(?:offers?|scholarships?|recruited|noticed|signed)|" +
+    "(?:your|his|her|their)\\s+(?:offer|offers|recruiting|scholarship)\\s+(?:list|sheet|board|count)|trending|on\\s+every\\s+(?:feed|timeline|phone|screen)|for\\s+you\\s+page|fyp)\\b",
   "giu"
 );
-// One emoji: a picture (with its skin tone or joins), a flag, a keycap.
-const EMOJI = "(?:\\p{Extended_Pictographic}[\\u{FE0F}\\u{20E3}\\u{200D}\\u{1F3FB}-\\u{1F3FF}\\p{Extended_Pictographic}]*|\\p{Regional_Indicator}{2}|[0-9#*]\\u{FE0F}?\\u{20E3})";
+// One emoji: a picture with its variation, skin tone and any pictures it's
+// joined to ("👨‍👩‍👧" is one), a flag, or a keycap.
+const EMOJI = "(?:\\p{Extended_Pictographic}(?:[\\u{FE0F}\\u{1F3FB}-\\u{1F3FF}]|\\u{200D}\\p{Extended_Pictographic})*|\\p{Regional_Indicator}{2}|[0-9#*]\\u{FE0F}?\\u{20E3})";
 // Emoji one after another, whatever's between them but words ("🔥🔥🔥",
 // "🔥.🔥.🔥", "🇺🇸 🇺🇸"): an emoji chain.
 const EMOJI_RUN = new RegExp(`${EMOJI}[\\s\\p{P}\\p{Z}]*${EMOJI}`, "u");
@@ -80,6 +82,8 @@ function transcriptInput(raw) {
   value.frames = r.frames === true;
   value.fps = value.frames ? Number(r.fps) : null;
   if (value.frames && !TP.FPS.includes(value.fps)) errors.push("fps");
+  // Drop-frame (";"), only at the rates that have it.
+  value.drop_frame = value.frames && r.drop === true && (value.fps === 29.97 || value.fps === 59.94);
   const list = Array.isArray(r.cues) ? r.cues : null;
   if (!list || !list.length) errors.push("cues");
   else if (list.length > TP.MAX_CUES) errors.push("too_many_cues");
@@ -299,7 +303,7 @@ function rowsFor(value) {
 // A transcript as Claude reads it: numbered cues with their times, the
 // names in them as codes (tr.shown, when the route masked them).
 function transcriptText(tr, { from = 1, to = Infinity } = {}) {
-  const opts = { frames: !!tr.frames, fps: tr.fps };
+  const opts = { frames: !!tr.frames, fps: tr.fps, drop: !!tr.drop_frame };
   return (tr.shown || tr.cues)
     .filter((c) => c.n >= from && c.n <= to)
     .map((c) => `${tr.ref}#${c.n} [${TP.tc(c.s, opts)}–${TP.tc(c.e, opts)}]${c.gap ? " (after a question or a pause: a line doesn't reach back across it)" : ""} ${c.t}`)
