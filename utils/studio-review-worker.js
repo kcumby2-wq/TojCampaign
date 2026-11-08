@@ -66,7 +66,14 @@ async function takeBack(d, keys) {
   }
   if (!ok) {
     for (const key of keys) {
-      await d.sb.from("studio_storage_removals").upsert({ key, reason: "left_over", done_at: null }, { onConflict: "key" }).then(() => {}, () => {});
+      // Listed once: a key already on the list keeps its reason (a pull's
+      // stays a pull's, so it's never kept back) and is due again.
+      try {
+        const { error } = await d.sb.from("studio_storage_removals").insert({ key, reason: "left_over" });
+        if (error && error.code === "23505") await d.sb.from("studio_storage_removals").update({ done_at: null }).eq("key", key);
+      } catch (e) {
+        /* the next pass finds it: the folder sweep, or the list */
+      }
     }
   }
 }
@@ -303,7 +310,8 @@ async function sweep(over = {}) {
   } catch (e) {
     console.warn("[studio] closing finished takedowns failed:", e && e.message);
   }
-  const todo = (await q(d.sb.from("studio_storage_removals").select("key,tries").is("done_at", null).order("requested_at", { ascending: true }).limit(500))) || [];
+  // Left-overs a ready cut uses are kept (studio_removals_due marks them done).
+  const todo = (await q(d.sb.rpc("studio_removals_due", { p_limit: 500 }))) || [];
   if (!todo.length) return { removed: swept, left: 0 };
   const keys = todo.map((x) => x.key);
   const at = d.now().toISOString();

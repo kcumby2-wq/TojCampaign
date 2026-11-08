@@ -357,6 +357,26 @@ test("nothing is made for a closed film, and its files are removed even when sto
   await assert.rejects(pool.query("update studio_film_cuts set status = 'processing' where id = $1", [waiting.id]), /closed/);
 });
 
+test("a left-over that a ready cut uses is kept; every file of a set of slides is listed", async () => {
+  const { film, p } = await aFilm();
+  const made = await aCut(film, [p.id]);
+  const row = (await pool.query("select preview_key, poster_key from studio_film_cuts where id = $1", [made.id])).rows[0];
+  assert.ok(store.has(U.BUCKET, row.preview_key));
+  // An earlier attempt left the same content-named copy behind, and its
+  // take-back was refused: it's on the list as a left-over.
+  await pool.query("insert into studio_storage_removals (key, reason) values ($1, 'left_over'), ('films/' || $2 || '/previews/stray.jpg', 'left_over') on conflict (key) do update set done_at = null", [row.preview_key, film.id]);
+  store.put(U.BUCKET, `films/${film.id}/previews/stray.jpg`, Buffer.from("x"), "image/jpeg");
+  await W.sweep({ sb });
+  assert.ok(store.has(U.BUCKET, row.preview_key), "the ready cut's copy is kept");
+  assert.equal(store.has(U.BUCKET, `films/${film.id}/previews/stray.jpg`), false, "a real left-over still goes");
+  const kept = (await pool.query("select done_at is not null as done, last_error from studio_storage_removals where key = $1", [row.preview_key])).rows[0];
+  assert.deepEqual(kept, { done: true, last_error: "kept: a ready cut uses it" });
+  // A set of slides lists each slide and each copy (in the copies' folder) once.
+  const set = { id: "00000000-0000-4000-8000-000000000001", film_id: film.id, kind: "slides", preview_key: "films/f/previews/c-abc/", poster_key: "films/f/previews/c-abc/1.jpg", slide_keys: ["films/f/slides/c/1.png", "films/f/slides/c/2.png"] };
+  const files = await pool.query("select studio_cut_files(jsonb_populate_record(null::studio_film_cuts, $1::jsonb)) as k order by 1", [JSON.stringify(set)]);
+  assert.deepEqual(files.rows.map((r) => r.k), ["films/f/previews/c-abc/1.jpg", "films/f/previews/c-abc/2.jpg", "films/f/slides/c/1.png", "films/f/slides/c/2.png"]);
+});
+
 test("Studio records can't be truncated", async () => {
   for (const t of ["studio_tool_approvals", "studio_films", "studio_film_steps", "studio_film_people", "studio_film_cuts", "studio_reviews", "studio_film_posts", "studio_takedowns", "studio_takedown_items", "studio_events", "studio_storage_removals"]) {
     await assert.rejects(pool.query(`truncate ${t} cascade`), /kept/, t);
