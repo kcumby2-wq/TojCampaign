@@ -189,9 +189,11 @@ end $$;
 -- and turning it off stops the live links for them (as review copies do).
 -- The switch is read with a share lock: turning it off waits for a link
 -- being made (and then stops it), or the link waits and sees it off. A
--- decision on a set made with it waits for the switch the same way.
+-- decision on a set made with it waits for the switch the same way. (As the
+-- tables' owner: the server can't lock the switch row itself, since it
+-- can't update it.)
 create or replace function public.studio_reviews_graphics() returns trigger
-language plpgsql set search_path = '' as $$
+language plpgsql security definer set search_path = '' as $$
 begin
   if tg_op = 'UPDATE' and not (old.decision is null and new.decision is not null) then
     return new;
