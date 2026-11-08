@@ -118,8 +118,8 @@ function tasteInput(raw, { partial = false } = {}) {
 async function namesInTaste(sb, value) {
   const words = [value.title, value.note, value.take, value.leave, ...(value.tags || [])].filter(Boolean).join("\n");
   if (!words) return false;
-  const { data } = await sb.from("studio_film_people").select("name,reviewer_name,is_minor").limit(10000);
-  const cards = data || [];
+  // Every page of them (the API caps one answer at 1,000 rows).
+  const cards = await U.everyCardRows(sb);
   return U.namesIn(words, cards, { strong: true }).length > 0 || U.minorWords(words, cards).length > 0;
 }
 const view = (row) => ({ id: row.id, ref: `Taste ${row.ref_no}`, ref_no: row.ref_no, title: row.title, url: row.url, kind: row.kind, note: row.note, take: row.take, leave: row.leave, tags: row.tags || [], added_by: row.added_by, created_at: row.created_at, updated_at: row.updated_at, archived_at: row.archived_at });

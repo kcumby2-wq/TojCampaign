@@ -138,13 +138,22 @@ function createOrchestrator({ namespace, baseDir, tools, defaultModel = DEFAULT_
       : task;
 
     // A tool can stop the run (scope.control.stop(why)): it aborts this
-    // signal, so the request the runner would send next (the tool's result,
-    // and everything read before it) never goes.
+    // attempt's signal (control.abort is this attempt's, a retry's too), so
+    // the request the runner would send next (the tool's result, and
+    // everything read before it) never goes.
     const abort = new AbortController();
     const control = scope && scope.control;
     if (control) {
       control.abort = () => abort.abort();
-      if (typeof control.stop !== "function") control.stop = (why) => { control.stopped = control.stopped || why; abort.abort(); };
+      if (!control.stopsAbort) {
+        const own = typeof control.stop === "function" ? control.stop : null;
+        control.stop = (why) => {
+          control.stopped = control.stopped || why;
+          if (own) own(why);
+          if (typeof control.abort === "function") control.abort();
+        };
+        control.stopsAbort = true;
+      }
       if (control.stopped) abort.abort();
     }
     const stoppedResult = (usage) => ({

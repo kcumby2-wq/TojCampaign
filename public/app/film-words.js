@@ -270,7 +270,7 @@
 
     // A pause alone is a gap only in a file with no labels (its questions may
     // have been cut out); in a labelled one, the other voices' lines are.
-    function chosen() { return s.parsed && s.parsed.ok && s.who !== undefined ? P().only(s.parsed.cues, s.who, { pauses: !s.parsed.labelled }) : []; }
+    function chosen() { return s.parsed && s.parsed.ok && s.who !== undefined ? P().only(s.parsed.cues, s.who, { pauses: P().pausesFor(s.parsed) }) : []; }
     function paint() {
       var p = s.parsed;
       var body = "";
@@ -360,7 +360,7 @@
         var cues = chosen().map(function (c) { return c.gap ? { s: c.s, e: c.e, t: c.t, gap: true } : { s: c.s, e: c.e, t: c.t }; });
         btn.disabled = true; btn.textContent = "Sending…";
         try {
-          await T().post("/api/studio-words/films/" + encodeURIComponent(id) + "/transcripts", { person_id: s.person, label: (s.label || "").trim(), frames: !!p.frames, fps: p.frames ? p.fps : null, drop: !!p.drop, labelled: !!p.labelled, cues: cues });
+          await T().post("/api/studio-words/films/" + encodeURIComponent(id) + "/transcripts", { person_id: s.person, label: (s.label || "").trim(), frames: !!p.frames, fps: p.frames ? p.fps : null, drop: !!p.drop, labelled: !!p.labelled, voices: p.voices, cues: cues });
           T().toast("Transcript added: " + cues.length + " lines.");
           T().go("#film-words/" + id);
         } catch (e) {

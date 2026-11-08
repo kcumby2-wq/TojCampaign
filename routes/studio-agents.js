@@ -28,6 +28,7 @@ const T = require("../utils/team");
 const P = require("../utils/push");
 const isPerson = (e) => !!e && e !== "api-key" && e.includes("@");
 const H = require("../utils/pylon-http");
+const U = require("../utils/studio-films");
 // A write that marks a brief (set aside, or started from it) is JSON from
 // the app's own pages: another site can't send one through a signed-in browser.
 function sameSiteJson(req, res) {
@@ -606,8 +607,7 @@ router.post("/brief", member, async (req, res) => {
       // (any film's) as a code. If the cards can't be read, nor can the notes.
       let everyone = null;
       try {
-        const r = await sb.from("studio_film_people").select("name,reviewer_name,reviewer_relation,is_minor,person_code").limit(10000);
-        if (!r.error) everyone = r.data || [];
+        everyone = await U.everyCardRows(sb, "id,name,reviewer_name,reviewer_relation,is_minor,person_code");
       } catch (e) {
         everyone = null;
       }

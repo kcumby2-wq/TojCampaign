@@ -1027,7 +1027,27 @@ function reviewReceipt({ reviewerName, decision, formatLabel, decidedName }) {
   };
 }
 
+// Every card on every film (what every film shares is read against them
+// all): page by page, after the last id read, until a page comes back
+// empty, since the API answers with a capped number of rows (1,000 by
+// default) whatever the limit asked. cols must include id.
+async function everyCardRows(sb, cols = "id,name,reviewer_name,is_minor") {
+  const out = [];
+  let after = null;
+  while (out.length < 200000) {
+    let q = sb.from("studio_film_people").select(cols).order("id", { ascending: true }).limit(1000);
+    if (after) q = q.gt("id", after);
+    const { data, error } = await q;
+    if (error) throw Object.assign(new Error(error.message), { db: error });
+    if (!data || !data.length) break;
+    out.push(...data);
+    after = data[data.length - 1].id;
+  }
+  return out;
+}
+
 module.exports = {
+  everyCardRows,
   LANES,
   FORMATS,
   RATIOS,

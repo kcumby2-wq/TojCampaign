@@ -250,17 +250,19 @@ begin
   return false;
 end $$;
 
--- One word of a minor's name on the film's cards (four letters or more, not
--- an everyday word) run into another word: where a capital starts it
--- ("#PrayForJamie", "JamieStrong"), or at a word's start or end
--- ("#teamjamie", "jamiestrong"). The app reads the same (utils/studio-films.js
--- minorRunIns); 039's studio_names_in reads whole words.
+-- One word of a minor's name on the film's cards (not an everyday word) run
+-- into another word: where camelCase starts and ends it ("#PrayForJamie",
+-- "JamieStrong", "#PrayForKai", "KaiStrong": three letters or more), or, four
+-- letters or more, at a word's start or end ("#teamjamie", "jamiestrong"). The
+-- app reads the same (utils/studio-films.js minorRunIns, utils/studio-words.js
+-- runIns: a three-letter one in a lower-case tag is asked about there);
+-- 039's studio_names_in reads whole words.
 create or replace function public.studio_minor_run_in(p_film uuid, p_text text) returns boolean
 language sql stable set search_path = '' as $$
   with w as (
     select distinct x as word
       from public.studio_film_people p, lateral regexp_split_to_table(lower(p.name), '[^[:alpha:]]+') as x
-     where p.film_id = p_film and p.is_minor and char_length(x) >= 4
+     where p.film_id = p_film and p.is_minor and char_length(x) >= 3
        and not (x = any (array[
          'ace', 'april', 'archer', 'art', 'ash', 'august', 'autumn', 'baker', 'bear', 'bell', 'best', 'bill', 'bird',
          'bishop', 'black', 'bliss', 'blue', 'bond', 'booth', 'brook', 'brooks', 'brown', 'buck', 'buddy', 'bush',
@@ -288,8 +290,7 @@ language sql stable set search_path = '' as $$
   select p_text is not null and exists (
     select 1 from w, hay
      where hay.split like '% ' || w.word || ' %'
-        or hay.plain ~ (' ' || w.word || '[[:alpha:]]+ ')
-        or hay.plain ~ (' [[:alpha:]]+' || w.word || ' '))
+        or char_length(w.word) >= 4 and (hay.plain ~ (' ' || w.word || '[[:alpha:]]+ ') or hay.plain ~ (' [[:alpha:]]+' || w.word || ' ')))
 $$;
 
 create or replace function public.studio_transcripts_gate() returns trigger
@@ -507,7 +508,8 @@ begin
     return null;
   end if;
   if exists (select 1 from public.studio_words w where w.film_id = new.film_id
-               and public.studio_names_in(new.film_id, concat_ws(' ', w.quote, w.text, w.title, w.note))) then
+               and (public.studio_names_in(new.film_id, concat_ws(' ', w.quote, w.text, w.title, w.note))
+                    or new.is_minor and public.studio_minor_run_in(new.film_id, concat_ws(' ', w.quote, w.text, w.title, w.note)))) then
     raise exception 'a line, caption, title or note kept on this film names someone on this card: remove it (Real words) first';
   end if;
   if exists (select 1 from public.studio_transcripts t where t.film_id = new.film_id
@@ -517,6 +519,53 @@ begin
   if exists (select 1 from public.studio_film_directions d where d.film_id = new.film_id
                and public.studio_names_in(new.film_id, public.studio_json_strings(d.directions) || ' ' || coalesce(d.why_recommended, '') || ' ' || public.studio_json_strings(d.questions))) then
     raise exception 'the film''s directions name someone on this card: talk to Kyron before adding it';
+  end if;
+  return null;
+end $$;
+
+-- A card added or renamed: the film's title and story are read against the
+-- cards, this one with them (039). A correction to a minor never waits on
+-- them (041, as on the lines): inside the correction, the words of their
+-- name the title or the story has are swapped for the card's code, where
+-- the film's own rules let them change (a pulled film's stay as they were).
+create or replace function public.studio_people_title_names() returns trigger
+language plpgsql set search_path = '' as $$
+declare
+  f public.studio_films%rowtype;
+  t text;
+  s text;
+  w text;
+begin
+  if tg_op = 'UPDATE' and row(new.name, new.reviewer_name, new.is_minor) is not distinct from row(old.name, old.reviewer_name, old.is_minor) then
+    return null;
+  end if;
+  select * into f from public.studio_films where id = new.film_id;
+  if tg_op = 'UPDATE' and new.is_minor and not old.is_minor then
+    t := f.title;
+    s := f.one_sentence;
+    -- The name run together, then each word of it: what's read as a name now.
+    for w in select x from (select regexp_replace(lower(new.name), '[^[:alpha:]]+', '', 'g') as x
+                            union select y from regexp_split_to_table(lower(new.name), '[^[:alpha:]]+') as y) z
+              where char_length(x) >= 2 order by char_length(x) desc loop
+      if public.studio_names_in(new.film_id, w) then
+        t := regexp_replace(t, '\m' || w || '\M', new.person_code, 'gi');
+        s := regexp_replace(s, '\m' || w || '\M', new.person_code, 'gi');
+      end if;
+    end loop;
+    if t is distinct from f.title or s is distinct from f.one_sentence then
+      begin
+        update public.studio_films set title = t, one_sentence = s where id = f.id;
+      exception when others then
+        null;
+      end;
+    end if;
+    return null;
+  end if;
+  if public.studio_names_in(new.film_id, f.title) then
+    raise exception 'the film''s title has a name from its cards in it: change the title first';
+  end if;
+  if f.one_sentence is not null and public.studio_names_in(new.film_id, f.one_sentence) then
+    raise exception 'the film''s story has a name from its cards in it: change the story first';
   end if;
   return null;
 end $$;
@@ -613,8 +662,8 @@ begin
   if tg_op = 'DELETE' then
     -- Only when a card on its film is corrected to a minor, and they name
     -- them (studio_people_kept_names, in that one statement).
-    if coalesce(current_setting('studio.correcting', true), '') <> ''
-       and exists (select 1 from public.studio_film_people p where p.id::text = current_setting('studio.correcting', true) and p.film_id = old.film_id) then
+    if coalesce(current_setting('studio.correcting', true), '') <> '' and pg_trigger_depth() > 1
+       and exists (select 1 from public.studio_film_people p where p.id::text = current_setting('studio.correcting', true) and p.film_id = old.film_id and p.is_minor) then
       return old;
     end if;
     raise exception 'directions are kept';

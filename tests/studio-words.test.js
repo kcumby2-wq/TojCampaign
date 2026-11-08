@@ -216,15 +216,21 @@ test("dashed subtitles are two voices, with or without a space; a label is read 
   // Someone quoting someone isn't a label, and doesn't make the file a labelled one.
   p = TP.parse("1\n00:00:01,000 --> 00:00:03,000\nHe said: you can do it.\n\n2\n00:00:03,000 --> 00:00:05,000\nHe said: keep going.\n");
   assert.deepEqual([p.labelled, TP.only(p.cues, null).length], [false, 2]);
-  // In a labelled file, words before a colon that don't look like a label: a voice the file doesn't name.
+  // In a labelled file, words before a colon that don't look like a label: nobody's (whose they are isn't known).
   p = TP.parse("1\n00:00:01,000 --> 00:00:03,000\nCOACH: Ready.\n\n2\n00:00:03,000 --> 00:00:05,000\nfor all of us: show up.\n\n3\n00:00:05,000 --> 00:00:07,000\nCOACH: Go.\n");
   assert.deepEqual(TP.only(p.cues, "COACH").map((c) => c.t), ["Ready.", "Go."]);
-  assert.deepEqual(TP.only(p.cues, "").map((c) => c.t), ["for all of us: show up."]);
-  // A pause alone is a gap only in a file with no labels.
+  assert.deepEqual([TP.only(p.cues, "").length, p.mixed], [0, 1]);
+  // A pause is a gap unless the file names two voices or more: one whose only label is the speaker's may have had its questions cut out.
   p = TP.parse("1\n00:00:01,000 --> 00:00:02,000\nCOACH: I ran it.\n\n2\n00:00:06,000 --> 00:00:08,000\nCOACH: Every Sunday.\n");
-  assert.deepEqual(TP.only(p.cues, "COACH", { pauses: !p.labelled }).map((c) => !!c.gap), [false, false]);
-  assert.deepEqual(W.transcriptInput({ labelled: true, cues: [{ s: 0, e: 1000, t: "a" }, { s: 5000, e: 6000, t: "b" }] }).value.cues.map((c) => !!c.gap), [false, false]);
-  assert.deepEqual(W.transcriptInput({ cues: [{ s: 0, e: 1000, t: "a" }, { s: 5000, e: 6000, t: "b" }] }).value.cues.map((c) => !!c.gap), [false, true]);
+  assert.deepEqual([p.voices, TP.pausesFor(p)], [1, true]);
+  assert.deepEqual(TP.only(p.cues, "COACH", { pauses: TP.pausesFor(p) }).map((c) => !!c.gap), [false, true]);
+  p = TP.parse("1\n00:00:01,000 --> 00:00:02,000\nCOACH: I ran it.\n\n2\n00:00:02,000 --> 00:00:03,000\nINTERVIEWER: When?\n\n3\n00:00:03,000 --> 00:00:04,000\nCOACH: Sundays.\n\n4\n00:00:09,000 --> 00:00:10,000\nCOACH: Every one.\n");
+  assert.deepEqual([p.voices, TP.pausesFor(p)], [2, false]);
+  const two = [{ s: 0, e: 1000, t: "a" }, { s: 5000, e: 6000, t: "b" }];
+  assert.deepEqual(W.transcriptInput({ labelled: true, voices: 2, cues: two }).value.cues.map((c) => !!c.gap), [false, false]);
+  assert.deepEqual(W.transcriptInput({ labelled: true, voices: 1, cues: two }).value.cues.map((c) => !!c.gap), [false, true]);
+  assert.deepEqual(W.transcriptInput({ labelled: true, cues: two }).value.cues.map((c) => !!c.gap), [false, false], "an older phone: as it read the file");
+  assert.deepEqual(W.transcriptInput({ cues: two }).value.cues.map((c) => !!c.gap), [false, true]);
 });
 
 test("a line never reaches across a question, a pause or missing words, and starts and ends on whole words", () => {
@@ -305,4 +311,65 @@ test("our own words: no promise of reach, no emoji chain, no line written for an
   assert.deepEqual(cap("Sundays, every week."), []);
   const promise = { ...tr, cues: [{ n: 1, s: 0, e: 4000, t: "This will get me exposure and followers." }] };
   assert.ok(W.checkWords({ captions: [{ lead: { transcript: "T1", from_cue: 1, to_cue: 1, quote: "This will get me exposure and followers" } }], structures: [] }, { transcripts: [promise], people, asks: new Set() }).issues.some((i) => /promises/.test(i.issue)));
+});
+
+test("other voices are nobody's however a file marks them: >>, a name in brackets, odd labels, what follows them", () => {
+  const S = (...subs) => subs.map((t, i) => `${i + 1}\n00:00:${String(i * 3).padStart(2, "0")},000 --> 00:00:${String(i * 3 + 3).padStart(2, "0")},000\n${t}\n`).join("\n");
+  const voice = (r) => r.cues.map((c) => [c.who === TP.TWO ? "two" : c.who, c.t]);
+  // ">>", a broadcast caption's new speaker: with no labels, nobody's throughout.
+  let p = TP.parse(S(">> Were you nervous before the game?\n>> No. Never.", ">> I ran it like any other Sunday.", "And I still do."));
+  assert.deepEqual([p.labelled, p.voices, p.mixed, TP.only(p.cues, null).length], [false, 0, 4, 0]);
+  // In a labelled file, a ">>" subtitle is two voices; ">> COACH:" is a label.
+  p = TP.parse(S("COACH: I ran this drill in 2017.", ">> Why that year?\n>> Because nobody filmed it.", "COACH: And I still run it."));
+  assert.deepEqual(TP.only(p.cues, "COACH").map((c) => c.t), ["I ran this drill in 2017.", "And I still run it."]);
+  p = TP.parse(S(">> COACH: I ran this drill in 2017.", ">> INTERVIEWER: Why that year?", ">> COACH: Because nobody filmed it."));
+  assert.deepEqual(voice(p), [["COACH", "I ran this drill in 2017."], ["INTERVIEWER", "Why that year?"], ["COACH", "Because nobody filmed it."]]);
+  // A speaker named in brackets or parentheses, as SDH subtitles write it; a sound note isn't one.
+  p = TP.parse(S("[COACH] I ran this drill in 2017.", "[INTERVIEWER] Why that year?", "[COACH] Because nobody filmed it."));
+  assert.deepEqual(voice(p), [["COACH", "I ran this drill in 2017."], ["INTERVIEWER", "Why that year?"], ["COACH", "Because nobody filmed it."]]);
+  p = TP.parse(S("COACH: I ran this drill in 2017.", "(INTERVIEWER) Why that year?", "COACH: Because nobody filmed it."));
+  assert.deepEqual(TP.only(p.cues, "COACH").map((c) => c.t), ["I ran this drill in 2017.", "Because nobody filmed it."]);
+  p = TP.parse(S("[APPLAUSE] Thank you all.", "[MUSIC PLAYING]", "I ran it every Sunday. [laughs]", "[DOOR CLOSES] And that was it."));
+  assert.deepEqual(voice(p), [[null, "Thank you all."], [null, "I ran it every Sunday."], [null, "And that was it."]]);
+  // Odd labels in a labelled file: nobody's, on a dashed line or a subtitle's
+  // first; and so is what follows them with no label, until the next one.
+  p = TP.parse(S("DAD: He gets up at five.", "-me and him: we play every day.\n-He says that every day.", "DAD: I never had that at his age."));
+  assert.deepEqual([TP.only(p.cues, "").length, TP.only(p.cues, "DAD").length, p.mixed], [0, 2, 2]);
+  p = TP.parse(S("INTERVIEWER: What did your dad tell you", "the night before the final: what did he say?", "He said to just play.", "INTERVIEWER: And did you?"));
+  assert.deepEqual(voice(p).map((x) => x[0]), ["INTERVIEWER", "two", "two", "INTERVIEWER"]);
+  // One voice: a minus before a number, or an em dash carrying a line on, isn't a second voice.
+  p = TP.parse(S("I was going to quit—", "—and then my dad showed up.", "It was cold that morning,", "-5 degrees, and we still ran."));
+  assert.deepEqual([p.mixed, TP.only(p.cues, null).length], [0, 4]);
+  // A dialogue dash in Spanish (an em dash, then a capital or ¿) still is.
+  p = TP.parse(S("— ¿Estabas nervioso?\n— Nunca.", "Yo corro aquí."));
+  assert.deepEqual(voice(p), [["two", "¿Estabas nervioso?"], ["two", "Nunca."], [null, "Yo corro aquí."]]);
+  // "Saturday:" on a wrapped line is words, not a speaker.
+  p = TP.parse(S("COACH: The plan for every\nSaturday: run it again.", "INTERVIEWER: Every one?", "COACH: Every one."));
+  assert.deepEqual(TP.only(p.cues, "COACH").map((c) => c.t), ["The plan for every Saturday: run it again.", "Every one."]);
+});
+
+test("a minor's three-letter name run into a tag or camelCase is masked and read; in an ordinary word it's the word", async () => {
+  const kai = [{ name: "Kai Moreno", person_code: "WK29", is_minor: true }];
+  assert.equal(W.maskNames("We all wore #PrayForKai bands.", kai).includes("WK29"), true);
+  assert.equal(W.maskNames("The whole town is KaiStrong now.", kai).includes("WK29"), true);
+  assert.equal(W.maskNames("#teamkai on every truck", kai).includes("WK29"), true);
+  assert.equal(W.maskNames("The kaiser roll", kai), "The kaiser roll");
+  assert.deepEqual(W.runIns("We all wore #PrayForKai bands.", kai), { sure: ["kai"], maybe: [] });
+  assert.deepEqual(W.runIns("#teamkai on every truck", kai), { sure: [], maybe: ["kai"] });
+  assert.deepEqual(W.runIns("the same drill", [{ name: "Sam Lund", is_minor: true }]), { sure: [], maybe: [] });
+  // An everyday name in a lower-case tag is masked too.
+  assert.equal(W.maskNames("We all wore #prayforhope bands.", [{ name: "Hope Lee", person_code: "WH29", is_minor: true }]).includes("WH29"), true);
+  assert.equal(W.maskNames("hopeful", [{ name: "Hope Lee", person_code: "WH29", is_minor: true }]), "hopeful");
+});
+
+test("every card is read page by page, past the API's cap on one answer", async () => {
+  const U = require("../utils/studio-films");
+  const rows = Array.from({ length: 2503 }, (_, i) => ({ id: String(i).padStart(6, "0"), name: "P" + i }));
+  // A stand-in that answers at most 1,000 rows, whatever the limit asked.
+  const sb = { from: () => {
+    const q = { after: null, n: 0, select() { return q; }, order() { return q; }, limit(n) { q.n = n; return q; }, gt(_, v) { q.after = v; return q; },
+      then(res) { const data = rows.filter((r) => q.after == null || r.id > q.after).slice(0, Math.min(q.n, 1000)); return Promise.resolve({ data, error: null }).then(res); } };
+    return q;
+  } };
+  assert.equal((await U.everyCardRows(sb)).length, 2503);
 });

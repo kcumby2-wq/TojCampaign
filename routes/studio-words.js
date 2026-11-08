@@ -496,7 +496,7 @@ router.post("/films/:id/directions", member, withDb(async (req, res, sb) => {
   const plan = film.plan || {};
   const mask = (x) => (x == null ? null : W.maskNames(x, people));
   // Every card on every film, for the taste notes every film shares.
-  const everyone = (await run(sb.from("studio_film_people").select("name,reviewer_name,reviewer_relation,is_minor,person_code").limit(10000))) || [];
+  const everyone = await U.everyCardRows(sb, "id,name,reviewer_name,reviewer_relation,is_minor,person_code");
   const scope = {
     film: {
       athlete_id: film.athlete_id,
