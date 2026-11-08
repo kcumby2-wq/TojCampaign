@@ -147,16 +147,18 @@ const idOk = (s) => U.UUID.test(String(s || ""));
 const NOTE_HAS_NAME = { error: "invalid", fields: ["note_has_name"] };
 const NOTE_HAS_MINOR_NAME = { error: "invalid", fields: ["note_has_minor_name"] };
 // A note's names: a whole name (or one run together) is refused, and so is
-// any word of a minor's name. A single word of an adult's name ("Will",
-// "Mark") is asked about, and kept once the writer says that word isn't a
-// name here: { names_ok: ["will"] }, the exact words, for this exact text
-// (the app forgets them when the text changes). null when the note can be kept.
+// a word of a minor's name, except an everyday word ("will", "hope") written
+// in lower case, or at the start of a sentence (asked about). A single word
+// of an adult's name ("Will", "Mark") is asked about, and kept once the
+// writer says that word isn't a name here: { names_ok: ["will"] }, the exact
+// words, for this exact text (the app forgets them when the text changes).
+// null when the note can be kept.
 function noteNames(text, people, body) {
   if (!text) return null;
   if (U.namesIn(text, people, { strong: true }).length) return NOTE_HAS_NAME;
   if (U.minorWords(text, people).length) return NOTE_HAS_MINOR_NAME;
   const ok = U.namesOkWords(body && body.names_ok);
-  const words = U.namesIn(text, people).filter((w) => !ok.has(w));
+  const words = [...new Set([...U.namesIn(text, people), ...U.minorMaybe(text, people)])].filter((w) => !ok.has(w));
   if (words.length) return { error: "invalid", fields: ["note_may_have_name"], words: words.slice(0, 10) };
   return null;
 }

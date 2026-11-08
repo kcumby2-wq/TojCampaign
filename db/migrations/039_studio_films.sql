@@ -375,14 +375,16 @@ language sql stable set search_path = '' as $$
 $$;
 
 -- Whether a note names someone on the film's cards for certain: their whole
--- name (or their reviewer's), or the name run together ("JamieRivers"), as
+-- name (or their reviewer's), or the name run together as one word
+-- ("JamieRivers"), as
 -- utils/studio-films.js namesIn does with { strong: true }; or any word of a
 -- minor's name ("Jamie's mom called"), as its minorWords does. Such a note
 -- stays out of the history. A single word of an adult's name ("Will",
 -- "Mark") is the app's to ask about, not the database's to refuse; a child's
--- name has no such question. Two-letter name words that are everyday words
--- ("he" for a child named Bo He) are left to the app, which counts them only
--- with a capital mid-sentence; the whole name is refused here regardless.
+-- name has no such question. A minor's name words that are everyday words
+-- ("he" for a child named Bo He, "will", "hope", "field") are left to the
+-- app, which counts them only with a capital mid-sentence; the whole name is
+-- refused here regardless.
 create or replace function public.studio_names_in(p_film uuid, p_text text) returns boolean
 language sql stable set search_path = '' as $$
   with hay as (
@@ -398,12 +400,34 @@ language sql stable set search_path = '' as $$
        and not (char_length(w) = 2 and w = any (array['he', 'do', 'an', 'so', 'go', 'oh', 'no', 'me', 'my', 'we', 'us', 'it', 'in', 'on',
          'at', 'to', 'be', 'by', 'of', 'or', 'up', 'as', 'is', 'am', 'if', 'hi', 'ok', 'ah', 'eh', 'uh', 'um', 'yo', 'ya', 'ha', 'ho', 'lo',
          'la', 'ma', 'pa', 'ye', 'ow', 'ox', 'ax', 'id', 're', 'vs']))
+       -- Everyday words that are names too (utils/studio-films.js EVERYDAY_NAMES).
+       and not (w = any (array[
+         'ace', 'april', 'archer', 'art', 'ash', 'august', 'autumn', 'baker', 'bear', 'bell', 'best', 'bill', 'bird',
+         'bishop', 'black', 'bliss', 'blue', 'bond', 'booth', 'brook', 'brooks', 'brown', 'buck', 'buddy', 'bush',
+         'butler', 'carter', 'case', 'cash', 'chance', 'chase', 'church', 'clay', 'cliff', 'colt', 'cook', 'cooper',
+         'crow', 'dale', 'dash', 'dawn', 'day', 'deal', 'dean', 'don', 'dot', 'dove', 'drew', 'duke', 'dusty', 'early',
+         'earl', 'echo', 'eve', 'fair', 'faith', 'fern', 'field', 'fields', 'fisher', 'flint', 'ford', 'forest', 'fox',
+         'frank', 'free', 'frost', 'gale', 'gene', 'gold', 'golden', 'grace', 'grant', 'gray', 'green', 'grey', 'guy',
+         'hall', 'hardy', 'hart', 'haven', 'hawk', 'hazel', 'heath', 'hero', 'hill', 'hills', 'holly', 'honey',
+         'honor', 'hood', 'hope', 'house', 'hunt', 'hunter', 'ivy', 'jack', 'jade', 'jay', 'jet', 'jewel', 'joy',
+         'judge', 'june', 'justice', 'kind', 'king', 'kit', 'knight', 'lake', 'lance', 'lane', 'lark', 'laurel',
+         'legend', 'liberty', 'light', 'lily', 'link', 'long', 'lord', 'love', 'lucky', 'major', 'march', 'mark',
+         'marsh', 'mason', 'max', 'may', 'meadow', 'mercy', 'miles', 'misty', 'moon', 'noble', 'north', 'ocean',
+         'page', 'park', 'pat', 'patience', 'peace', 'pearl', 'penny', 'pepper', 'pierce', 'piper', 'pope', 'porter',
+         'power', 'price', 'pride', 'prince', 'queen', 'rain', 'ranger', 'raven', 'ray', 'read', 'rebel', 'reed',
+         'rice', 'rich', 'ridge', 'river', 'rob', 'rock', 'rocky', 'rose', 'royal', 'ruby', 'rush', 'rusty', 'sage',
+         'saint', 'sandy', 'scout', 'shade', 'shadow', 'shepherd', 'shore', 'short', 'silver', 'sky', 'small', 'smith',
+         'snow', 'sonny', 'south', 'spring', 'star', 'steel', 'sterling', 'stone', 'storm', 'stormy', 'strong', 'sue',
+         'summer', 'sunday', 'sunny', 'sweet', 'swift', 'tad', 'tank', 'true', 'trust', 'tucker', 'valor', 'violet',
+         'wade', 'walker', 'ward', 'warren', 'waters', 'way', 'wells', 'west', 'white', 'will', 'willow', 'winter',
+         'wise', 'wolf', 'wood', 'woods', 'worth', 'wren', 'young']))
   )
   select p_text is not null and p_film is not null and (exists (
     select 1 from names, hay
      where (names.spaced like '% %' and hay.words like '% ' || names.spaced || ' %')
+        -- Run together as one word ("JamieRivers"): the whole word only.
         or (names.spaced like '% %' and char_length(replace(names.spaced, ' ', '')) >= 5
-            and hay.letters like '%' || replace(names.spaced, ' ', '') || '%'))
+            and hay.words like '% ' || replace(names.spaced, ' ', '') || ' %'))
     or exists (select 1 from minor_words, hay where hay.words like '% ' || minor_words.w || ' %'))
 $$;
 
