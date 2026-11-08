@@ -851,7 +851,18 @@ router.post("/tools/:tool", member, withDb(async (req, res, sb) => {
   const note = U.clean(body.note, 500) || null;
   if (on && !note) return res.status(400).json({ error: "invalid", fields: ["note"] });
   try {
-    const rows = await run(sb.from("studio_tool_approvals").update({ is_on: on, note, decided_by: me(req) }).eq("tool", req.params.tool).select());
+    // Through 040's studio_tool_switch: turning the graphics system off takes
+    // its films first, the order a link or a decision for one of its sets
+    // takes them in (film, then the switch), so the two never deadlock.
+    // Before 040 there's no graphics lock to order: a plain update.
+    let rows;
+    try {
+      rows = await rpcRows(sb, "studio_tool_switch", { p_tool: req.params.tool, p_on: on, p_note: note, p_by: me(req) });
+    } catch (e) {
+      const code = String((e && e.db && e.db.code) || "");
+      if (code !== "42883" && code !== "PGRST202") throw e;
+      rows = await run(sb.from("studio_tool_approvals").update({ is_on: on, note, decided_by: me(req) }).eq("tool", req.params.tool).select());
+    }
     if (!rows || !rows.length) return res.status(404).json({ error: "not_found" });
     await T.logActivity(me(req), on ? "tool_on" : "tool_off", req.params.tool, null);
     res.json({ tool: rows[0] });
@@ -986,7 +997,7 @@ function slidesInput(body, filmPeople, film) {
   if (!v.made_with) errors.push("made_with");
   if (!v.slides.length || v.slides.length > MAX_SLIDES || v.slides.some((x) => !SLIDE_TYPES[x])) errors.push("slides");
   if (!v.file_name) errors.push("file_name");
-  else if (U.strictNames(v.file_name, filmPeople).length) errors.push("file_name_has_name");
+  else if (U.idNames(v.file_name, filmPeople).length) errors.push("file_name_has_name");
   const ids = new Set(filmPeople.map((p) => p.id));
   v.people = Array.isArray(body.people) ? [...new Set(body.people.slice(0, 50).map((x) => String(x).toLowerCase()))] : [];
   if (v.people.some((x) => !ids.has(x))) errors.push("people");
@@ -1127,7 +1138,8 @@ router.get("/films/:id/shoot", member, withDb(async (req, res, sb) => {
     pulled: !!p.consent_pulled_at,
     covers: { face: !!(p.covers || {}).face, name: !!(p.covers || {}).name, jersey: !!(p.covers || {}).jersey, voice: !!(p.covers || {}).voice },
   });
-  const safe = (x) => U.offlineSafe(x, people, { places: plan.locations });
+  const vocab = k ? U.kitWords(k) : null;
+  const safe = (x) => U.offlineSafe(x, people, { places: plan.locations, vocab });
   const offline = {
     v: 1,
     film_id: film.id,

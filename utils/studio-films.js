@@ -270,11 +270,17 @@ function planInput(raw) {
 // What the director's phone keeps for a dead signal (shoot mode): the call
 // times without what they're for (a call sheet line names people and places
 // too often to keep), and only those must-haves and frame-pair lines a
-// strict screen can't fault: no name on a card, no word of a place under
-// Locations, no contact, no "@", no digits, and no capital after the first
-// word ("Westlake HS", "St. Mary's"). A name that's on no card and typed all
-// in lower case can't be told from other words, so the board says these
-// lines go on the phone. The rest shows online only.
+// strict screen can't fault:
+//   - no word of a card's name, in any case (idNames: "hope smiling" too);
+//   - no word of a place under Locations, in any case;
+//   - no contact, no "@", no digits;
+//   - no capital after the first word ("Westlake HS", "St. Mary's"), and a
+//     capital first word only if it's an ordinary one (COMMON_FIRST, or a
+//     word of the approved kit's own text: "Hands", "Gate"), not "Dana" or
+//     "Lincoln".
+// A name that's on no card and typed all in lower case can't be told from
+// other words, so the board says these lines go on the phone. The rest
+// shows online only.
 const PHONE_RE = /(?:\+?\d[\s().-]*){7,}/;
 const EMAIL_RE = /[^\s@]+@[^\s@]+\.[a-z]{2,}/i;
 const LINK_RE = /\bhttps?:\/\/|\bwww\./i;
@@ -283,22 +289,57 @@ function contactIn(text) {
   const t = String(text || "");
   return PHONE_RE.test(t) || EMAIL_RE.test(t) || LINK_RE.test(t) || STREET_RE.test(t);
 }
-// The capitalised words of the places under Locations ("The Rivers
-// family's driveway, 12 Oak St": rivers, oak, st), but "the".
+// The words of the places under Locations ("The Rivers family's driveway,
+// 12 Oak St": rivers, family, driveway, oak, st), in any case, but the
+// ordinary small ones ("the", "at") and three letters or fewer typed in
+// lower case.
+const PLACE_SKIP = new Set(["the", "a", "an", "at", "of", "on", "in", "by", "and", "to", "for", "from", "near", "with", "s"]);
 function placeWords(locations) {
   const out = new Set();
   for (const l of Array.isArray(locations) ? locations : []) {
-    for (const w of String(l || "").match(/[\p{L}\p{M}]+/gu) || []) if (/^\p{Lu}/u.test(w) && w.toLowerCase() !== "the") out.add(w.toLowerCase());
+    for (const w of String(l || "").match(/[\p{L}\p{M}]+/gu) || []) {
+      const lw = w.toLowerCase();
+      if (PLACE_SKIP.has(lw)) continue;
+      if (/^\p{Lu}/u.test(w) || Array.from(lw).length >= 4) out.add(lw);
+    }
   }
   return out;
 }
-function offlineSafe(text, people, { places = [] } = {}) {
+// Ordinary words a shot line may start with, besides the kit's own words.
+const COMMON_FIRST = new Set(("i we he she they it the a an his her their our my your its this that these those one two three four five first second third last next final " +
+  "then after before during while when where over under behind beside between inside outside into onto off up down out back front side top " +
+  "on in at by for from with without to of and but or no not all each every both same other another more most few some any " +
+  "wide close tight medium slow fast low high long short full half empty quiet loud early late " +
+  "sunday monday tuesday wednesday thursday friday saturday morning afternoon evening night dawn dusk sunrise sunset noon midnight " +
+  "kids players team coach coaches parents crowd fans ball cones sled bench stands bleachers scoreboard whistle helmet cleats gloves tape " +
+  "hands feet eyes shoulders breath sweat rain snow mud sun shadow shadows light lights silhouette reflection archive photo phone " +
+  "drill drills rep reps sprint sprints run runs walk walks warmup warm stretch huddle practice game field court track gym gate door " +
+  "b broll insert inserts cutaway cutaways establishing aerial overhead handheld locked static push pull pan tilt dolly track tracking").split(/\s+/));
+function offlineSafe(text, people, { places = [], vocab = null } = {}) {
   const t = String(text || "").trim();
-  if (!t || t.includes("@") || /\d/.test(t) || contactIn(t) || strictNames(t, people).length) return false;
+  if (!t || t.includes("@") || /\d/.test(t) || contactIn(t) || idNames(t, people).length) return false;
   const words = t.match(/[\p{L}\p{M}'’]+/gu) || [];
   const at = placeWords(places);
   if (words.some((w) => at.has(w.toLowerCase().replace(/['’]s?$/u, "")))) return false;
-  return !words.slice(1).some((w) => /^\p{Lu}/u.test(w) && w !== "I");
+  if (words.slice(1).some((w) => /^\p{Lu}/u.test(w) && w !== "I")) return false;
+  // A capital first word: an ordinary one, or one the kit's own text uses.
+  const first = words[0] || "";
+  if (/^\p{Lu}/u.test(first)) {
+    const lw = first.toLowerCase().replace(/['’]s?$/u, "");
+    if (!COMMON_FIRST.has(lw) && !(vocab && vocab.has(lw))) return false;
+  }
+  return true;
+}
+// The words of a kit's own text, lower case: what a shot line may start with.
+function kitWords(kit) {
+  const out = new Set();
+  const walk = (v) => {
+    if (typeof v === "string") for (const w of v.toLowerCase().match(/[\p{L}\p{M}]+/gu) || []) out.add(w);
+    else if (Array.isArray(v)) v.forEach(walk);
+    else if (v && typeof v === "object") Object.values(v).forEach(walk);
+  };
+  walk(kit);
+  return out;
 }
 
 // ── Words on a graphic ───────────────────────────────────────────────────
@@ -322,18 +363,44 @@ function graphicsCredit(p, as, format) {
 // (#TyNgNeverQuit, @tyng23): its words are also read with the capitals in a
 // run split apart, and a name run together counts anywhere inside a hashtag
 // or a handle.
+// A hashtag or handle starts a sentence of its own ("#HopeIsAPlan" reads
+// "Hope Is A Plan", asked about like any sentence start).
 function publicText(all) {
-  return all + "\n" + all.replace(/(\p{Ll})(\p{Lu})/gu, "$1 $2").replace(/(\p{L})(\p{N})|(\p{N})(\p{L})/gu, "$1$3 $2$4");
+  const split = all.replace(/[#@]/g, "\n").replace(/(\p{Ll})(\p{Lu})/gu, "$1 $2").replace(/(\p{Lu})(\p{Lu}\p{Ll})/gu, "$1 $2").replace(/(\p{L})(\p{N})|(\p{N})(\p{L})/gu, "$1$3 $2$4");
+  return all + "\n" + split;
 }
+// A name run together inside a hashtag or handle: { sure } when it starts
+// where a word of the tag starts (its first letter, a capital after a small
+// letter, a letter after a digit or "_": "#tyngneverquit", "@tyng23",
+// "#GoTyNg"), { ask } (the tag) when it's inside a word ("edli" in
+// "#SpeedLimit"), or nothing.
 function inTags(all, name, minRun) {
-  const joined = nameParts(name).join("");
-  if (nameParts(name).length < 2 || Array.from(joined).length < minRun) return false;
-  const tags = String(all || "").toLowerCase().match(/[#@][\p{L}\p{M}\p{N}_.]+/gu) || [];
-  return tags.some((t) => t.replace(/[^\p{L}\p{M}]+/gu, "").includes(joined));
+  const parts = nameParts(name);
+  const joined = parts.join("");
+  if (parts.length < 2 || Array.from(joined).length < minRun) return {};
+  let sure = false;
+  const ask = [];
+  for (const tag of String(all || "").match(/[#@][\p{L}\p{M}\p{N}_.]+/gu) || []) {
+    let letters = "";
+    const starts = new Set();
+    let prev = "";
+    for (const ch of Array.from(tag.slice(1))) {
+      if (/[\p{L}\p{M}]/u.test(ch)) {
+        if (!letters || !/[\p{L}\p{M}]/u.test(prev) || (/\p{Lu}/u.test(ch) && /\p{Ll}/u.test(prev))) starts.add(letters.length);
+        letters += ch.toLowerCase();
+      }
+      prev = ch;
+    }
+    for (let i = letters.indexOf(joined); i >= 0; i = letters.indexOf(joined, i + 1)) {
+      if (starts.has(i)) sure = true;
+      else ask.push(tag.toLowerCase());
+    }
+  }
+  return { sure, ask: [...new Set(ask)] };
 }
 function publicNames(all, p) {
   const minor = !!p.is_minor;
-  return strictNames(publicText(all), [{ name: p.name, is_minor: minor }]).length > 0 || inTags(all, p.name, minor ? 4 : 5);
+  return strictNames(publicText(all), [{ name: p.name, is_minor: minor }]).length > 0 || !!inTags(all, p.name, minor ? 4 : 5).sure;
 }
 // What a graphic's words may not carry (the same rules as titles and file
 // names, read as above): the name of anyone the release doesn't let it name,
@@ -358,11 +425,18 @@ function graphicsProblems(texts, people, { format = null, banned = null } = {}) 
 // capital at the start of a sentence ("Will never quit"). ok: the words the
 // writer said aren't names here.
 function graphicsAsks(texts, people, { format = null, ok = new Set() } = {}) {
-  const all = publicText((texts || []).filter(Boolean).join("\n"));
+  const raw = (texts || []).filter(Boolean).join("\n");
+  const all = publicText(raw);
   const out = new Set();
   for (const p of people || []) {
-    if (!mayName(p, format)) for (const w of nameHits(all, p, p.is_minor ? { minRun: 4, minWord: 2 } : {}).maybe) out.add(w);
-    if (p.reviewer_name && p.reviewer_relation !== "self") for (const w of nameHits(all, { name: p.reviewer_name }).maybe) out.add(w);
+    if (!mayName(p, format)) {
+      for (const w of nameHits(all, p, p.is_minor ? { minRun: 4, minWord: 2 } : {}).maybe) out.add(w);
+      for (const tag of inTags(raw, p.name, p.is_minor ? 4 : 5).ask || []) out.add(tag);
+    }
+    if (p.reviewer_name && p.reviewer_relation !== "self") {
+      for (const w of nameHits(all, { name: p.reviewer_name }).maybe) out.add(w);
+      for (const tag of inTags(raw, p.reviewer_name, 5).ask || []) out.add(tag);
+    }
   }
   return [...out].filter((w) => !ok.has(w));
 }
@@ -605,7 +679,7 @@ function deliveryCheck(film, v, people = []) {
     else if (sec < lo - 0.5 || sec > hi + 0.5) add("length", false, `${fmt.label} runs ${fmt.spec.split(" · ")[0]}; this one is ${Math.round(sec)} seconds.`);
     else add("length", true, `${Math.round(sec)} seconds, inside ${lo}–${hi}.`);
   }
-  const names = strictNames(v.file_name.replace(/\.[a-z0-9]+$/i, ""), people);
+  const names = idNames(v.file_name.replace(/\.[a-z0-9]+$/i, ""), people);
   if (names.length) add("names", false, "The file name has a name in it. Files carry the athlete ID, never a name.");
   else add("names", true, "No names in the file name.");
   const warns = nameWarnings(v.file_name, film, { format: v.format, ratio: v.ratio, version: Number((/_v(\d{2,3})_/.exec(v.file_name) || [])[1]) || 1 });
@@ -708,6 +782,7 @@ module.exports = {
   namesOkWords,
   planInput,
   offlineSafe,
+  kitWords,
   mayName,
   graphicsCredit,
   graphicsProblems,

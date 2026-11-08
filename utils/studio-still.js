@@ -123,17 +123,22 @@ function checkPng(buf) {
   return { ok: true, type: "png", width: ihdr.w, height: ihdr.h, marked };
 }
 
-// Reads the frame header (SOF) up to the start of the picture data (SOS).
-// Exactly one: a second could tell this check one size and a viewer another.
+// Reads every marker to the end of the picture (EOI), through the coded
+// data of each scan (a stuffed 0xFF00 or a restart marker is data). Exactly
+// one frame header (SOF) before the end: a second could tell this check one
+// size and a viewer another, or give the review copy another picture.
+// Anything after the end (a phone's second image) isn't read.
 function checkJpeg(buf) {
   let p = 2;
   let size = null;
-  while (p + 4 <= buf.length) {
+  let ended = false;
+  while (p + 2 <= buf.length) {
     if (buf[p] !== 0xff) return no("it isn't a JPEG that can be read");
     const m = buf[p + 1];
     if (m === 0xff) { p += 1; continue; }
     if (m === 0xd8 || (m >= 0xd0 && m <= 0xd7) || m === 0x01) { p += 2; continue; }
-    if (m === 0xd9 || m === 0xda) break;
+    if (m === 0xd9) { ended = true; break; }
+    if (p + 4 > buf.length) return no("the file is cut short");
     const len = buf.readUInt16BE(p + 2);
     if (len < 2 || p + 2 + len > buf.length) return no("the file is cut short");
     if ((m >= 0xc0 && m <= 0xcf) && m !== 0xc4 && m !== 0xc8 && m !== 0xcc) {
@@ -141,8 +146,20 @@ function checkJpeg(buf) {
       size = { h: buf.readUInt16BE(p + 5), w: buf.readUInt16BE(p + 7) };
     }
     p += 2 + len;
+    if (m === 0xda) {
+      // The scan's coded data, up to the next marker that isn't data.
+      for (;;) {
+        const q = buf.indexOf(0xff, p);
+        if (q < 0 || q + 1 >= buf.length) return no("the file is cut short");
+        const n = buf[q + 1];
+        if (n === 0x00 || (n >= 0xd0 && n <= 0xd7)) { p = q + 2; continue; }
+        p = q;
+        break;
+      }
+    }
   }
   if (!size) return no("its size can't be read");
+  if (!ended) return no("the file is cut short");
   const bad = sizeOk(size.w, size.h);
   return bad ? no(bad) : { ok: true, type: "jpeg", width: size.w, height: size.h, marked: false };
 }

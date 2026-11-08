@@ -307,10 +307,17 @@ test("the shoot sheet: what the phone keeps for a dead signal has no names, cont
   // The screen itself.
   const people = [{ name: "Jordan Kid", is_minor: true }];
   for (const [line, safe] of [["Hands on the sled", true], ["The drive in", true], ["I want the drive", true], ["Gate at dawn", true],
-    ["Wide at Westlake HS", false], ["St. Mary's gym", false], ["Dana's hands", true], ["Then Dana", false], ["jordan at the gate", false],
-    ["Call 5125550199", false], ["dana@x.test", false], ["Shot 2 wide", false], ["", false]]) {
+    ["Wide at Westlake HS", false], ["St. Mary's gym", false], ["Then Dana", false], ["jordan at the gate", false],
+    ["Call 5125550199", false], ["dana@x.test", false], ["Shot 2 wide", false], ["", false],
+    // A card's name in any case, an everyday word too ("kid" in Jordan Kid).
+    ["the kid at the gate", false], ["Kid at the gate", false],
+    // A capital first word only if it's an ordinary one (or the kit's own: see below).
+    ["Dana's hands", false], ["Lincoln gate at dawn", false], ["Sunday drill wide", true]]) {
     assert.equal(U.offlineSafe(line, people), safe, line);
   }
+  const vocab = U.kitWords(require("../agents/studio/kits/same-work.v1.json"));
+  assert.equal(U.offlineSafe("Interview chair, wide", people), false, "an unknown first word");
+  assert.equal(U.offlineSafe("Interview chair, wide", people, { vocab }), true, "a word the kit itself uses");
   // A word of a place under Locations, in any case, stays online too.
   const places = ["The Rivers family's driveway, 12 Oak St"];
   assert.equal(U.offlineSafe("the rivers' gate at dusk", people, { places }), false);
@@ -423,6 +430,38 @@ test("turning the graphics switch off waits for a link being written, and a set 
   }
 });
 
+test("turning the graphics system off takes its films first, so a decision holding a film never deadlocks with it", async () => {
+  const { film, p } = await aFilm("K0004", "quote_card");
+  ok(await films("POST", "/tools/graphics_system", { on: true, note: "Kyron and Hooks approved the type system" }, "kyron"), "on");
+  const made = await aSet(film, [p.id], { made_with: "graphics", files: [I.png(4, 5, { mark: true })] });
+  ok(await films("POST", `/films/${film.id}/cuts/${made.cut.id}/reviews`, { person_id: p.id }, "lead"), "link");
+  const a = await pool.connect();
+  const b = await pool.connect();
+  try {
+    // A decision's order: the film, then the switch (share).
+    await a.query("begin");
+    await a.query("select 1 from studio_films where id = $1 for update", [film.id]);
+    let done = false;
+    const off = b.query("select * from studio_tool_switch('graphics_system', false, null, 'kyron@toj.test')").then(() => { done = true; });
+    await new Promise((r) => setTimeout(r, 300));
+    assert.equal(done, false, "the switch-off waits for the film");
+    await a.query("select 1 from studio_tool_approvals where tool = 'graphics_system' and is_on for share");
+    await a.query("commit");
+    await off;
+  } finally {
+    a.release();
+    b.release();
+  }
+  assert.equal((await pool.query("select is_on from studio_tool_approvals where tool = 'graphics_system'")).rows[0].is_on, false);
+  assert.equal((await pool.query("select count(*)::int as n from studio_reviews where cut_id = $1 and link_hash is not null", [made.cut.id])).rows[0].n, 0);
+  // A delivery check's file name is split where its words run together before the database looks for a name.
+  ok(await films("POST", `/films/${film.id}/people`, { person_code: "K0005", name: "Ty Ng", role: "athlete", is_minor: true, release_on_file: true, covers: { voice: true } }, "lead"), "minor");
+  await pool.query("insert into studio_delivery_checks (film_id, created_by, file_name, format, ratio, passed) values ($1, 'ed@toj.test', 'SW_TyNgQuoteCard.png', 'quote_card', '4x5', false)", [film.id]);
+  assert.equal((await pool.query("select file_name from studio_delivery_checks where film_id = $1 order by created_at desc limit 1", [film.id])).rows[0].file_name, "(a file name with a name in it)");
+  const named = ok(await films("POST", `/films/${film.id}/delivery-checks`, { file_name: "tyngquotecard.png", format: "quote_card", ratio: "4x5", width: 1080, height: 1350, bytes: 1000 }, "ed"), "check").check;
+  assert.equal(named.file_name, "(a file name with a name in it)");
+});
+
 test("a registration that names an id already used keeps that cut's files", async () => {
   const { film, p } = await aFilm("V0002", "quote_card");
   const first = await aSet(film, [p.id], { drain: false });
@@ -461,6 +500,15 @@ test("a graphic asks about an everyday word that's also a name it can't carry, a
   assert.match(named.problems[0], /Q0004/);
   // Lower case, mid-sentence: an everyday word.
   assert.equal((await check({ texts: ["We will run it every Sunday."] })).data.ok, true);
+  // A hashtag starts a sentence of its own: asked, not refused.
+  assert.deepEqual((await check({ texts: ["#WillPower"] })).data.asks, ["will"]);
+  // A name run together inside a word of a tag is asked about (the tag);
+  // at the start of a word of the tag, it's a name.
+  ok(await films("POST", `/films/${film.id}/people`, { person_code: "Q0005", name: "Ed Li", role: "athlete", is_minor: true, release_on_file: true, covers: { voice: true } }, "lead"), "Ed Li");
+  const speed = (await check({ texts: ["#SpeedLimit on the drive in"] })).data;
+  assert.deepEqual([speed.ok, speed.problems, speed.asks], [false, [], ["#speedlimit"]]);
+  assert.equal((await check({ texts: ["#SpeedLimit on the drive in"], names_ok: ["#speedlimit"] })).data.ok, true);
+  for (const t of ["#edlineverquits", "#GoEdLi", "@edli7"]) assert.match((await check({ texts: [t] })).data.problems[0] || "", /Q0005/, t);
 });
 
 test("the words on a graphic pass the server's name rules, and the credit goes only as far as the release", async () => {
@@ -468,7 +516,7 @@ test("the words on a graphic pass the server's name rules, and the credit goes o
   const kid = ok(await films("POST", `/films/${film.id}/people`, { person_code: "Q0002", name: "Ty Ng", role: "athlete", is_minor: true, release_on_file: true, covers: { voice: true }, reviewer_relation: "parent", reviewer_name: "Lin Ng", reviewer_email: "lin@x.test", speaker: true }, "lead"), "kid").person;
   const check = (body) => films("POST", `/films/${film.id}/graphics/check`, { format: "quote_card", speaker_id: p.id, credit: "role", ...body }, "ed");
   assert.equal((await check({ texts: ["We ran it every Sunday."] })).data.ok, true);
-  for (const words of ["Ty never quit", "#TyNg forever", "#TyNgNeverQuit", "#tyngneverquit", "@tyng_23", "Lin drove us", "His mom Lin Ng was there", "#AlexDoe23 ran it"]) {
+  for (const words of ["Ty never quit", "#TyNg forever", "#TyNgNeverQuit", "#tyngneverquit", "@tyng_23", "#GoTyNg", "Lin drove us", "His mom Lin Ng was there", "#AlexDoe23 ran it"]) {
     const r = (await check({ texts: [words] })).data;
     assert.equal(r.ok, false, words);
   }

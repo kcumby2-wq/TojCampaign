@@ -259,4 +259,13 @@ test("the still check refuses a file it can't read whole, rather than throwing, 
   const big = Buffer.from(sof); big.writeUInt16BE(16000, 5); big.writeUInt16BE(16000, 7);
   assert.equal(Still.check(Buffer.concat([j.subarray(0, 21), big, j.subarray(21)])).ok, false);
   assert.deepEqual(Still.check(Buffer.concat([Buffer.from([0xff, 0xd8, 0xff]), j.subarray(2)])), { ok: true, type: "jpeg", width: 100, height: 100, marked: false });
+  // Through a scan to the end: a second frame header after the first scan
+  // is refused; a second picture after the end (a phone's) isn't read; a
+  // scan cut short is refused.
+  const scan = Buffer.from([0xff, 0xda, 0x00, 0x08, 0x01, 0x01, 0x00, 0x00, 0x3f, 0x00, 0x12, 0xff, 0x00, 0x34, 0xff, 0xd0, 0x56]);
+  const withScan = Buffer.concat([j.subarray(0, 21), scan, Buffer.from([0xff, 0xd9])]);
+  assert.equal(Still.check(withScan).ok, true);
+  assert.equal(Still.check(Buffer.concat([j.subarray(0, 21), scan, big, scan, Buffer.from([0xff, 0xd9])])).ok, false);
+  assert.equal(Still.check(Buffer.concat([withScan, withScan])).ok, true);
+  assert.match(Still.check(Buffer.concat([j.subarray(0, 21), scan])).why, /cut short/);
 });

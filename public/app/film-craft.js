@@ -699,7 +699,9 @@
       if (r.problems && r.problems.length) return r.problems[0];
       if (r.asks && r.asks.length) {
         asked = { texts: texts, words: (same ? asked.words : []).concat(r.asks) };
-        return "\u201c" + r.asks.join("\u201d, \u201c") + "\u201d is also a name on a card that this graphic can't carry. If it isn't a name here, tap again.";
+        var tags = r.asks.filter(function (w) { return /^[#@]/.test(w); }), plain = r.asks.filter(function (w) { return !/^[#@]/.test(w); });
+        var q = function (l) { return "\u201c" + l.join("\u201d, \u201c") + "\u201d"; };
+        return (plain.length ? q(plain) + " is also a name on a card that this graphic can't carry. " : "") + (tags.length ? q(tags) + " has a name on a card run into it. " : "") + "If it isn't a name here, tap again.";
       }
       if (r.credit && r.credit !== credit()) { g.creditAs = "role"; keepDraft(); draw(); return "The credit can only be what the release allows: it now reads \u201c" + r.credit + "\u201d. Look again, then tap again."; }
       // Typed over while it was checked: check again.

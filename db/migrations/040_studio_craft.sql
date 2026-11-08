@@ -174,8 +174,10 @@ begin
   if tg_op <> 'INSERT' then
     raise exception 'a delivery check is kept as it was checked';
   end if;
-  -- Kept for good: a file name with a name in it is kept without it.
-  if public.studio_names_in(new.film_id, regexp_replace(new.file_name, '[_.-]+', ' ', 'g')) then
+  -- Kept for good: a file name with a name in it is kept without it. Its
+  -- words are split where they run together first ("TyNgQuoteCard").
+  if public.studio_names_in(new.film_id, regexp_replace(regexp_replace(regexp_replace(new.file_name,
+       '([[:lower:]])([[:upper:]])', '\1 \2', 'g'), '([[:upper:]])([[:upper:]][[:lower:]])', '\1 \2', 'g'), '[_.0-9-]+', ' ', 'g')) then
     new.file_name := '(a file name with a name in it)';
   end if;
   new.created_at := now();
@@ -217,6 +219,24 @@ begin
   return null;
 end $$;
 
+-- Turn a tool on or off (the route's one way to): turning the graphics
+-- system off takes the films with its live links first, in id order, the
+-- order a link or a decision for one of its sets takes them (the film, then
+-- the switch, studio_reviews_graphics), so the two never deadlock.
+create or replace function public.studio_tool_switch(p_tool text, p_on boolean, p_note text, p_by text)
+returns setof public.studio_tool_approvals
+language plpgsql volatile set search_path = '' as $$
+begin
+  if p_tool = 'graphics_system' and not p_on then
+    perform 1 from public.studio_films f
+     where f.id in (select r.film_id from public.studio_reviews r join public.studio_film_cuts c on c.id = r.cut_id
+                     where r.link_hash is not null and c.made_with = 'graphics')
+     order by f.id for update;
+  end if;
+  return query update public.studio_tool_approvals t set is_on = p_on, note = p_note, decided_by = p_by
+    where t.tool = p_tool returning t.*;
+end $$;
+
 -- Delete a cut never reviewed or posted (039's gate says which), film first:
 -- a note being added to it takes the film first too.
 create or replace function public.studio_cut_remove(p_cut uuid)
@@ -255,7 +275,7 @@ declare
 begin
   foreach fn in array array['public.studio_notes_gate()', 'public.studio_delivery_checks_gate()', 'public.studio_film_cuts_files()',
                             'public.studio_names_in_any(text)', 'public.studio_reviews_graphics()', 'public.studio_tool_approvals_graphics()',
-                            'public.studio_cut_remove(uuid)'] loop
+                            'public.studio_cut_remove(uuid)', 'public.studio_tool_switch(text, boolean, text, text)'] loop
     execute format('revoke all on function %s from public', fn);
     foreach r in array array['anon', 'authenticated'] loop
       if exists (select 1 from pg_roles where rolname = r) then
@@ -271,6 +291,6 @@ begin
   if exists (select 1 from pg_roles where rolname = 'service_role') then
     -- Rows only, as for 039's tables.
     execute 'revoke truncate, trigger, references on public.studio_notes, public.studio_delivery_checks from service_role';
-    execute 'grant execute on function public.studio_names_in_any(text), public.studio_cut_remove(uuid) to service_role';
+    execute 'grant execute on function public.studio_names_in_any(text), public.studio_cut_remove(uuid), public.studio_tool_switch(text, boolean, text, text) to service_role';
   end if;
 end $$;
