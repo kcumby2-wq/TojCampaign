@@ -1,10 +1,11 @@
 "use strict";
-// Studio review copies (migration 039). An editor uploads a cut for review;
-// this makes the copy its speakers watch: the cut at 720 on the short side,
-// with its sound, "REVIEW COPY · NOT FOR SHARING" burned in, and a poster. It
-// takes the uploaded file's sha256, the fingerprint every approval is tied to
-// (the file that will post), and the copy's own sha256, whose start is in the
-// copy's storage key, so the copy can't be swapped for another unseen:
+// Studio review copies (migrations 039, 040). An editor uploads a cut for
+// review; this makes the copy its speakers watch: the cut at 720 on the short
+// side, with its sound, "REVIEW COPY · NOT FOR SHARING" burned in, and a
+// poster; stills and slides get a marked copy of each image. It takes the
+// uploaded files' sha256, the fingerprint every approval is tied to (the files
+// that will post), and the copies' own sha256, whose start is in the copies'
+// storage key, so a copy can't be swapped for another unseen:
 //
 //   uploaded → processing → ready        (failed after 3 tries, or the film closed)
 //
@@ -141,7 +142,65 @@ async function finish(d, row, keys, patch) {
   return !!(done && done.length);
 }
 
+// A still or a set of slides (a parent card, a quote card, a carousel): each
+// image's copy at 1080 on the long side, marked REVIEW COPY, without its
+// metadata (a phone photo's location stays out). The fingerprint speakers
+// approve is of the files themselves: the sha256 of their sha256s, in order.
+// The copies go in a folder named by their own fingerprint (the sha256 of the
+// copies' sha256s), so none is ever overwritten.
+const SLIDE_LONG_SIDE = 1080;
+const slideBox = `scale='min(${SLIDE_LONG_SIDE},iw)':'min(${SLIDE_LONG_SIDE},ih)':force_original_aspect_ratio=decrease:force_divisible_by=2,setsar=1`;
+async function slideCopy(d, src, out, opts) {
+  const r = await d.media.run(
+    ["-i", src, "-i", WATERMARK, "-filter_complex", `[0:v:0]${slideBox}[b];[b][1:v]overlay=(W-w)/2:(H-h)/2,format=yuvj420p[v]`, "-map", "[v]", "-frames:v", "1", "-map_metadata", "-1", "-q:v", "3", "-y", out],
+    opts
+  );
+  if (r.code !== 0 || !fs.existsSync(out) || fs.statSync(out).size === 0) throw new media.MediaError("Couldn't make the review copy of a slide: " + media.lastWords(r.stderr, opts.dir));
+}
+const setHash = (hashes) => crypto.createHash("sha256").update(hashes.join("\n"), "utf8").digest("hex");
+async function processSlides(row, d) {
+  const dir = await fs.promises.mkdtemp(path.join(d.tmp, "studio-slides-"));
+  try {
+    if (!(await stillWanted(d, row))) throw closed();
+    const keys = row.slide_keys || [];
+    if (!keys.length) throw new media.MediaError("The set has no slides.", { final: true });
+    const hashes = [];
+    const copies = [];
+    let bytes = 0;
+    let first = null;
+    for (let i = 0; i < keys.length; i++) {
+      const src = path.join(dir, `slide-${i + 1}.${/\.jpg$/.test(keys[i]) ? "jpg" : "png"}`);
+      await download(d, keys[i], src);
+      bytes += (await fs.promises.stat(src)).size;
+      hashes.push(await sha256File(src));
+      const info = await d.media.probe(src, { dir });
+      if (info.duration_ms && info.duration_ms > 100) throw new media.MediaError(`Slide ${i + 1} isn't a still image.`, { final: true });
+      if (!first) first = info;
+      const out = path.join(dir, `copy-${i + 1}.jpg`);
+      await slideCopy(d, src, out, { dir });
+      copies.push({ file: out, sha: await sha256File(out) });
+    }
+    const sha = setHash(hashes);
+    const copySha = setHash(copies.map((c) => c.sha));
+    const prefix = U.slideCopyPrefix(row.film_id, row.id, copySha);
+    const made = copies.map((_, i) => `${prefix}${i + 1}.jpg`);
+    // Checked again just before anything is written for it.
+    if (!(await stillWanted(d, row))) throw closed();
+    try {
+      for (let i = 0; i < copies.length; i++) await upload(d, made[i], copies[i].file, "image/jpeg");
+    } catch (e) {
+      await takeBack(d, made);
+      throw e;
+    }
+    const saved = await finish(d, row, made, { sha256: sha, preview_sha256: copySha, bytes, width: first.width, height: first.height, preview_key: prefix, poster_key: made[0] });
+    return { ok: saved, sha256: sha, preview_sha256: copySha };
+  } finally {
+    await fs.promises.rm(dir, { recursive: true, force: true }).catch(() => {});
+  }
+}
+
 async function processOne(row, d) {
+  if (row.kind === "slides") return processSlides(row, d);
   const dir = await fs.promises.mkdtemp(path.join(d.tmp, "studio-cut-"));
   try {
     if (!(await stillWanted(d, row))) throw closed();
@@ -376,4 +435,4 @@ function stop() {
   timer = null;
 }
 
-module.exports = { MAX_ATTEMPTS, STALE_MS, MAX_SECONDS, WATERMARK, start, stop, kick, drain, claim, recover, sweep, processOne, sha256File };
+module.exports = { MAX_ATTEMPTS, STALE_MS, MAX_SECONDS, WATERMARK, start, stop, kick, drain, claim, recover, sweep, processOne, processSlides, sha256File };

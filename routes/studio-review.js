@@ -80,20 +80,23 @@ router.post("/view", safe(async (req, res) => {
   let poster = null;
   const slides = [];
   try {
-    const keys = [r.preview_key, r.poster_key, ...(r.slide_keys || [])].filter(Boolean);
+    // A set of slides is seen as its copies (marked REVIEW COPY): the set's
+    // folder (preview_key), then 1.jpg, 2.jpg, ... never the files themselves.
+    const copies = r.kind === "slides" && r.preview_key && /\/$/.test(r.preview_key) ? (r.slide_keys || []).map((_, i) => `${r.preview_key}${i + 1}.jpg`) : [];
+    const keys = r.kind === "slides" ? copies : [r.preview_key, r.poster_key].filter(Boolean);
     if (keys.length) {
       const { data: signed } = await sb.storage.from(U.BUCKET).createSignedUrls(keys, 2 * 60 * 60);
-      for (const s of signed || []) {
-        if (!s || !s.signedUrl) continue;
-        if (s.path === r.preview_key) video = s.signedUrl;
-        else if (s.path === r.poster_key) poster = s.signedUrl;
-        else slides.push(s.signedUrl);
+      const by = new Map((signed || []).filter((x) => x && x.signedUrl).map((x) => [x.path, x.signedUrl]));
+      if (r.kind === "slides") for (const k of copies) slides.push(by.get(k) || null);
+      else {
+        video = by.get(r.preview_key) || null;
+        poster = r.poster_key ? by.get(r.poster_key) || null : null;
       }
     }
   } catch (e) {
     console.warn("[studio-review] watch link failed:", e && e.message);
   }
-  if (r.kind !== "slides" && !video) return res.status(503).json({ error: "storage_unavailable" });
+  if (r.kind === "slides" ? !slides.length || slides.some((x) => !x) : !video) return res.status(503).json({ error: "storage_unavailable" });
   res.json({
     ok: true,
     relation: r.relation === "self" ? "self" : r.relation === "guardian" ? "guardian" : "parent",

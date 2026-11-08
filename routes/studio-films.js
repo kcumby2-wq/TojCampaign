@@ -32,6 +32,13 @@
 //   POST   /api/studio-films/takedowns/:tid/items         { film_id, label }: something else to take down
 //   POST   /api/studio-films/takedown-items/:iid/done     { note }
 //   POST   /api/studio-films/tools/:tool                  { on, note } (owner only)
+//   POST   /api/studio-films/films/:id/cut-notes          { cut_id, at_ms, note, label }: a note at a moment
+//   POST   /api/studio-films/cut-notes/:nid/resolve       the editor marks it done
+//   GET    /api/studio-films/labels                       note labels and how often each came up
+//   POST   /api/studio-films/films/:id/delivery-checks    what the browser read from an export, checked
+//   POST   /api/studio-films/films/:id/slides/upload      signed links for stills or slides (1 to 10 images)
+//   POST   /api/studio-films/films/:id/slides             register them for review
+//   GET    /api/studio-films/films/:id/shoot              shoot mode: times, lights, the kit's rules for the day
 //
 // Who does what: members run films and their cards and cuts; the film's
 // director and editor finish their own steps; approvers (the producer's role)
@@ -49,6 +56,7 @@ const H = require("../utils/pylon-http");
 const U = require("../utils/studio-films");
 const F = require("../agents/studio/films");
 const S = require("../agents/studio/service");
+const K = require("../agents/studio/kit");
 const worker = require("../utils/studio-review-worker");
 
 const router = express.Router();
@@ -207,6 +215,10 @@ router.get("/meta", member, withDb(async (req, res, sb) => {
     tools: tools.map((x) => ({ tool: x.tool, label: U.TOOLS[x.tool] || x.tool, is_on: x.is_on, decided_by: x.decided_by, decided_at: x.decided_at, note: x.note })),
     max_review_mb: U.MAX_REVIEW_MB(),
     platforms: U.PLATFORMS,
+    // The TOJ banned list, for words on graphics (the kit: none on screen).
+    banned: { words: K.BANNED_RE.source, phrases: K.BANNED_PHRASES_RE.source },
+    // The export sizes the kit names, for the delivery check and graphics.
+    sizes: U.KIT_SIZES,
     can: { producer: isProducer(req), owner: isOwner(req) },
   });
 }));
@@ -269,6 +281,10 @@ router.get("/films/:id", member, withDb(async (req, res, sb) => {
     run(sb.from("studio_film_posts").select("*").eq("film_id", film.id).order("posted_at", { ascending: true })),
     run(sb.from("studio_events").select("*").eq("film_id", film.id).order("id", { ascending: false }).limit(200)),
   ]);
+  const [notes, checks] = await Promise.all([
+    run(sb.from("studio_notes").select("*").eq("film_id", film.id).order("created_at", { ascending: true }).limit(500)).catch(() => []),
+    run(sb.from("studio_delivery_checks").select("*").eq("film_id", film.id).order("created_at", { ascending: false }).limit(20)).catch(() => []),
+  ]);
   const t = F.templateFor(film.kit_slug);
   let kit = null;
   try {
@@ -278,7 +294,7 @@ router.get("/films/:id", member, withDb(async (req, res, sb) => {
   }
   // Watch links for ready cuts (an hour), for the team only.
   const keys = [];
-  for (const c of cuts || []) if (c.status === "ready" && !film.pulled_at) keys.push(c.preview_key, c.poster_key);
+  for (const c of cuts || []) if (c.status === "ready" && !film.pulled_at) keys.push(c.kind === "slides" ? null : c.preview_key, c.poster_key, ...U.slideCopyKeys(c));
   const signed = {};
   if (keys.filter(Boolean).length && sb.storage) {
     try {
@@ -303,10 +319,13 @@ router.get("/films/:id", member, withDb(async (req, res, sb) => {
     people: people.map((p) => ({ ...p, gaps: U.clearanceGaps(p) })),
     cuts: (cuts || []).map((c) => ({
       ...c,
-      watch_url: c.preview_key ? signed[c.preview_key] || null : null,
       poster_url: c.poster_key ? signed[c.poster_key] || null : null,
-      warnings: [...(U.namesIn(String(c.file_name || "").replace(/\.[a-z0-9]+$/i, ""), people).length ? ["The file name has a name in it: rename the export, the kit's way"] : []), ...U.nameWarnings(c.file_name, film, c)],
+      watch_url: c.kind === "slides" ? null : c.preview_key ? signed[c.preview_key] || null : null,
+      slide_urls: c.status === "ready" ? U.slideCopyKeys(c).map((k) => signed[k] || null) : [],
+      warnings: [...(U.namesIn(String(c.file_name || "").replace(/\.[a-z0-9]+$/i, ""), people).length ? ["The file name has a name in it: rename the export, the kit's way"] : []), ...(c.kind === "video" ? U.nameWarnings(c.file_name, film, c) : [])],
     })),
+    notes: notes || [],
+    delivery_checks: checks || [],
     reviews: (reviews || []).map((r) => reviewView(r)),
     posts: posts || [],
     takedowns: takedowns.map((x) => ({ ...x, items: items.filter((i) => i.takedown_id === x.id) })),
@@ -805,6 +824,238 @@ router.post("/tools/:tool", member, withDb(async (req, res, sb) => {
   }
 }));
 
+// ── Notes on a cut ───────────────────────────────────────────────────────
+router.post("/films/:id/cut-notes", member, withDb(async (req, res, sb) => {
+  const film = await filmById(sb, req.params.id);
+  if (!film) return res.status(404).json({ error: "not_found" });
+  const body = bodyOf(req);
+  const note = U.cleanNotes(body.note, 1000);
+  const fields = [];
+  if (!note) fields.push("note");
+  const cutId = body.cut_id ? String(body.cut_id).toLowerCase() : null;
+  if (cutId && !idOk(cutId)) fields.push("cut_id");
+  let atMs = null;
+  if (body.at_ms !== undefined && body.at_ms !== null) {
+    atMs = Math.round(Number(body.at_ms));
+    if (!Number.isFinite(atMs) || atMs < 0 || atMs > 36000000 || !cutId) fields.push("at_ms");
+  }
+  const lab = body.label ? U.label(body.label) : null;
+  if (body.label && !lab) fields.push("label");
+  if (fields.length) return res.status(400).json({ error: "invalid", fields });
+  // Notes are kept for good: no names in them (a word that's also a name is
+  // asked about first), and none in a label, which is shared across films.
+  const people = await peopleOf(sb, film.id);
+  const why = noteNames(note, people, body);
+  if (why) return res.status(400).json(why);
+  if (lab && U.namesIn(lab, people).length) return res.status(400).json({ error: "invalid", fields: ["label_has_name"] });
+  try {
+    const row = await run(sb.from("studio_notes").insert({ film_id: film.id, cut_id: cutId, at_ms: atMs, note, label: lab, created_by: me(req) }).select().single());
+    res.json({ note: row });
+  } catch (e) {
+    refused(res, e);
+  }
+}));
+
+router.post("/cut-notes/:nid/resolve", member, withDb(async (req, res, sb) => {
+  if (!idOk(req.params.nid)) return res.status(404).json({ error: "not_found" });
+  try {
+    const rows = await run(sb.from("studio_notes").update({ resolved_at: nowIso(), resolved_by: me(req) }).eq("id", req.params.nid).is("resolved_at", null).select());
+    if (!rows || !rows.length) return res.status(409).json({ error: "already_done" });
+    res.json({ note: rows[0] });
+  } catch (e) {
+    refused(res, e);
+  }
+}));
+
+// The labels in use, most used first: the same note made three times is
+// proposed as a rule (docs/studio-films.md).
+router.get("/labels", member, withDb(async (req, res, sb) => {
+  const rows = (await run(sb.from("studio_notes").select("label,film_id").not("label", "is", null).limit(5000))) || [];
+  const by = new Map();
+  for (const r of rows) {
+    const x = by.get(r.label) || { label: r.label, notes: 0, films: new Set() };
+    x.notes += 1;
+    x.films.add(r.film_id);
+    by.set(r.label, x);
+  }
+  res.json({ labels: [...by.values()].map((x) => ({ label: x.label, notes: x.notes, films: x.films.size })).sort((a, b) => b.notes - a.notes || a.label.localeCompare(b.label)) });
+}));
+
+// ── Delivery checks ──────────────────────────────────────────────────────
+router.post("/films/:id/delivery-checks", member, withDb(async (req, res, sb) => {
+  const film = await filmById(sb, req.params.id);
+  if (!film) return res.status(404).json({ error: "not_found" });
+  const { errors, value } = U.deliveryInput(bodyOf(req));
+  if (errors.length) return res.status(400).json({ error: "invalid", fields: errors });
+  const people = await peopleOf(sb, film.id);
+  const { passed, results } = U.deliveryCheck(film, value, people);
+  // A name never goes into the record: a file name that has one is kept as
+  // "(a file name with a name in it)".
+  const fileName = results.some((r) => r.key === "names" && r.ok === false) ? "(a file name with a name in it)" : value.file_name;
+  try {
+    const row = await run(sb.from("studio_delivery_checks").insert({ film_id: film.id, created_by: me(req), file_name: fileName, format: value.format, ratio: value.ratio, duration_ms: value.duration_ms, width: value.width, height: value.height, bytes: value.bytes, passed, results }).select().single());
+    res.json({ check: row });
+  } catch (e) {
+    refused(res, e);
+  }
+}));
+
+// ── Stills and slides for review ─────────────────────────────────────────
+// A parent card, a quote card, a carousel: 1 to 10 images (PNG or JPEG), each
+// straight to storage on a signed link, in order. Uploaded from the editor's
+// own tools, or made in the app with the graphics system, which waits for
+// Kyron and Coach Hooks (Tool approvals). The worker makes the copies speakers
+// see, marked REVIEW COPY, and fingerprints the files themselves.
+const MAX_SLIDES = 10;
+const MAX_SLIDE_BYTES = 20 * 1024 * 1024;
+const SLIDE_TYPES = { png: "image/png", jpg: "image/jpeg" };
+async function slidesAllowed(sb, res, film, madeWith) {
+  if (film.pulled_at || film.archived_at) {
+    res.status(409).json({ error: "film_closed" });
+    return false;
+  }
+  if (!(await toolOn(sb, "review_copies"))) {
+    res.status(409).json({ error: "tool_off", tool: "review_copies" });
+    return false;
+  }
+  if (madeWith === "graphics" && !(await toolOn(sb, "graphics_system"))) {
+    res.status(409).json({ error: "tool_off", tool: "graphics_system" });
+    return false;
+  }
+  return true;
+}
+function slidesInput(body, filmPeople) {
+  const errors = [];
+  const v = {
+    format: U.clean(body.format, 20).toLowerCase(),
+    ratio: U.clean(body.ratio, 5).toLowerCase(),
+    version: Number(body.version),
+    file_name: U.clean(body.file_name, 200).replace(/[/\\]/g, ""),
+    made_with: body.made_with === "graphics" ? "graphics" : body.made_with === "upload" ? "upload" : null,
+    slides: Array.isArray(body.slides) ? body.slides.slice(0, MAX_SLIDES + 1).map((x) => (x === "jpeg" ? "jpg" : String(x || "").toLowerCase())) : [],
+  };
+  if (!U.FORMATS.includes(v.format)) errors.push("format");
+  if (!U.RATIOS.includes(v.ratio)) errors.push("ratio");
+  if (!Number.isInteger(v.version) || v.version < 1 || v.version > 999) errors.push("version");
+  if (!v.made_with) errors.push("made_with");
+  if (!v.slides.length || v.slides.length > MAX_SLIDES || v.slides.some((x) => !SLIDE_TYPES[x])) errors.push("slides");
+  if (!v.file_name) errors.push("file_name");
+  else if (U.namesIn(v.file_name, filmPeople).length) errors.push("file_name_has_name");
+  const ids = new Set(filmPeople.map((p) => p.id));
+  v.people = Array.isArray(body.people) ? [...new Set(body.people.slice(0, 50).map((x) => String(x).toLowerCase()))] : [];
+  if (v.people.some((x) => !ids.has(x))) errors.push("people");
+  return { errors, value: v };
+}
+
+router.post("/films/:id/slides/upload", member, withDb(async (req, res, sb) => {
+  const film = await filmById(sb, req.params.id);
+  if (!film) return res.status(404).json({ error: "not_found" });
+  const people = await peopleOf(sb, film.id);
+  const { errors, value } = slidesInput(bodyOf(req), people);
+  if (errors.length) return res.status(400).json({ error: "invalid", fields: errors });
+  if (!(await slidesAllowed(sb, res, film, value.made_with))) return;
+  const id = crypto.randomUUID();
+  const uploads = [];
+  for (let n = 1; n <= value.slides.length; n++) {
+    const ext = value.slides[n - 1];
+    const key = U.slideKey(film.id, id, n, ext);
+    const { data, error } = await sb.storage.from(U.BUCKET).createSignedUploadUrl(key);
+    if (error || !data) return res.status(503).json({ error: "storage_unavailable" });
+    uploads.push({ n, key, signed_url: data.signedUrl, content_type: SLIDE_TYPES[ext] });
+  }
+  res.json({ id, uploads, max_bytes: MAX_SLIDE_BYTES });
+}));
+
+router.post("/films/:id/slides", member, withDb(async (req, res, sb) => {
+  const film = await filmById(sb, req.params.id);
+  if (!film) return res.status(404).json({ error: "not_found" });
+  const body = bodyOf(req);
+  const people = await peopleOf(sb, film.id);
+  const { errors, value } = slidesInput(body, people);
+  const id = String(body.id || "").toLowerCase();
+  if (!idOk(id)) errors.push("id");
+  if (errors.length) return res.status(400).json({ error: "invalid", fields: errors });
+  if (!(await slidesAllowed(sb, res, film, value.made_with))) return;
+  const keys = [];
+  for (let n = 1; n <= value.slides.length; n++) {
+    const key = U.slideKey(film.id, id, n, value.slides[n - 1]);
+    const { data: stored, error: missing } = await sb.storage.from(U.BUCKET).info(key);
+    if (missing || !stored) return res.status(409).json({ error: "not_uploaded" });
+    if (Number(stored.size) > MAX_SLIDE_BYTES) {
+      await sb.storage.from(U.BUCKET).remove(value.slides.map((x, i) => U.slideKey(film.id, id, i + 1, x))).catch(() => {});
+      return res.status(400).json({ error: "invalid", fields: ["too_big"] });
+    }
+    keys.push(key);
+  }
+  try {
+    const cut = await run(sb.from("studio_film_cuts").insert({ id, film_id: film.id, kind: "slides", format: value.format, ratio: value.ratio, version: value.version, file_name: value.file_name, people: value.people, slide_keys: keys, made_with: value.made_with, created_by: me(req) }).select().single());
+    await T.logActivity(me(req), "studio_slides_uploaded", film.id, { slides: keys.length, made_with: value.made_with });
+    worker.kick();
+    res.json({ cut });
+  } catch (e) {
+    refused(res, e);
+  }
+}));
+
+// ── Shoot mode ───────────────────────────────────────────────────────────
+// What the director needs on set: call times, the cards' lights, the kit's
+// rules for the day and the shots. "offline" is the part the phone may keep
+// for a dead signal: codes, times and shots, never names, contacts or places.
+const SHOOT_CARDS = ["6. Minors on set", "3. Thirteen interview rules", "4. Run the day"];
+const FORMAT_CARDS = { same_drill: ["5. The Same Drill match cut"], on_the_mic: ["8. On set for the new formats"], own_words: ["8. On set for the new formats"] };
+router.get("/films/:id/shoot", member, withDb(async (req, res, sb) => {
+  const film = await filmById(sb, req.params.id);
+  if (!film) return res.status(404).json({ error: "not_found" });
+  const people = await peopleOf(sb, film.id);
+  let kit = null;
+  try {
+    kit = await S.approvedKit(sb, film.kit_slug);
+  } catch (e) {
+    kit = null;
+  }
+  const k = kit && kit.kit;
+  const titles = [...SHOOT_CARDS, ...(FORMAT_CARDS[film.format] || [])];
+  const cards = titles.map((t) => F.cardFor(k, t)).filter(Boolean);
+  const checklist = F.cardFor(k, "Shoot day: director");
+  const plan = film.plan || {};
+  const t = F.templateFor(film.kit_slug);
+  const light = (p) => ({
+    id: p.id,
+    code: p.person_code,
+    role: p.role,
+    is_minor: !!p.is_minor,
+    texas_youth: !!p.texas_youth,
+    speaker: !!p.speaker,
+    cleared: !!p.cleared_at && !p.consent_pulled_at,
+    pulled: !!p.consent_pulled_at,
+    covers: { face: !!(p.covers || {}).face, name: !!(p.covers || {}).name, jersey: !!(p.covers || {}).jersey, voice: !!(p.covers || {}).voice },
+  });
+  const offline = {
+    v: 1,
+    film_id: film.id,
+    saved_at: nowIso(),
+    title: film.title,
+    athlete_id: film.athlete_id,
+    format: film.format,
+    format_label: t && t.formats[film.format] ? t.formats[film.format].label : film.format,
+    closed: !!(film.pulled_at || film.archived_at),
+    shoot_date: plan.shoot_date || null,
+    schedule: Array.isArray(plan.schedule) ? plan.schedule.slice(0, 40) : [],
+    must_have: Array.isArray(plan.must_have) ? plan.must_have.slice(0, 3) : [],
+    frame_pair: plan.frame_pair || {},
+    people: people.map(light),
+    cards,
+    checklist: checklist ? checklist.parts.map((x) => x.text) : [],
+    kit_version: kit ? kit.version || null : null,
+  };
+  res.json({
+    offline,
+    names: Object.fromEntries(people.map((p) => [p.id, p.name])),
+    locations: Array.isArray(plan.locations) ? plan.locations : [],
+    one_sentence: film.one_sentence || null,
+  });
+}));
+
 // ── Today ────────────────────────────────────────────────────────────────
 router.get("/today", member, withDb(async (req, res, sb) => {
   const films = (await run(sb.from("studio_films").select("*").is("archived_at", null).order("created_at", { ascending: false }).limit(200))) || [];
@@ -836,6 +1087,21 @@ router.get("/today", member, withDb(async (req, res, sb) => {
     if (c.created_by !== me(req) && !isProducer(req)) continue;
     const f = live.find((x) => x.id === c.film_id);
     needs.push({ kind: "cut_failed", film: { id: f.id, title: f.title }, cut: { id: c.id, label: `${c.format} ${c.ratio} v${c.version}`, error: c.error } });
+  }
+  // Notes on a cut wait on the film's editor (on the producer while nobody's
+  // assigned). Before migration 040 there are none.
+  const mineToEdit = live.filter((f) => (f.editor_email ? f.editor_email === me(req) : isProducer(req)));
+  if (mineToEdit.length) {
+    let open = [];
+    try {
+      open = (await run(sb.from("studio_notes").select("film_id").in("film_id", mineToEdit.map((f) => f.id)).is("resolved_at", null).limit(1000))) || [];
+    } catch (e) {
+      open = [];
+    }
+    for (const f of mineToEdit) {
+      const n = open.filter((x) => x.film_id === f.id).length;
+      if (n) needs.push({ kind: "notes", film: { id: f.id, title: f.title, athlete_id: f.athlete_id, format: f.format }, count: n });
+    }
   }
   res.json({ needs, count: needs.length });
 }));

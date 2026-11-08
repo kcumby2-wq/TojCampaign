@@ -292,6 +292,73 @@ function nameWarnings(fileName, film, cut) {
   return out;
 }
 
+// ── The delivery check ───────────────────────────────────────────────────
+// What the browser read from an exported file, checked against the kit:
+// the format's length and ratios, the export sizes (1080×1920 for 9:16,
+// 1080×1350 for 4:5), the name pattern (a warning) and no names in the file
+// name (a failure). Nothing about the file leaves the phone but these numbers.
+const KIT_SIZES = Object.freeze({ "9x16": [1080, 1920], "4x5": [1080, 1350] });
+const RATIO_VALUE = Object.freeze({ "9x16": 9 / 16, "4x5": 4 / 5, "1x1": 1, "16x9": 16 / 9 });
+function deliveryInput(raw) {
+  const r = raw && typeof raw === "object" ? raw : {};
+  const errors = [];
+  const num = (v, max) => {
+    const n = Number(v);
+    return Number.isFinite(n) && n >= 0 && n <= max ? Math.round(n) : null;
+  };
+  const v = {
+    file_name: clean(r.file_name, 200).replace(/[/\\]/g, ""),
+    format: clean(r.format, 20).toLowerCase(),
+    ratio: clean(r.ratio, 5).toLowerCase(),
+    duration_ms: r.duration_ms === null || r.duration_ms === undefined ? null : num(r.duration_ms, 36000000),
+    width: num(r.width, 20000),
+    height: num(r.height, 20000),
+    bytes: num(r.bytes, 50 * 1024 * 1024 * 1024),
+  };
+  if (!v.file_name) errors.push("file_name");
+  if (!FORMATS.includes(v.format)) errors.push("format");
+  if (!RATIOS.includes(v.ratio)) errors.push("ratio");
+  if (!v.width || !v.height) errors.push("size");
+  if (v.bytes === 0) v.bytes = null;
+  return { errors, value: v };
+}
+function deliveryCheck(film, v, people = []) {
+  const t = F.templateFor(film.kit_slug);
+  const fmt = t && t.formats[v.format];
+  const out = [];
+  const add = (key, ok, text) => out.push({ key, ok, text });
+  if (fmt && fmt.ratios && !fmt.ratios.includes(v.ratio)) add("ratio", false, `${fmt.label} is ${fmt.ratios.map((x) => x.replace("x", ":")).join(" or ")}, not ${v.ratio.replace("x", ":")}.`);
+  const want = KIT_SIZES[v.ratio];
+  if (v.width && v.height) {
+    const actual = v.width / v.height;
+    if (Math.abs(actual - RATIO_VALUE[v.ratio]) > 0.01) add("shape", false, `The file is ${v.width}×${v.height}, which isn't ${v.ratio.replace("x", ":")}.`);
+    else if (want && (v.width !== want[0] || v.height !== want[1])) add("size", false, `Export at ${want[0]}×${want[1]} for ${v.ratio.replace("x", ":")}; this one is ${v.width}×${v.height}.`);
+    else if (!want) add("size", "warn", `The kit names export sizes for 9:16 and 4:5 only.`);
+    else add("size", true, `${v.width}×${v.height}, the kit's size for ${v.ratio.replace("x", ":")}.`);
+  }
+  if (fmt && fmt.seconds && v.duration_ms !== null) {
+    const sec = v.duration_ms / 1000;
+    const [lo, hi] = fmt.seconds;
+    if (fmt.still && sec < 0.5) add("length", true, "A still.");
+    else if (sec < lo - 0.5 || sec > hi + 0.5) add("length", false, `${fmt.label} runs ${fmt.spec.split(" · ")[0]}; this one is ${Math.round(sec)} seconds.`);
+    else add("length", true, `${Math.round(sec)} seconds, inside ${lo}–${hi}.`);
+  }
+  const names = namesIn(v.file_name.replace(/\.[a-z0-9]+$/i, ""), people);
+  if (names.length) add("names", false, "The file name has a name in it. Files carry the athlete ID, never a name.");
+  else add("names", true, "No names in the file name.");
+  const warns = nameWarnings(v.file_name, film, { format: v.format, ratio: v.ratio, version: Number((/_v(\d{2,3})_/.exec(v.file_name) || [])[1]) || 1 });
+  const pattern = warns.filter((w) => !/^Version/.test(w));
+  if (pattern.length) add("pattern", "warn", "Not the kit's name pattern: " + pattern.join(" · "));
+  else add("pattern", true, "Named the kit's way.");
+  return { passed: !out.some((r) => r.ok === false), results: out };
+}
+
+// ── Notes and labels ─────────────────────────────────────────────────────
+const label = (v) => {
+  const s = clean(v, 60).toLowerCase().replace(/[^a-z0-9 '-]+/g, " ").replace(/\s+/g, " ").trim();
+  return s.length >= 2 && /^[a-z0-9].*[a-z0-9]$/.test(s) ? s : null;
+};
+
 // ── Keys in storage ──────────────────────────────────────────────────────
 const BUCKET = "studio-films";
 const cutKey = (filmId, cutId, ext) => `films/${filmId}/cuts/${cutId}.${ext}`;
@@ -299,6 +366,16 @@ const cutKey = (filmId, cutId, ext) => `films/${filmId}/cuts/${cutId}.${ext}`;
 // poster after it: a copy is never overwritten, only added (migration 039).
 const previewKey = (filmId, cutId, copySha) => `films/${filmId}/previews/${cutId}-${String(copySha || "").slice(0, 16)}.mp4`;
 const posterKey = (filmId, cutId, copySha) => `films/${filmId}/previews/${cutId}-${String(copySha || "").slice(0, 16)}.jpg`;
+// Stills and slides (migration 040): the files as uploaded, in order, and the
+// copies speakers see (marked REVIEW COPY) in a folder named by the copies'
+// own fingerprint, then 1.jpg, 2.jpg, ...
+const slideKey = (filmId, cutId, n, ext = "png") => `films/${filmId}/slides/${cutId}/${n}.${ext === "jpg" ? "jpg" : "png"}`;
+const slideCopyPrefix = (filmId, cutId, copySha) => `films/${filmId}/previews/${cutId}-${String(copySha || "").slice(0, 16)}/`;
+// A ready set's copies, from its folder (none before it's made).
+function slideCopyKeys(cut) {
+  if (!cut || cut.kind !== "slides" || !cut.preview_key || !/\/$/.test(cut.preview_key)) return [];
+  return (cut.slide_keys || []).map((_, i) => `${cut.preview_key}${i + 1}.jpg`);
+}
 
 // ── What people read ─────────────────────────────────────────────────────
 const RELATION_WORDS = { self: "you", parent: "your child", guardian: "the athlete in your care" };
@@ -368,6 +445,13 @@ module.exports = {
   cutKey,
   previewKey,
   posterKey,
+  slideKey,
+  slideCopyPrefix,
+  slideCopyKeys,
+  KIT_SIZES,
+  deliveryInput,
+  deliveryCheck,
+  label,
   reviewEmail,
   reviewReceipt,
   mailbox,

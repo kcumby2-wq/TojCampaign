@@ -2,7 +2,7 @@
 
 A Studio kit is the playbook (agents/studio, migration 018). A **film** is one piece of work made from it. Starting a film turns the kit's ten handoff steps into that film's steps, each with its owner, and the rules the kit asks people to follow by hand are held by the database (migration 039).
 
-In the TOJ app: Studio → **Films**. API: `routes/studio-films.js` (team) and `routes/studio-review.js` (the speakers' links). Template: `agents/studio/films.js`.
+In the TOJ app: Studio → **Films**. API: `routes/studio-films.js` (team) and `routes/studio-review.js` (the speakers' links). Template: `agents/studio/films.js`. The craft screens (shoot mode, the ghost frame, the delivery check, the graphics) are `public/app/film-craft.js` (migration 040).
 
 ## The ten steps
 
@@ -52,6 +52,29 @@ Live links sit in more places than the app:
 
 Once a link is out, who's in the cut is fixed. A speaker who takes their yes back is recorded by the producer ("They took it back"); that cut can't go out (a live post has to come down first).
 
+### Stills and slides
+
+A parent card (one photo), a quote card or an In Their Own Words carousel goes to its speaker like a cut: **Upload a cut for review** takes 1 to 10 images (PNG or JPEG, 20 MB each) in order, or the graphics screen sends its slides. The speaker sees copies marked *REVIEW COPY*, at 1080 on the long side and without the photo's metadata (a phone photo's location stays out), and approves the files themselves: the set's fingerprint is the sha256 of each file's sha256, in order. The copies sit in a folder named by their own fingerprint, so none is ever overwritten. A set made with the graphics system needs that system approved first; uploads from the editor's own tools need only *Review copies in storage*.
+
+### Notes on a cut
+
+Under each cut: a note for the edit, at the playhead (`0:12`) or for the whole cut, with an optional **label** in the same few words each time it comes up ("open on the fact", "music under the voice"). Labels count across films; one that comes up three times is a rule in the making (the kit's monthly refresh, next PR). The film's editor sees open notes on Today and marks each one done. Notes are kept for good, so they carry no names (the app and the database both refuse one).
+
+## On set and in the edit
+
+**Shoot mode** (the room → *Shoot mode*): the shoot day, the call times, where, and a light for every card (green cleared, red not: "shoot B-roll that doesn't show them, and call the producer"). Minors read "wide shots only". Below that: the three must-haves, the frame pair, and the kit's own cards for the day (*Minors on set*, open whenever a minor is on the cards; *Thirteen interview rules*; *Run the day*; the Same Drill or new-format card when the film is one), read from the approved kit as plain text. Then the *Shoot day: director* checklist. Ticks stay on the phone. The phone keeps a copy of the sheet, without names, contacts or places, and shows it if the signal drops while the app is open. It keeps 10 films at most, for 14 days.
+
+**The ghost frame** (Same Drill films, from shoot mode): the archive frame, picked from the phone, see-through over the live camera, with thirds and a horizon line, to match the angle, height, side and direction; then the kit's three ways (matched, tighter, wider) to tick. Nothing is recorded or uploaded. Where the app can't open the camera, a test shot goes under the frame instead.
+
+**The delivery check** (the room → *Delivery check*): pick the export; the phone reads its size, shape and length (the file stays on the phone) and the server checks them against the kit. The checks: the format's ratios, 1080×1920 for 9:16 and 1080×1350 for 4:5, the format's length, no names in the file name (a failure), and the kit's name pattern (a warning). Checks are kept for the film; a file name with a name in it is kept as "(a file name with a name in it)".
+
+**The graphics** (the room → *Graphics*), in the kit's proposed type system: Playfair Display for headlines and quotes (one word in italic), Oswald caps widely tracked for title cards, Courier Prime for letters; one accent, cream (`#EFE3C8`), on dark frames.
+- *Quote card* (4:5 or 9:16): their own line, word for word from the transcript; two or three more sentences from the same answer; the credit only as far as the release allows (a minor's, or a card that doesn't cover the name, reads "A Coached by Hooks athlete"); optionally a real, cleared photo, with a tick that everyone in it is listed and it shows only what their cards allow.
+- *In Their Own Words*: the quote card, then letter slides (one idea each; a blank line starts the next), 5 to 7 in all, page numbers on each.
+- *Title card*, *end card* (a type stand-in for the Coached by Hooks mark) and *year labels* (transparent, small in the top corner, with a tick that the years are true): saved for the edit, not reviewed.
+
+Words that name someone their card doesn't cover, or a word on the TOJ banned list, hold the graphic back. Until Kyron and Coach Hooks turn on *The graphics system*, every graphic carries a **PROPOSED** band and nothing goes to review. The fonts are in `public/app/fonts` (SIL Open Font License, `OFL.txt`) and cached with the app.
+
 ## Posting and takedowns
 
 Only Kyron records posts, after the final sign-off, and only cuts every speaker in them approved, with everyone in them cleared.
@@ -96,12 +119,16 @@ All under `/api/studio-films` (team members with Studio; writes are JSON from th
 | POST | `/films/:id/posts` | Kyron |
 | POST | `/posts/:pid/removed`, GET `/takedowns`, POST `/takedowns/:tid/items`, `/takedown-items/:iid/done` | producer |
 | POST | `/tools/:tool` `{ on, note }` | Kyron |
+| GET | `/films/:id/shoot`, `/labels` | members |
+| POST | `/films/:id/cut-notes` `{ cut_id, at_ms, note, label }`, `/cut-notes/:nid/resolve` | members |
+| POST | `/films/:id/delivery-checks` `{ file_name, format, ratio, duration_ms, width, height, bytes }` | members |
+| POST | `/films/:id/slides/upload`, `/films/:id/slides` `{ format, ratio, version, file_name, people, slides, made_with }` | members |
 
 The speakers' page: `POST /api/studio-review/view {token}` and `POST /api/studio-review/decide {token, decision, name, note, confirm}` (POST and JSON only, from the site's own pages, 30 tries per visitor per 10 minutes).
 
 ## Setup
 
-1. Apply `db/migrations/039_studio_films.sql` (tables, rules, the bucket `studio-films`).
+1. Apply `db/migrations/039_studio_films.sql` (tables, rules, the bucket `studio-films`), then `040_studio_craft.sql` (notes, delivery checks, stills and slides).
 2. Optional settings on Render: `STUDIO_SITE_BASE` (default `https://www.tojcampaign.com`), `STUDIO_REVIEW_REPLY_TO`, `STUDIO_REVIEW_MAX_MB` (raise it after the Supabase Pro upgrade), `STUDIO_REVIEW_WORKER=off` to stop the worker on a server.
 3. Kyron turns on *Review copies in storage* (Studio → Films → Tool approvals) once he's checked Supabase's terms.
 4. Email works as for the rest of the app (`EMAIL_USER`/`EMAIL_PASS` or `SMTP_*`); without it, review links aren't made.
@@ -112,4 +139,6 @@ The speakers' page: `POST /api/studio-review/view {token}` and `POST /api/studio
 - Coach Hooks's yes is recorded by the producer with how it came (a text, an email), not by Hooks in the app.
 - The worker reads a review copy into memory to upload it (a 10-minute copy at 720p is tens of megabytes).
 - The speakers' page limits tries per visitor by `X-Forwarded-For`, which a caller reaching Render directly can set. The per-connection limit and the 256-bit tokens still hold.
-- Slides (In Their Own Words, quote cards) go through the same review links once the graphics templates land (next PR).
+- If the phone closes the app with no signal, the app opens at sign-in until there's a signal again: open shoot mode before the signal goes.
+- The end card is a type stand-in until the Coached by Hooks mark file is added to the app.
+- The graphics read the speaker's line as typed: the real-words tools (next PR) will offer lines straight from the transcript.

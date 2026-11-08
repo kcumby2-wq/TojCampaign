@@ -7,12 +7,13 @@
  *                              cuts and their review links, posts, history
  *   #film-edit/<id>            details and the board's structured parts
  *   #film-person/<id>/<pid>    a clearance card (<pid> "new" for a new one)
- *   #film-cut/<id>             upload a cut for review, with who's in it
+ *   #film-cut/<id>             upload a cut, or stills and slides, for review, with who's in it
  *   #film-takedowns            open takedowns and their 72-hour clocks
  *   #film-tools                the tools that touch footage, off until approved
  *
- * Names and contacts show on cards and nowhere else: titles and file names
- * carry the athlete ID.
+ * Shoot mode, the ghost frame, the delivery check and the graphics are in
+ * film-craft.js (migration 040). Names and contacts show on cards and nowhere
+ * else: titles and file names carry the athlete ID.
  */
 (function () {
   "use strict";
@@ -49,11 +50,17 @@
     already_removed: "Already marked down.",
     storage_unavailable: "The server can't reach its database or storage right now.",
     not_found: "Not found. It may have been removed.",
+    slides: "Pick 1 to 10 images (PNG or JPEG).",
+    at_ms: "A timecode goes with a cut.",
+    note: "Write the note first.",
+    label: "A label is a few plain words.",
+    size: "The phone couldn't read the file's size.",
   };
   function why(e) {
     var d = e && e.data;
     if (d && d.error === "refused" && d.reason) return d.reason.charAt(0).toUpperCase() + d.reason.slice(1) + ".";
     if (d && d.error === "gaps") return "Still needed: " + (d.gaps || []).join("; ") + ".";
+    if (d && d.error === "tool_off" && d.tool === "graphics_system") return "The graphics system is proposed: graphics made here go to review once Kyron and Coach Hooks approve it (Tool approvals).";
     if (d && d.error === "invalid" && d.fields) return d.fields.map(function (f) { return MSG[f] || "Check " + f.replace(/_/g, " "); }).join(" ");
     return (d && MSG[d.error]) || (e && e.message) || "That didn't work.";
   }
@@ -187,8 +194,15 @@
     var t = T(), back = t.backBtn("#films", "Films");
     loading(back);
     var d;
-    try { await getMeta(); d = await t.api("/api/studio-films/films/" + encodeURIComponent(id)); } catch (e) { if (e.stale) throw e; return failed(back, e); }
-    var f = d.film, w = d.where, people = d.people, cuts = d.cuts, reviews = d.reviews, posts = d.posts;
+    var labels = [];
+    try {
+      await getMeta();
+      var both = await Promise.all([t.api("/api/studio-films/films/" + encodeURIComponent(id)), t.api("/api/studio-films/labels").catch(function () { return { labels: [] }; })]);
+      d = both[0]; labels = both[1].labels || [];
+    } catch (e) { if (e.stale) throw e; return failed(back, e); }
+    var f = d.film, w = d.where, people = d.people, cuts = d.cuts, reviews = d.reviews, posts = d.posts, notes = d.notes || [];
+    var labelCount = {};
+    labels.forEach(function (l) { labelCount[l.label] = l.notes; });
     var closed = !!(f.pulled_at || f.archived_at);
     var current = d.steps.find(function (s) { return s.status === "todo"; });
     var lastDone = d.steps.filter(function (s) { return s.status === "done"; }).slice(-1)[0];
@@ -200,7 +214,7 @@
       (f.one_sentence ? '<p class="lede" style="font-size:15px">' + h(f.one_sentence) + "</p>" : "") + "</div>" +
       '<div class="btn-row" style="gap:8px">' + (w.state === "active" ? badge("Next: " + w.label + " · " + w.waiting_on, "gold") : w.state === "pulled" ? badge("Consent pulled", "bad") : w.state === "published" ? badge("Published", "ok") : badge("Archived")) +
       (f.post_date ? badge("Posts " + new Date(f.post_date + "T12:00:00").toLocaleDateString(undefined, { month: "short", day: "numeric" })) : "") + "</div>" +
-      (closed ? "" : '<div class="btn-row"><a class="btn soft small" href="#film-edit/' + h(f.id) + '">Details and board</a></div>');
+      (closed ? "" : '<div class="btn-row"><a class="btn soft small" href="#film-edit/' + h(f.id) + '">Details and board</a><a class="btn soft small" href="#film-shoot/' + h(f.id) + '">Shoot mode</a><a class="btn soft small" href="#film-check/' + h(f.id) + '">Delivery check</a><a class="btn soft small" href="#film-graphics/' + h(f.id) + '">Graphics</a></div>');
     var pulledBox = f.pulled_at ? '<article class="card" style="border-color:#5A3A33"><div class="name">Consent was pulled</div><p class="body">Nothing more goes out. Every post of this film is on the takedown list, with the 72-hour clock.' + (d.can.producer ? "" : " The producer is on it.") + "</p>" + (d.can.producer ? '<div class="btn-row"><a class="btn small" href="#film-takedowns">Open takedowns</a></div>' : "") + "</article>" : "";
 
     // The ten steps.
@@ -266,11 +280,36 @@
         }
         return '<div class="row" style="align-items:flex-start;padding:6px 0;border-top:1px solid #1E2C40"><div class="grow"><div class="name" style="font-size:14px">' + h(p.person_code) + ' <span class="sub">' + h(p.reviewer_relation === "self" ? "approves their own cut" : "parent or guardian approves") + '</span></div><div class="sub">' + h(stateText) + "</div></div>" + (acts ? '<div class="btn-row" style="flex:none">' + acts + "</div>" : "") + "</div>";
       }).join("");
-      return '<article class="card"><div class="row"><div class="grow"><div class="name">' + h(cutLabel(c)) + '</div><div class="sub">' + h(c.file_name) + " · in it: " + h(inIt) + "</div>" +
+      var what = c.kind === "slides" ? (c.slide_keys || []).length + ((c.slide_keys || []).length === 1 ? " image" : " images") + (c.made_with === "graphics" ? " · made with the graphics system" : " · uploaded") + " · " : "";
+      return '<article class="card"><div class="row"><div class="grow"><div class="name">' + h(cutLabel(c)) + '</div><div class="sub">' + h(what + c.file_name) + " · in it: " + h(inIt) + "</div>" +
         (c.warnings && c.warnings.length ? '<div class="sub warnc">' + h(c.warnings.join(" · ")) + "</div>" : "") + (c.error ? '<div class="sub err">' + h(c.error) + "</div>" : "") + "</div>" + st + "</div>" +
-        (c.watch_url ? '<video controls playsinline preload="none" src="' + h(c.watch_url) + '"' + (c.poster_url ? ' poster="' + h(c.poster_url) + '"' : "") + ' style="width:100%;max-height:60vh;border-radius:12px;background:#000"></video>' : "") +
-        (speakers.length ? rows : c.status === "ready" ? '<p class="sub warnc">No speaker is listed in this cut, so nobody can approve it.</p>' : "") + "</article>";
+        (c.watch_url ? '<video controls playsinline preload="none" data-cutvideo="' + h(c.id) + '" src="' + h(c.watch_url) + '"' + (c.poster_url ? ' poster="' + h(c.poster_url) + '"' : "") + ' style="width:100%;max-height:60vh;border-radius:12px;background:#000"></video>' : "") +
+        ((c.slide_urls || []).length ? '<div class="chips" style="gap:10px">' + c.slide_urls.map(function (u, i) { return u ? '<img src="' + h(u) + '" alt="Slide ' + (i + 1) + ' (review copy)" style="flex:none;height:220px;border-radius:10px;background:#000">' : ""; }).join("") + "</div>" : "") +
+        (speakers.length ? rows : c.status === "ready" ? '<p class="sub warnc">No speaker is listed in this cut, so nobody can approve it.</p>' : "") +
+        cutNotes(c) + "</article>";
     }).join("");
+
+    // Notes on a cut: where (the moment) and what, with a label that groups
+    // the same note across films. The editor marks each one done.
+    function tc(ms) { var sec = Math.floor(ms / 1000); return Math.floor(sec / 60) + ":" + String(sec % 60).padStart(2, "0"); }
+    function cutNotes(c) {
+      var mine = notes.filter(function (n) { return n.cut_id === c.id; }).sort(function (a, b) { return (a.at_ms == null ? -1 : a.at_ms) - (b.at_ms == null ? -1 : b.at_ms) || String(a.created_at).localeCompare(String(b.created_at)); });
+      var open = mine.filter(function (n) { return !n.resolved_at; }).length;
+      var list = mine.map(function (n) {
+        var count = n.label ? labelCount[n.label] || 1 : 0;
+        return '<div class="row" style="align-items:flex-start;padding:6px 0;border-top:1px solid #1E2C40' + (n.resolved_at ? ';opacity:.6' : "") + '"><div class="grow body" style="font-size:13.5px">' +
+          (n.at_ms != null && c.watch_url ? '<button type="button" class="badge" data-seek="' + h(c.id) + '" data-ms="' + n.at_ms + '" style="border:0;cursor:pointer;min-height:28px;margin-right:6px">' + tc(n.at_ms) + "</button>" : n.at_ms != null ? '<span class="badge" style="margin-right:6px">' + tc(n.at_ms) + "</span>" : "") +
+          h(n.note) + (n.label ? ' <span class="badge"' + (count >= 3 ? ' title="This note has come up ' + count + ' times: a rule in the making"' : "") + ">" + h(n.label) + (count >= 3 ? " · " + count + "×" : "") + "</span>" : "") +
+          '<div class="sub">' + h(n.created_by) + " · " + h(t.ago(n.created_at)) + (n.resolved_at ? " · done by " + h(n.resolved_by) : "") + "</div></div>" +
+          (!n.resolved_at && !closed ? '<button type="button" class="btn ghost small" data-resolve="' + h(n.id) + '" style="flex:none">Done</button>' : "") + "</div>";
+      }).join("");
+      var form = closed ? "" : '<div class="field" style="margin-top:4px"><textarea class="textarea" data-notetext="' + h(c.id) + '" maxlength="1000" style="min-height:60px" placeholder="A note for the edit: open on the fact, music under the voice…"></textarea>' +
+        '<div class="row" style="gap:8px">' + (c.watch_url ? '<button type="button" class="btn ghost small" data-playhead="' + h(c.id) + '" style="flex:none">At the playhead</button>' : "") +
+        '<input class="input" data-noteat="' + h(c.id) + '" inputmode="numeric" placeholder="' + (c.watch_url ? "0:12 (optional)" : "No timecode") + '"' + (c.watch_url ? "" : " disabled") + ' style="min-height:40px;flex:1"></div>' +
+        '<input class="input" data-notelabel="' + h(c.id) + '" list="noteLabels" maxlength="60" placeholder="Label (optional): the same few words each time it comes up" style="min-height:40px">' +
+        '<button type="button" class="btn small" data-addnote="' + h(c.id) + '">Add the note</button></div>';
+      return '<details' + (open ? " open" : "") + '><summary class="sub" style="cursor:pointer;min-height:36px;display:flex;align-items:center">Notes on this cut · ' + (open ? open + " open" : mine.length ? "all done" : "none yet") + "</summary>" + list + form + "</details>";
+    }
 
     var postRows = posts.map(function (p) {
       var c = cuts.find(function (x) { return x.id === p.cut_id; });
@@ -313,9 +352,37 @@
       (tds ? '<section class="sec"><h2 class="sec-h">Takedowns</h2>' + tds + "</section>" : "") +
       '<section class="sec"><h2 class="sec-h">History</h2><div class="field"><textarea class="textarea" id="noteText" maxlength="1000" style="min-height:70px" placeholder="Add a note to the history (no names of minors)"></textarea><button type="button" class="btn ghost small" id="addNote">Add note</button></div>' + hist + "</section>" +
       (d.can.producer && !f.pulled_at ? '<div class="btn-row"><button type="button" class="btn ghost small" id="archive">' + (f.archived_at ? "Bring it back" : "Archive this film") + "</button></div>" : "") +
-      msgBox("roomMsg") + "</div>");
+      msgBox("roomMsg") + '<datalist id="noteLabels">' + labels.slice(0, 50).map(function (l) { return '<option value="' + h(l.label) + '">'; }).join("") + "</datalist></div>");
 
     var reload = function () { film(id); };
+    var videoOf = function (cid) { return document.querySelector('[data-cutvideo="' + cid + '"]'); };
+    document.querySelectorAll("[data-seek]").forEach(function (b) {
+      b.addEventListener("click", function () { var v = videoOf(b.dataset.seek); if (!v) return; v.currentTime = Number(b.dataset.ms) / 1000; v.scrollIntoView({ block: "center" }); });
+    });
+    document.querySelectorAll("[data-playhead]").forEach(function (b) {
+      b.addEventListener("click", function () { var v = videoOf(b.dataset.playhead); var inp = document.querySelector('[data-noteat="' + b.dataset.playhead + '"]'); if (v && inp) inp.value = tc(Math.round(v.currentTime * 1000)); });
+    });
+    function parseTc(v) {
+      v = String(v || "").trim();
+      if (!v) return null;
+      var m = /^(\d{1,3}):([0-5]\d)(?:\.(\d))?$/.exec(v) || /^(\d{1,4})$/.exec(v);
+      if (!m) return undefined;
+      return m[2] === undefined ? Number(m[1]) * 1000 : (Number(m[1]) * 60 + Number(m[2])) * 1000 + (m[3] ? Number(m[3]) * 100 : 0);
+    }
+    document.querySelectorAll("[data-addnote]").forEach(function (b) {
+      b.addEventListener("click", async function () {
+        var cid = b.dataset.addnote;
+        var text = document.querySelector('[data-notetext="' + cid + '"]').value.trim();
+        var at = parseTc((document.querySelector('[data-noteat="' + cid + '"]') || {}).value);
+        if (!text) return T().toast("Write the note first.");
+        if (at === undefined) return T().toast("Write the timecode as 0:12, or leave it empty.");
+        b.disabled = true;
+        try { await t.post("/api/studio-films/films/" + f.id + "/cut-notes", { cut_id: cid, at_ms: at, note: text, label: document.querySelector('[data-notelabel="' + cid + '"]').value || null, names_ok: namesOk(b) }); reload(); } catch (e) { if (nameAsk(b, e)) return; b.disabled = false; T().toast(why(e)); }
+      });
+    });
+    document.querySelectorAll("[data-resolve]").forEach(function (b) {
+      b.addEventListener("click", async function () { b.disabled = true; try { await t.post("/api/studio-films/cut-notes/" + b.dataset.resolve + "/resolve", {}); reload(); } catch (e) { b.disabled = false; T().toast(why(e)); } });
+    });
     var done = document.getElementById("stepDone");
     if (done) done.addEventListener("click", async function () {
       var body = { note: (document.getElementById("stepNote") || {}).value || "" };
@@ -514,6 +581,13 @@
       x.send(file);
     });
   }
+  // Stills and slides (a parent card, a quote card, a carousel) go to review
+  // like a video cut: 1 to 10 images, in order; the app marks the copies the
+  // speaker sees. A quote card can be either.
+  var STILLS_ONLY = { parent_card: 1, own_words: 1 };
+  var EITHER = { quote_card: 1 };
+  var MAX_SLIDES = 10, MAX_SLIDE_MB = 20;
+  function extOf(file) { return file.type === "image/png" || /\.png$/i.test(file.name) ? "png" : "jpg"; }
   async function filmCut(id) {
     if (!guard()) return;
     var t = T(), back = t.backBtn("#film/" + id, "Film");
@@ -521,30 +595,44 @@
     var d;
     try { await getMeta(); d = await t.api("/api/studio-films/films/" + encodeURIComponent(id)); } catch (e) { if (e.stale) throw e; return failed(back, e); }
     var f = d.film, tp = tpl(f.kit_slug);
-    var s = { format: f.format, ratio: (tp.formats[f.format] || {}).ratios ? tp.formats[f.format].ratios[0] : "9x16", file: null, people: d.people.filter(function (p) { return p.cleared_at && !p.consent_pulled_at; }).map(function (p) { return p.id; }) };
+    var s = { format: f.format, ratio: (tp.formats[f.format] || {}).ratios ? tp.formats[f.format].ratios[0] : "9x16", file: null, images: [], people: d.people.filter(function (p) { return p.cleared_at && !p.consent_pulled_at; }).map(function (p) { return p.id; }) };
+    s.stills = !!(STILLS_ONLY[s.format] || EITHER[s.format]);
     function nextVersion() { return d.cuts.filter(function (c) { return c.format === s.format && c.ratio === s.ratio; }).reduce(function (m, c) { return Math.max(m, c.version); }, 0) + 1; }
-    function kitName() { var day = new Date().toISOString().slice(0, 10).replace(/-/g, ""); var fm = tp.formats[s.format]; return [tp.file_prefix || "SW", (tp.lanes[f.lane] || {}).code || "LANE", f.athlete_id, fm ? fm.code : "FMT", s.ratio, "v" + String(nextVersion()).padStart(2, "0"), day].join("_") + ".mp4"; }
+    function kitName() { var n = new Date(), day = String(n.getFullYear()) + String(n.getMonth() + 1).padStart(2, "0") + String(n.getDate()).padStart(2, "0"); var fm = tp.formats[s.format]; return [tp.file_prefix || "SW", (tp.lanes[f.lane] || {}).code || "LANE", f.athlete_id, fm ? fm.code : "FMT", s.ratio, "v" + String(nextVersion()).padStart(2, "0"), day].join("_") + (s.stills ? "" : ".mp4"); }
     function draw() {
       var fm = tp.formats[s.format] || {};
+      var either = !!EITHER[s.format];
       t.show(null,
-        '<div class="screen">' + back + '<h1 class="title sm">Upload a cut</h1><p class="lede">The review copy speakers watch. Export it at 720p (up to ' + meta.max_review_mb + ' MB) with the sound. It goes straight to private storage; the app burns in REVIEW COPY.</p>' +
-        '<div class="field"><label class="label" for="cFormat">Format</label><select class="input" id="cFormat">' + Object.keys(tp.formats).filter(function (k) { return !tp.formats[k].still && !tp.formats[k].slides; }).map(function (k) { return '<option value="' + k + '"' + (s.format === k ? " selected" : "") + ">" + h(tp.formats[k].label + " · " + tp.formats[k].spec) + "</option>"; }).join("") + "</select></div>" +
+        '<div class="screen">' + back + '<h1 class="title sm">' + (s.stills ? "Upload stills for review" : "Upload a cut") + '</h1><p class="lede">' +
+        (s.stills ? "The images the speaker approves, in order: up to " + MAX_SLIDES + ", PNG or JPEG, " + MAX_SLIDE_MB + " MB each. They go straight to private storage; the speaker sees copies marked REVIEW COPY." : "The review copy speakers watch. Export it at 720p (up to " + meta.max_review_mb + " MB) with the sound. It goes straight to private storage; the app burns in REVIEW COPY.") + "</p>" +
+        '<div class="field"><label class="label" for="cFormat">Format</label><select class="input" id="cFormat">' + Object.keys(tp.formats).map(function (k) { return '<option value="' + k + '"' + (s.format === k ? " selected" : "") + ">" + h(tp.formats[k].label + " · " + tp.formats[k].spec) + "</option>"; }).join("") + "</select></div>" +
+        (either ? '<div class="field"><span class="label">What it is</span><div class="seg" role="group" aria-label="Still or video"><button type="button" data-kind="stills" aria-pressed="' + s.stills + '">A still</button><button type="button" data-kind="video" aria-pressed="' + !s.stills + '">5–7 seconds of video</button></div></div>' : "") +
         '<div class="field"><span class="label">Ratio</span><div class="seg" role="group" aria-label="Ratio">' + (fm.ratios || ["9x16"]).map(function (r) { return '<button type="button" data-ratio="' + r + '" aria-pressed="' + (s.ratio === r) + '">' + ratio(r) + "</button>"; }).join("") + "</div></div>" +
-        '<div class="field"><label class="label" for="cFile">The file</label><input class="input" id="cFile" type="file" accept="video/mp4,video/quicktime,.m4v"></div>' +
-        '<div class="field"><label class="label" for="cName">File name <small>(the kit\'s way: athlete ID, never a name)</small></label><input class="input" id="cName" value="' + h(s.name || kitName()) + '"></div>' +
+        (s.stills
+          ? '<div class="field"><label class="label" for="cFiles">The images <small>(in order: name them 1, 2, 3…)</small></label><input class="input" id="cFiles" type="file" accept="image/png,image/jpeg" multiple>' + (s.images.length ? '<ol class="body" style="margin:6px 0 0;padding-left:20px;font-size:13.5px">' + s.images.map(function (x) { return "<li>" + h(x.name) + "</li>"; }).join("") + "</ol>" : "") + "</div>"
+          : '<div class="field"><label class="label" for="cFile">The file</label><input class="input" id="cFile" type="file" accept="video/mp4,video/quicktime,.m4v"></div>') +
+        '<div class="field"><label class="label" for="cName">' + (s.stills ? "The set's name" : "File name") + ' <small>(the kit\'s way: athlete ID, never a name)</small></label><input class="input" id="cName" value="' + h(s.name || kitName()) + '"></div>' +
         '<div class="field"><span class="label">Who\'s in it <small>(the clip log)</small></span><div style="display:flex;flex-direction:column;gap:8px">' + d.people.map(function (p) {
           var off = !p.cleared_at || p.consent_pulled_at;
           return '<label class="li" style="cursor:pointer;border-radius:14px;border:1px solid var(--line)"><div class="grow"><div class="name" style="font-size:15px">' + h(p.person_code) + " · " + h(p.name) + '</div><div class="sub">' + h(p.consent_pulled_at ? "Consent pulled" : p.cleared_at ? (p.speaker ? "Speaker" : "On camera") : "Not cleared yet: clear the card first") + '</div></div><input type="checkbox" class="switch" data-pp="' + h(p.id) + '"' + (s.people.indexOf(p.id) >= 0 && !off ? " checked" : "") + (off ? " disabled" : "") + "></label>";
         }).join("") + "</div></div>" +
         msgBox("cMsg") + "</div>" +
-        '<div class="dock"><div class="dock-inner"><button type="button" class="btn block" id="sendCut">Upload v' + nextVersion() + '</button><span class="note">The review copy takes a minute or two. Then send each speaker their link.</span></div></div>');
-      document.getElementById("cFormat").addEventListener("change", function () { keep(); s.format = this.value; s.ratio = (tp.formats[s.format].ratios || ["9x16"])[0]; s.name = null; draw(); });
+        '<div class="dock"><div class="dock-inner"><button type="button" class="btn block" id="sendCut">Upload v' + nextVersion() + '</button><span class="note">' + (s.stills ? "The marked copies take a moment. Then send each speaker their link." : "The review copy takes a minute or two. Then send each speaker their link.") + "</span></div></div>");
+      document.getElementById("cFormat").addEventListener("change", function () { keep(); s.format = this.value; s.ratio = (tp.formats[s.format].ratios || ["9x16"])[0]; s.stills = !!(STILLS_ONLY[s.format] || EITHER[s.format]); s.name = null; s.file = null; s.images = []; draw(); });
+      document.querySelectorAll("[data-kind]").forEach(function (b) { b.addEventListener("click", function () { keep(); s.stills = b.dataset.kind === "stills"; s.name = null; s.file = null; s.images = []; draw(); }); });
       document.querySelectorAll("[data-ratio]").forEach(function (b) { b.addEventListener("click", function () { keep(); s.ratio = b.dataset.ratio; s.name = null; draw(); }); });
-      document.getElementById("cFile").addEventListener("change", function () { s.file = this.files && this.files[0] || null; });
+      var one = document.getElementById("cFile");
+      if (one) one.addEventListener("change", function () { s.file = this.files && this.files[0] || null; });
+      var many = document.getElementById("cFiles");
+      if (many) many.addEventListener("change", function () {
+        keep();
+        s.images = Array.prototype.slice.call(this.files || []).sort(function (a, b) { return a.name.localeCompare(b.name, undefined, { numeric: true }); });
+        draw();
+      });
       document.querySelectorAll("[data-pp]").forEach(function (c) { c.addEventListener("change", function () { var k = c.dataset.pp; s.people = c.checked ? s.people.concat([k]) : s.people.filter(function (x) { return x !== k; }); }); });
-      document.getElementById("sendCut").addEventListener("click", send);
+      document.getElementById("sendCut").addEventListener("click", s.stills ? sendStills : send);
     }
-    function keep() { s.name = document.getElementById("cName").value; }
+    function keep() { var el = document.getElementById("cName"); if (el) s.name = el.value; }
     async function send() {
       keep();
       var btn = document.getElementById("sendCut");
@@ -561,7 +649,33 @@
         T().go("#film/" + f.id);
       } catch (e) { btn.disabled = false; btn.textContent = "Upload v" + v; say("cMsg", why(e), true); } finally { busy--; }
     }
+    async function sendStills() {
+      keep();
+      var btn = document.getElementById("sendCut");
+      if (!s.images.length) return say("cMsg", "Pick the images first.", true);
+      if (s.images.length > MAX_SLIDES) return say("cMsg", "That's " + s.images.length + " images. A set is " + MAX_SLIDES + " at most.", true);
+      if (s.images.some(function (x) { return x.size > MAX_SLIDE_MB * 1024 * 1024; })) return say("cMsg", "Each image is " + MAX_SLIDE_MB + " MB at most.", true);
+      var v = nextVersion();
+      btn.disabled = true; busy++;
+      try {
+        await uploadSet(f.id, { format: s.format, ratio: s.ratio, version: v, file_name: s.name, people: s.people, made_with: "upload" }, s.images, function (n, pr) { btn.textContent = "Uploading " + n + " of " + s.images.length + " · " + Math.round(pr * 100) + "%"; });
+        t.toast("Uploaded. The marked copies are on their way.");
+        T().go("#film/" + f.id);
+      } catch (e) { btn.disabled = false; btn.textContent = "Upload v" + v; say("cMsg", why(e), true); } finally { busy--; }
+    }
     draw();
+  }
+  // A set of images to review: signed links, each image straight to storage
+  // in order, then the set is registered (graphics or uploads alike).
+  async function uploadSet(filmId, body, blobs, progress) {
+    var t = T();
+    var full = Object.assign({}, body, { slides: blobs.map(extOf) });
+    var up = await t.post("/api/studio-films/films/" + filmId + "/slides/upload", full);
+    for (var i = 0; i < up.uploads.length; i++) {
+      var n = i + 1;
+      await put(up.uploads[i].signed_url, blobs[i], up.uploads[i].content_type, function (pr) { progress(n, pr); });
+    }
+    return t.post("/api/studio-films/films/" + filmId + "/slides", Object.assign({}, full, { id: up.id }));
   }
 
   // ── Takedowns ────────────────────────────────────────────────────────
@@ -629,13 +743,20 @@
     var needs = (d.needs || []).map(function (n) {
       if (n.kind === "takedown") { var l = left(n.due_at); return '<a class="card tight" href="#film-takedowns" style="text-decoration:none;color:inherit"><div class="row"><div class="grow"><div class="name" style="font-size:15px">Takedown · ' + h(n.person_code) + '</div><div class="sub">Consent pulled: every version down within 72 hours</div></div>' + badge(l.text, "bad") + "</div></a>"; }
       if (n.kind === "changes") return '<a class="card tight" href="#film/' + h(n.film.id) + '" style="text-decoration:none;color:inherit"><div class="row"><div class="grow"><div class="name" style="font-size:15px">' + h(n.film.title) + '</div><div class="sub">A speaker asked for a change: ' + h(n.note || "") + "</div></div>" + badge("Change asked", "warn") + "</div></a>";
+      if (n.kind === "notes") return '<a class="card tight" href="#film/' + h(n.film.id) + '" style="text-decoration:none;color:inherit"><div class="row"><div class="grow"><div class="name" style="font-size:15px">' + h(n.film.title) + '</div><div class="sub">' + h(n.count + (n.count === 1 ? " note" : " notes") + " on the cut, waiting on the edit") + "</div></div>" + badge("Notes", "warn") + "</div></a>";
       if (n.kind === "cut_failed") return '<a class="card tight" href="#film/' + h(n.film.id) + '" style="text-decoration:none;color:inherit"><div class="row"><div class="grow"><div class="name" style="font-size:15px">' + h(n.film.title) + '</div><div class="sub">' + h(n.cut.label + ": " + (n.cut.error || "the review copy failed")) + "</div></div>" + badge("Failed", "bad") + "</div></a>";
       return '<a class="card tight" href="#film/' + h(n.film.id) + '" style="text-decoration:none;color:inherit"><div class="row"><div class="grow"><div class="name" style="font-size:15px">' + h(n.film.title) + '</div><div class="sub">' + h(fmtLabel("same-work", n.film.format) + " · " + n.film.athlete_id) + "</div></div>" + badge(n.label, "gold") + "</div></a>";
     }).join("");
     return { needs: needs, count: (d.needs || []).length };
   }
 
-  window.TOJFilms = { todayParts: todayParts };
+  window.TOJFilms = {
+    todayParts: todayParts,
+    // For film-craft.js.
+    why: why, getMeta: getMeta, tpl: tpl, fmtLabel: fmtLabel, laneLabel: laneLabel, ratio: ratio, when: when, badge: badge, msgBox: msgBox, say: say,
+    armed: armed, loading: loading, failed: failed, guard: guard, uploadSet: uploadSet,
+    busy: function (n) { busy += n; },
+  };
   window.TOJScreens = Object.assign(window.TOJScreens || {}, {
     films: films, "film-new": filmNew, film: film, "film-edit": filmEdit, "film-person": filmPerson, "film-cut": filmCut, "film-takedowns": filmTakedowns, "film-tools": filmTools,
   });

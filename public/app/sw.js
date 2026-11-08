@@ -3,8 +3,10 @@
  * /api always goes to the network, so data is never stale or stored here.
  * Push: shows the notification the server sends and opens the app on tap.
  */
-const VERSION = "toj-app-v14";
-const SHELL = ["/app/", "/app/app.css", "/app/app.js", "/app/creators.js", "/app/os.js", "/app/gfs.js", "/app/bookings.js", "/app/pylon.js", "/app/fellowship.js", "/app/market.js", "/app/chat.js", "/app/shelf.js", "/app/push.js", "/app/manifest.webmanifest", "/app/icons/icon-192.png", "/app/icons/apple-touch-icon.png"];
+const VERSION = "toj-app-v15";
+const SHELL = ["/app/", "/app/app.css", "/app/app.js", "/app/creators.js", "/app/os.js", "/app/gfs.js", "/app/bookings.js", "/app/pylon.js", "/app/fellowship.js", "/app/market.js", "/app/films.js", "/app/film-craft.js", "/app/chat.js", "/app/shelf.js", "/app/push.js", "/app/manifest.webmanifest", "/app/icons/icon-192.png", "/app/icons/apple-touch-icon.png",
+  // The graphics system's type, for shoot days and edits with no signal.
+  "/app/fonts/playfair-display-latin-400-normal.woff2", "/app/fonts/playfair-display-latin-400-italic.woff2", "/app/fonts/oswald-latin-500-normal.woff2", "/app/fonts/courier-prime-latin-400-normal.woff2"];
 
 self.addEventListener("install", (e) => {
   e.waitUntil(caches.open(VERSION).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting()));
