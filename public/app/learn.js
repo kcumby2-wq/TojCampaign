@@ -287,7 +287,7 @@
         '<div class="field"><label class="label" for="mBrief">The brief <small>(edit anything)</small></label><textarea class="textarea mono" id="mBrief" style="min-height:220px">' + h(text) + "</textarea>" +
         (edited ? '<p class="sub" style="margin:0">' + h(tickedSinceEdit ? "Your edits are kept, so ticking doesn't change the brief now. Build it again to put the ticks in." : "Edited by hand. Ticking won't change it now.") + '</p><button type="button" class="btn ghost small" id="mRebuild">Build it again from the ticks</button>' : "") +
         (c.left ? '<p class="sub" style="margin:0">' + h(c.left + " didn't fit in one brief: they stay for next month.") + "</p>" : "") + "</div>" +
-        (mustCheck ? '<div class="card tight" role="alert" style="gap:8px"><p class="body" style="margin:0;font-size:14px">' + h("You declined " + mustCheck.title + ", and your edited brief may still ask for it. Build the brief again from the ticks, or take it out by hand and say so.") + '</p><div class="btn-row"><button type="button" class="btn small" id="mCheckRebuild">Build it again from the ticks</button><button type="button" class="btn ghost small" id="mCheckOut">It\'s out of the brief</button></div></div>' : "") +
+        (mustCheck ? '<div class="card tight" role="alert" style="gap:8px"><p class="body" style="margin:0;font-size:14px">' + h("You declined " + mustCheck.title + ", and your edited brief may still ask for it. Build the brief again from the ticks, or take it out by hand and say so.") + '</p><div class="btn-row"><button type="button" class="btn small" id="mCheckRebuild">Build it again</button><button type="button" class="btn ghost small" id="mCheckOut">It\'s out of the brief</button></div></div>' : "") +
         '<div id="mMissing"></div><p id="mMsg" class="body" role="status"></p></div>' +
         '<div class="dock"><div class="dock-inner"><button type="button" class="btn block" id="mStart"' + (any && !d.running && !mustCheck ? "" : " disabled") + ">" + h(startLabel) + '</button><span class="note">Makes a draft. Nothing changes until it\'s approved.</span></div></div>');
       wire();
@@ -355,7 +355,7 @@
         // without the run reading it: asked once.
         var missing = Object.keys(c.lines).filter(function (k) { return brief.indexOf(c.lines[k]) < 0; });
         if (missing.length && !missingAsked) {
-          document.getElementById("mMissing").innerHTML = '<div class="card tight" role="alert" style="gap:8px"><p class="body" style="margin:0;font-size:14px">' + h(missing.length + (missing.length === 1 ? " ticked item isn't" : " ticked items aren't") + " in the brief as written. It would be folded in without the Kit Refresher reading it. Build the brief again, untick it, or start anyway.") + '</p><div class="btn-row"><button type="button" class="btn small" id="mMissRebuild">Build it again from the ticks</button><button type="button" class="btn ghost small" id="mMissGo">Start anyway</button></div></div>';
+          document.getElementById("mMissing").innerHTML = '<div class="card tight" role="alert" style="gap:8px"><p class="body" style="margin:0;font-size:14px">' + h(missing.length + (missing.length === 1 ? " ticked item isn't" : " ticked items aren't") + " in the brief as written. It would be folded in without the Kit Refresher reading it. Build the brief again, untick it, or start anyway.") + '</p><div class="btn-row"><button type="button" class="btn small" id="mMissRebuild">Build it again</button><button type="button" class="btn ghost small" id="mMissGo">Start anyway</button></div></div>';
           document.getElementById("mMissRebuild").addEventListener("click", rebuild);
           document.getElementById("mMissGo").addEventListener("click", function () { missingAsked = true; document.getElementById("mMissing").innerHTML = ""; btn.click(); });
           // Where it can be seen, above the Start button.
@@ -374,6 +374,11 @@
           btn.disabled = false; btn.textContent = d.done_this_month ? "Start another refresh this month" : "Start the monthly refresh";
           say("mMsg", (e.data && e.data.error === "brief_too_long" ? "The brief is over " + e.data.max + " characters: untick some, or shorten it." : why(e)), true);
           var m = document.getElementById("mMsg");
+          // Something changed since the page opened: open it again (your edits go).
+          if (m && e.data && e.data.error === "refresh_refused") {
+            m.insertAdjacentHTML("beforeend", '<span class="btn-row" style="margin-top:8px"><button type="button" class="btn soft small" id="mReload">Open the month\'s brief again</button></span>');
+            document.getElementById("mReload").addEventListener("click", function () { monthly(slug); });
+          }
           if (m && m.scrollIntoView) m.scrollIntoView({ block: "center" });
         }
       });

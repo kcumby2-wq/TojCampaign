@@ -400,7 +400,7 @@ begin
               and not public.studio_refresh_holds('suggestion', x.id, null, null)) <> cardinality(sg)
        or (select count(*) from public.studio_rule_candidates(p_slug) c
             where c.label = any (lb) and not public.studio_refresh_holds('label', null, p_slug, c.label)) <> cardinality(lb) then
-      raise exception 'some of what was picked was decided, folded or picked up by another refresh meanwhile: open the month''s brief again';
+      raise exception 'some of what was picked isn''t open for this kit now (decided, folded, another kit''s, or picked up by another refresh meanwhile): open the month''s brief again';
     end if;
   end if;
   if p_kind = 'monthly' then
