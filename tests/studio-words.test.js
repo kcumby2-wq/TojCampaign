@@ -382,6 +382,22 @@ test("other voices are nobody's however a file marks them: >>, a name in bracket
   // "Saturday:" on a wrapped line is words, not a speaker.
   p = TP.parse(S("COACH: The plan for every\nSaturday: run it again.", "INTERVIEWER: Every one?", "COACH: Every one."));
   assert.deepEqual(TP.only(p.cues, "COACH").map((c) => c.t), ["The plan for every Saturday: run it again.", "Every one."]);
+  // A one-word voice, a voice-over, someone shouting from afar: another voice.
+  const asked = (b) => TP.only(TP.parse(S("COACH: I ran it.", `[${b}] Why that year?`, "COACH: Because.")).cues, "COACH").map((c) => c.t);
+  for (const b of ["scout", "recruiter", "agent", "officer", "nurse", "pastor", "manager", "neighbor", "voice-over", "voiceover", "distant shouting"]) {
+    assert.deepEqual(asked(b), ["I ran it.", "Because."], b);
+  }
+  // A note naming someone that's about the speaker, a sound people make, a
+  // one-word sound or thing, an adverb, the footage: the speaker's words go on.
+  for (const b of ["to coach", "on phone with mom", "speaking to a teammate", "imitating his dad", "players warming up", "kids playing in background", "radio static", "gunshot", "explosion", "fireworks", "heartbeat", "phone", "barks", "quietly", "flashback", "shouting", "applause", "laughter"]) {
+    assert.deepEqual(asked(b), ["I ran it.", "Why that year?", "Because."], b);
+  }
+  // A word in italics for stress stays in its line; italics that end a sentence are their own.
+  p = TP.parse(S("COACH: I ran it.", "COACH: <i>Never</i> again, I said.", "<i>I</i> did that.", "That's how it was."));
+  assert.deepEqual(TP.only(p.cues, "COACH").map((c) => c.t), ["I ran it.", "Never again, I said.", "I did that.", "That's how it was."]);
+  // Written once in a file with no labels, a day, a game or a score before a colon is words.
+  p = TP.parse(S("I ran this drill in 2017.", "Day One: nobody believed in us.", "Touchdown: that's all I remember.", "Producer: Why that year?", "That was the year."));
+  assert.deepEqual(TP.only(p.cues, null).map((c) => c.t), ["I ran this drill in 2017.", "Day One: nobody believed in us.", "Touchdown: that's all I remember.", "That was the year."]);
 });
 
 test("a minor's three-letter name run into a tag or camelCase is masked and read; in an ordinary word it's the word", async () => {
@@ -396,6 +412,17 @@ test("a minor's three-letter name run into a tag or camelCase is masked and read
   // An everyday name in a lower-case tag is masked too.
   assert.equal(W.maskNames("We all wore #prayforhope bands.", [{ name: "Hope Lee", person_code: "WH29", is_minor: true }]).includes("WH29"), true);
   assert.equal(W.maskNames("hopeful", [{ name: "Hope Lee", person_code: "WH29", is_minor: true }]), "hopeful");
+  // In a tag, capitals that mark the name off win over the English word
+  // that holds its letters, and a name word left on its own is masked too.
+  const ct = [{ name: "Chris Tian Doe", person_code: "WC29", is_minor: true }];
+  assert.equal(W.maskNames("#ChrisTian rules", ct), "# WC29 WC29 rules");
+  assert.equal(W.maskNames("#christian rules", ct), "#christian rules");
+  assert.equal(W.maskNames("Merry Christmas", ct), "Merry Christmas");
+  // A long tag of the name over and over is read once.
+  const isla = [{ name: "Isla Moon", person_code: "WI29", is_minor: true }];
+  const t0 = Date.now();
+  for (let k = 0; k < 500; k++) W.maskNames(`#${"isla".repeat(35)} ${k}`, isla);
+  assert.ok(Date.now() - t0 < 500, "500 long tags in under half a second");
 });
 
 test("every card is read page by page, past the API's cap on one answer", async () => {
