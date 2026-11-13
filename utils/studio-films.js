@@ -275,7 +275,8 @@ const personKey = (name, minor) => nameParts(name).join(" ") + (minor ? "|m" : "
 //          a first and last name without the middle one ("Grace Long" for a
 //          Grace Ann Long); a word of a name that's no everyday word (three
 //          letters or more, a minor's from two), a reviewer's too, and its
-//          plain plural or possessive ("Jordans", "Kaylees"); a whole name
+//          plain plural or possessive ("Jordans", "Kaylees") or with a
+//          letter held ("Kayleeee"); a whole name
 //          run into a tag, a handle, a link or a file name
 //          ("#teamjordanreyes"); a minor's name word (four letters or more)
 //          run into one beside a tag's own word ("#jordanstrong",
@@ -307,13 +308,18 @@ const KIT_TAG_WORDS = new Set(("strong nation fam family gang forever crew squad
 // ("#lifelong" for a Long, "#willpower" for a Will): the word, as written.
 const KIT_COMPOUNDS = new Set(("lifelong daylong weeklong nightlong yearlong seasonlong powerhouse clubhouse showcase lovebird lovebirds " +
   "freewill willpower truelove bigdeal").split(" "));
-// A word's plain plural or possessive, without the apostrophe: "Jordans",
-// "Kaylees", "Joneses" (the name, three letters or more).
+// Other ways a word may write a name: its plain plural or possessive,
+// without the apostrophe ("Jordans", "Kaylees", "Joneses"), and a letter
+// held ("Kayleeee", "Jordannn"): the name, three letters or more.
 const plainStems = (w) => {
-  const out = [];
-  if (w.length >= 4 && w.endsWith("s") && !w.endsWith("ss")) out.push(w.slice(0, -1));
-  if (w.length >= 5 && w.endsWith("es")) out.push(w.slice(0, -2));
-  return out;
+  const out = new Set();
+  const held = [w, w.replace(/(\p{L})\1{2,}/gu, "$1"), w.replace(/(\p{L})\1{2,}/gu, "$1$1")];
+  for (const x of new Set(held)) {
+    if (x !== w) out.add(x);
+    if (x.length >= 4 && x.endsWith("s") && !x.endsWith("ss")) out.add(x.slice(0, -1));
+    if (x.length >= 5 && x.endsWith("es")) out.add(x.slice(0, -2));
+  }
+  return [...out];
 };
 // The cards are indexed once per list (thousands of them, read for each of a
 // month's wrap-ups): by each word of a name, by the name run together, and,
@@ -399,8 +405,9 @@ function kitNames(textValue, people, { film = [] } = {}) {
           } else put(low, e.isMinor && !DATE_WORDS.has(low), e.isMinor);
         }
       }
-      // A plain plural or possessive of a name that's no everyday word
-      // ("Jordans mom called", "KAYLEES DRILL").
+      // A plain plural or possessive of a name that's no everyday word, or
+      // one with a letter held ("Jordans mom called", "KAYLEES DRILL",
+      // "the Kayleeee energy").
       for (const st of plainStems(low)) {
         for (const e of ix.byJoined.get(st) || []) put(st, true, e.isMinor);
         for (const e of ix.byWord.get(st) || []) if (!ordinary(st) && Array.from(st).length >= 3) put(st, true, e.isMinor);
@@ -443,8 +450,10 @@ function kitNames(textValue, people, { film = [] } = {}) {
                 // "#hopestrong", "#teamhope": the name. A surname that's an
                 // everyday word is asked ("#gogreen", "#teamgreen" for a
                 // Green), and so is an everyday word ("#lifelong").
-                const first = e.parts.indexOf(w) === 0 && !KIT_COMPOUNDS.has(t.low);
-                put(w, (byTagWord && first) || own, true);
+                // A surname: the card's last word (cards are written first
+                // name first; "Mary Grace Long" goes by Grace).
+                const surname = e.parts.length > 1 && e.parts.lastIndexOf(w) === e.parts.length - 1;
+                put(w, (byTagWord && !surname && !KIT_COMPOUNDS.has(t.low)) || own, true);
               }
             } else if ((camel || byTagWord || !head || !tail) && !ordinary(w)) put(w, own, false);
           }

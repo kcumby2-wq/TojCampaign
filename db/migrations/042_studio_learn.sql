@@ -121,22 +121,28 @@ create index if not exists studio_refresh_sources_ref_idx on public.studio_refre
 alter table public.studio_refresh_sources enable row level security;
 
 -- ── Gates ─────────────────────────────────────────────────────────────────
--- The cards' check (039's studio_names_in, 040's studio_names_in_any) on a
--- text and on its plain plurals and possessives taken back to the name
--- ("Jordans mom called", "KAYLEES DRILL", "the Joneses"): without each
--- word's "s", and without its "es". Each read on its own, so no name is
--- made across them.
+-- The ways a text may write a name the cards' check (039's studio_names_in)
+-- reads: as written; with a letter held three times or more taken back to
+-- one and to two ("Kayleeee", "Jordannn"); and with each word's plain
+-- plural or possessive taken back to the name ("Jordans mom called",
+-- "KAYLEES DRILL", "the Joneses"): without its "s", and without its "es".
+-- Each read on its own, so no name is made across them.
+create or replace function public.studio_text_forms(p_text text) returns text[]
+language sql immutable set search_path = '' as $$
+  select array_agg(distinct f) from (
+    select h, unnest(array[h, regexp_replace(h, '([[:alpha:]]{3,})[sS]\M', '\1', 'g'),
+                         regexp_replace(h, '([[:alpha:]]{3,})[eE][sS]\M', '\1', 'g')]) as f
+      from unnest(array[p_text, regexp_replace(p_text, '([[:alpha:]])\1{2,}', '\1', 'g'),
+                        regexp_replace(p_text, '([[:alpha:]])\1{2,}', '\1\1', 'g')]) as h) x
+   where f is not null
+$$;
 create or replace function public.studio_names_in_forms(p_film uuid, p_text text) returns boolean
 language sql stable set search_path = '' as $$
-  select public.studio_names_in(p_film, p_text)
-      or public.studio_names_in(p_film, regexp_replace(p_text, '([[:alpha:]]{3,})[sS]\M', '\1', 'g'))
-      or public.studio_names_in(p_film, regexp_replace(p_text, '([[:alpha:]]{3,})[eE][sS]\M', '\1', 'g'))
+  select p_text is not null and exists (select 1 from unnest(public.studio_text_forms(p_text)) as f where public.studio_names_in(p_film, f))
 $$;
 create or replace function public.studio_names_in_any_forms(p_text text) returns boolean
 language sql stable set search_path = '' as $$
-  select public.studio_names_in_any(p_text)
-      or public.studio_names_in_any(regexp_replace(p_text, '([[:alpha:]]{3,})[sS]\M', '\1', 'g'))
-      or public.studio_names_in_any(regexp_replace(p_text, '([[:alpha:]]{3,})[eE][sS]\M', '\1', 'g'))
+  select p_text is not null and exists (select 1 from unnest(public.studio_text_forms(p_text)) as f where public.studio_names_in_any(f))
 $$;
 
 -- The draft a refresh made was discarded (018's kits: a database without
@@ -688,7 +694,7 @@ begin
     'public.studio_refresh_start(uuid, text, text, text, uuid[], uuid[], text[], boolean)', 'public.studio_refresh_end(uuid, text)',
     'public.studio_refresh_holds(text, uuid, text, text)', 'public.studio_label_decline(text, text, text, text)',
     'public.studio_refresh_unfold(uuid, text)', 'public.studio_kits_discarded()', 'public.studio_refresh_discarded(uuid)',
-    'public.studio_names_in_forms(uuid, text)', 'public.studio_names_in_any_forms(text)'] loop
+    'public.studio_names_in_forms(uuid, text)', 'public.studio_names_in_any_forms(text)', 'public.studio_text_forms(text)'] loop
     execute format('revoke all on function %s from public', fn);
     foreach r in array array['anon', 'authenticated'] loop
       if exists (select 1 from pg_roles where rolname = r) then
@@ -711,6 +717,6 @@ begin
       'public.studio_refresh_start(uuid, text, text, text, uuid[], uuid[], text[], boolean), public.studio_refresh_end(uuid, text), '
       'public.studio_refresh_holds(text, uuid, text, text), public.studio_label_decline(text, text, text, text), '
       'public.studio_refresh_unfold(uuid, text), public.studio_refresh_discarded(uuid), '
-      'public.studio_names_in_forms(uuid, text), public.studio_names_in_any_forms(text) to service_role';
+      'public.studio_names_in_forms(uuid, text), public.studio_names_in_any_forms(text), public.studio_text_forms(text) to service_role';
   end if;
 end $$;

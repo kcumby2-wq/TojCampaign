@@ -181,6 +181,8 @@ test("a wrap-up goes to the whole kit: no name of anyone on any film's cards, an
   // plural or possessive ("Kenjis").
   await assert.rejects(pool.query("insert into studio_film_wraps (film_id, worked, created_by) values ($1, 'kenji ran it', 'dir@toj.test')", [film.id]), /keep no names/);
   await assert.rejects(pool.query("insert into studio_film_wraps (film_id, worked, created_by) values ($1, 'KENJIS OPEN RAN LONG', 'dir@toj.test')", [film.id]), /keep no names/);
+  await assert.rejects(pool.query("insert into studio_film_wraps (film_id, worked, created_by) values ($1, 'the Kenjiii energy', 'dir@toj.test')", [film.id]), /keep no names/);
+  assert.deepEqual((await add({ worked: "the Kenjiii energy" })).data.fields, ["wrap_has_minor_name"]);
   assert.deepEqual((await add({ worked: "Kenjis open ran long" })).data.fields, ["wrap_has_minor_name"]);
   // A word that's a name only on a card added later: kept now, then held
   // back from the month's brief (and the brief refused) once the card is in.
@@ -461,7 +463,7 @@ test("what every film shares is read against every card for names, not for ordin
   assert.deepEqual(U.kitNames("#lifelong", [{ name: "Grace Long", is_minor: true }]).maybe, ["long"]);
   // A plain plural or possessive; a whole name run into a tag; a minor's
   // name where a word starts in a handle; a first and last name without the middle one.
-  for (const [t, w] of [["Jordans mom called", "jordan"], ["KIDDS DRILL", "kidd"], ["#teamjordankidd", "jordankidd"], ["#jordankiddstrong", "jordankidd"],
+  for (const [t, w] of [["Jordans mom called", "jordan"], ["KIDDS DRILL", "kidd"], ["the Jordannn energy", "jordan"], ["#teamjordankidd", "jordankidd"], ["#jordankiddstrong", "jordankidd"],
     ["instagram.com/jordanb_hoops", "jordan"]]) assert.ok(read(t).minor.includes(w), t);
   const mid = [{ name: "Grace Ann Long", is_minor: true }];
   for (const t of ["#GraceLong", "#gracelong", "#GoGraceLong", "gracelong_quote_v1", "Grace Long ran it"]) assert.ok(U.kitNames(t, mid).minor.length > 0, t);
