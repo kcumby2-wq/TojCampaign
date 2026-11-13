@@ -324,7 +324,12 @@ test("the taste library: notes and a link, never a picture; found by any form of
   assert.equal((await call("GET", "/api/studio-taste/00000000-0000-4000-8000-000000000000", undefined, "dir")).status, 404);
   assert.equal((await call("GET", "/api/studio-taste/tags", undefined, "dir")).status, 200, "tags still answer as tags");
   await assert.rejects(pool.query("delete from studio_taste where id = $1", [e1.id]), /archived, not deleted/);
-  await assert.rejects(pool.query("insert into studio_taste (title, url, note, added_by) values ('x', 'https://x.test/a.PNG', 'y', 'dir@toj.test')"), /check constraint/);
+  await assert.rejects(pool.query("insert into studio_taste (title, url, note, added_by) values ('x', 'https://x.test/a.PNG', 'y', 'dir@toj.test')"), /check constraint|picture or a video file/);
+  // An image service's own address, an ending hidden behind ";v=2" or "%2E", a video file: all refused, by the app and the database.
+  for (const url of ["https://pbs.twimg.com/media/abc?format=jpg", "https://x.test/a.jpg;v=2", "https://x.test/a%2Ejpg", "https://x.test/clip.mp4", "https://x.test/a.jpg/", "https://www.instagram.com/p/Cxyz123/media/?size=l"]) {
+    assert.deepEqual((await add({ title: "x", url, note: "y" })).data.fields, ["url_is_an_image"], url);
+    await assert.rejects(pool.query("insert into studio_taste (title, url, note, added_by) values ('x', $1, 'y', 'dir@toj.test')", [url]), /picture or a video file/, url);
+  }
   void e1b;
 });
 
@@ -354,4 +359,143 @@ test("a brief that came back waits on Today until it's started or set aside", as
   const run = ok(await call("GET", `/api/studio-agents/runs/${a}`, undefined, "dir"), "the brief").mark;
   assert.equal(run.direction, 2);
   void c;
+});
+
+test("Claude reads names as codes, and a run stops the moment its transcript can't be read any more", async () => {
+  const { film, people, code } = await aFilm([{ person_code: "WK01", name: "Jamie Rivers", role: "athlete", is_minor: true, release_on_file: true, covers: { voice: true }, reviewer_relation: "parent", reviewer_name: "Dale Rivers", reviewer_email: "dale@x.test" }]);
+  const t = ok(await addTranscript(film, people[0], [{ s: 0, e: 3000, t: "Jamie gets up at five." }, { s: 3000, e: 6000, t: "I just open the gate." }]), "transcript").transcript;
+  await films("POST", "/tools/claude_transcripts", { on: true, note: "Anthropic's terms checked: no training on API data" }, "kyron");
+  let pages = [];
+  let second = null;
+  wordsRouter._setDeps({
+    words: async ({ scope }) => {
+      const tools = wordsTools.toolsFor({ scope });
+      const read = tools.find((x) => x.name === "words_read");
+      pages.push(await read.run({ transcript: "T1" }));
+      // Kyron turns it off while the run is going: the next page isn't read.
+      await films("POST", "/tools/claude_transcripts", { on: false, note: "Checking the terms again" }, "kyron");
+      second = await read.run({ transcript: "T1" });
+      const submit = tools.find((x) => x.name === "submit_words");
+      return { output: await submit.run({ lines: [], structures: [] }), trace: [], eval_status: "not_run" };
+    },
+  });
+  try {
+    const r = ok(await words("POST", `/films/${film.id}/ask-claude`, {}, "ed"), "ask");
+    const done = await runDone(r.run_id);
+    assert.match(pages[0], /WK01 gets up at five/);
+    assert.doesNotMatch(pages[0], /Jamie/);
+    assert.match(second, /^Stopped: Kyron turned off/);
+    assert.equal(done.status, "failed");
+    assert.match(done.output, /Stopped/);
+    void code;
+    void t;
+  } finally {
+    wordsRouter._setDeps({ words: null });
+    await films("POST", "/tools/claude_transcripts", { on: true, note: "Anthropic's terms checked: no training on API data" }, "kyron");
+  }
+});
+
+test("one words run at a time for a film, and only the film's people keep lines", async () => {
+  const { film, people } = await aFilm();
+  const t = ok(await addTranscript(film, people[0]), "transcript").transcript;
+  // Someone who isn't on the film reads the lines, and doesn't keep them.
+  assert.equal((await words("POST", `/films/${film.id}/lines`, { transcript_id: t.id, from_cue: 2, to_cue: 2, quote: "I still run it on Sundays" }, "other")).data.error, "not_your_film");
+  let release;
+  const gate = new Promise((r) => (release = r));
+  wordsRouter._setDeps({ words: async () => { await gate; return { output: "", trace: [], eval_status: "not_run" }; } });
+  try {
+    const r = ok(await words("POST", `/films/${film.id}/ask-claude`, {}, "ed"), "ask");
+    assert.equal((await words("POST", `/films/${film.id}/ask-claude`, {}, "dir")).data.error, "already_running");
+    release();
+    await runDone(r.run_id);
+    ok(await words("POST", `/films/${film.id}/ask-claude`, {}, "dir"), "once it's back");
+  } finally {
+    release && release();
+    wordsRouter._setDeps({ words: null });
+  }
+});
+
+test("a line picked by hand that has a word of a card's name is asked about; across a question it isn't kept", async () => {
+  const { film, people } = await aFilm([{ person_code: "WD01", name: "Darnell Price", role: "coach", release_on_file: true, covers: { voice: true } }]);
+  const cues = [{ s: 0, e: 3000, t: "Darnell taught me everything." }, { s: 3000, e: 5000, t: "Every Sunday." }, { s: 9000, e: 11000, t: "That's why I stayed.", gap: true }];
+  const t = ok(await addTranscript(film, people[0], cues), "transcript").transcript;
+  const asked = await words("POST", `/films/${film.id}/lines`, { transcript_id: t.id, from_cue: 1, to_cue: 1, quote: "Darnell taught me everything" }, "ed");
+  assert.deepEqual([asked.status, asked.data.fields, asked.data.words], [400, ["may_have_name"], ["darnell"]]);
+  ok(await words("POST", `/films/${film.id}/lines`, { transcript_id: t.id, from_cue: 1, to_cue: 1, quote: "Darnell taught me everything", names_ok: ["darnell"] }, "ed"), "kept once they say");
+  const across = await words("POST", `/films/${film.id}/lines`, { transcript_id: t.id, from_cue: 2, to_cue: 3, quote: "Every Sunday. That's why I stayed" }, "ed");
+  assert.equal(across.status, 400);
+  assert.match(across.data.issues[0], /across/);
+  // The database holds the same: a line across a gap, or starting inside a word.
+  await assert.rejects(pool.query("select studio_words_save($1, null, 'ed@toj.test', 'ed@toj.test', $2::jsonb, false)", [film.id, JSON.stringify([{ kind: "line", transcript_id: t.id, from_cue: 2, to_cue: 3, quote: "Every Sunday. That's why I stayed", start_ms: 3000, end_ms: 11000 }])]), /reach across/);
+  await assert.rejects(pool.query("select studio_words_save($1, null, 'ed@toj.test', 'ed@toj.test', $2::jsonb, false)", [film.id, JSON.stringify([{ kind: "line", transcript_id: t.id, from_cue: 1, to_cue: 1, quote: "arnell taught", start_ms: 0, end_ms: 1000 }])]), /whole word/);
+});
+
+test("a card added or renamed after the words were kept waits until the lines with its name are gone", async () => {
+  const { film, people } = await aFilm();
+  const t = ok(await addTranscript(film, people[0], [{ s: 0, e: 3000, t: "Kenji gets up at five." }, { s: 3000, e: 5000, t: "I open the gate." }]), "transcript").transcript;
+  ok(await words("POST", `/films/${film.id}/lines`, { transcript_id: t.id, from_cue: 1, to_cue: 1, quote: "Kenji gets up at five" }, "ed"), "kept before the card");
+  const kid = { person_code: "WG01", name: "Kenji Sato", role: "athlete", is_minor: true, release_on_file: true, covers: { voice: true } };
+  const r = await films("POST", `/films/${film.id}/people`, kid, "lead");
+  assert.equal(r.status, 409);
+  assert.match(r.data.reason, /remove those lines/);
+  // A transcript's label with a word of a card added later: the card waits too.
+  const f3 = await aFilm();
+  ok(await words("POST", `/films/${f3.film.id}/transcripts`, { person_id: f3.people[0].id, label: "Hooks session", cues: [{ s: 0, e: 2000, t: "I open the gate." }] }, "ed"), "a label first");
+  const later = await films("POST", `/films/${f3.film.id}/people`, { person_code: "WH01", name: "Darnell Hooks", role: "coach", release_on_file: true, covers: { voice: true } }, "lead");
+  assert.equal(later.status, 409);
+  // Gone from Real words, the card goes in.
+  const w = ok(await words("GET", `/films/${film.id}`, undefined, "ed"), "room").words.lines[0];
+  ok(await words("DELETE", `/words/${w.id}`, {}, "ed"), "removed");
+  ok(await films("POST", `/films/${film.id}/people`, kid, "lead"), "now the card");
+});
+
+test("a release taken off file lets the speaker's words go; a deleted run lets go of what it kept", async () => {
+  const { film, people } = await aFilm();
+  ok(await addTranscript(film, people[0]), "transcript");
+  const card = (await pool.query("select updated_at from studio_film_people where id = $1", [people[0].id])).rows[0];
+  ok(await films("PATCH", `/films/${film.id}/people/${people[0].id}`, { seen: card.updated_at, release_on_file: false }, "lead"), "release off file");
+  assert.equal((await pool.query("select count(*)::int as n from studio_transcripts where person_id = $1", [people[0].id])).rows[0].n, 0);
+  // A run that kept words and directions can be deleted: they stay, without it.
+  const f2 = await aFilm();
+  const t2 = ok(await addTranscript(f2.film, f2.people[0]), "transcript 2").transcript;
+  const runId = (await pool.query("insert into agent_runs (role, status, created_by) values ('words-editor', 'completed', 'ed@toj.test') returning id")).rows[0].id;
+  await pool.query("select studio_words_save($1, $2, 'claude', 'ed@toj.test', $3::jsonb, false)", [f2.film.id, runId, JSON.stringify([{ kind: "line", transcript_id: t2.id, from_cue: 2, to_cue: 2, quote: "I still run it on Sundays", start_ms: 4500, end_ms: 8000 }])]);
+  await pool.query("insert into studio_film_directions (film_id, run_id, directions, created_by) values ($1, $2, $3::jsonb, 'lead@toj.test')", [f2.film.id, runId, JSON.stringify([{ name: "a" }, { name: "b" }, { name: "c" }])]);
+  await pool.query("delete from agent_runs where id = $1", [runId]);
+  assert.equal((await pool.query("select count(*)::int as n from studio_words where film_id = $1 and run_id is null", [f2.film.id])).rows[0].n, 1);
+});
+
+test("a taste note keeps no name from any film's cards, and agents read it with names as codes", async () => {
+  await aFilm([{ person_code: "WT01", name: "Rosa Diaz", role: "athlete", is_minor: true, release_on_file: true, covers: { voice: true } }]);
+  const add = (body) => call("POST", "/api/studio-taste", body, "ed");
+  assert.deepEqual((await add({ title: "Rosa's first season", url: "https://vimeo.com/2", note: "The light on the field." })).data.fields, ["taste_has_name"]);
+  await assert.rejects(pool.query("insert into studio_taste (title, url, note, added_by) values ('x', 'https://vimeo.com/3', 'Rosa Diaz at the gate', 'ed@toj.test')"), /keep no names/);
+  // A cited note is kept with its ref, title, link and use only.
+  const TA = require("../agents/studio-brief/taste");
+  const row = { ref_no: 7, title: "A film", url: "https://vimeo.com/7", note: "Long note", take: "x", leave: "y", tags: [] };
+  const c = await TA.checkCited({ tasteByRef: async () => row }, [{ ref: "Taste 7", take: "the grain" }], "taste");
+  assert.deepEqual(c.cited, [{ ref: "Taste 7", title: "A film", url: "https://vimeo.com/7", use: "the grain" }]);
+  const tool = TA.tasteSearchTool({ searchTaste: async () => [{ ...row, note: "Kenji Sato opens the gate" }], maskTaste: (x) => String(x).replace(/Kenji Sato/g, "WG01") });
+  assert.match(await tool.run({ query: "gate" }), /WG01 opens the gate/);
+});
+
+test("a brief is started only by whoever asked for it (or the producer), and its first start is kept", async () => {
+  const brief = (by) => pool.query("insert into agent_runs (role, status, task, output, created_by) values ('brief-writer', 'completed', 'x', 'y', $1) returning id", [by]).then((r) => r.rows[0].id);
+  const mine = await brief("dir@toj.test");
+  const start = (from, who = "dir", direction = 1) => call("POST", "/api/studio-agents/run", { role: "kit-refresher", slug: "same-work", brief: "Refresh the gear card for winter shoots.", from_brief: from, direction }, who);
+  assert.equal((await start(mine, "ed")).data.error, "not_your_brief");
+  const notBrief = (await pool.query("insert into agent_runs (role, status, created_by) values ('kit-refresher', 'completed', 'dir@toj.test') returning id")).rows[0].id;
+  assert.equal((await start(notBrief)).data.error, "not_a_brief");
+  const first = ok(await start(mine, "dir", 2), "started");
+  const again = ok(await start(mine, "lead", 3), "the producer starts it again");
+  const m = (await pool.query("select direction, started_by, started_run_id from studio_brief_marks where brief_run_id = $1", [mine])).rows[0];
+  assert.deepEqual([m.direction, m.started_by, m.started_run_id], [2, "dir@toj.test", first.run_id]);
+  // The second run says where it came from.
+  assert.match((await pool.query("select task from agent_runs where id = $1", [again.run_id])).rows[0].task, new RegExp(`Started from brief ${mine}, direction 3`));
+  // Setting a brief aside is JSON from the app's own pages.
+  const other = await brief("dir@toj.test");
+  const form = await fetch(base + `/api/studio-agents/briefs/${other}/set-aside`, { method: "POST", headers: { Cookie: cookies.dir, "Content-Type": "application/x-www-form-urlencoded" }, body: "aside=true" });
+  assert.equal(form.status, 415);
+  const cross = await fetch(base + `/api/studio-agents/briefs/${other}/set-aside`, { method: "POST", headers: { Cookie: cookies.dir, "Content-Type": "application/json", Origin: "https://elsewhere.example" }, body: "{}" });
+  assert.equal(cross.status, 403);
 });

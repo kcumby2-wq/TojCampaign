@@ -171,3 +171,99 @@ test("the Brief Writer hands back three directions, each a whole brief, and name
   // A brief from before directions still reads.
   assert.match(briefText({ title: "Old", mode: "refresh", slug: "same-work", brief: "Goal: x", references: [], questions: [] }), /Goal: x/);
 });
+
+test("a subtitle with two voices or two labels is split, and only the chosen speaker's lines go", () => {
+  // Two voices in one WebVTT cue, and two voice tags on one line.
+  let p = TP.parse("WEBVTT\n\n00:00:01.000 --> 00:00:04.000\n<v Dad>He gets up at five.\n\n00:00:04.000 --> 00:00:08.000\n<v Jamie>I want to play for my dad.\n<v Dad>He says that every day.\n");
+  assert.deepEqual(TP.only(p.cues, "Dad").map((c) => c.t), ["He gets up at five.", "He says that every day."]);
+  assert.deepEqual(TP.only(p.cues, "Jamie").map((c) => c.t), ["I want to play for my dad."]);
+  p = TP.parse("WEBVTT\n\n00:00:01.000 --> 00:00:03.000\n<v Coach>Because it's mine.</v> <v Interviewer>Why Sundays?</v>\n");
+  assert.deepEqual(p.cues.map((c) => [c.who, c.t]), [["Coach", "Because it's mine."], ["Interviewer", "Why Sundays?"]]);
+  // Its time is shared by the words.
+  assert.ok(p.cues[0].e > p.cues[0].s && p.cues[0].e === p.cues[1].s && p.cues[1].e === 3000);
+  // A second typed label in a cue, and a label in any alphabet.
+  p = TP.parse("1\n00:00:01,000 --> 00:00:04,000\nCOACH: I ran this drill in 2017.\nINTERVIEWER: Why that year?\n\n2\n00:00:04,000 --> 00:00:07,000\nCOACH: Because nobody filmed it.\n\n3\n00:00:07,000 --> 00:00:09,000\nJOSÉ: And why Sundays?\n");
+  assert.deepEqual(TP.only(p.cues, "COACH").map((c) => c.t), ["I ran this drill in 2017.", "Because nobody filmed it."]);
+  assert.ok(p.speakers.some((x) => x.who === "JOSÉ"));
+  // A line with no label in a labelled file is a voice the file doesn't name: only those go when it's picked.
+  p = TP.parse("1\n00:00:00,500 --> 00:00:01,500\nOkay, we're rolling.\n\n2\n00:00:02,000 --> 00:00:04,000\nINTERVIEWER: What drives you?\n\n3\n00:00:04,000 --> 00:00:07,000\nJAMIE: My dad.\n\n4\n00:00:07,000 --> 00:00:09,000\nJAMIE: I want to make it for him.\n");
+  assert.equal(p.labelled, true);
+  assert.deepEqual(TP.only(p.cues, "").map((c) => c.t), ["Okay, we're rolling."]);
+  assert.equal(p.speakers.some((x) => x.who === null), false, "no 'everything' choice in a labelled file");
+  // A file with no labels: a "- " subtitle's lines are another voice, left out.
+  p = TP.parse("1\n00:00:01,000 --> 00:00:04,000\nI have run here twenty years.\n\n2\n00:00:04,000 --> 00:00:08,000\n- Were you nervous?\n- Every single time.\n\n3\n00:00:08,000 --> 00:00:10,000\nAnd I still am.\n");
+  assert.deepEqual([p.labelled, p.mixed], [false, 2]);
+  assert.deepEqual(TP.only(p.cues, null).map((c) => c.t), ["I have run here twenty years.", "And I still am."]);
+});
+
+test("a line never reaches across a question, a pause or missing words, and starts and ends on whole words", () => {
+  const p = TP.parse("1\n00:00:01,000 --> 00:00:04,000\nCOACH: I ran this drill.\n\n2\n00:00:04,000 --> 00:00:05,000\nINTERVIEWER: When?\n\n3\n00:00:05,000 --> 00:00:08,000\nCOACH: Every Sunday since.\n\n4\n00:00:12,000 --> 00:00:14,000\nCOACH: I never [inaudible] quit.\n");
+  const mine = TP.only(p.cues, "COACH");
+  assert.deepEqual(mine.map((c) => !!c.gap), [false, true, true], "after the question, and after four seconds of nothing");
+  assert.deepEqual(TP.find(mine, 1, 2, "I ran this drill. Every Sunday"), { ok: false, why: "across_a_gap" });
+  assert.equal(TP.find(mine, 3, 3, "I never quit").why, "missing_words");
+  assert.equal(TP.find(mine, 3, 3, "quit").ok, true);
+  const cues = [{ n: 1, s: 0, e: 4000, t: "I ran a 4.4 forty, 1,000 times. I can‘t lose. A well-known drill." }];
+  for (const q of ["4 forty", "000 times", "I can", "known drill"]) assert.equal(TP.find(cues, 1, 1, q).why, "part_of_a_word", q);
+  for (const q of ["a 4.4 forty", "1,000 times", "I can‘t lose", "A well-known drill"]) assert.equal(TP.find(cues, 1, 1, q).ok, true, q);
+  // Said in two of the cues picked: which one isn't clear.
+  assert.equal(TP.find([{ n: 1, s: 0, e: 1000, t: "Never quit." }, { n: 2, s: 1000, e: 2000, t: "Never quit, ever." }], 1, 2, "never quit").why, "said_twice");
+  // The server keeps the browser's gap marks and finds pauses itself.
+  const v = W.transcriptInput({ cues: [{ s: 0, e: 1000, t: "a" }, { s: 1100, e: 2000, t: "b", gap: true }, { s: 6000, e: 7000, t: "c" }, { s: 7100, e: 8000, t: "d" }] }).value;
+  assert.deepEqual(v.cues.map((c) => !!c.gap), [false, true, true, false]);
+});
+
+test("timecodes round to the nearest frame; a transcript past ten hours says so", () => {
+  for (const fps of TP.FPS) {
+    for (let f = 0; f < Math.round(fps); f++) {
+      const ms = Math.round((61 + f / fps) * 1000);
+      assert.equal(TP.tc(ms, { frames: true, fps }), "00:01:01:" + String(f).padStart(2, "0"), `${fps} fps, frame ${f}`);
+    }
+  }
+  assert.equal(TP.tc(61500, { frames: true, fps: 29.97, drop: true }).includes(";"), true);
+  // Drop-frame never shows frames 00 and 01 at the start of a minute (but every tenth).
+  assert.equal(TP.tc(60000, { frames: true, fps: 29.97, drop: true }), "00:01:00;02");
+  assert.equal(TP.tc(600000, { frames: true, fps: 29.97, drop: true }), "00:10:00;00");
+  assert.equal(W.transcriptInput({ frames: true, fps: 29.97, drop: true, cues: [{ s: 0, e: 1000, t: "a" }] }).value.drop_frame, true);
+  assert.equal(W.transcriptInput({ frames: true, fps: 25, drop: true, cues: [{ s: 0, e: 1000, t: "a" }] }).value.drop_frame, false);
+  assert.deepEqual(TP.parse("1\n10:00:01,000 --> 10:00:04,000\nLate words.\n").error, "past_ten_hours");
+});
+
+test("agents read names as codes, run together and in handles too; a code is never read as a name", () => {
+  const people = [{ name: "Jamie Rivers", person_code: "WJ01", is_minor: true }, { name: "Ty Ng", person_code: "TY1", is_minor: true, reviewer_name: "Ann Ng", reviewer_relation: "parent" }];
+  assert.equal(W.maskNames("@jamierivers is up at five", people).includes("jamierivers"), false);
+  assert.equal(W.maskNames("#JamieRivers2026", people).includes("Rivers"), false);
+  assert.equal(W.maskNames("TyNg runs", people).trim(), "TY1  runs");
+  assert.equal(W.maskNames("Ann Ng drove Ty", people), "TY1's parent drove TY1");
+});
+
+test("our own words: no promise of reach, no emoji chain, no line written for anyone, no word of a name", () => {
+  for (const t of ["more reach with college coaches", "Millions of views", "Recruiters will notice you", "This will get you an offer"]) assert.ok(W.voiceTrouble(t).some((x) => /promises/.test(x)), t);
+  for (const t of ["He reaches for the bar", "the views from the hill", "fire 🔥 and ice"]) assert.deepEqual(W.voiceTrouble(t), [], t);
+  for (const t of ["🔥.🔥.🔥", "🇺🇸 🇺🇸", "1️⃣2️⃣", "💯-💯"]) assert.ok(W.voiceTrouble(t).includes("no emoji chains"), t);
+  for (const t of ["👨‍👩‍👧 one family", "👍🏽 great work"]) assert.deepEqual(W.voiceTrouble(t), [], t);
+  for (const t of ["Your offer list starts here.", "Trending on every feed."]) assert.ok(W.voiceTrouble(t).some((x) => /promises/.test(x)), t);
+  for (const t of ["He says: I do it for my mom", "A note with ‘it made me better’ inside", "'Never quit on the hill' he said", "«Je ne lâche rien jamais»"]) assert.ok(W.writtenLines(t).length, t);
+  for (const t of ["don't stop, it's fine", "the coach's \"why\"", "Look: warm light, slow push"]) assert.deepEqual(W.writtenLines(t), [], t);
+  // A word of an adult's name: Claude is refused; a person is asked.
+  const tr = { ref: "T1", id: "t1", person_id: "p1", cues: [{ n: 1, s: 0, e: 4000, t: "Darnell taught me everything." }, { n: 2, s: 4000, e: 8000, t: "I do it all for my mom." }] };
+  const people = [{ name: "Darnell Price", person_code: "C1", is_minor: false }, { name: "Sam Rowe", person_code: "S1", is_minor: false }];
+  const claude = W.checkWords({ lines: [{ transcript: "T1", from_cue: 1, to_cue: 1, quote: "Darnell taught me everything", why: "Marcus at his most honest" }], structures: [] }, { transcripts: [tr], people, byClaude: true });
+  assert.ok(claude.issues.some((i) => /darnell/i.test(i.issue)), JSON.stringify(claude.issues));
+  const asks = new Set();
+  const person = W.checkWords({ lines: [{ transcript: "T1", from_cue: 1, to_cue: 1, quote: "Darnell taught me everything" }], structures: [] }, { transcripts: [tr], people, asks });
+  assert.deepEqual([person.issues.filter((i) => i.where !== "structures"), [...asks]], [[], ["darnell"]]);
+  const okd = W.checkWords({ lines: [{ transcript: "T1", from_cue: 1, to_cue: 1, quote: "Darnell taught me everything" }], structures: [] }, { transcripts: [tr], people, asks: new Set(), namesOk: new Set(["darnell"]) });
+  assert.equal(okd.value.lines.length, 1);
+  // A note in our words with an adult's name: refused, whoever writes it.
+  assert.ok(W.checkWords({ lines: [{ transcript: "T1", from_cue: 2, to_cue: 2, quote: "I do it all for my mom", why: "Sam Rowe at his best" }], structures: [] }, { transcripts: [tr], people, asks: new Set() }).issues.some((i) => /no names/.test(i.issue)));
+  // A caption with a second, made-up quote after the real one; a caption that opens on a promise.
+  const cap = (after, line = 2) => W.checkWords({ captions: [{ lead: { transcript: "T1", from_cue: line, to_cue: line, quote: line === 2 ? "I do it all for my mom" : "Darnell taught me everything" }, after }], structures: [] }, { transcripts: [tr], people, asks: new Set(), namesOk: new Set(["darnell"]) }).issues.filter((i) => i.where !== "structures");
+  assert.ok(cap("He told us “It made me who I am.”").length);
+  // A minor's name run into a hashtag in our words.
+  const kidd = [...people, { name: "Jordan Kidd", person_code: "JK1", is_minor: true }];
+  assert.ok(W.checkWords({ captions: [{ lead: { transcript: "T1", from_cue: 2, to_cue: 2, quote: "I do it all for my mom" }, after: "#jordanstrong every Sunday" }], structures: [] }, { transcripts: [tr], people: kidd, asks: new Set() }).issues.some((i) => /no names/.test(i.issue)));
+  assert.deepEqual(cap("Sundays, every week."), []);
+  const promise = { ...tr, cues: [{ n: 1, s: 0, e: 4000, t: "This will get me exposure and followers." }] };
+  assert.ok(W.checkWords({ captions: [{ lead: { transcript: "T1", from_cue: 1, to_cue: 1, quote: "This will get me exposure and followers" } }], structures: [] }, { transcripts: [promise], people, asks: new Set() }).issues.some((i) => /promises/.test(i.issue)));
+});

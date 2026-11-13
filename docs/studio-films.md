@@ -40,6 +40,9 @@ One per person on camera. The name stays on the card; everything else carries th
   - words that run together are split first (`TyNgQuoteCard`, `hope_quote_v02`);
   - any word of a card's name counts, in any case, an everyday word too ("hope", "smith"): a word of three letters or more, two for a minor ("Bo"), but never a two-letter everyday word ("in", "an");
   - a name run together counts anywhere inside a word (`tyngquotecard`), from five letters (four for a minor).
+  - one word of a minor's name (four letters or more) run into another word counts where a word starts or ends (`jordanquote_v2`, `quotejordan`, "Kiddstrong season"); one that's also an everyday word ("#hopestrong" for a Hope) is asked about where questions can be asked.
+  - A title is words someone chose, so two of those are asked about there rather than refused: an everyday word that's also a name ("Game day" for a Dan Day, "Young and hungry" for a Chase Young), and a short name run together inside a word ("The walkout" for an Al Ko). The title is kept once the writer says it isn't a name here. A name run together from a word's start, or of seven letters or more, is still refused, and so is a minor's everyday-word name read as in a story: a possessive ("Hope's first season") or a capital mid-title outside Title Case ("Go Hope go", "Thanks, Hope").
+  - A title or story sent unchanged (the edit screen sends both with every save) isn't asked about again, but a certain name in it still stops the save. The database holds the certain ones too (a whole name, one run together, any word of a minor's name), so a title and a card saved in the same instant can't both go through. A card added or changed later is read against both: a name in either stops the card until they change, and an everyday word that's also its name is asked about there.
 - The one-sentence story is a sentence: it never carries a card's name (a word of three letters or more, two for a minor, the whole name, or the name run together as one word, as in `JamieRivers`). A word that's also an everyday word ("he" in Bo He, "will", "hope", "field", "young": the app keeps the list) counts as a name with a capital in the middle of a sentence ("we ran it with Will"). At the start of a sentence ("Hope never quits") the app asks, and keeps it once the writer says it isn't a name here. In lower case it's the everyday word. An adult's lone two-letter name isn't caught.
 - Notes are screened the same way, with one difference: a single word of an adult's name ("will" for a Will, "mark" for a Mark), or a minor's everyday-word name at the start of a sentence ("Will you send it?"), is asked about, and kept once the writer says that word isn't a name here (the app sends back the exact words, for that exact text; change the text and it asks again). A whole name, one run together, or any other word of a minor's name is always refused, by the app and by the database: there's no "it isn't a name here" for a child. (The database leaves the everyday words to the app.)
 - **A pulled consent stays pulled.** A new card for that code is refused while its takedown is open, and after that until the producer records the family's new consent (how and when) on the first new card. A card being added while the pull runs waits for it, and is pulled with it.
@@ -62,7 +65,7 @@ A parent card (one photo), a quote card or an In Their Own Words carousel goes t
 
 ### Notes on a cut
 
-Under each cut: a note for the edit, at the playhead (`0:12`) or for the whole cut, with an optional **label** in the same few words each time it comes up ("open on the fact", "music under the voice"). Labels count across films; one that comes up three times is a rule in the making (the kit's monthly refresh, next PR). The film's editor sees open notes on Today and marks each one done (the producer can too). Notes are kept for good, so they carry no names (the app and the database both refuse one); a label is shared by every film, so it's checked against every film's cards. A cut that was never reviewed or posted can still be deleted when it has notes: the notes stay, with what the cut was ("hero 9x16 v1").
+Under each cut: a note for the edit, at the playhead (`0:12`) or for the whole cut, with an optional **label** in the same few words each time it comes up ("open on the fact", "music under the voice"). Labels count across a kit's films; one that comes up three times is a rule in the making (the kit's monthly refresh, below). The film's editor sees open notes on Today and marks each one done (the producer can too). Notes are kept for good, so they carry no names (the app and the database both refuse one); a label is shared by every film, so it's checked against every film's cards. A cut that was never reviewed or posted can still be deleted when it has notes: the notes stay, with what the cut was ("hero 9x16 v1").
 
 ## On set and in the edit
 
@@ -82,9 +85,11 @@ Under each cut: a note for the edit, at the playhead (`0:12`) or for the whole c
 - *Title card*, *end card* (a type stand-in for the Coached by Hooks mark) and *year labels* (transparent, small in the top corner, with a tick that the years are true): saved for the edit, not reviewed.
 
 Before a graphic is saved or sent, the server checks its words and its credit by the same rules as titles and file names: a name the release doesn't let a graphic carry on that format (any word of a minor's name, a child's name run together as in `#TyNg`, a parent's or guardian's name ever), or a word on the TOJ banned list, holds it back. A graphic is public, so hashtags and handles are read too:
-- a tag starts a sentence of its own, and capitals in a run are split apart (`#TyNgNeverQuit` reads "Ty Ng Never Quit", `#HopeIsAPlan` is asked about like any sentence start);
-- a name run together that starts where a word of the tag starts is a name (`#tyngneverquit`, `@tyng23`, `#GoTyNg`);
-- one inside a word of the tag is asked about (`#SpeedLimit` for an Ed Li). An everyday word that's also such a name, at the start of a sentence ("Will never quit"), is asked about; the writer's "not a name here" counts for that exact text. Mid-sentence with a capital ("we ran it with Will"), it's a name. The credit names a speaker only if they're an adult, cleared, and their release covers their name and lists the format. A closed film makes no graphics. Drafts stay in this session only, for a day at most. Until Kyron and Coach Hooks turn on *The graphics system*, every graphic carries a **PROPOSED** band and nothing goes to review; the screen reads the switch afresh before saving or sending. The fonts are in `public/app/fonts` (SIL Open Font License, `OFL.txt`) and cached with the app.
+- capitals in a tag's run are split apart (`#TyNgNeverQuit` reads "Ty Ng Never Quit"), and every word of a tag, like every word of a line of three words or more in Title Case or capitals ("Never Lose Hope"), reads as the start of a sentence: a capital there says nothing, so an everyday word that's also a name is asked about (`#HopeIsAPlan`, `#NeverLoseHope`), and a whole name is still a name (`#HopeFieldStrong`);
+- a name run together is a name where a word of the tag starts or ends, or at seven letters or more (`#tyngneverquit`, `@tyng23`, `#GoTyNg`, `#teamtyng`, `#gojordankidd`);
+- a shorter one inside a word of the tag is asked about (`#SpeedLimit` for an Ed Li, `#WalkOff` for an Al Ko);
+- one word of a minor's name (four letters or more) run into a tag or a word is the name where a word starts or ends (`#jordanstrong`, `#teamjordan`, "jordanstrong forever"); an everyday one is asked about (`#hopestrong`);
+- a line in Title Case is read as a shout-out: its last word, and a word right after "Go", "Thanks", "You", "Birthday", "Coach" and the like, is the name for anyone the graphic can't name ("Way To Go Hope", "Go Hope Go", "Thank You Coach Will", "Keep the Faith" for a Faith): write it in sentence case if it isn't one; An everyday word that's also such a name, at the start of a sentence ("Will never quit"), is asked about; the writer's "not a name here" counts for that exact text. Mid-sentence with a capital ("we ran it with Will"), it's a name. The credit names a speaker only if they're an adult, cleared, and their release covers their name and lists the format. A closed film makes no graphics. Drafts stay in this session only, for a day at most. Until Kyron and Coach Hooks turn on *The graphics system*, every graphic carries a **PROPOSED** band and nothing goes to review; the screen reads the switch afresh before saving or sending. The fonts are in `public/app/fonts` (SIL Open Font License, `OFL.txt`) and cached with the app.
 
 ## Posting and takedowns
 
@@ -109,17 +114,22 @@ Everyone whose email a card names as the one who approves (the speaker themself,
 The film's room → **Real words** (`public/app/film-words.js`, API `routes/studio-words.js`, migration 041).
 
 **Transcripts.** Export the interview's transcript from Resolve: subtitles (`.srt` or `.vtt`), or text with a timecode on each line. A timecode that counts frames needs the timeline's frame rate. The file is read on the phone (`public/app/transcript-parse.js`), and only the speaker's lines go to the server:
-- In a file with speaker labels ("Coach:", a voice tag, "Speaker 1"), you pick which label is the speaker. The interviewer's questions and everyone else's lines stay on the phone.
-- In a file without labels, every line goes as the speaker's words, so you confirm only their words are in it.
-- You pick whose card the words belong to, and give it a label with no name in it ("Interview 1").
+- In a file with speaker labels ("Coach:", "JOSÉ:", a voice tag, "Speaker 1"), you pick which label is the speaker. The interviewer's questions and everyone else's lines stay on the phone. A subtitle with two voices or two labels in it is split between them, its time shared by their words, and a line with no label is a voice the file doesn't name: "(no label)" sends only those lines.
+- In a file without labels, every line goes as the speaker's words, so you confirm only their words are in it. A subtitle with two voices in it (the "- " lines) stays on the phone.
+- You pick whose card the words belong to (nothing is picked for you), and give it a label with no name in it ("Interview 1").
+- A line that comes after someone else's (a question left out) or after a pause of more than three seconds is marked, and no kept line reaches back across it. "[inaudible]" and "[crosstalk]" stay in the words as ⟨…⟩, and no line reaches across that either.
+- Timecodes read to the frame (rounded). A drop-frame transcript (";" before the frames, 29.97 or 59.94) is kept as one, and shows its timecodes as Resolve does. A transcript past ten hours is refused with a note on how to export it.
+- A board link that names someone on the cards ("instagram.com/jamierivers") isn't shown to an agent: only that there was one.
 
 Limits: 5,000 lines, 2,000 characters a line, 300,000 characters in all.
 
 **Adults first.** Only a cleared adult speaker's words can be used: a speaker card, not a minor, cleared, consent standing, the release covering their voice. Anyone else's card says why not. When a card changes so their words can't be used (consent pulled, marked a minor, no longer a speaker, voice no longer covered), the database removes their transcripts and every line kept from them.
 
-**Lines by hand.** Open a transcript, tap the line where the words start and the one where they end (12 at most), and trim the words to the line you want. They have to be the speaker's own, word for word: the server finds them in the transcript and works out when they're said. The database checks the quote and its times again. A line that names someone on the cards (a whole name, one run together, any word of a minor's name) or has a banned word is refused. A caption opens on the speaker's line and runs under 60 words; your words after it carry no names, no banned words, no promise of reach and no emoji chains.
+**Lines by hand.** The film's director, editor or producer opens a transcript (everyone else reads it), taps the line where the words start and the one where they end (12 at most), and trims the words to the line they want. They have to be the speaker's own, word for word, from a whole word to a whole word (not "4 forty" out of "4.4 forty"): the server finds them in the transcript and works out when they're said. Words said twice in the lines picked have to be picked from the one cue. The database checks the quote again, whole words, gaps and all, and that its times fall inside its cues (it doesn't work the times out again). A line that names someone on the cards (a whole name, one run together, any word of a minor's name) or has a banned word is refused; a line with one word of an adult's name ("Darnell taught me everything") is asked about, and kept once you say it isn't a name there. A caption opens on the speaker's line and runs under 60 words; that line and your words after it carry no promise of reach (views, followers, being noticed by recruiters, an offer) and no emoji chains (🔥🔥🔥, 🔥.🔥.🔥, flags), and your words carry no names (any word of one) and no line written for someone in quotes of any kind.
 
-**Claude** reads the transcripts only once Kyron turns on *Claude reads transcripts*. The film's director, editor or producer asks. Claude reads every transcript whose words can be used, with people as code and role, and hands back:
+**When a card changes.** A card added, renamed or corrected to a minor whose name is in a kept line, a caption, a title or note of ours, or the directions waits: remove those first (the database holds this). A transcript's label is read as strictly as when it was added: any word of the card's name in it holds the card too. A release taken off file, like a release no longer covering the voice, takes the speaker's transcripts and their lines with it.
+
+**Claude** reads the transcripts only once Kyron turns on *Claude reads transcripts*. The film's director, editor or producer asks, one run at a time for a film. Claude reads every transcript whose words can be used, with people as code and role and every name said in them as a code ("WJ01 gets up at five"). Before each page it reads, the switch, the film, the transcript and its speaker's card are checked again: the first "no" stops the run, no judge reads it, and nothing is kept. Claude can't be asked "is that a name here?", so a line or note of Claude's with any word of a card's name is refused. It hands back:
 - up to 12 strongest lines;
 - two or three structures (3 to 12 beats, the speaker's lines in order);
 - up to 6 cutdowns whose first line lands in the first two seconds (up to 5 lines after it);
@@ -133,13 +143,14 @@ Every quote goes through the same checks as a line picked by hand. A new set rep
 - three must-have shots;
 - why it fits, and the risks.
 
-It writes no lines for anyone: a quoted line of three words or more is refused, since only real words are used. Two directions that are nearly the same film are refused too. The producer picks one, and *Use its must-haves* puts its three shots on the board.
+It writes no lines for anyone: a quoted run of three words or more, in quotes of any kind or after "says:", is refused, since only real words are used. Two directions that are nearly the same film are refused too. A taste note it cites is kept as its number, title, link and the use made of it. The producer picks one, and *Use its must-haves* puts its three shots on the board.
 
-**The Brief Writer** hands back three directions too, each a whole brief, and says which it would pick and why. You pick one, edit it, and start the kit run with it; the run records which direction it came from. Or you set the brief aside. **Today lists your briefs that came back and were neither started nor set aside** (the last 60 days). A started brief stays started.
+**The Brief Writer** hands back three directions too, each a whole brief, and says which it would pick and why. Whoever asked for it (or the producer) picks one, edits it, and starts the kit run with it; the run's task says which brief and direction it came from. Or you set the brief aside (your edits stay on the screen). **Today lists your briefs that came back and were neither started nor set aside** (the last 60 days). A started brief stays started, with its first run and direction: starting it again makes another run and leaves that as it was.
 
 **The taste library** (Studio → *Taste library*, `public/app/taste.js`, API `routes/studio-taste.js`) keeps notes on work worth learning from:
 - a link to the work, what it is, what to take and what to leave, and tags;
-- never a picture or a copy of the work: a link to an image file is refused, by the app and by the database;
+- never a picture or a copy of the work: a link to an image or video file (by its ending, in any case, behind ";v=2" or "%2E" too), to an image service's own address, or with format=jpg in it, is refused, by the app and by the database (a link that redirects to a picture can't be told);
+- no name on any film's cards (a whole name, one run together, any word of a minor's), since every film reads it; agents read it with names as codes;
 - a number for each note ("Taste 12"), which briefs and directions cite; Claude checks a cited note exists;
 - search by words (any form) or by tag.
 
@@ -151,24 +162,31 @@ Migration 042, API `routes/studio-learn.js`, screens in `public/app/learn.js` an
 
 **Wrap-ups** (the room → *Wrap-ups*):
 - What worked on the film, what missed, and what the kit should change, with the kit card it's about if you know it.
-- No names, as for the history: a whole name, one run together, or any word of a minor's name is refused, by the app and by the database. A word that's also a name is asked about first.
-- Whoever wrote one edits it; they or an approver can remove it, until it's folded into a refresh. After that it's kept as it was.
+- No names. A wrap-up goes to the whole kit, so it's held to what a kit holds: a name of anyone on any film's cards is refused (a word of one, a minor's from two letters or run into a tag, the whole name, one run together), by the app, and by the database for whole names, names run together and minors' names. A word that's also a name (on this film's cards, or an everyday one that starts a sentence) is asked about first; a word that's surely a name can't be cleared that way.
+- Whoever wrote one edits it; they or an approver can remove it, until it's folded into a refresh. After that it's kept as it was. While a refresh is running with it, it stays as that refresh read it.
 
 **Suggest an edit** (a card on the kit page): what the card should say and why.
-- It names a card in the approved kit, and carries no name: a kit never does. It's checked against every film's cards, by the app and by the database.
-- It stays open until an approver folds it into a refresh or declines it, with a reason. Never deleted.
+- It names a card in the approved kit, not one of its locked rule cards (a refresh can't change those), and carries no name: a kit never does. It's checked against every film's cards, by the app and by the database, the reason for a decline too. A name for certain is refused, and the app says which word it read as one; a word that may be a name (an everyday word that's a name too, with a capital: "Mark IV", "In April") is asked about, and kept once you say it isn't one here.
+- It stays open until an approver folds it into a refresh or declines it, with a reason. Never deleted. The kit page shows how many are waiting on each card.
 
 **Copy the whole column** (the kit page): every card in the column at once, in order, to paste onto the Milanote board.
 
-**Rules in the making.** A review-note label used on three notes is proposed as a rule. An approver folds it into a refresh or declines it, with a reason. A declined one comes back after three more uses.
+**Rules in the making.** A review-note label used on three notes of a kit's films is proposed as a rule for that kit. An approver folds it into a refresh or declines it, with a reason. A declined one comes back after three more uses. Every decision is kept: declining it again adds a decision, it doesn't rewrite the first.
 
-**The month's refresh.** Today shows approvers *This month's kit refresh* when there's something new and no refresh this month.
-- *Open the month's brief* lists the wrap-ups, suggested edits and rules in the making, each ticked, and builds the Kit Refresher's brief from them.
-- Untick what shouldn't go in; edit the brief if you like; the ticks decide what's marked folded in. What doesn't fit in one brief (6,000 characters) waits for next month.
-- *Start the monthly refresh* starts a kit run like any other, and it makes a draft only: nothing changes until Kyron approves it.
-- The run is marked, and what it drew on is folded in, each once.
+**Names in what every film shares.** Wrap-ups, suggested edits, rule labels, decline reasons and the month's brief are read against every card on every film (all of them, page by page), so the check tells a name from an ordinary word that holds one:
+- A name for certain: a whole name, or one run together ("JamieRivers"); a word of a name that's no everyday word ("Jordan", "Dana"); a minor's name run into a tag, a handle, a link or a file name ("#jordanstrong", "@jordan.hoops", "jordan_final_v2"), or where camelCase starts or ends it ("JordanStrong"); and, in a wrap-up, an everyday word that's the name of a minor on that film's cards, with a capital mid-sentence ("talked to Will after"). Refused, with the word.
+- Asked: an everyday word that's a name, with a capital ("Mark IV", "Hope never quits"), a month's or a day's name ("In April"), an everyday-word name run into a tag ("#hopestrong"), and an adult's name run into one ("#teamrivers").
+- Not read: a name inside an ordinary word ("Milanote" for a Mila, "state" for a Tate, "label" for an Abel), and everyday words in lower case.
 
-**The gear re-check.** Today shows *Gear re-check due* a month after the last one, or when there's never been one. *Re-check gear* goes through the Brief Writer as before, and the run it starts is marked as the gear re-check.
+**The month's refresh.** Today shows approvers *This month's kit refresh* when there's something new for a kit and its refresh hasn't run this month (and isn't running).
+- *Open the month's brief* lists the wrap-ups, suggested edits and rules in the making, each ticked, and builds the Kit Refresher's brief from them. Anything that names someone on a card added since is held back: a wrap-up with a link to edit it on its film, a suggested edit or a rule (which can't be edited) with *Decline…*.
+- Untick what shouldn't go in; edit the brief if you like. Your edits stay until you build it again from the ticks. The ticks decide what the run is given; at Start, a ticked item whose line isn't in the brief as written is asked about, and so is an unticked one whose line still is (the run would read it, and it would stay open). Declining something takes its line out of an edited brief (or asks you to). The composed brief stays under 5,800 characters, leaving room for your edits (a kit run takes 6,000); what doesn't fit waits for next month.
+- *Start the monthly refresh* starts a kit run like any other, and it makes a draft only: nothing changes until Kyron approves it. The brief can't name anyone on any card: what a person wrote into it is read (the kit's title, its columns' and cards' titles, the formats' names and the dates the app writes aren't), a name for certain is refused with the word, and a word that may be one is asked about first.
+- The run is marked with what it was given, under the kit's lock: one at a time, and only what's still open and in no other running refresh (or nothing starts, with the reason). A second one in a month is started on purpose (*Start another refresh this month*).
+- What it was given is folded in, each once, only when it saves a draft. A run that fails, goes quiet for 90 minutes, or finds nothing to change leaves it all open for the next one. Something that can't be folded by then (a name came on a card since) stays open, and the run says how many.
+- Kyron discards the draft: what its refresh folded in is open again, as it was, for the next one (a rule gets a decision saying so), and that refresh no longer counts as the month's having run. A draft discarded while its refresh still runs folds nothing in.
+
+**The gear re-check.** Today shows *Gear re-check due* a month after the last one that ran through (a draft, or nothing to change), or when there's never been one. *Re-check gear* goes through the Brief Writer as before, and the run it starts (on the Same Work kit only) is marked as the gear re-check.
 
 ## Tool approvals
 
@@ -218,7 +236,7 @@ Real words (`/api/studio-words`, members with Studio; "the film's people" are it
 | GET | `/films/:id` (transcripts without their words, the lines kept, directions, runs), `/transcripts/:tid` (its lines), `/runs/:rid` | members |
 | POST | `/films/:id/transcripts` `{ person_id, label, frames, fps, cues }` | members |
 | DELETE | `/transcripts/:tid` | whoever added it, the producer |
-| POST | `/films/:id/lines` `{ transcript_id, from_cue, to_cue, quote, note, kind, after }` | members |
+| POST | `/films/:id/lines` `{ transcript_id, from_cue, to_cue, quote, note, kind, after, names_ok }` | the film's people |
 | DELETE | `/words/:wid` | the film's people |
 | POST | `/films/:id/ask-claude` | the film's people, with *Claude reads transcripts* on |
 | POST | `/films/:id/directions` | the producer, the film's director |
@@ -231,12 +249,12 @@ The kit learns (`/api/studio-learn`):
 | GET/POST | `/films/:id/wraps` `{ worked, missed, change, card_title, names_ok }` | members |
 | PATCH | `/wraps/:wid` | whoever wrote it, until it's folded |
 | DELETE | `/wraps/:wid` | whoever wrote it or an approver, until it's folded |
-| GET/POST | `/suggestions?slug=&status=`, `/suggestions` `{ slug, version, column, card_title, suggestion, why }` | members |
-| POST | `/suggestions/:id/decline` `{ note }`, `/labels/decline` `{ label, note }` | approvers |
+| GET/POST | `/suggestions?slug=&status=`, `/suggestions` `{ slug, column, card_title, suggestion, why, names_ok }` | members |
+| POST | `/suggestions/:id/decline` `{ note, names_ok }`, `/labels/decline` `{ slug, label, note, names_ok }` | approvers |
 | GET | `/monthly/:slug` | approvers |
 | GET | `/today` | members (the month's refresh: approvers only) |
 
-A kit run takes `{ purpose: "monthly", sources: { wraps, suggestions, labels } }` (approvers) or `{ purpose: "gear" }`.
+A kit run takes `{ purpose: "monthly", sources: { wraps, suggestions, labels }, again }` (approvers) or `{ purpose: "gear" }` (the Same Work kit), as JSON from the app's own pages, from a person (not the automation key). It answers 409 `refresh_refused` with the reason when it can't start (running already, run this month without `again`, or something picked was decided, folded or taken meanwhile), 400 `brief_has_name` with the `words` read as names, and 400 `brief_may_have_name` with the `words` to ask about (send them back as `names_ok` with the same brief). A name check that refuses answers `{ error: "invalid", fields: ["…_has_name"], words }`; one that asks, `fields: ["…_may_have_name"]`. Discarding a draft answers `given_back: true` when its refresh's items are open again.
 
 The taste library (`/api/studio-taste`): GET `?q=&tag=&limit=`, GET `/tags`, GET `/:id`, POST (members); PATCH `/:id` with `seen`, POST `/:id/archive` (whoever added it, the producer). Briefs: GET `/api/studio-agents/briefs/unstarted`; POST `/api/studio-agents/briefs/:id/set-aside` `{ aside }`; a kit run started from a brief sends `{ from_brief, direction }`.
 
@@ -246,7 +264,7 @@ Their own page (`/api/studio-speaker`, the same rules): `POST /send-link {email}
 
 ## Setup
 
-1. Apply `db/migrations/039_studio_films.sql` (tables, rules, the bucket `studio-films`), then `040_studio_craft.sql` (notes, delivery checks, stills and slides), then `041_studio_words.sql` (transcripts, lines, directions, the taste library, brief marks), then `042_studio_learn.sql` (wrap-ups, suggested edits, rule decisions, refresh marks), then `043_studio_speaker.sql` (their own page's links). None has been applied anywhere yet: each goes on fresh, in order (040 isn't written to upgrade an earlier draft of itself).
+1. Apply `db/migrations/039_studio_films.sql` (tables, rules, the bucket `studio-films`), then `040_studio_craft.sql` (notes, delivery checks, stills and slides), then `041_studio_words.sql` (transcripts, lines, directions, the taste library, brief marks), then `042_studio_learn.sql` (wrap-ups, suggested edits, rule decisions, refresh marks and what each was given), then `043_studio_speaker.sql` (their own page's links). None has been applied anywhere yet: each goes on fresh, in order (040 isn't written to upgrade an earlier draft of itself).
 2. Optional settings on Render: `STUDIO_SITE_BASE` (default `https://www.tojcampaign.com`), `STUDIO_REVIEW_REPLY_TO`, `STUDIO_REVIEW_MAX_MB` (raise it after the Supabase Pro upgrade), `STUDIO_REVIEW_WORKER=off` to stop the worker on a server.
 3. Kyron turns on *Review copies in storage* (Studio → Films → Tool approvals) once he's checked Supabase's terms, and *Claude reads transcripts* once he's checked Anthropic's terms for interview transcripts.
 4. Email works as for the rest of the app (`EMAIL_USER`/`EMAIL_PASS` or `SMTP_*`); without it, review links aren't made.
@@ -264,8 +282,10 @@ Their own page (`/api/studio-speaker`, the same rules): `POST /send-link {email}
 - A line is checked against the transcript, not the sound: a word Resolve misheard is kept as Resolve wrote it. Fix it in Resolve and add the transcript again.
 - A line's start and end inside one transcript line are estimated from where its words fall in that line, so they can be off by a fraction of a second; a cutdown's two seconds are measured the same way.
 - A minor's words can't be used at all yet (adults first): their review comes later.
-- The month's refresh is started by an approver from Today, not on a timer: nothing runs a model on its own.
+- The month's refresh is started by an approver from Today, not on a timer: nothing runs a model on its own. The automation key can't start it or the gear re-check.
+- Declining a suggested edit or a rule while a refresh is running with it waits until that run ends.
 - A wrap-up's card is free text (with the kit's titles offered); a title that isn't a card's is kept as written.
-- The phone's copy of the shoot sheet drops lines that read like a name or a place by their capitals, the cards and *Locations*; a name typed all in lower case, of someone not on the cards, can't be told from other words. Keep names on the cards and places under *Locations*.
+- A word that's a name on any card and something else too (a town, a school, a camera: "Austin", "Madison", "Alexa") is refused in what every film shares once someone with that name is on a card, as a name would be: the app says which word, so it can be written another way. A minor's name is never kept on a writer's say-so.
+- The phone's copy of the shoot sheet drops lines that read like a name or a place by their capitals, the cards and *Locations*; a name typed all in lower case, of someone not on the cards, can't be told from other words. Keep names on the cards and places under *Locations*. A line may start with a capital only on an ordinary word (the app's list: family, gear, the field and the shot) or one the kit itself uses; a place's ordinary words ("practice field", "high school", "park") don't keep a line off the phone, its own name ("Westlake") does; a place made only of ordinary words ("Park High School", "Home Field") keeps them all, and each part of a location is a place of its own ("The Rowe house on High Street", "Home Field, Riverside").
 - A minor's name run together ("tyng") is caught by the app from four letters; the database's own screen starts at five.
 - The still check reads a slide's pixels in the web server's own process: about a tenth of a second for the largest it takes (3000 × 2000), a few hundredths for the kit's sizes.

@@ -27,7 +27,27 @@ const me = (req) => req.team.email;
 const isProducer = (req) => T.can(req.team, "studio", "approver");
 const bodyOf = H.bodyOf;
 const KINDS = ["film", "cut", "look", "sound", "graphic", "caption", "other"];
-const IMAGE_FILE = /\.(jpe?g|png|gif|webp|heic|heif|avif|bmp|tiff?|svg)([?#].*)?$/i;
+// A link to a picture or a video file, as far as its address shows (the
+// database checks the same: migration 041's studio_taste_file_link): the
+// file's ending in any case, with a trailing "/" or ";v=2", "%2E" for the
+// dot; an image service's own address; format=jpg in the query. A link that
+// redirects to one can't be told.
+const FILE_END = /\.(jpe?g|jpe|jfif|pjpeg|pjp|png|apng|gif|webp|heic|heif|avif|bmp|dib|tiff?|svgz?|ico|jxl|jp2|j2k|dng|cr2|nef|arw|raw|psd|mp4|m4v|mov|webm|mkv|avi|wmv|flv|mpe?g|3gp|ts|m3u8)$/;
+const IMAGE_QUERY = /(^|&)(format|fm|ext|type|mime)=(jpe?g|png|gif|webp|avif|heic|svg|bmp|image%2f[a-z]+|image\/[a-z]+)(&|$)/;
+const IMAGE_HOST = /(^|\.)(pbs\.twimg\.com|images\.unsplash\.com|plus\.unsplash\.com|i\.imgur\.com|i\.redd\.it|preview\.redd\.it|lh[0-9]\.googleusercontent\.com|media\.licdn\.com|scontent[a-z0-9.-]*\.fbcdn\.net|scontent[a-z0-9.-]*\.cdninstagram\.com|i\.pinimg\.com|images\.squarespace-cdn\.com|cdn\.shopify\.com|i\.ytimg\.com|img\.youtube\.com|i\.vimeocdn\.com|media\.giphy\.com|i\.giphy\.com|images\.pexels\.com|cdn\.pixabay\.com|live\.staticflickr\.com|farm[0-9]+\.staticflickr\.com|upload\.wikimedia\.org|video\.twimg\.com|v[0-9]+\.cdninstagram\.com)$/;
+function fileLink(url) {
+  let u;
+  try {
+    u = new URL(url);
+  } catch (e) {
+    return true;
+  }
+  let path = u.pathname.toLowerCase().replace(/%2e/g, ".").replace(/%2f/g, "/");
+  path = path.replace(/;[^/]*/g, "").replace(/\/+$/, "");
+  // Instagram's /p/<id>/media/ address sends the picture itself.
+  const media = /(^|\.)instagram\.com$/.test(u.hostname.toLowerCase()) && /^\/(p|reel|tv)\/[^/]+\/media$/.test(path);
+  return FILE_END.test(path) || media || IMAGE_QUERY.test(u.search.replace(/^\?/, "").toLowerCase()) || IMAGE_HOST.test(u.hostname.toLowerCase());
+}
 
 router.use((req, res, next) => {
   if (["POST", "PATCH", "DELETE"].includes(req.method) && !req.is("application/json")) return res.status(415).json({ error: "json_only" });
@@ -63,8 +83,8 @@ function tasteInput(raw, { partial = false } = {}) {
   if (want("url")) {
     v.url = U.https(r.url);
     if (!v.url || v.url.length > 500) errors.push("url");
-    // A link to the work, never a copy of a picture of it.
-    else if (IMAGE_FILE.test(new URL(v.url).pathname + (new URL(v.url).search || ""))) errors.push("url_is_an_image");
+    // A link to the work, never a copy of a picture or a video file of it.
+    else if (fileLink(v.url)) errors.push("url_is_an_image");
   }
   if (want("kind")) {
     v.kind = KINDS.includes(r.kind) ? r.kind : "film";
@@ -84,6 +104,16 @@ function tasteInput(raw, { partial = false } = {}) {
   const words = [v.title, v.note, v.take, v.leave, ...(v.tags || [])].filter(Boolean).join("\n");
   if (K.lintWords(words, "x").length) errors.push("banned_words");
   return { errors, value: v };
+}
+// Every film reads the taste library: a name on any film's cards (a whole
+// name, one run together, any word of a minor's) is refused, as the
+// database refuses it (studio_names_in_any).
+async function namesInTaste(sb, value) {
+  const words = [value.title, value.note, value.take, value.leave, ...(value.tags || [])].filter(Boolean).join("\n");
+  if (!words) return false;
+  const { data } = await sb.from("studio_film_people").select("name,reviewer_name,is_minor").limit(10000);
+  const cards = data || [];
+  return U.namesIn(words, cards, { strong: true }).length > 0 || U.minorWords(words, cards).length > 0;
 }
 const view = (row) => ({ id: row.id, ref: `Taste ${row.ref_no}`, ref_no: row.ref_no, title: row.title, url: row.url, kind: row.kind, note: row.note, take: row.take, leave: row.leave, tags: row.tags || [], added_by: row.added_by, created_at: row.created_at, updated_at: row.updated_at, archived_at: row.archived_at });
 
@@ -115,6 +145,7 @@ router.get("/:id", member, withDb(async (req, res, sb) => {
 router.post("/", member, withDb(async (req, res, sb) => {
   const { errors, value } = tasteInput(bodyOf(req));
   if (errors.length) return res.status(400).json({ error: "invalid", fields: errors });
+  if (await namesInTaste(sb, value)) return res.status(400).json({ error: "invalid", fields: ["taste_has_name"] });
   const { data, error } = await sb.from("studio_taste").insert({ ...value, added_by: me(req) }).select().single();
   if (error) return refused(res, error);
   await T.logActivity(me(req), "studio_taste_added", `Taste ${data.ref_no}`, null);
@@ -138,6 +169,7 @@ router.patch("/:id", member, withDb(async (req, res, sb) => {
   const { errors, value } = tasteInput(body, { partial: true });
   if (errors.length) return res.status(400).json({ error: "invalid", fields: errors });
   if (!Object.keys(value).length) return res.json({ entry: view(row) });
+  if (await namesInTaste(sb, { ...row, ...value })) return res.status(400).json({ error: "invalid", fields: ["taste_has_name"] });
   const { data, error } = await sb.from("studio_taste").update(value).eq("id", row.id).eq("updated_at", body.seen).select();
   if (error) return refused(res, error);
   if (!data || !data.length) return res.status(409).json({ error: "changed_meanwhile" });
@@ -157,4 +189,5 @@ router.post("/:id/archive", member, withDb(async (req, res, sb) => {
 router.use((req, res) => res.status(404).json({ error: "not_found" }));
 
 router._tasteInput = tasteInput;
+router._fileLink = fileLink;
 module.exports = router;

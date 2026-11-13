@@ -20,9 +20,9 @@ const { overlap } = require("../studio-brief/tools");
 
 const LIMITS = Object.freeze({ name: 60, logline: 220, beat: 160, beats: [3, 8], look: 300, sound: 300, must_have: 3, must: 120, why: 300, risks: 300 });
 const SAME_SHARE = 0.7;
-// "Real words only": a quoted run of three words or more is a line written
-// for someone. Describe the kind of line to find instead.
-const QUOTED = /[“"]([^”"]{1,400})[”"]/g;
+// "Real words only": a quoted run of three words or more, in quotes of any
+// kind, or put after "says:", is a line written for someone
+// (utils/studio-words.js writtenLines). Describe the kind of line instead.
 
 function json(x) {
   return JSON.stringify(x, null, 1);
@@ -123,11 +123,9 @@ function toolsFor(ctx) {
       out.forEach((d, i) => {
         const where = `directions[${i}]`;
         const all = [d.name, d.logline, ...d.beats, d.look, d.sound, ...d.must_have, d.why, d.risks, ...d.taste.map((t) => t.use)].filter(Boolean).join("\n");
-        for (const m of all.matchAll(QUOTED)) {
-          if (W.wordCount(m[1]) >= 3) {
-            issues.push({ where, issue: `"${m[1].slice(0, 60)}" reads as a line written for someone. Real words only: describe the kind of line to find (a line about Sundays), never write it` });
-            break;
-          }
+        for (const q of W.writtenLines(all)) {
+          issues.push({ where, issue: `"${q.slice(0, 60)}" reads as a line written for someone. Real words only: describe the kind of line to find (a line about Sundays), never write it` });
+          break;
         }
         if (W.namesTrouble(all, people)) issues.push({ where, issue: "no names: cards by code and role" });
         for (const v of W.voiceTrouble(all)) issues.push({ where, issue: v });
@@ -144,6 +142,7 @@ function toolsFor(ctx) {
       for (const t of [why, ...questions]) {
         if (W.namesTrouble(t, people)) issues.push({ where: "why_recommended / questions", issue: "no names: cards by code and role" });
         for (const v of W.voiceTrouble(t)) issues.push({ where: "why_recommended / questions", issue: v });
+        if (W.writtenLines(t).length) issues.push({ where: "why_recommended / questions", issue: "no lines written for someone: describe the kind of line" });
       }
       if (issues.length) return refused("fix these and send all three again.", issues);
       stage.submits++;

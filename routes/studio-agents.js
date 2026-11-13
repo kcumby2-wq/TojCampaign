@@ -27,6 +27,23 @@ const { renderDocument } = require("../agents/studio/kit-render");
 const T = require("../utils/team");
 const P = require("../utils/push");
 const isPerson = (e) => !!e && e !== "api-key" && e.includes("@");
+const H = require("../utils/pylon-http");
+const U = require("../utils/studio-films");
+const F = require("../agents/studio/films");
+// A write that marks a brief (set aside, or started from it) or starts a
+// refresh from what the team learned is JSON from the app's own pages:
+// another site can't send one through a signed-in browser.
+function sameSiteJson(req, res) {
+  if (!req.is("application/json")) {
+    res.status(415).json({ error: "json_only" });
+    return false;
+  }
+  if (!H.originOk(req)) {
+    res.status(403).json({ error: "wrong_origin" });
+    return false;
+  }
+  return true;
+}
 
 const router = express.Router();
 const STUDIO_ROLES = ["kit-builder", "kit-refresher"];
@@ -75,8 +92,9 @@ router._setDeps = ({ sb, run, brief } = {}) => {
 
 // Who may do what (utils/team.js): viewers open kits; members write briefs
 // and start runs; approvers and the owner approve. The STUDIO_API_KEY header
-// acts as a member for automation (e.g. a monthly refresh): it can start runs
-// but never approve or unlock rule cards.
+// acts as a member for automation: it can start a run, but never approve,
+// unlock rule cards, or start the month's refresh or the gear re-check
+// (a person starts those: nothing runs a model on a timer).
 const viewer = T.requireTeamOrApiKey("x-studio-api-key", "STUDIO_API_KEY", "studio", "viewer");
 const member = T.requireTeamOrApiKey("x-studio-api-key", "STUDIO_API_KEY", "studio", "member");
 const approver = T.requireTeam("studio", "approver");
@@ -89,6 +107,89 @@ function who(req) {
 function fail(res, e, what) {
   console.error(`[studio] ${what} failed:`, e && e.message);
   return res.status(500).json({ error: `${what}_failed` });
+}
+
+// A refresh from what the team learned (migration 042): started with what
+// it's given, under the kit's lock (with no run: only whether it could), and
+// ended with how it went. Retried once on a deadlock or a serialization
+// failure. { error } or { given } / { folded, skipped }.
+const RETRY = new Set(["40P01", "40001"]);
+async function rpcRetry(sb, fn, args) {
+  let out = await sb.rpc(fn, args);
+  for (let i = 0; i < 2 && out.error && RETRY.has(out.error.code); i++) {
+    await new Promise((r) => setTimeout(r, 30 + Math.floor(Math.random() * 120)));
+    out = await sb.rpc(fn, args);
+  }
+  return out;
+}
+async function refreshStart(sb, { run, slug, kind, by, sources, again }) {
+  try {
+    const { data, error } = await rpcRetry(sb, "studio_refresh_start", {
+      p_run: run, p_slug: slug, p_kind: kind, p_by: by,
+      p_wraps: sources ? sources.wraps : [], p_suggestions: sources ? sources.suggestions : [], p_labels: sources ? sources.labels : [], p_again: !!again,
+    });
+    if (error) return { error };
+    return { given: data && data[0] ? data[0].given : 0 };
+  } catch (e) {
+    return { error: { message: e.message } };
+  }
+}
+function refreshRefused(res, error) {
+  if (error && error.code === "P0001") return res.status(409).json({ error: "refresh_refused", reason: String(error.message || "").slice(0, 300) });
+  console.error("[studio] refresh not started:", (error && (error.code || error.message)) || error);
+  return res.status(503).json({ error: "refresh_unavailable" });
+}
+// What the app writes into a refresh's brief: the kit's title, its columns'
+// and cards' titles, its films' formats and lanes (and dates, which
+// utils/studio-films.js withoutKnown takes out itself). The name check reads
+// what's left, what a person wrote: "Same Work Milanote Kit" is the kit's
+// name, never a Mila's.
+async function appWords(sb, slug) {
+  const out = [slug];
+  try {
+    const base = await S.approvedKit(sb, slug);
+    const kit = base && base.kit;
+    if (kit) {
+      out.push(kit.title);
+      for (const c of kit.columns || []) {
+        out.push(c.name);
+        for (const x of c.cards || []) out.push(x.title);
+      }
+    }
+  } catch (e) {
+    /* no kit: the run itself says so */
+  }
+  const t = F.templateFor(slug);
+  if (t) {
+    out.push(t.name);
+    for (const f of Object.values(t.formats || {})) out.push(f.label);
+    for (const l of Object.values(t.lanes || {})) out.push(l.label);
+  }
+  return out;
+}
+// A refresh's brief, against every card: a name for certain is refused, with
+// the words read as one; a word that may be one is asked about first
+// ({ names_ok }, for this exact brief).
+function briefNames(brief, everyone, known, namesOk) {
+  const k = U.kitNames(U.withoutKnown(brief, known), everyone);
+  if (k.sure.length) return { error: "brief_has_name", words: k.sure.slice(0, 10) };
+  const ok = U.namesOkWords(namesOk);
+  const words = k.maybe.filter((w) => !ok.has(w));
+  if (words.length) return { error: "brief_may_have_name", words: words.slice(0, 10) };
+  return null;
+}
+async function refreshEnd(sb, run, outcome) {
+  try {
+    const { data, error } = await rpcRetry(sb, "studio_refresh_end", { p_run: run, p_outcome: outcome });
+    if (error) {
+      console.error(`[studio] run ${run}: refresh not ended (${outcome}):`, error.code || error.message);
+      return { error };
+    }
+    return data && data[0] ? { folded: data[0].folded, skipped: data[0].skipped } : { folded: 0, skipped: 0 };
+  } catch (e) {
+    console.error(`[studio] run ${run}: refresh not ended (${outcome}):`, e.message);
+    return { error: { message: e.message } };
+  }
 }
 
 router.get("/roles", (_req, res) => res.json({ roles: orchestrator().listRoles() }));
@@ -196,11 +297,23 @@ router.post("/kits/:id/discard", approver, async (req, res) => {
       .update({ status: "discarded", discarded_by: who(req), discarded_at: new Date().toISOString() })
       .eq("id", req.params.id)
       .eq("status", "draft")
-      .select("id,slug,version,status");
+      .select("id,slug,version,status,source_run_id");
     if (error) throw new Error(error.message);
     if (!data || !data.length) return res.status(409).json({ error: "not_a_draft" });
-    await T.logActivity(who(req), "discarded_kit", `${data[0].slug} v${data[0].version}`, { kit_id: data[0].id });
-    res.json({ ok: true, ...data[0] });
+    const { source_run_id: runId, ...kit } = data[0];
+    // A draft from a refresh started from what the team learned: what it
+    // folded in is open again (migration 042's studio_kits_discarded).
+    let givenBack = false;
+    if (runId) {
+      try {
+        const { data: m } = await sb.from("studio_refresh_marks").select("undone_at").eq("run_id", runId).maybeSingle();
+        givenBack = !!(m && m.undone_at);
+      } catch (e) {
+        /* before migration 042 */
+      }
+    }
+    await T.logActivity(who(req), "discarded_kit", `${kit.slug} v${kit.version}`, { kit_id: kit.id });
+    res.json({ ok: true, ...kit, given_back: givenBack });
   } catch (e) {
     fail(res, e, "discard_kit");
   }
@@ -235,20 +348,57 @@ router.post("/run", member, async (req, res) => {
   const direction = Number.isInteger(body.direction) && body.direction >= 1 && body.direction <= 3 ? body.direction : null;
   // What it's for (migration 042): the month's refresh, from the wrap-ups,
   // suggested edits and rules in the making it lists (an approver's call),
-  // or a gear re-check. Marked, so Today knows what's due.
+  // or the gear re-check (the Same Work kit's). Marked with what it was
+  // given, so Today knows what's due; folded in once it saves a draft.
   const purpose = ["monthly", "gear"].includes(body.purpose) ? body.purpose : null;
+  if (purpose && req._apiKeyAuth) return res.status(403).json({ error: "refresh_needs_a_person" });
   if (purpose === "monthly" && !(req.team && T.can(req.team, "studio", "approver"))) return res.status(403).json({ error: "producer_only" });
   if (purpose && role !== "kit-refresher") return res.status(400).json({ error: "invalid_purpose" });
+  if (purpose === "gear" && slug !== "same-work") return res.status(400).json({ error: "invalid_purpose" });
   const src = body.sources && typeof body.sources === "object" ? body.sources : {};
   const ids = (v) => (Array.isArray(v) ? [...new Set(v.map((x) => String(x).toLowerCase()).filter((x) => S.isUuid(x)))].slice(0, 200) : []);
+  const labelOf = (l) => (l && typeof l === "object" ? l.label : l);
   const sources = purpose === "monthly"
-    ? { wraps: ids(src.wraps), suggestions: ids(src.suggestions), labels: (Array.isArray(src.labels) ? src.labels : []).filter((l) => l && typeof l.label === "string").slice(0, 50).map((l) => ({ label: l.label.slice(0, 60), uses: Math.max(0, Math.floor(Number(l.uses) || 0)) })) }
+    ? { wraps: ids(src.wraps), suggestions: ids(src.suggestions), labels: [...new Set((Array.isArray(src.labels) ? src.labels : []).map(labelOf).filter((l) => typeof l === "string" && l.length).map((l) => l.slice(0, 60)))].slice(0, 50) }
     : null;
+  // A second month's refresh in one month is on purpose.
+  const again = purpose === "monthly" && body.again === true;
   if (allowLocked && req._apiKeyAuth) return res.status(403).json({ error: "rule_changes_need_a_person" });
   if (allowLocked && !(req.team && req.team.owner)) return res.status(403).json({ error: "rule_changes_need_the_owner" });
+  if ((fromBrief || purpose) && !sameSiteJson(req, res)) return;
 
   const sb = getSupabase();
   if (!sb) return res.status(503).json({ error: "supabase_unavailable" });
+
+  if (purpose) {
+    // The brief draws on every film's work: no name of anyone on any card,
+    // in what a person wrote into it (briefNames).
+    try {
+      const asked = briefNames(brief, await U.everyCardRows(sb), await appWords(sb, slug), body.names_ok);
+      if (asked) return res.status(400).json(asked);
+    } catch (e) {
+      return fail(res, e, "start_run");
+    }
+    // Can it start? (Asked again, locked, once the run is made.)
+    const can = await refreshStart(sb, { run: null, slug, kind: purpose, by: who(req), sources, again });
+    if (can.error) return refreshRefused(res, can.error);
+  }
+
+  // Started from a brief: a Brief Writer run that came back, yours (or the
+  // producer's to start). The first start is kept as it was.
+  let briefMark = null;
+  if (fromBrief) {
+    const { data: br, error: bErr } = await sb.from("agent_runs").select("id,role,status,created_by").eq("id", fromBrief).maybeSingle();
+    if (bErr) return fail(res, bErr, "start_run");
+    if (!br || br.role !== "brief-writer" || !["completed", "waiting"].includes(br.status)) return res.status(400).json({ error: "not_a_brief" });
+    if (br.created_by !== who(req) && !(req.team && T.can(req.team, "studio", "approver"))) return res.status(403).json({ error: "not_your_brief" });
+    try {
+      const { data: m } = await sb.from("studio_brief_marks").select("started_at").eq("brief_run_id", fromBrief).maybeSingle();
+      briefMark = m || null;
+    } catch (e) {
+      briefMark = null;
+    }
+  }
 
   let scope;
   try {
@@ -275,7 +425,7 @@ router.post("/run", member, async (req, res) => {
     return fail(res, e, "start_run");
   }
 
-  const task = S.buildTask({
+  const task = (fromBrief ? `(Started from brief ${fromBrief}${direction ? `, direction ${direction}` : ""}.)\n\n` : "") + S.buildTask({
     mode: scope.mode,
     slug,
     brief,
@@ -295,23 +445,22 @@ router.post("/run", member, async (req, res) => {
   if (insErr) return fail(res, insErr, "start_run");
 
   if (purpose) {
-    // Marked (and the month's sources folded in) before the answer goes back.
-    try {
-      const { error: fErr } = await sb.rpc("studio_refresh_fold", {
-        p_run: runRow.id, p_slug: slug, p_kind: purpose, p_by: who(req),
-        p_wraps: sources ? sources.wraps : [], p_suggestions: sources ? sources.suggestions : [],
-        p_labels: sources ? sources.labels.map((l) => l.label) : [], p_label_uses: sources ? sources.labels.map((l) => l.uses) : [],
-      });
-      if (fErr) console.warn("[studio-agents] refresh not marked:", fErr.code || fErr.message);
-    } catch (e) {
-      /* before 042: not marked */
+    // Marked, with what it was given, before the answer goes back; if it
+    // can't be (picked up meanwhile by another start), the run doesn't start.
+    const started = await refreshStart(sb, { run: runRow.id, slug, kind: purpose, by: who(req), sources, again });
+    if (started.error) {
+      const reason = started.error.code === "P0001" ? String(started.error.message || "").slice(0, 300) : "it couldn't be marked";
+      await sb.from("agent_runs").update({ status: "failed", error: `Not started: ${reason}`, completed_at: new Date().toISOString() }).eq("id", runRow.id);
+      return refreshRefused(res, started.error);
     }
   }
-  if (fromBrief) {
-    // Today stops listing the brief, before the answer goes back. Before
-    // migration 041 there's no table: the brief stays on Today.
+  if (fromBrief && !(briefMark && briefMark.started_at)) {
+    // Today stops listing the brief, before the answer goes back. A brief
+    // started again keeps its first start (that run and its direction); the
+    // new run's task says where it came from. Before migration 041 there's no
+    // table: the brief stays on Today.
     try {
-      const { error: mErr } = await sb.from("studio_brief_marks").upsert({ brief_run_id: fromBrief, started_run_id: runRow.id, direction, started_by: who(req), started_at: new Date().toISOString() }, { onConflict: "brief_run_id" });
+      const { error: mErr } = await sb.from("studio_brief_marks").upsert({ brief_run_id: fromBrief, started_run_id: runRow.id, direction, started_by: who(req), started_at: new Date().toISOString(), set_aside_at: null, set_aside_by: null }, { onConflict: "brief_run_id" });
       if (mErr) console.warn("[studio-agents] brief not marked started:", mErr.code || mErr.message);
     } catch (e) {
       /* no table yet */
@@ -324,6 +473,7 @@ router.post("/run", member, async (req, res) => {
   setImmediate(async () => {
     const startedAt = Date.now();
     let stage = null;
+    let refreshEnded = false;
     try {
       const result = await runAgent({ role, task, scope: { ...scope, onStage: (s) => (stage = s) } });
       const passed = ["passed", "passed_after_retry", "not_run"].includes(result.eval_status);
@@ -334,11 +484,22 @@ router.post("/run", member, async (req, res) => {
         console.error(`[studio] run ${runRow.id} could not save its draft:`, e.message);
         saved = { saved: false, reason: "save_failed" };
       }
-      const note = saved.saved
+      // A refresh from what the team learned ends here: what it was given is
+      // folded in only with a draft saved; otherwise it all stays open.
+      refreshEnded = !!purpose;
+      const ended = purpose ? await refreshEnd(sb, runRow.id, saved.saved ? "drafted" : saved.reason === "no_changes" ? "no_changes" : "failed") : null;
+      const folded = purpose === "monthly"
+        ? saved.saved
+          ? ended && !ended.error
+            ? `\nFolded in ${ended.folded} of what it was given${ended.skipped ? ` (${ended.skipped} left open: a name came on a card since; edit it, then fold it into the next one)` : ""}.`
+            : "\nWhat it was given couldn't be marked folded: it stays open for the next refresh."
+          : "\nWhat it was given stays open for the next refresh."
+        : "";
+      const note = (saved.saved
         ? `\n\n---\nSaved as draft v${saved.version} of "${slug}" (kit ${saved.id}). Nothing is approved until a person approves it.`
         : saved.reason === "no_changes"
           ? "\n\n---\nNo changes were needed, so no new draft was saved."
-          : `\n\n---\nNo draft was saved (${saved.reason}).`;
+          : `\n\n---\nNo draft was saved (${saved.reason}).`) + folded;
       await sb
         .from("agent_runs")
         .update({
@@ -390,6 +551,8 @@ router.post("/run", member, async (req, res) => {
       }
     } catch (e) {
       console.error(`[studio] run ${runRow.id} failed:`, e.message);
+      // Nothing it was given is folded in; it all stays open.
+      if (purpose && !refreshEnded) await refreshEnd(sb, runRow.id, "failed");
       if (isPerson(requestedBy)) P.notifySoon([requestedBy], { title: "Your kit run stopped", body: "Open it to see what happened.", url: `/app/#run/${runRow.id}`, tag: `run-${runRow.id}` });
       await sb
         .from("agent_runs")
@@ -485,33 +648,42 @@ router.get("/briefs/unstarted", viewer, async (req, res) => {
   const mine = who(req);
   if (!isPerson(mine)) return res.json({ briefs: [] });
   const since = new Date(Date.now() - 60 * 86400000).toISOString();
-  const { data, error } = await sb
-    .from("agent_runs")
-    .select("id,status,task,output,created_at")
-    .eq("role", "brief-writer")
-    .eq("created_by", mine)
-    .in("status", ["completed", "waiting"])
-    .gte("created_at", since)
-    .order("created_at", { ascending: false })
-    .limit(40);
-  if (error) return fail(res, error, "unstarted_briefs");
-  const ids = (data || []).map((r) => r.id);
-  let marked = new Set();
-  if (ids.length) {
-    try {
-      const { data: marks, error: mErr } = await sb.from("studio_brief_marks").select("brief_run_id").in("brief_run_id", ids);
-      // Before migration 041, nothing is marked: every brief counts.
-      if (!mErr) marked = new Set((marks || []).map((m) => m.brief_run_id));
-    } catch (e) {
-      marked = new Set();
+  // Page back through the 60 days until ten unmarked briefs are found, so an
+  // older one never started doesn't drop off behind newer, started ones.
+  const open = [];
+  for (let from = 0; from < 400 && open.length < 10; from += 40) {
+    const { data, error } = await sb
+      .from("agent_runs")
+      .select("id,status,task,output,created_at")
+      .eq("role", "brief-writer")
+      .eq("created_by", mine)
+      .in("status", ["completed", "waiting"])
+      .gte("created_at", since)
+      .order("created_at", { ascending: false })
+      .range(from, from + 39);
+    if (error) return fail(res, error, "unstarted_briefs");
+    const page = data || [];
+    const ids = page.map((r) => r.id);
+    let marked = new Set();
+    if (ids.length) {
+      try {
+        const { data: marks, error: mErr } = await sb.from("studio_brief_marks").select("brief_run_id").in("brief_run_id", ids);
+        // Before migration 041, nothing is marked: every brief counts.
+        if (!mErr) marked = new Set((marks || []).map((m) => m.brief_run_id));
+      } catch (e) {
+        marked = new Set();
+      }
     }
+    open.push(...page.filter((r) => !marked.has(r.id)));
+    if (page.length < 40) break;
   }
   res.json({
-    briefs: (data || []).filter((r) => !marked.has(r.id)).slice(0, 10).map((r) => ({ id: r.id, status: r.status, created_at: r.created_at, label: runLabel({ role: "brief-writer", task: r.task, output: r.output }) })),
+    briefs: open.slice(0, 10).map((r) => ({ id: r.id, status: r.status, created_at: r.created_at, label: runLabel({ role: "brief-writer", task: r.task, output: r.output }) })),
   });
 });
 
 router.post("/briefs/:id/set-aside", member, async (req, res) => {
+  if (!sameSiteJson(req, res)) return;
   const sb = getSupabase();
   if (!sb) return res.status(503).json({ error: "supabase_unavailable" });
   if (!S.isUuid(req.params.id)) return res.status(404).json({ error: "not_found" });

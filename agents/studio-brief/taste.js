@@ -11,7 +11,8 @@ const { betaTool } = require("@anthropic-ai/sdk/helpers/beta/json-schema");
 
 const REF_RE = /^Taste (\d{1,7})$/;
 const tasteRef = (row) => `Taste ${row.ref_no}`;
-const view = (row) => ({ ref: tasteRef(row), title: row.title, url: row.url, kind: row.kind, note: row.note, take: row.take || null, leave: row.leave || null, tags: row.tags || [] });
+// What an agent reads of a note: every card's name as a code (scope.maskTaste).
+const view = (row, mask = (x) => x) => ({ ref: tasteRef(row), title: mask(row.title), url: row.url, kind: row.kind, note: mask(row.note), take: row.take ? mask(row.take) : null, leave: row.leave ? mask(row.leave) : null, tags: row.tags || [] });
 
 function tasteSearchTool(scope) {
   return betaTool({
@@ -23,7 +24,8 @@ function tasteSearchTool(scope) {
       if (typeof scope.searchTaste !== "function") return "The taste library isn't set up yet: carry on without it.";
       const rows = await scope.searchTaste(String(query || "").slice(0, 200), tag ? String(tag).toLowerCase().trim().slice(0, 24) : null);
       if (!rows || !rows.length) return "Nothing in the taste library for that. Try other words, or none for the newest.";
-      return JSON.stringify(rows.slice(0, 12).map(view), null, 1);
+      const mask = typeof scope.maskTaste === "function" ? scope.maskTaste : (x) => x;
+      return JSON.stringify(rows.slice(0, 12).map((r) => view(r, mask)), null, 1);
     },
   });
 }
@@ -42,7 +44,8 @@ async function checkCited(scope, refs, where) {
       issues.push({ where, issue: `no taste note "${ref}": cite one taste_search returned, as "Taste 12"` });
       continue;
     }
-    if (!cited.some((c) => c.ref === ref)) cited.push({ ...view(row), use: String((r && r.take) || "").trim().slice(0, 300) || null });
+    // Kept with what cites it: the note's ref, title and link, and the use made of it.
+    if (!cited.some((c) => c.ref === ref)) cited.push({ ref, title: row.title, url: row.url, use: String((r && r.take) || "").trim().slice(0, 300) || null });
   }
   return { cited, issues };
 }

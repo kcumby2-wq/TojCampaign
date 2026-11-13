@@ -128,8 +128,9 @@ function parseBriefRequest(body = {}) {
   if (fileTotal > LIMITS.totalFileChars) return bad("files_too_long", { max_chars: LIMITS.totalFileChars });
 
   // What the brief is for, carried to the run it starts (migration 042): a
-  // gear re-check is marked, so Today knows when the next one is due.
-  const purpose = body.purpose === "gear" ? "gear" : null;
+  // gear re-check (the Same Work kit's) is marked, so Today knows when the
+  // next one is due. Aimed at anything else, it's an ordinary brief.
+  const purpose = body.purpose === "gear" && mode === "refresh" && slug === "same-work" ? "gear" : null;
   return { ok: true, idea, target: { mode, slug }, refs, attachments, files, purpose };
 }
 
