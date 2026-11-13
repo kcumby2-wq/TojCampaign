@@ -543,10 +543,13 @@ test("a tag or a Title Case line reads each word as a sentence start; a whole na
   for (const t of ["#gojordankidd", "#believeinjordankidd", "#gohopefield", "#letsgohopefield", "#teamtyng"]) {
     assert.equal(judge(t, whole, new Set([t])), "refused", t);
   }
-  // One word of a minor's name run into a tag or a word: the name where a
-  // word starts or ends; an everyday one is asked about.
-  for (const t of ["#jordanstrong", "#teamjordan", "#prayforjordan", "#kiddstrong", "#JORDANSTRONG", "jordanstrong forever"]) assert.equal(judge(t, whole), "refused", t);
-  assert.equal(judge("#hopestrong", whole), "asked hope");
+  // One word of a minor's name run into a tag or a word beside a tag's or a
+  // file's word: the name; an everyday one only as a first name.
+  for (const t of ["#jordanstrong", "#teamjordan", "#prayforjordan", "#kiddstrong", "#JORDANSTRONG", "jordanstrong forever", "#hopestrong", "#teamhope"]) assert.equal(judge(t, whole), "refused", t);
+  assert.equal(judge("#gofield", whole), "asked field");
+  // An ordinary word that starts or ends with a minor's name is asked about, never refused.
+  const ordinary = [{ person_code: "IM1", name: "Isla Moss", is_minor: true }, { person_code: "LC1", name: "Liam Cruz", is_minor: true }, { person_code: "EL2", name: "Ella Ruiz", is_minor: true }];
+  for (const [t, want] of [["We grew up on the island", "asked isla"], ["William coached me", "asked liam"], ["Grab an umbrella", "asked ella"]]) assert.equal(judge(t, ordinary), want, t);
   assert.equal(judge("#SpeedLimit", whole), "asked #speedlimit");
   assert.equal(judge("#WalkOff", whole), "asked #walkoff");
   assert.equal(judge("#WalkOff", whole, new Set(["#walkoff"])), "passes");

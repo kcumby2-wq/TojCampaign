@@ -144,40 +144,82 @@ function capitalizedAtStart(raw, w) {
 }
 // One word of a minor's name (four letters or more) run into other letters
 // ("#jordanstrong", "#teamjordan", "kiddquote", "Kiddstrong season"):
-// { sure, maybe }. Where a word of the run starts or ends (its first or last
-// letter, or a capital after a small letter), it's the name for certain,
-// unless it's also an everyday word ("#hopestrong" for a Hope: asked); inside
-// a word, asked ("#ourjordanfam"). The word alone is read by the other screens.
+// { sure, maybe, edge, loose }. The name for certain where the letters beside
+// it are a word a tag or a file name runs a name into ("strong", "team",
+// "quote", "prayfor"), another word of the name, initials after it in a tag
+// or a handle ("kayleeb_hoops"), or where camelCase starts or ends it
+// ("JordanStrong"). An everyday word ("hope") only as a first name beside
+// such a word ("#hopestrong", "#teamhope"): a surname that's an everyday word
+// there ("#teamgreen" for an Ava Green), and an everyday word made that way
+// ("#lifelong"), are asked. Anywhere else asked: an ordinary word that starts
+// or ends with a name ("island" for an Isla, "umbrella" for an Ella,
+// "William" for a Liam), a tag's ("#dallascowboys"), one inside a word
+// ("#ourjordanfam"). The word alone is read by the other screens.
 // edge: every word found where a word of the run starts or ends, everyday
-// or not (a file name reads "hopequote_v02" as Hope's).
+// or not; loose: those that are no everyday word (a file name, with no one
+// to ask, reads "jordanxyz_v2" as Jordan's).
+let RUN_BESIDE = null;
+const runBeside = () => RUN_BESIDE || (RUN_BESIDE = new Set([...FILE_WORDS, ...TAG_TAILS, ...("go pray prayfor for thanks thankyou happy happybirthday birthday bday " +
+  "congrats congratulations proudof proudofyou coach dear hey shoutout welcome free justice lil big our my iloveyou loveyou missyou ilove rip " +
+  "day week night watch highlights game games show hoops ball bball mvp").split(" ")]));
+const RUN_COMPOUNDS = new Set(("lifelong daylong weeklong nightlong yearlong seasonlong powerhouse clubhouse showcase lovebird lovebirds " +
+  "freewill willpower truelove bigdeal").split(" "));
+// A run of text with no space that's a tag, a handle, a link or a file name:
+// it starts with # or @, has a digit or an underscore, or a dot or a slash
+// between letters.
+function tagChunks(raw) {
+  const out = [];
+  for (const c of raw.matchAll(/\S+/gu)) {
+    const s = c[0];
+    if (/^[^\p{L}\p{N}]*[#@]/u.test(s) || (/[_\p{N}]/u.test(s) && /\p{L}/u.test(s)) || /[\p{L}\p{N}][./][\p{L}\p{N}]/u.test(s)) out.push([c.index, c.index + s.length]);
+  }
+  return out;
+}
 function minorRunIns(textValue, people) {
+  const raw = String(textValue || "");
   const sure = new Set();
   const maybe = new Set();
   const edge = new Set();
+  const loose = new Set();
+  const chunks = tagChunks(raw);
   const runs = [];
-  for (const m of String(textValue || "").matchAll(/[\p{L}\p{M}]+/gu)) {
+  for (const m of raw.matchAll(/[\p{L}\p{M}]+/gu)) {
     const tok = m[0];
-    const edges = new Set([0, tok.length]);
-    for (let i = 1; i < tok.length; i++) if (/\p{Lu}/u.test(tok[i]) && /\p{Ll}/u.test(tok[i - 1])) edges.add(i);
-    runs.push({ low: tok.toLowerCase(), edges });
+    const inner = new Set();
+    for (let i = 1; i < tok.length; i++) if (/\p{Lu}/u.test(tok[i]) && /\p{Ll}/u.test(tok[i - 1])) inner.add(i);
+    runs.push({ low: tok.toLowerCase(), inner, tag: chunks.some(([a, b]) => m.index >= a && m.index < b) });
   }
+  const beside = runBeside();
   for (const p of people || []) {
     if (!p || !p.is_minor) continue;
-    for (const w of nameParts(p.name)) {
-      if (Array.from(w).length < 4) continue;
+    const parts = nameParts(p.name);
+    parts.forEach((w, k) => {
+      if (Array.from(w).length < 4) return;
+      // A surname: the card's last word (cards are written first name first).
+      const surname = parts.length > 1 && k === parts.length - 1;
       for (const r of runs) {
         if (r.low === w) continue;
         for (let i = r.low.indexOf(w); i >= 0; i = r.low.indexOf(w, i + 1)) {
-          const atEdge = r.edges.has(i) || r.edges.has(i + w.length);
-          if (atEdge) edge.add(w);
-          if (atEdge && !everyday(w)) sure.add(w);
+          const head = r.low.slice(0, i);
+          const tail = r.low.slice(i + w.length);
+          const camel = r.inner.has(i) || r.inner.has(i + w.length);
+          const byWord = (!head && beside.has(tail)) || (!tail && beside.has(head));
+          const own = parts.some((x) => x !== w && Array.from(x).length >= 2 && (head.endsWith(x) || tail.startsWith(x)));
+          if (!head || !tail || camel) {
+            edge.add(w);
+            if (!everyday(w)) loose.add(w);
+          }
+          if (!everyday(w)) {
+            if (camel || byWord || own || (r.tag && !head && Array.from(tail).length <= 2)) sure.add(w);
+            else maybe.add(w);
+          } else if ((byWord && !surname && !RUN_COMPOUNDS.has(r.low) && !FILE_COMPOUNDS.has(r.low)) || own) sure.add(w);
           else maybe.add(w);
         }
       }
-    }
+    });
   }
   for (const w of sure) maybe.delete(w);
-  return { sure: [...sure], maybe: [...maybe], edge: [...edge] };
+  return { sure: [...sure], maybe: [...maybe], edge: [...edge], loose: [...loose] };
 }
 // Where a text names a person, for certain or maybe: their whole name; the
 // name run together as one word ("#TyNg", "JamieRivers": the whole token,
@@ -290,10 +332,12 @@ function idNames(textValue, people) {
     if (p.reviewer_name) look(p.reviewer_name, false);
   }
   // One word of a minor's name run into a word where a word starts or ends
-  // ("jordanquote_v2", "quotejordan"). An everyday one ("hope") only when the
-  // rest of the word is one a file name uses ("hopequote_v02", "quotehope"):
-  // "hopeful_promo" and "kicking_drill" are ordinary words.
-  for (const w of minorRunIns(raw, people).sure) out.add(w);
+  // ("jordanquote_v2", "quotejordan", "jordanxyz_v2": a file name has no one
+  // to ask). An everyday one ("hope") only when the rest of the word is one a
+  // file name uses ("hopequote_v02", "quotehope"): "hopeful_promo" and
+  // "kicking_drill" are ordinary words.
+  const runIn = minorRunIns(raw, people);
+  for (const w of [...runIn.sure, ...runIn.loose]) out.add(w);
   const words = raw.toLowerCase().split(/[^\p{L}\p{M}]+/u).filter(Boolean);
   // A three-letter one too, beside such a word ("samquote_v2", "Teamsam",
   // "samstrong"; "same_drill" is the word).

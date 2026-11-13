@@ -247,7 +247,11 @@ test("a title or a file name is read harder than a sentence: run-together, camel
   const kidd = [{ name: "Jordan Kidd", is_minor: true }];
   for (const t of ["teamjordan", "Kiddstrong season"]) assert.deepEqual(U.titleNames(t, kidd).sure.length, 1, t);
   for (const f of ["jordanquote_v2", "kiddquote", "quotejordan"]) assert.ok(U.idNames(f, kidd).length, f);
-  assert.deepEqual(U.minorRunIns("#hopestrong", [{ name: "Hope Field", is_minor: true }]), { sure: [], maybe: ["hope"], edge: ["hope"] });
+  assert.deepEqual(U.minorRunIns("#hopestrong", [{ name: "Hope Field", is_minor: true }]), { sure: ["hope"], maybe: [], edge: ["hope"], loose: [] });
+  assert.deepEqual(U.minorRunIns("#teamfield", [{ name: "Hope Field", is_minor: true }]), { sure: [], maybe: ["field"], edge: ["field"], loose: [] });
+  // An ordinary word that starts or ends with a name: asked; a file name reads it as the name.
+  assert.deepEqual(U.minorRunIns("We grew up on the island", [{ name: "Isla Moss", is_minor: true }]), { sure: [], maybe: ["isla"], edge: ["isla"], loose: ["isla"] });
+  assert.deepEqual(U.idNames("jordanxyz_v2", kidd), ["jordan"]);
   // A file name has no one to ask: an everyday word run in at a word's start or end counts there.
   for (const f of ["hopequote_v02", "quotehope", "HopeQuote"]) assert.deepEqual(U.idNames(f, [{ name: "Hope Field", is_minor: true }]), ["hope"], f);
   assert.deepEqual(U.idNames("ourhopefam", [{ name: "Hope Field", is_minor: true }]), [], "inside a word, it's another word");
