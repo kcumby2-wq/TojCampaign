@@ -85,15 +85,17 @@ Runs take roughly 5 to 20 minutes (Opus with web search and fetch, up to 3 judge
 - **Pictures are sent to the model for this run only and never stored.** File names never leave the browser; references are called Image 1, Video 1, Link 1, File 1. The stored task keeps the idea, the notes, the links and file text.
 - Poll `GET /runs/:id`; when done it carries `brief`: `{ mode, slug, title, brief, needs_source, references: [{ ref, what_it_shows, take, leave, seen }], questions }`.
 
-### Example: a monthly refresh from a scheduler
+### Example: a kit run from a script
 
 ```bash
 curl -s -X POST https://www.tojcampaign.com/api/studio-agents/run \
   -H "Content-Type: application/json" -H "X-Studio-API-Key: $STUDIO_API_KEY" \
-  -d '{"role":"kit-refresher","slug":"same-work","brief":"Monthly re-check: Netflix approved cameras, camera specs, transcription and caption tools, reference follower counts. Change only what moved; update dates and the Sources card."}'
+  -d '{"role":"kit-refresher","slug":"same-work","brief":"Re-check the reference follower counts. Change only what moved; update dates and the Sources card."}'
 ```
 
 The result is a draft waiting for approval. Nothing reaches the crew until Kyron approves it.
+
+The month's refresh and the gear re-check are a person's to start, in the app (Today asks when they're due, and they're marked with what they were given): the key can't start those (`refresh_needs_a_person`), and nothing runs a model on a timer.
 
 ## Files
 
@@ -112,7 +114,7 @@ The result is a draft waiting for approval. Nothing reaches the crew until Kyron
 ## Setup
 
 1. Apply `db/migrations/018_studio_kits.sql` and `019_team.sql` to Supabase (both applied Oct 19, 2026).
-2. The server needs `ANTHROPIC_API_KEY`, `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `ADMIN_EMAILS` and `SESSION_SECRET` (already used by the other packs). Optional: `STUDIO_API_KEY` for scheduled refreshes; `STUDIO_ASSET_SECRET` to sign image URLs with their own secret.
+2. The server needs `ANTHROPIC_API_KEY`, `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `ADMIN_EMAILS` and `SESSION_SECRET` (already used by the other packs). Optional: `STUDIO_API_KEY` for kit runs started by a script (not the month's refresh or the gear re-check); `STUDIO_ASSET_SECRET` to sign image URLs with their own secret.
 3. Web search and web fetch must be enabled for the Anthropic organization behind `ANTHROPIC_API_KEY` (an organization admin setting in the Claude Console). If they're off, runs still work from the approved kit and the reference library, but nothing gets re-checked.
 
 ## What still needs a person
