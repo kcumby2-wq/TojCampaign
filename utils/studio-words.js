@@ -425,6 +425,17 @@ function maskNames(text, people) {
     while (a > 0 && !/\s/u.test(str[a - 1])) a -= 1;
     return /[#@]/.test(str.slice(a, off));
   };
+  // The run-in reading, once per chunk and name (a long run of letters with
+  // the name many times in it is read once, not once a time); a chunk past
+  // 200 characters isn't read: a name that's no everyday word in it is
+  // coded wherever it stands.
+  const reads = new Map();
+  const runInSure = (chunk, full, w) => {
+    if (chunk.length > 200) return true;
+    const key = full + "\u0000" + chunk;
+    if (!reads.has(key)) reads.set(key, new Set(U.minorRunIns(chunk, [{ name: full, is_minor: true }]).sure));
+    return reads.get(key).has(w);
+  };
   const chunkAt = (str, off, len) => {
     let a = off;
     let b = off + len;
@@ -456,7 +467,7 @@ function maskNames(text, people) {
             ? (camel && bounds.has(at) && bounds.has(j)) || (tag && (at === 0 || j === low.length))
             : U.EVERYDAY_NAMES.has(w)
               ? /\p{Lu}/u.test(tok[at]) || tag
-              : tag || U.minorRunIns(chunkAt(str, off, tok.length), [{ name: x.full, is_minor: true }]).sure.includes(w);
+              : tag || runInSure(chunkAt(str, off, tok.length), x.full, w);
           if (here) {
             res += tok.slice(i, at) + ` ${mark(x.by)} `;
             i = j;
