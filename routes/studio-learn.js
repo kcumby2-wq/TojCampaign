@@ -66,8 +66,18 @@ async function run(query) {
   if (error) throw Object.assign(new Error(error.message), { db: error });
   return data;
 }
+// The database's own name check (042) read a name the app let through: it
+// can't say which word, so the writer is told what it reads.
+const DB_NAMES = /keep(?:s)? no names/;
 function refused(res, e) {
   const err = (e && e.db) || e || {};
+  if (err.code === "P0001" && DB_NAMES.test(String(err.message || ""))) {
+    return res.status(409).json({
+      error: "refused",
+      names: true,
+      reason: "the database read a name on a card in it, a minor's most likely, maybe as a plural or a possessive (\u201cJordans\u201d): write their code instead",
+    });
+  }
   if (err.code === "P0001") return res.status(409).json({ error: "refused", reason: String(err.message || "").slice(0, 300) });
   if (err.code === "23505") return res.status(409).json({ error: "exists" });
   if (/^(23|22)/.test(String(err.code || ""))) return res.status(400).json({ error: "invalid" });
@@ -433,4 +443,5 @@ router.get("/today", member, withDb(async (req, res, sb) => {
 router.use((req, res) => res.status(404).json({ error: "not_found" }));
 
 router._thisMonth = thisMonth;
+router._refused = refused;
 module.exports = router;
