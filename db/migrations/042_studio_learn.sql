@@ -123,15 +123,17 @@ alter table public.studio_refresh_sources enable row level security;
 -- ── Gates ─────────────────────────────────────────────────────────────────
 -- The ways a text may write a name the cards' check (039's studio_names_in)
 -- reads: as written; with a letter held three times or more taken back to
--- one and to two ("Kayleeee", "Jordannn"); and with each word's plain
--- plural or possessive taken back to the name ("Jordans mom called",
--- "KAYLEES DRILL", "the Joneses"): without its "s", and without its "es".
--- Each read on its own, so no name is made across them.
+-- one and to two ("Kayleeee", "Jordannn"); and with a word's plain plural
+-- or possessive taken back to a name of five letters or more ("Jordans mom
+-- called", "KAYLEES DRILL"), and "es" after s, x, z, ch or sh ("the
+-- Joneses"). Shorter names' plurals are the app's to read ("Tims mom", not
+-- "three times": utils/studio-films.js kitNames). Each read on its own, so
+-- no name is made across them.
 create or replace function public.studio_text_forms(p_text text) returns text[]
 language sql immutable set search_path = '' as $$
   select array_agg(distinct f) from (
-    select h, unnest(array[h, regexp_replace(h, '([[:alpha:]]{3,})[sS]\M', '\1', 'g'),
-                         regexp_replace(h, '([[:alpha:]]{3,})[eE][sS]\M', '\1', 'g')]) as f
+    select h, unnest(array[h, regexp_replace(h, '([[:alpha:]]{5,})[sS]\M', '\1', 'g'),
+                         regexp_replace(h, '([[:alpha:]]{2,}(?:[sSxXzZ]|[cCsS][hH]))[eE][sS]\M', '\1', 'g')]) as f
       from unnest(array[p_text, regexp_replace(p_text, '([[:alpha:]])\1{2,}', '\1', 'g'),
                         regexp_replace(p_text, '([[:alpha:]])\1{2,}', '\1\1', 'g')]) as h) x
    where f is not null
@@ -153,7 +155,7 @@ begin
   if p_run is null or to_regclass('public.studio_kits') is null then
     return false;
   end if;
-  return exists (select 1 from public.studio_kits k where k.source_run_id = p_run and k.status = 'discarded');
+  return exists (select 1 from public.studio_kits k where k.source_run_id = p_run and k.status = 'discarded' and k.approved_at is null);
 end $$;
 
 create or replace function public.studio_film_wraps_gate() returns trigger
@@ -650,7 +652,8 @@ end $$;
 create or replace function public.studio_kits_discarded() returns trigger
 language plpgsql set search_path = '' as $$
 begin
-  if new.status = 'discarded' and old.status is distinct from 'discarded' and new.source_run_id is not null then
+  -- A draft discarded (an approved kit is never given back, whatever its row says).
+  if new.status = 'discarded' and old.status = 'draft' and new.source_run_id is not null then
     perform public.studio_refresh_unfold(new.source_run_id, new.discarded_by);
   end if;
   return null;

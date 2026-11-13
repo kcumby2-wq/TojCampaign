@@ -182,6 +182,9 @@ test("a wrap-up goes to the whole kit: no name of anyone on any film's cards, an
   await assert.rejects(pool.query("insert into studio_film_wraps (film_id, worked, created_by) values ($1, 'kenji ran it', 'dir@toj.test')", [film.id]), /keep no names/);
   await assert.rejects(pool.query("insert into studio_film_wraps (film_id, worked, created_by) values ($1, 'KENJIS OPEN RAN LONG', 'dir@toj.test')", [film.id]), /keep no names/);
   await assert.rejects(pool.query("insert into studio_film_wraps (film_id, worked, created_by) values ($1, 'the Kenjiii energy', 'dir@toj.test')", [film.id]), /keep no names/);
+  // The database leaves short names' plurals to the app: "three times" for a minor Tim is kept.
+  await aFilm([{ person_code: "L9105", name: "Tim Lu", role: "athlete", is_minor: true, release_on_file: true, covers: { voice: true } }]);
+  ok(await add({ worked: "We ran it three times" }), "times");
   assert.deepEqual((await add({ worked: "the Kenjiii energy" })).data.fields, ["wrap_has_minor_name"]);
   assert.deepEqual((await add({ worked: "Kenjis open ran long" })).data.fields, ["wrap_has_minor_name"]);
   // A word that's a name only on a card added later: kept now, then held
@@ -465,6 +468,11 @@ test("what every film shares is read against every card for names, not for ordin
   // name where a word starts in a handle; a first and last name without the middle one.
   for (const [t, w] of [["Jordans mom called", "jordan"], ["KIDDS DRILL", "kidd"], ["the Jordannn energy", "jordan"], ["#teamjordankidd", "jordankidd"], ["#jordankiddstrong", "jordankidd"],
     ["instagram.com/jordanb_hoops", "jordan"]]) assert.ok(read(t).minor.includes(w), t);
+  // Ordinary plurals aren't a short name's: "three times" for a Tim, "the lens" for a Len.
+  const short = [{ name: "Tim Ross" }, { name: "Sid Lane", is_minor: true }, { name: "Liv Park", is_minor: true }, { name: "Len Cruz", is_minor: true }, { name: "Cam Diaz", is_minor: true }];
+  for (const t of ["three times", "both sides", "their lives", "the lens list", "two cams"]) assert.deepEqual(U.kitNames(t, short).sure, [], t);
+  assert.deepEqual(U.kitNames("Tims mom called", short).sure, ["tim"]);
+  assert.deepEqual(U.kitNames("the Joneses", [{ name: "Ann Jones", is_minor: true }]).minor, ["jones"]);
   const mid = [{ name: "Grace Ann Long", is_minor: true }];
   for (const t of ["#GraceLong", "#gracelong", "#GoGraceLong", "gracelong_quote_v1", "Grace Long ran it"]) assert.ok(U.kitNames(t, mid).minor.length > 0, t);
   assert.deepEqual(read("#teamrivers"), { sure: [], maybe: ["rivers"], minor: [] });
@@ -584,6 +592,12 @@ test("a discarded draft gives back what its refresh folded in, and its refresh n
   const r2 = ok(await startRun({ brief: BRIEF, purpose: "monthly", sources: { wraps: [w.id], suggestions: [sg.id], labels: ["missing slate"] }, again: true }), "again").run_id;
   assert.equal(await ended(r2), "drafted");
   assert.deepEqual(await folded(), [true, "folded", 0]);
+  // Approved, then set to discarded by hand: an approved kit gives nothing back.
+  const d2 = (await pool.query("select id from studio_kits where source_run_id = $1", [r2])).rows[0].id;
+  ok(await call("POST", `/api/studio-agents/kits/${d2}/approve`, {}, "kyron"), "approve");
+  await pool.query("update studio_kits set status = 'discarded', discarded_by = 'kyron@toj.test', discarded_at = now() where id = $1", [d2]);
+  assert.deepEqual(await folded(), [true, "folded", 0]);
+  assert.equal((await pool.query("select undone_at from studio_refresh_marks where run_id = $1", [r2])).rows[0].undone_at, null);
   // A draft discarded while its refresh still runs: nothing is folded in.
   const w2 = ok(await learn("POST", `/films/${film.id}/wraps`, { worked: "Room tone first, every location" }, "dir"), "wrap 2").wrap;
   const r3 = (await pool.query("insert into agent_runs (role, task, status, created_by) values ('kit-refresher', 'x', 'running', 'lead@toj.test') returning id")).rows[0].id;

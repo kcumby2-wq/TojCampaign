@@ -375,7 +375,9 @@ const plainStems = (w) => {
   for (const x of new Set(held)) {
     if (x !== w) out.add(x);
     if (x.length >= 4 && x.endsWith("s") && !x.endsWith("ss")) out.add(x.slice(0, -1));
-    if (x.length >= 5 && x.endsWith("es")) out.add(x.slice(0, -2));
+    // "es" only where English adds it: after s, x, z, ch or sh ("Joneses",
+    // "Maxes"; not "times", "lines").
+    if (x.length >= 5 && /(?:[sxz]|[cs]h)es$/.test(x)) out.add(x.slice(0, -2));
   }
   return [...out];
 };
@@ -467,6 +469,9 @@ function kitNames(textValue, people, { film = [] } = {}) {
       // one with a letter held ("Jordans mom called", "KAYLEES DRILL",
       // "the Kayleeee energy").
       for (const st of plainStems(low)) {
+        // A three-letter name's only with a capital ("Tims mom", "TIMS"; not
+        // "three times", "the lens").
+        if (Array.from(st).length === 3 && !hits.some((h) => h.cap)) continue;
         for (const e of ix.byJoined.get(st) || []) put(st, true, e.isMinor);
         for (const e of ix.byWord.get(st) || []) if (!ordinary(st) && Array.from(st).length >= 3) put(st, true, e.isMinor);
       }
