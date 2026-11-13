@@ -461,7 +461,12 @@ test("what every film shares is read against every card for names, not for ordin
   const sorted = (r) => ({ sure: [...r.sure].sort(), maybe: [...r.maybe].sort(), minor: [...r.minor].sort() });
   // A minor's everyday-word first name beside a tag's word is the name; a
   // surname that's an everyday word there, and an everyday word, are asked.
-  assert.deepEqual(sorted(read("#hopestrong and #ourjordanfam")), { sure: ["hope"], maybe: ["jordan"], minor: ["hope"] });
+  assert.deepEqual(sorted(read("#hopestrong and #ourjordanfam")), { sure: ["hope", "jordan"], maybe: [], minor: ["hope", "jordan"] });
+  // English words around a minor's name in a tag: the name; an English word holding it: the word, asked.
+  assert.deepEqual(read("#jordanfootball").minor, ["jordan"]);
+  assert.deepEqual(read("Jordanfootball season").minor, ["jordan"]);
+  assert.deepEqual(U.kitNames("#summertime", [{ name: "Summer Ray", is_minor: true }]), { sure: [], maybe: ["summer"], minor: [] });
+  for (const t of ["Times are hard", "three times"]) assert.deepEqual(U.kitNames(t, [{ name: "Tim Ross" }]).sure, [], t);
   for (const t of ["#golane", "#teamlane", "#lifelong"]) assert.equal(read(t).sure.length, 0, t);
   assert.deepEqual(U.kitNames("#lifelong", [{ name: "Grace Long", is_minor: true }]).maybe, ["long"]);
   // A plain plural or possessive; a whole name run into a tag; a minor's
@@ -480,7 +485,8 @@ test("what every film shares is read against every card for names, not for ordin
   // "#teamstate" (a Tate, or "team state") and "#dallascowboys" are asked.
   assert.deepEqual(read("#teamtate").minor, ["tate"]);
   assert.deepEqual(read("#teamstate"), { sure: [], maybe: ["tate"], minor: [] });
-  assert.deepEqual(U.kitNames("#dallascowboys", [{ name: "Dallas Cole", is_minor: true }]), { sure: [], maybe: ["dallas"], minor: [] });
+  // A name run into English words is the name ("#dallascowboys" for a minor Dallas: Dallas + cowboys).
+  assert.deepEqual(U.kitNames("#dallascowboys", [{ name: "Dallas Cole", is_minor: true }]).minor, ["dallas"]);
   // An ordinary word holds a name only beside a tag's word: "Jordanstrong", "teamjordan".
   assert.deepEqual(read("Jordanstrong all season").minor, ["jordan"]);
   assert.deepEqual(read("the teamjordan shirts").minor, ["jordan"]);

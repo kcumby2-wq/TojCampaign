@@ -511,6 +511,17 @@ function kitIndex(people) {
   KIT_INDEX.set(list, ix);
   return ix;
 }
+// How a run reads around a name's letters at i (minorRunIns' reading):
+// held, an English word holds them; words, English words (or nothing) on
+// each side.
+function runRead(low, i, len, camel) {
+  const rd = low.length <= RUN_READ ? wordReading(low) : null;
+  const j = i + len;
+  return {
+    held: !camel && !!rd && heldByWord(low, i, len, rd),
+    words: !!rd && rd.ends[i] && (rd.starts[j] || (low[j] === "s" && j + 1 < low.length && rd.starts[j + 1])),
+  };
+}
 function kitNames(textValue, people, { film = [] } = {}) {
   const raw = String(textValue || "").normalize("NFC");
   const words = wordsOf(raw);
@@ -554,7 +565,8 @@ function kitNames(textValue, people, { film = [] } = {}) {
       // A plain plural or possessive of a name that's no everyday word, or
       // one with a letter held ("Jordans mom called", "KAYLEES DRILL",
       // "the Kayleeee energy").
-      for (const st of plainStems(low)) {
+      // An English word is the word ("Times are hard", "the lens", "Jeans").
+      for (const st of englishWords().has(low) ? [] : plainStems(low)) {
         // A three-letter name's only with a capital ("Tims mom", "TIMS"; not
         // "three times", "the lens").
         if (Array.from(st).length === 3 && !hits.some((h) => h.cap)) continue;
@@ -590,36 +602,50 @@ function kitNames(textValue, people, { film = [] } = {}) {
           const head = t.low.slice(0, i);
           const tail = t.low.slice(i + w.length);
           const byTagWord = (!head && KIT_TAG_WORDS.has(tail)) || (!tail && KIT_TAG_WORDS.has(head));
+          const r = runRead(t.low, i, w.length, camel);
           for (const e of list) {
             const own = besideOwn(e, w, head, tail);
             if (e.isMinor) {
-              // A handle's initials after it: "kayleeb_hoops", "@jordanrb".
-              if (!ordinary(w)) put(w, camel || byTagWord || own || (t.tag && !head && tail.length <= 2), true);
+              // A handle's initials after it: "kayleeb_hoops", "@jordanrb";
+              // English words on each side: "#jordanfootball", "#letsgojamie"
+              // (utils/studio-films.js minorRunIns). An English word holding
+              // it is the word ("#islandlife", "#Philadelphia"): asked.
+              if (!ordinary(w)) put(w, !r.held && (camel || byTagWord || own || (t.tag && !head && tail.length <= 2) || r.words), true);
               else {
-                // "#hopestrong", "#teamhope": the name. A surname that's an
-                // everyday word is asked ("#gogreen", "#teamgreen" for a
-                // Green), and so is an everyday word ("#lifelong").
+                // "#hopestrong", "#teamhope": the name, beside a word that
+                // says so (RUN_CLEAR). A phrase's word ("#summertime"), a
+                // surname that's an everyday word ("#gogreen", "#teamgreen"
+                // for a Green) and an everyday word ("#lifelong") are asked.
                 // A surname: the card's last word (cards are written first
                 // name first; "Mary Grace Long" goes by Grace).
                 const surname = e.parts.length > 1 && e.parts.lastIndexOf(w) === e.parts.length - 1;
-                put(w, (byTagWord && !surname && !KIT_COMPOUNDS.has(t.low)) || own, true);
+                const clearBy = (!head && (RUN_CLEAR.has(tail) || (tail[0] === "s" && RUN_CLEAR.has(tail.slice(1))))) || (!tail && RUN_CLEAR.has(head));
+                put(w, !r.held && ((clearBy && !surname && !KIT_COMPOUNDS.has(t.low)) || own), true);
               }
-            } else if ((camel || byTagWord || !head || !tail) && !ordinary(w)) put(w, own, false);
+            } else if ((camel || byTagWord || !head || !tail) && !ordinary(w) && !r.held) put(w, own, false);
           }
         }
       }
     }
-    // In an ordinary word, only beside a tag's own word: "Jordanstrong",
-    // "teamjordan" (never "Milanote", "state", "label").
+    // In an ordinary word, only where it starts or ends it with a tag's own
+    // word or English words beside it ("Jordanstrong", "teamjordan",
+    // "Jordanfootball season"); an English word holding it is the word
+    // ("Milanote", "state", "label", "island", "transfer").
     for (const low of byLow.keys()) {
-      if (low.length < 6) continue;
-      for (const tw of KIT_TAG_WORDS) {
-        if (low.length < tw.length + 4) continue;
-        for (const w of [low.endsWith(tw) ? low.slice(0, low.length - tw.length) : null, low.startsWith(tw) ? low.slice(tw.length) : null]) {
-          if (!w) continue;
-          for (const e of ix.runJoined.get(w) || []) put(w, true, e.isMinor);
-          for (const e of ix.runWords.get(w) || []) {
-            if (e.isMinor) put(w, !ordinary(w), true);
+      if (low.length < 6 || englishWords().has(low)) continue;
+      for (let k = 4; k <= low.length - 2; k++) {
+        for (const [w, i] of [[low.slice(0, k), 0], [low.slice(low.length - k), low.length - k]]) {
+          const joined = ix.runJoined.get(w) || [];
+          const single = ix.runWords.get(w) || [];
+          if (!joined.length && !single.length) continue;
+          const rest = i ? low.slice(0, i) : low.slice(k);
+          const byTagWord = KIT_TAG_WORDS.has(rest);
+          const r = runRead(low, i, k, false);
+          if (r.held) continue;
+          for (const e of joined) put(w, byTagWord || r.words, e.isMinor);
+          for (const e of single) {
+            if (!byTagWord && !r.words) continue;
+            if (e.isMinor) put(w, !ordinary(w) || false, true);
             else if (!ordinary(w)) put(w, false);
           }
         }
