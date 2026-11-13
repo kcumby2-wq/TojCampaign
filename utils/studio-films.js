@@ -144,26 +144,78 @@ function capitalizedAtStart(raw, w) {
 }
 // One word of a minor's name (four letters or more) run into other letters
 // ("#jordanstrong", "#teamjordan", "kiddquote", "Kiddstrong season"):
-// { sure, maybe, edge, loose }. A name that's no everyday word is the name
-// for certain where it starts or ends the word and the rest is a word a tag
-// or a file name runs a name into ("strong", "team", "quote", "prayfor") or
-// four letters or more ("#jordanfootball", "#welovejordan", "#jordansarmy",
-// "Jordanfootball season"); beside another word of the name; anywhere it
-// starts or ends a word in a tag, a handle, a link or a file name
-// ("kayleeb_hoops", "#letsgojamie"); or where camelCase starts or ends it
-// ("JordanStrong"). An ordinary word that starts or ends with one
-// is asked: a short ending or start ("island" for an Isla, "William" for a
-// Liam, "theory" for a Theo, "Jordanian"), or a word on ORDINARY_RUNS
-// ("umbrella" for an Ella, "#islandlife"). An everyday word ("hope") is the
-// name only as a first name beside a word that says so ("#hopestrong",
-// "#teamhope", "#gohope"); beside a word that's as often a phrase
-// ("#summertime", "#faithlife", "#starpower"), as a surname ("#teamgreen" for
-// an Ava Green), or in an everyday word made that way ("#lifelong"), asked.
-// Inside a word, asked ("#ourjordanfam"). The word alone is read by the
-// other screens.
+// { sure, maybe, edge, loose }. An English word that holds the name's
+// letters is the word, asked about where questions can be asked: "island"
+// for an Isla, "transfer" for a Tran, "basically" for an Ally,
+// "Philadelphia" for a Phil, "#islandlife" ("island" holds it). Otherwise a
+// name that's no everyday word is the name for certain where the letters on
+// each side are English words or nothing ("#jordanfootball", "#letsgojamie",
+// "#jamiethegoat", "#bigjamieenergy", "Jordanfootball season", a possessive
+// s too: "#jordansarmy"), a word a tag or a file name runs a name into
+// ("kiddquote"), another word of the name, initials after it in a tag or a
+// handle ("kayleeb_hoops", "#jordanxo"), or where camelCase starts or ends
+// it ("JordanStrong"); anything else is asked ("#jordanbae"). An everyday
+// word ("hope") is the name only as a first name beside a word that says so
+// ("#hopestrong", "#teamhope", "#gohope"); beside a word that's as often a
+// phrase ("#summertime", "#faithlife"), as a surname ("#teamgreen" for an
+// Ava Green), or in an everyday word made that way ("#lifelong"), asked.
+// The word alone is read by the other screens.
 // edge: every word found where a word of the run starts or ends, everyday
-// or not; loose: those that are no everyday word (a file name, with no one
-// to ask, reads "jordanxyz_v2" as Jordan's).
+// or not, unless an English word holds it; loose: those that are no
+// everyday word (a file name, with no one to ask, reads "jordanxyz_v2" as
+// Jordan's).
+//
+// The English words: SCOWL's, as hunspell's en_US list has them, every
+// form, lower case (utils/data/words-en.txt.gz, utils/data/README.md).
+let ENGLISH = null;
+function englishWords() {
+  if (ENGLISH) return ENGLISH;
+  try {
+    const zlib = require("zlib");
+    const fs = require("fs");
+    const raw = zlib.gunzipSync(fs.readFileSync(require("path").join(__dirname, "data", "words-en.txt.gz"))).toString("utf8");
+    ENGLISH = new Set(raw.split("\n").filter(Boolean));
+  } catch {
+    ENGLISH = new Set();
+  }
+  for (const w of OWN_WORDS) ENGLISH.add(w);
+  return ENGLISH;
+}
+const WORD_MAX = 24;
+// Words the app and its tools use that the list doesn't have.
+const OWN_WORDS = ["milanote", "sportsclippers", "subjectmedias", "groundfloorsports", "tojcampaign", "pylon", "hudl", "maxpreps", "davinci", "capcut"];
+// A word longer than the name holds its letters there, in a reading of the
+// whole run as words ("island" in "islandlife" for an Isla, "christmas" in
+// "merrychristmas" for a Chris; not "hopes" in "hopestrong").
+function heldByWord(tok, i, len) {
+  const W = englishWords();
+  for (let a = Math.max(0, i - WORD_MAX); a <= i; a++) {
+    for (let b = i + len; b <= Math.min(tok.length, a + WORD_MAX); b++) {
+      if (b - a > len && W.has(tok.slice(a, b)) && allWords(tok.slice(0, a)) && allWords(tok.slice(b))) return true;
+    }
+  }
+  return false;
+}
+// Letters that are English words end to end ("letsgo", "thegoat").
+const WORDS_CACHE = new Map();
+function allWords(str) {
+  if (!str) return true;
+  if (WORDS_CACHE.has(str)) return WORDS_CACHE.get(str);
+  const W = englishWords();
+  const ok = [true];
+  for (let b = 1; b <= str.length; b++) {
+    ok[b] = false;
+    for (let a = Math.max(0, b - WORD_MAX); a < b; a++) {
+      if (ok[a] && W.has(str.slice(a, b))) {
+        ok[b] = true;
+        break;
+      }
+    }
+  }
+  if (WORDS_CACHE.size > 5000) WORDS_CACHE.clear();
+  WORDS_CACHE.set(str, ok[str.length]);
+  return ok[str.length];
+}
 let RUN_BESIDE = null;
 const runBeside = () => RUN_BESIDE || (RUN_BESIDE = new Set([...FILE_WORDS, ...TAG_TAILS, ...("go pray prayfor thanks thankyou happy happybirthday birthday bday " +
   "congrats congratulations proudof proudofyou coach dear hey shoutout welcome free justice lil big our my iloveyou loveyou missyou ilove rip " +
@@ -171,10 +223,6 @@ const runBeside = () => RUN_BESIDE || (RUN_BESIDE = new Set([...FILE_WORDS, ...T
 // Beside an everyday first name, the words that say it's the name.
 const RUN_CLEAR = new Set(("strong nation fam gang squad crew army fans stan team go hey pray prayfor thanks thankyou happybirthday birthday bday " +
   "congrats congratulations proudof proudofyou dear welove iloveyou loveyou missyou shoutout").split(" "));
-// Ordinary words that start or end with a name, with four letters or more
-// beside it: the word, where it holds the name's letters.
-const ORDINARY_RUNS = ("island islands islander islanders umbrella umbrellas cinderella mozzarella salmonella coleslaw milanote nicotine " +
-  "tarantula tarantulas williams williamsburg generic america american americans theory theories jordanian jordanians").split(" ");
 const RUN_COMPOUNDS = new Set(("lifelong daylong weeklong nightlong yearlong seasonlong powerhouse clubhouse showcase lovebird lovebirds " +
   "freewill willpower truelove bigdeal").split(" "));
 // A run of text with no space that's a tag, a handle, a link or a file name:
@@ -220,19 +268,21 @@ function minorRunIns(textValue, people) {
           const clear = (!head && RUN_CLEAR.has(tail)) || (!tail && RUN_CLEAR.has(head));
           const own = parts.some((x) => x !== w && Array.from(x).length >= 2 && (head.endsWith(x) || tail.startsWith(x)));
           const atEdge = !head || !tail;
-          // The letters an ordinary word's ("umbrella", "#islandlife",
-          // "#island", "island_trip.mov"): asked, a file name's too.
-          const ordinaryHere = !camel && ORDINARY_RUNS.some((o) => { const j = o.indexOf(w); return j >= 0 && r.low.startsWith(o, i - j); });
-          // The rest a word in its own right ("football", "welove").
-          const rest = atEdge && Array.from(head || tail).length >= 4;
-          if ((atEdge || camel) && !ordinaryHere) {
+          // An English word holds the letters ("island", "transfer",
+          // "#islandlife"): the word, asked, a file name's too.
+          const held = !camel && heldByWord(r.low, i, w.length);
+          // English words (or nothing) on each side: "football", "letsgo",
+          // a possessive s ("sarmy").
+          const side = (x) => allWords(x) || (x.startsWith("s") && x.length > 1 && allWords(x.slice(1)));
+          if ((atEdge || camel) && !held) {
             edge.add(w);
             if (!everyday(w)) loose.add(w);
           }
           if (!everyday(w)) {
-            if (!ordinaryHere && (camel || byWord || own || rest || (r.tag && atEdge))) sure.add(w);
+            const initials = r.tag && atEdge && !head && Array.from(tail).length <= 2;
+            if (!held && (camel || byWord || own || initials || (side(head) && side(tail)))) sure.add(w);
             else maybe.add(w);
-          } else if ((clear && !surname && !RUN_COMPOUNDS.has(r.low) && !FILE_COMPOUNDS.has(r.low)) || own) sure.add(w);
+          } else if (!held && ((clear && !surname && !RUN_COMPOUNDS.has(r.low) && !FILE_COMPOUNDS.has(r.low)) || own)) sure.add(w);
           else maybe.add(w);
         }
       }

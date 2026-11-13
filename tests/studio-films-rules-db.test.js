@@ -261,6 +261,12 @@ test("a title or a file name is read harder than a sentence: run-together, camel
   assert.deepEqual(U.minorRunIns("#island", isla), { sure: [], maybe: ["isla"], edge: [], loose: [] });
   assert.deepEqual(U.idNames("island_trip_2026.mov", isla), []);
   assert.deepEqual(U.idNames("isla_trip_2026.mov", isla), ["isla"]);
+  // An English word that holds a name's letters is the word; a name run into
+  // English words is the name.
+  const pool = [{ name: "Kim Tran", is_minor: true }, { name: "Chris Young", is_minor: true }, { name: "Phil Moss", is_minor: true }, { name: "Ally Moss", is_minor: true }, { name: "Jamie Ortiz", is_minor: true }];
+  for (const t of ["Transfer portal", "Merry Christmas", "#merrychristmas", "#Philadelphia", "Basically unstoppable"]) assert.deepEqual(U.minorRunIns(t, pool).sure, [], t);
+  for (const t of ["#letsgojamie", "#bigjamieenergy", "#jamiethegoat", "#weloveyoujamie"]) assert.deepEqual(U.minorRunIns(t, pool).sure, ["jamie"], t);
+  assert.deepEqual(U.idNames("transfer_portal_v1", pool), []);
   // "for" alone isn't a word a name runs into ("forward" for a Ward).
   assert.deepEqual(U.idNames("forward_pass_drill", [{ name: "Ward Bell", is_minor: true }]), []);
   // A file name has no one to ask: an everyday word run in at a word's start or end counts there.
