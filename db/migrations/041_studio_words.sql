@@ -289,7 +289,9 @@ language sql stable set search_path = '' as $$
          'snow', 'sonny', 'south', 'spring', 'star', 'steel', 'sterling', 'stone', 'storm', 'stormy', 'strong', 'sue',
          'summer', 'sunday', 'sunny', 'sweet', 'swift', 'tad', 'tank', 'true', 'trust', 'tucker', 'valor', 'violet',
          'wade', 'walker', 'ward', 'warren', 'waters', 'way', 'wells', 'west', 'white', 'will', 'willow', 'winter',
-         'wise', 'wolf', 'wood', 'woods', 'worth', 'wren', 'young']))
+         'wise', 'wolf', 'wood', 'woods', 'worth', 'wren', 'young',
+         'amber', 'angel', 'carol', 'christian', 'crystal', 'daisy', 'destiny', 'genesis', 'glen', 'harmony', 'iris', 'jasmine',
+         'journey', 'lyric', 'melody', 'olive', 'robin', 'trinity']))
   ), beside as (
     -- utils/studio-films.js runBeside: the file words, the tags' last words,
     -- and the words a tag starts a name with.
