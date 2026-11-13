@@ -254,9 +254,9 @@ end $$;
 -- into another word, where it's the name for certain without an English
 -- word list: where camelCase starts and ends it ("#PrayForJamie",
 -- "JamieStrong", "#PrayForKai", "KaiStrong": three letters or more), or,
--- four letters or more, right beside a word a tag or a file name runs a
--- name into ("#teamjamie", "jamiestrong", "#prayforjamie", "jamiequote",
--- "#letsgojamie"). The app reads more, with English words
+-- four letters or more, with only words a tag or a file name runs a name
+-- into on either side ("#teamjamie", "jamiestrong", "#prayforjamie",
+-- "jamiequote", "#letsgojamie", "#bigjamieenergy"). The app reads more, with English words
 -- (utils/studio-films.js minorRunIns: "#jordanfootball", "#bigjamieenergy"),
 -- and it holds a card back, or takes a corrected minor's lines with them,
 -- for what it reads (routes/studio-films.js keptRunIns); an English word
@@ -315,7 +315,8 @@ language sql stable set search_path = '' as $$
     select 1 from w, hay
      where hay.split like '% ' || w.word || ' %'
         or char_length(w.word) >= 4
-           and exists (select 1 from beside where hay.plain like '% ' || w.word || beside.b || ' %' or hay.plain like '% ' || beside.b || w.word || ' %'))
+           and hay.plain ~ (' (?:' || (select string_agg(b, '|' order by char_length(b) desc) from beside) || ')*' || w.word
+                            || '(?:' || (select string_agg(b, '|' order by char_length(b) desc) from beside) || ')* '))
 $$;
 
 create or replace function public.studio_transcripts_gate() returns trigger
