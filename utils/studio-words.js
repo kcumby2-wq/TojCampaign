@@ -420,11 +420,20 @@ function maskNames(text, people) {
   // starts and ends it ("#PrayForKai", "KaiStrong"), or at the start or the
   // end of a word in a tag ("#teamkai"), never in an ordinary word ("same"
   // for a Sam).
-  const inTag = (str, off) => {
-    let a = off;
-    while (a > 0 && !/\s/u.test(str[a - 1])) a -= 1;
-    return /[#@]/.test(str.slice(a, off));
+  // The chunk (a run with no space) a token sits in, found once per chunk:
+  // tokens come in order, so the last one found is reused.
+  let span = { str: null, a: 0, b: 0 };
+  const spanAt = (str, off) => {
+    if (span.str !== str || off < span.a || off >= span.b) {
+      let a = off;
+      let b = off;
+      while (a > 0 && !/\s/u.test(str[a - 1])) a -= 1;
+      while (b < str.length && !/\s/u.test(str[b])) b += 1;
+      span = { str, a, b };
+    }
+    return span;
   };
+  const inTag = (str, off) => /[#@]/.test(str.slice(spanAt(str, off).a, off));
   // The run-in reading, once per chunk and name (a long run of letters with
   // the name many times in it is read once, not once a time); a chunk past
   // 200 characters isn't read: a name that's no everyday word in it is
@@ -436,12 +445,9 @@ function maskNames(text, people) {
     if (!reads.has(key)) reads.set(key, new Set(U.minorRunIns(chunk, [{ name: full, is_minor: true }]).sure));
     return reads.get(key).has(w);
   };
-  const chunkAt = (str, off, len) => {
-    let a = off;
-    let b = off + len;
-    while (a > 0 && !/\s/u.test(str[a - 1])) a -= 1;
-    while (b < str.length && !/\s/u.test(str[b])) b += 1;
-    return str.slice(a, b);
+  const chunkAt = (str, off) => {
+    const sp = spanAt(str, off);
+    return str.slice(sp.a, sp.b);
   };
   for (const x of subjects.filter((v) => v.minor)) {
     for (const w of x.full.toLowerCase().split(/[^\p{L}\p{M}]+/u).filter((v) => Array.from(v).length >= 3)) {
@@ -461,13 +467,18 @@ function maskNames(text, people) {
         }
         let res = "";
         let i = 0;
+        let chunk = null;
         for (let at = low.indexOf(w); at >= 0; at = low.indexOf(w, at + w.length)) {
           const j = at + w.length;
+          // In a tag, coded unless an English word holds the letters
+          // ("#islandlife"); in an ordinary word, where it's the name.
           const here = short
             ? (camel && bounds.has(at) && bounds.has(j)) || (tag && (at === 0 || j === low.length))
             : U.EVERYDAY_NAMES.has(w)
               ? /\p{Lu}/u.test(tok[at]) || tag
-              : tag || runInSure(chunkAt(str, off, tok.length), x.full, w);
+              : tag
+                ? !U.heldInRun(low, at, w.length)
+                : runInSure(chunk === null ? (chunk = chunkAt(str, off)) : chunk, x.full, w);
           if (here) {
             res += tok.slice(i, at) + ` ${mark(x.by)} `;
             i = j;
