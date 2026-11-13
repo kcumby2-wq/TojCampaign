@@ -1,7 +1,8 @@
-// Brief Writer eval — "Would the kit agent do what Kyron meant, from this
-// brief alone?" The judge reads the idea and the references as Kyron gave
-// them, and the brief that was submitted (agents/studio-brief/tools.js
-// evalView). 5 questions × 0-2; below 7 = FAIL → retry with guidance.
+// Brief Writer eval — "Would the kit agent do what Kyron meant, from any of
+// these briefs alone, and are they three real choices?" The judge reads the
+// idea and the references as Kyron gave them, and the three directions that
+// were submitted (agents/studio-brief/tools.js evalView). 6 questions × 0-2;
+// below 8 = FAIL → retry with guidance.
 
 const BANNED =
   "\\b(unlock\\w*|unleash\\w*|transform\\w*|elite\\w*|generational|next[- ]level|phenoms?|future\\s+stars?|game[- ]chang\\w*|supercharg\\w*|premier(?!e)\\w*|top[- ]notch|state[- ]of[- ]the[- ]art|revolutioni[sz]\\w*)";
@@ -10,11 +11,11 @@ module.exports = {
   id: "brief-principles",
   namespace: "studio-brief",
   applies_to: "*",
-  scoring: { threshold: 7, max_retries: 3 },
+  scoring: { threshold: 8, max_retries: 3 },
   questions: [
     {
       id: "faithful_to_idea",
-      prompt: "Does the brief ask for what Kyron's idea asks for: no less, and nothing he didn't ask for? Where the idea was unclear, did the agent choose sensibly and ask, rather than guess silently or widen the scope?",
+      prompt: "Does each direction ask for what Kyron's idea asks for, with the close one the smallest change that does it? Where the idea was unclear, did the agent choose sensibly and ask, rather than guess silently?",
       pass_signal: "Goal matches the idea; scope is the smallest that does it; unclear points become questions",
       fail_signal: "Brief drifts from the idea, adds work he didn't ask for, or fills gaps without saying so",
     },
@@ -26,7 +27,7 @@ module.exports = {
     },
     {
       id: "actionable",
-      prompt: "Could the kit agent act on the brief without guessing? Mode and kit named; changes as numbered steps naming the exact column and card; what to leave alone; how Kyron will know it worked.",
+      prompt: "Could the kit agent act on each direction's brief alone, without guessing? Mode and kit named; changes as numbered steps naming the exact column and card; what to leave alone; how Kyron will know it worked; taste library links written into the brief when a note is used.",
       pass_signal: "Goal, kit, numbered Do steps with real card names, Leave alone, Done when",
       fail_signal: "Vague asks ('make it better'), no card names, no done criteria",
     },
@@ -38,9 +39,15 @@ module.exports = {
     },
     {
       id: "plain_and_tight",
-      prompt: "Is the brief plain and tight: short lines, numbers over adjectives, under about 400 words, with no filler?",
+      prompt: "Is each brief plain and tight: short lines, numbers over adjectives, under about 400 words, with no filler?",
       pass_signal: "Scannable, concrete, short",
       fail_signal: "Long, padded or full of adjectives",
+    },
+    {
+      id: "three_real_choices",
+      prompt: "Are the three directions genuinely different routes (the smallest change, a bolder one, another way in), each worth picking, with a recommendation and a reason that fits Kyron's idea?",
+      pass_signal: "Three distinct routes Kyron could choose between; a clear pick and why",
+      fail_signal: "Three versions of the same brief, a padded direction nobody would pick, or no reason for the pick",
     },
   ],
   auto_fails: [

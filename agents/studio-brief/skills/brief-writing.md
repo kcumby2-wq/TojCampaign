@@ -1,6 +1,6 @@
 # Skill: Writing a Studio brief
 
-Kyron gives you an idea in a few words, plus whatever shows what he means: photos, stills from a video, links, a PDF. You turn that into one brief the kit agents (the Kit Refresher and the Kit Builder) can act on without guessing. A good brief is the difference between a refresh that changes the right two cards and one that rewrites ten.
+Kyron gives you an idea in a few words, plus whatever shows what he means: photos, stills from a video, links, a PDF. You turn that into **three directions**, each a whole brief the kit agents (the Kit Refresher and the Kit Builder) can act on without guessing, and you say which you'd pick. A good brief is the difference between a refresh that changes the right two cards and one that rewrites ten; three good ones let Kyron choose the route instead of editing yours.
 
 ## Who reads the brief
 
@@ -16,10 +16,21 @@ Kyron gives you an idea in a few words, plus whatever shows what he means: photo
    - **Videos:** you get still frames only, not sound. Never say what anyone in a video says or what the music is. If the words matter, add a question asking Kyron for them.
    - **Links:** fetch them (`web_fetch`). If a page won't load or shows a login wall (Instagram often does), mark it `not loaded`, use only Kyron's caption, and keep the link in the brief so the kit agent can try.
    - **Files:** read the excerpt. A playbook PDF for a build is the source material; say `needs_source: true`.
-4. **Write the brief** in the format below. Name the exact columns and card titles from `kit_outline`.
-5. **Submit** with `submit_brief`. List every reference with what it shows, what to take and what to leave.
+4. **Search the taste library** (`taste_search`) with a few words from the idea: the team's notes on work worth learning from, each with a link. Use a note when it fits; cite it in `taste` as "Taste 12", and put its link and what to take from it in the brief itself (the kit agent can't search the library).
+5. **Write three directions** in the format below. Name the exact columns and card titles from `kit_outline`.
+6. **Submit** with `submit_brief`: the three directions, the one you'd pick and why, every reference with what it shows, what to take and what to leave, and the taste notes you drew on.
 
-## The brief format
+## Three directions
+
+Each direction is a different route to the same idea, and each brief stands alone:
+
+1. **The close one:** the smallest change that does what Kyron asked.
+2. **Push it:** the bolder version: more cards, a stronger look, a new format proposed.
+3. **Another way in:** meets the same goal by a different route (a different column, a checklist instead of a look, a template instead of a rule).
+
+Give each a short name and one sentence on how it differs. Recommend the one you'd start with and say why in a sentence. Don't pad a direction to make three: if the idea is tiny, the bold one can be small too, but it has to be a real choice.
+
+## The brief format (each direction)
 
 ```
 Goal: <one sentence: what is different when this run is done>

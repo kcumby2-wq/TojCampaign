@@ -137,6 +137,34 @@ function createOrchestrator({ namespace, baseDir, tools, defaultModel = DEFAULT_
       ? `Client scope: ${client_id}\n\nTask:\n${task}`
       : task;
 
+    // A tool can stop the run (scope.control.stop(why)): it aborts this
+    // attempt's signal (control.abort is this attempt's, a retry's too), so
+    // the request the runner would send next (the tool's result, and
+    // everything read before it) never goes.
+    const abort = new AbortController();
+    const control = scope && scope.control;
+    if (control) {
+      control.abort = () => abort.abort();
+      if (!control.stopsAbort) {
+        const own = typeof control.stop === "function" ? control.stop : null;
+        control.stop = (why) => {
+          control.stopped = control.stopped || why;
+          if (own) own(why);
+          if (typeof control.abort === "function") control.abort();
+        };
+        control.stopsAbort = true;
+      }
+      if (control.stopped) abort.abort();
+    }
+    const stoppedResult = (usage) => ({
+      role,
+      label: cfg.label,
+      output: `Stopped: ${control.stopped}.`,
+      trace: [],
+      stop_reason: "stopped",
+      usage: usage || null,
+    });
+    if (control && control.stopped) return stoppedResult();
     const runner = client.beta.messages.toolRunner({
       model: cfg.model || defaultModel,
       max_tokens: cfg.max_tokens || MAX_TOKENS,
@@ -150,11 +178,15 @@ function createOrchestrator({ namespace, baseDir, tools, defaultModel = DEFAULT_
       ],
       thinking: { type: "adaptive" },
       max_iterations: cfg.max_iterations || MAX_ITERATIONS,
-    });
+    }, { signal: abort.signal });
 
     const trace = [];
     let final = null;
     let pauses = 0;
+    // A tool can stop the run (scope.control.stopped: a reason): the loop
+    // ends at the next message, and nothing more is asked of the model.
+    const stoppedNow = () => !!(scope && scope.control && scope.control.stopped);
+    try {
     for await (const message of runner) {
       for (const block of message.content) {
         if (block.type === "text") trace.push({ type: "text", text: block.text });
@@ -171,7 +203,17 @@ function createOrchestrator({ namespace, baseDir, tools, defaultModel = DEFAULT_
         continue;
       }
       if (message.stop_reason === "end_turn") final = message;
+      if (stoppedNow()) {
+        final = { content: [{ type: "text", text: `Stopped: ${scope.control.stopped}.` }], stop_reason: "stopped", usage: message.usage };
+        break;
+      }
     }
+    } catch (e) {
+      // The request after a stop was aborted before it went: stopped.
+      if (!stoppedNow()) throw e;
+      return { ...stoppedResult(), trace };
+    }
+    if (stoppedNow() && (!final || final.stop_reason !== "stopped")) return { ...stoppedResult(final && final.usage), trace };
     if (!final) final = await runner.done();
 
     const finalText = final.content
@@ -201,9 +243,25 @@ function createOrchestrator({ namespace, baseDir, tools, defaultModel = DEFAULT_
     let lastResult = null;
     let lastEval = null;
 
+    const stoppedRun = () => !!(scope && scope.control && scope.control.stopped);
+    // Asked again before anything more goes to a model (the judge, a retry):
+    // whether the run may still go on (scope.recheckRun: null, or why not).
+    const stillGoing = async () => {
+      if (!stoppedRun() && scope && typeof scope.recheckRun === "function") {
+        const why = await scope.recheckRun();
+        if (why && scope.control) scope.control.stopped = scope.control.stopped || why;
+      }
+      return !stoppedRun();
+    };
+    const stoppedOut = () => ({ namespace, ...(lastResult || { role, label: cfg.label, output: `Stopped: ${scope.control.stopped}.`, trace: [], stop_reason: "stopped", usage: null }), skills_loaded: cfg.skills || [], eval_status: "stopped", retry_count: Math.max(0, attempt - 1), eval_history: evalHistory });
     while (attempt < MAX_EVAL_RETRIES) {
       attempt++;
+      if (attempt > 1 && !(await stillGoing())) return stoppedOut();
       lastResult = await _invokeAgentOnce({ role, task: currentTask, client_id, scope, attachments });
+      // Stopped by a tool: no judge reads it, and no retry.
+      if (stoppedRun()) {
+        return { namespace, ...lastResult, skills_loaded: cfg.skills || [], eval_status: "stopped", retry_count: attempt - 1, eval_history: evalHistory };
+      }
 
       // If no eval spec, ship immediately
       if (!EVAL_SPEC) {
@@ -225,6 +283,8 @@ function createOrchestrator({ namespace, baseDir, tools, defaultModel = DEFAULT_
         ? { ...EVAL_SPEC, questions: [...EVAL_SPEC.questions, ...cfg.eval_additions] }
         : EVAL_SPEC;
 
+      // The judge reads what the run handed back: only while it may go on.
+      if (!(await stillGoing())) return stoppedOut();
       const judged = evalView ? evalView(lastResult, { role, client_id, scope }) : lastResult;
       lastEval = await evaluate(roleSpec, judged, {
         client_id_present: !!client_id,
