@@ -15,11 +15,14 @@
  * brackets: "[COACH]"); "" for a line whose voice the file doesn't say (no
  * label before any label, in a file that has labels); TWO for what's
  * nobody's, never picked, counted in mixed: a part of a subtitle with two
- * voices in it ("- " or "-" lines, ">>" lines) that has no label of its own,
- * words before a colon that don't look like a label, a line of a ">>" file
- * with no label, and, in a file with labels, what follows any of these until
- * the next label; null only in a file with no labels at all. A subtitle with
- * two voices or two labels in it is split into one cue for each.
+ * voices in it ("- " or "-" lines, ">>" lines, ">>" in the middle of a line)
+ * that has no label of its own, words before a colon that don't look like a
+ * label, words after a bracket that isn't a note on how the speaker says it
+ * ("[man]", "[crowd chanting]", "[APPLAUSE]", or a name in brackets in a file
+ * with no labels), a line of a ">>" file with no label, and, in a file with
+ * labels, what follows any of these until the next label; null only in a
+ * file with no labels at all. A subtitle with two voices or two labels in it
+ * is split into one cue for each.
  *   voices: how many voices can be picked (labelled files: a pause is a gap
  *   in only() unless there are two or more).
  *   find(cues, from, to, quote)   → the quote's exact words in cues from..to, and when they're said
@@ -78,6 +81,7 @@
       .replace(/<\d{1,2}:\d{2}[^>]*>/g, "")
       .replace(MISSING_RE, " " + MISSING + " ")
       .replace(/\[[^\]]{0,60}\]/g, " ")
+      .replace(/\(([^()]{1,40})\)/g, function (m, x) { return MANNER.test(x.trim()) ? " " : m; })
       .replace(/[♪♫]+/g, " ")
       .replace(/[\u0000-\u0008\u000b-\u001f\u007f]/g, " ")
       .replace(/\s+/g, " ")
@@ -88,7 +92,9 @@
   // any words before a colon may be one; on a later line, only what looks
   // like a label ("INTERVIEWER: Why that year?"): a wrapped line ("for all
   // of us: show up") is words.
-  var LABEL = /^\s*(\p{L}[\p{L}\p{M}\p{N} .'’-]{0,38}?)\s*:\s+(\S.*)$/u;
+  // A note after the name ("INTERVIEWER (O.S.):", "COACH (V.O.):", "PAT
+  // (CONT'D):"), as documentary transcripts write it, is the label's too.
+  var LABEL = /^\s*(\p{L}[\p{L}\p{M}\p{N} .'’-]{0,38}?)\s*(?:\(\s*(?:[oO]\.?\s?[sS]\.?|[vV]\.?\s?[oO]\.?|[cC][oO][nN][tT]['’]?[dD]\.?|[oO][fF][fF][- ]?(?:[sS][cC][rR][eE][eE][nN]|[cC][aA][mM][eE][rR][aA])|[oO][nN][- ]?(?:[sS][cC][rR][eE][eE][nN]|[cC][aA][mM][eE][rR][aA])|[iI][nN][tT][oO] [pP][hH][oO][nN][eE])\s*\))?\s*:\s+(\S.*)$/u;
   // What a label looks like: all capitals, "Speaker 2", or one to three words
   // each with a capital ("Coach", "Pat R.", "Mrs Lopez"). Anything else
   // before a colon is a label only in a file that has labels, and then a
@@ -104,19 +110,50 @@
   var TWO = "\u0000two";
   // A voice tag, anywhere in a line: <v Coach>, <v.loud Coach>.
   var VOICE_ANY = /<v(?:\.[^\s>]+)*\s+([^>]{1,40})>/gi;
-  // A line of a subtitle with two voices in it: "- Were you nervous?", or
-  // "-Were you nervous?" (no space, as professional deliveries write it).
-  // Not a minus before a number ("-5 degrees"), and not an en or em dash
-  // carrying a line on ("—and then my dad showed up").
-  var DASH = /^\s*(?:[-‐‑]\s*(?!\d)|[–—‒―](?:\s+|(?![\p{Ll}\d])))([^\s\-–—].*)$/u;
+  // A line of a subtitle with two voices in it: "- Were you nervous?",
+  // "- 500 a day.", or "-Were you nervous?" (no space, as professional
+  // deliveries write it). Not a minus glued to a number ("-5 degrees"), and
+  // not an en or em dash carrying a line on ("—and then my dad showed up").
+  var DASH = /^\s*(?:[-‐‑](?:\s+|(?!\d))|[–—‒―](?:\s+|(?![\p{Ll}\d])))([^\s\-–—].*)$/u;
   var SPEAKER_N = /^\s*(speaker\s*\d{1,2})\s*$/i;
-  // ">>" (">>>" too), a broadcast caption's mark for a new speaker.
-  var CHEVRON = /^\s*(?:>{2,}|(?:&gt;){2,})\s*(.*)$/;
+  // ">>" (">>>", "> >" and "»" too), a broadcast caption's mark for a new
+  // speaker, at a line's start; ">>" also in the middle of one, where a
+  // caption puts two turns on one line ("Every Sunday. >> Why Sunday?").
+  var CHEVRON = /^\s*(?:>{2,}|(?:&gt;){2,}|>\s+>|»)\s*(.*)$/;
+  var MID_CHEVRON = /\s*(?:>{2,}|(?:&gt;){2,}|>\s+>)/g;
   // A speaker named in brackets at a line's start, as SDH subtitles write it
   // ("[COACH] I ran it", "(INTERVIEWER) Why?"). A sound note in capitals
   // isn't one ("[APPLAUSE]", "(LAUGHS)", "[MUSIC PLAYING]", "[DOOR CLOSES]").
-  var BRACKET = /^\s*[\[(]\s*(\p{L}[^\[\]()]{0,39}?)\s*[\])]\s*:?\s*(.*)$/u;
-  var SOUND_FIRST = /^(?:music|musical|song|applause|applauding|laugh\w*|chuckl\w*|giggl\w*|sigh\w*|cheer\w*|clap\w*|whistl\w*|silence|silent|quiet|pause|noise|static|beep\w*|buzz\w*|horn\w*|bell\w*|ring\w*|footstep\w*|breath\w*|exhal\w*|inhal\w*|pant\w*|gasp\w*|cough\w*|snif\w*|cr(?:y|ies|ying)|sob\w*|scream\w*|shout\w*|yell\w*|groan\w*|grunt\w*|moan\w*|wind|rain|thunder\w*|engine\w*|door\w*|knock\w*|bounc\w*|indistinct|chatter\w*|crosstalk|inaudible|unintelligible|overlapping|upbeat|dramatic|soft|loud|distant|muffled|siren\w*|whoosh\w*|thud\w*|bang\w*|splash\w*|crash\w*|click\w*|typing|murmur\w*|whisper\w*|sing\w*|hum\w*|chant\w*|speak\w*|background|sound\w*|sfx|tv|radio|phone|crowd|audience|ball|referee|ref|game|play|plays|beat|beats|bass|drums?|guitar|piano)$/i;
+  // Any other bracket at a line's start ("[man] Why that year?", "[crowd
+  // chanting] Let's go!", "[INTERVIEWER, OFF-SCREEN]") or in the middle of
+  // one ("Every Sunday. [INTERVIEWER] Why Sunday?") says another voice may
+  // speak: what follows it is nobody's, unless it's a note on how the speaker
+  // says it ("[laughs]", "(sighs)") or words the transcript says are missing.
+  var BRACKET = /^\s*[\[(]\s*([^\[\]()]{1,60}?)\s*[\])]\s*:?\s*(.*)$/u;
+  var MID_BRACKET = /\[[^\]]{1,60}\]/g;
+  var MANNER = /^(?:laugh\w*|chuckl\w*|giggl\w*|sigh\w*|scoff\w*|snort\w*|smirk\w*|smil\w*|grin\w*|nod\w*|shrug\w*|winc\w*|hum\w*|mutter\w*|mumbl\w*|stammer\w*|stutter\w*|paus\w*|hesitat\w*|exhal\w*|inhal\w*|breath\w*|snif\w*|clear\w*\s+(?:\w+\s+)?throat|cough\w*|gasp\w*|groan\w*|grunt\w*|cr(?:y|ies|ying)|sob\w*|tear\w*|whisper\w*|yawn\w*|emotional|quietly|softly|beat|long pause|silence|voice (?:breaks|breaking|cracks|cracking))$/i;
+  function manner(s) {
+    var t = String(s || "").trim();
+    MISSING_RE.lastIndex = 0;
+    return MANNER.test(t) || MISSING_RE.test("[" + t + "]");
+  }
+  // A line cut where another voice may start in the middle of it: at ">>",
+  // and at a bracket that isn't a note on how the speaker says it.
+  function cutLine(raw) {
+    var cuts = [];
+    var m;
+    MID_CHEVRON.lastIndex = 0;
+    while ((m = MID_CHEVRON.exec(raw))) if (/\S/.test(raw.slice(0, m.index))) cuts.push(m.index);
+    MID_BRACKET.lastIndex = 0;
+    while ((m = MID_BRACKET.exec(raw))) if (/\S/.test(raw.slice(0, m.index)) && !manner(m[0].slice(1, -1))) cuts.push(m.index);
+    cuts.sort(function (a, b) { return a - b; });
+    var out = [];
+    var at = 0;
+    cuts.forEach(function (c) { if (c > at) { out.push(raw.slice(at, c)); at = c; } });
+    out.push(raw.slice(at));
+    return out.filter(function (x) { return x.trim(); });
+  }
+  var SOUND_FIRST = /^(?:music|musical|song|applause|applauding|laugh\w*|chuckl\w*|giggl\w*|sigh\w*|cheer\w*|clap\w*|whistl\w*|silence|silent|quiet|pause|noise|static|beep\w*|buzz\w*|horn\w*|bell\w*|ring\w*|footstep\w*|breath\w*|exhal\w*|inhal\w*|pant\w*|gasp\w*|cough\w*|snif\w*|cr(?:y|ies|ying)|sob\w*|scream\w*|shout\w*|yell\w*|groan\w*|grunt\w*|moan\w*|wind|rain|thunder\w*|engine\w*|door\w*|knock\w*|bounc\w*|indistinct|chatter\w*|crosstalk|inaudible|unintelligible|overlapping|upbeat|dramatic|soft|loud|distant|muffled|siren\w*|whoosh\w*|thud\w*|bang\w*|splash\w*|crash\w*|click\w*|typing|murmur\w*|whisper\w*|sing\w*|hum\w*|chant\w*|speak\w*|background|sound\w*|sfx|ball|game|play|plays|beat|beats|bass|drums?|guitar|piano)$/i;
   var SOUND_LAST = /(?:ing|blows|rings|closes|opens|slams|buzzes|beeps|honks|roars|cheers|claps|laughs|sighs|barks|chirps|ticks|plays|starts|stops|continues|fades|rises|swells|builds|ends|drops|bounces|squeaks)$/i;
   function soundNote(s) {
     var w = String(s || "").trim().toLowerCase().split(/\s+/);
@@ -132,10 +169,15 @@
   // on from before). A subtitle with a dashed or a ">>" line in it has two
   // voices: its parts with no tag or label of their own are nobody's (kind
   // "dash"); a ">>" line with no label is a new voice nobody names ("chev").
-  function partsOf(lines) {
+  function partsOf(given) {
     var out = [];
     var cur = null;
     function begin(kind, who) { cur = { kind: kind, who: who, text: [] }; out.push(cur); }
+    // Each piece of a line cut where another voice may start is a line of its
+    // own; the first piece of the subtitle's first line starts it.
+    var lines = [];
+    var first = [];
+    given.forEach(function (raw, li) { cutLine(raw).forEach(function (piece, k) { lines.push(piece); first.push(li === 0 && k === 0); }); });
     lines.forEach(function (raw, idx) {
       // Split the line at each voice tag.
       var segs = [];
@@ -166,10 +208,19 @@
           var body = dash ? dash[1] : t0;
           // A voice changes here: a ">>" or a dashed line starts its subtitle's
           // own voice, and so does a subtitle's first line.
-          var starts = idx === 0 || !!dash || !!chev;
+          var starts = first[idx] || !!dash || !!chev;
           var br = BRACKET.exec(body);
-          if (br && LABEL_LIKE.test(br[1].trim()) && !soundNote(br[1])) {
-            begin("label", br[1].trim().replace(/\s+/g, " ")); cur.dash = !!dash; cur.chev = !!chev; cur.odd = false; cur.start = starts;
+          if (br && !manner(br[1])) {
+            var bn = br[1].trim().replace(/\s+/g, " ");
+            // A name in brackets: a label (in a file with no labels, a voice
+            // nobody names: nobody's).
+            if (/^\p{L}/u.test(bn) && LABEL_LIKE.test(bn) && !soundNote(bn)) {
+              begin("label", bn); cur.dash = !!dash; cur.chev = !!chev; cur.br = true; cur.odd = false; cur.start = starts;
+            } else {
+              // A sound note, a voice in lower case, a name with more in it:
+              // what follows is nobody's.
+              begin("other", ""); cur.dash = !!dash; cur.chev = !!chev;
+            }
             if (br[2].trim()) cur.text.push(br[2]);
             return;
           }
@@ -251,7 +302,7 @@
     var counts = {};
     var split = [];
     raw.forEach(function (c) {
-      var ps = partsOf(c.lines).map(function (pt) { return { kind: pt.kind, who: pt.who, dash: !!pt.dash, chev: !!pt.chev, odd: !!pt.odd, text: pt.text.join(" ") }; })
+      var ps = partsOf(c.lines).map(function (pt) { return { kind: pt.kind, who: pt.who, dash: !!pt.dash, chev: !!pt.chev, br: !!pt.br, odd: !!pt.odd, text: pt.text.join(" ") }; })
         .filter(function (pt) { return /[\p{L}\p{N}]/u.test(cleanText(pt.text)); });
       if (!ps.length) return;
       ps.forEach(function (pt) {
@@ -267,7 +318,7 @@
         var a = c.s == null ? null : Math.round(c.s + ((c.e - c.s) * acc) / all);
         acc += n[k];
         var b = c.s == null ? null : k === ps.length - 1 ? c.e : Math.round(c.s + ((c.e - c.s) * acc) / all);
-        split.push({ s: a, e: b, kind: pt.kind, who: pt.who, dash: pt.dash, chev: pt.chev, odd: pt.odd, text: pt.text, sub: ps.length > 1 });
+        split.push({ s: a, e: b, kind: pt.kind, who: pt.who, dash: pt.dash, chev: pt.chev, br: pt.br, odd: pt.odd, text: pt.text, sub: ps.length > 1 });
       });
     });
     // Once the file uses labels (a voice tag, "Speaker 1", or any typed label
@@ -293,8 +344,9 @@
       else if (p.kind === "label") {
         if (labelled && p.odd) { p.text = p.who + ": " + p.text; who = TWO; }
         else if (labelled) who = p.who;
+        else if (p.br) who = TWO;
         else { p.text = p.who + ": " + p.text; who = p.dash || p.chev ? TWO : last; }
-      } else if (p.kind === "dash" || p.kind === "chev") who = TWO;
+      } else if (p.kind === "dash" || p.kind === "chev" || p.kind === "other") who = TWO;
       else who = last;
       if (!labelled && chevrons) who = TWO;
       // In a file with labels, what follows nobody's with no label is

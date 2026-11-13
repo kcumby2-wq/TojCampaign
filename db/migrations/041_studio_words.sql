@@ -253,10 +253,15 @@ end $$;
 -- One word of a minor's name on the film's cards (not an everyday word) run
 -- into another word: where camelCase starts and ends it ("#PrayForJamie",
 -- "JamieStrong", "#PrayForKai", "KaiStrong": three letters or more), or, four
--- letters or more, at a word's start or end ("#teamjamie", "jamiestrong"). The
--- app reads the same (utils/studio-films.js minorRunIns, utils/studio-words.js
--- runIns: a three-letter one in a lower-case tag is asked about there);
--- 039's studio_names_in reads whole words.
+-- letters or more, beside a word a tag or a file name runs a name into
+-- ("#teamjamie", "jamiestrong", "#prayforjamie", "jamiequote"), or with
+-- initials after it in a tag or a handle ("jamieb_hoops"). An ordinary word
+-- that starts or ends with one ("island" for an Isla, "umbrella" for an
+-- Ella) isn't: the app asks about it, and keeps it once the writer says it
+-- isn't a name here. The app reads the same (utils/studio-films.js
+-- minorRunIns and its words beside, utils/studio-words.js runIns: a
+-- three-letter one in a lower-case tag is asked about there); 039's
+-- studio_names_in reads whole words.
 create or replace function public.studio_minor_run_in(p_film uuid, p_text text) returns boolean
 language sql stable set search_path = '' as $$
   with w as (
@@ -283,14 +288,36 @@ language sql stable set search_path = '' as $$
          'summer', 'sunday', 'sunny', 'sweet', 'swift', 'tad', 'tank', 'true', 'trust', 'tucker', 'valor', 'violet',
          'wade', 'walker', 'ward', 'warren', 'waters', 'way', 'wells', 'west', 'white', 'will', 'willow', 'winter',
          'wise', 'wolf', 'wood', 'woods', 'worth', 'wren', 'young']))
+  ), beside as (
+    -- utils/studio-films.js runBeside: the file words, the tags' last words,
+    -- and the words a tag starts a name with.
+    select b from unnest(array[
+      'quote', 'quotes', 'card', 'cards', 'promo', 'promos', 'cut', 'cuts', 'edit', 'edits', 'final', 'finals', 'reel', 'reels', 'slide', 'slides',
+      'story', 'stories', 'clip', 'clips', 'cover', 'covers', 'title', 'titles', 'draft', 'drafts', 'strong', 'team', 'hero', 'heroes', 'teaser',
+      'teasers', 'trailer', 'intro', 'outro', 'broll', 'bts', 'vo', 'mix', 'master', 'export', 'exports', 'select', 'selects', 'graphic', 'graphics',
+      'gfx', 'thumb', 'thumbs', 'thumbnail', 'poster', 'posters', 'still', 'stills', 'photo', 'photos', 'pic', 'pics', 'carousel', 'post', 'posts',
+      'short', 'shorts', 'frame', 'frames', 'spot', 'spots', 'sizzle', 'recap', 'highlight', 'highlights', 'feature', 'profile', 'interview',
+      'interviews', 'sitdown',
+      'nation', 'fam', 'family', 'gang', 'forever', 'crew', 'squad', 'army', 'pride', 'power', 'time', 'era', 'way', 'life', 'season', 'szn', 'mode',
+      'legacy', 'love', 'fans', 'stan', 'club', 'world', 'vibes', 'energy', 'effect', 'magic', 'made', 'proud', 'hype', 'goat', 'goats',
+      'go', 'pray', 'prayfor', 'for', 'thanks', 'thankyou', 'happy', 'happybirthday', 'birthday', 'bday', 'congrats', 'congratulations', 'proudof',
+      'proudofyou', 'coach', 'dear', 'hey', 'shoutout', 'welcome', 'free', 'justice', 'lil', 'big', 'our', 'my', 'iloveyou', 'loveyou', 'missyou',
+      'ilove', 'rip', 'day', 'week', 'night', 'watch', 'game', 'games', 'show', 'hoops', 'ball', 'bball', 'mvp']) as b
   ), hay as (
     select ' ' || btrim(regexp_replace(lower(regexp_replace(coalesce(p_text, ''), '([[:lower:]])([[:upper:]])', '\1 \2', 'g')), '[^[:alpha:]]+', ' ', 'g')) || ' ' as split,
            ' ' || btrim(regexp_replace(lower(coalesce(p_text, '')), '[^[:alpha:]]+', ' ', 'g')) || ' ' as plain
+  ), tags as (
+    -- A tag, a handle, a link or a file name: its words, each with a space
+    -- on either side.
+    select ' ' || btrim(regexp_replace(lower(t[1]), '[^[:alpha:]]+', ' ', 'g')) || ' ' as words
+      from regexp_matches(coalesce(p_text, ''), '([^[:space:]]*(?:[#@_0-9]|[[:alnum:]][./][[:alnum:]])[^[:space:]]*)', 'g') as t
   )
   select p_text is not null and exists (
     select 1 from w, hay
      where hay.split like '% ' || w.word || ' %'
-        or char_length(w.word) >= 4 and (hay.plain ~ (' ' || w.word || '[[:alpha:]]+ ') or hay.plain ~ (' [[:alpha:]]+' || w.word || ' ')))
+        or char_length(w.word) >= 4 and (
+             exists (select 1 from beside where hay.plain like '% ' || w.word || beside.b || ' %' or hay.plain like '% ' || beside.b || w.word || ' %')
+          or exists (select 1 from tags where tags.words ~ (' ' || w.word || '[[:alpha:]]{1,2} '))))
 $$;
 
 create or replace function public.studio_transcripts_gate() returns trigger
@@ -523,52 +550,8 @@ begin
   return null;
 end $$;
 
--- A card added or renamed: the film's title and story are read against the
--- cards, this one with them (039). A correction to a minor never waits on
--- them (041, as on the lines): inside the correction, the words of their
--- name the title or the story has are swapped for the card's code, where
--- the film's own rules let them change (a pulled film's stay as they were).
-create or replace function public.studio_people_title_names() returns trigger
-language plpgsql set search_path = '' as $$
-declare
-  f public.studio_films%rowtype;
-  t text;
-  s text;
-  w text;
-begin
-  if tg_op = 'UPDATE' and row(new.name, new.reviewer_name, new.is_minor) is not distinct from row(old.name, old.reviewer_name, old.is_minor) then
-    return null;
-  end if;
-  select * into f from public.studio_films where id = new.film_id;
-  if tg_op = 'UPDATE' and new.is_minor and not old.is_minor then
-    t := f.title;
-    s := f.one_sentence;
-    -- The name run together, then each word of it: what's read as a name now.
-    for w in select x from (select regexp_replace(lower(new.name), '[^[:alpha:]]+', '', 'g') as x
-                            union select y from regexp_split_to_table(lower(new.name), '[^[:alpha:]]+') as y) z
-              where char_length(x) >= 2 order by char_length(x) desc loop
-      if public.studio_names_in(new.film_id, w) then
-        t := regexp_replace(t, '\m' || w || '\M', new.person_code, 'gi');
-        s := regexp_replace(s, '\m' || w || '\M', new.person_code, 'gi');
-      end if;
-    end loop;
-    if t is distinct from f.title or s is distinct from f.one_sentence then
-      begin
-        update public.studio_films set title = t, one_sentence = s where id = f.id;
-      exception when others then
-        null;
-      end;
-    end if;
-    return null;
-  end if;
-  if public.studio_names_in(new.film_id, f.title) then
-    raise exception 'the film''s title has a name from its cards in it: change the title first';
-  end if;
-  if f.one_sentence is not null and public.studio_names_in(new.film_id, f.one_sentence) then
-    raise exception 'the film''s story has a name from its cards in it: change the story first';
-  end if;
-  return null;
-end $$;
+-- A card added or renamed, and a correction to a minor: 039's
+-- studio_people_title_names (one definition, so running 039 again keeps it).
 
 -- Whether a transcript's label has a word of this name (a label carries no
 -- word of anyone's name at all: three letters or more, two for a minor, not

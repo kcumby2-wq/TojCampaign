@@ -329,8 +329,26 @@ test("other voices are nobody's however a file marks them: >>, a name in bracket
   assert.deepEqual(voice(p), [["COACH", "I ran this drill in 2017."], ["INTERVIEWER", "Why that year?"], ["COACH", "Because nobody filmed it."]]);
   p = TP.parse(S("COACH: I ran this drill in 2017.", "(INTERVIEWER) Why that year?", "COACH: Because nobody filmed it."));
   assert.deepEqual(TP.only(p.cues, "COACH").map((c) => c.t), ["I ran this drill in 2017.", "Because nobody filmed it."]);
-  p = TP.parse(S("[APPLAUSE] Thank you all.", "[MUSIC PLAYING]", "I ran it every Sunday. [laughs]", "[DOOR CLOSES] And that was it."));
-  assert.deepEqual(voice(p), [[null, "Thank you all."], [null, "I ran it every Sunday."], [null, "And that was it."]]);
+  // Words after a sound note are nobody's (someone else may say them); a note
+  // on how the speaker says it ("[laughs]", "(sighs)", "[SCOFFS]") isn't a voice.
+  p = TP.parse(S("[APPLAUSE] Thank you all.", "[MUSIC PLAYING]", "I ran it every Sunday. [laughs]", "[DOOR CLOSES] And that was it.", "(sighs) It was hard.", "[SCOFFS] Yeah, right.", "[SCOFFS] Sure."));
+  assert.deepEqual(voice(p), [["two", "Thank you all."], [null, "I ran it every Sunday."], ["two", "And that was it."], [null, "It was hard."], [null, "Yeah, right."], [null, "Sure."]]);
+  assert.equal(p.labelled, false);
+  // Marks in the middle of a line, a voice in lower case or with more in its
+  // brackets, a voice named with a word sound notes use, a label with a note
+  // after the name: the other voice's words are nobody's, or theirs.
+  p = TP.parse(S("COACH: I ran it.", "COACH: Every Sunday. >> Why Sunday?", "COACH: Every Sunday. [INTERVIEWER] Why that day?", "COACH: Church."));
+  assert.deepEqual(TP.only(p.cues, "COACH").map((c) => c.t), ["I ran it.", "Every Sunday.", "Every Sunday.", "Church."]);
+  p = TP.parse(S("I ran it every Sunday.", "[man] Why that year?", "[REFEREE] Foul on number three.", "[crowd chanting] Let's go, Bulldogs!", "[INTERVIEWER, OFF-SCREEN] Why?", "[INTERVIEWER LAUGHING] Really?", "[TV] Breaking news.", "Because nobody filmed it."));
+  assert.deepEqual(TP.only(p.cues, null).map((c) => c.t), ["I ran it every Sunday.", "Because nobody filmed it."]);
+  p = TP.parse(S("[COACH] I ran it.", "[interviewer] Why that year?", "[COACH] Because nobody filmed it.", "[COACH] And I still run it."));
+  assert.deepEqual(TP.only(p.cues, "COACH").map((c) => c.t), ["I ran it.", "Because nobody filmed it.", "And I still run it."]);
+  p = TP.parse(S("COACH: I ran it.", "INTERVIEWER (O.S.): Why that year?", "COACH (CONT'D): Because nobody filmed it.", "COACH: Yes."));
+  assert.deepEqual(TP.only(p.cues, "COACH").map((c) => c.t), ["I ran it.", "Because nobody filmed it.", "Yes."]);
+  p = TP.parse(S("How many a day?\n- 500 a day.", "And every day after."));
+  assert.deepEqual(TP.only(p.cues, null).map((c) => c.t), ["And every day after."]);
+  p = TP.parse(S("I ran it every Sunday. >> Why Sunday?"));
+  assert.deepEqual([p.voices, TP.only(p.cues, null).length], [0, 0]);
   // Odd labels in a labelled file: nobody's, on a dashed line or a subtitle's
   // first; and so is what follows them with no label, until the next one.
   p = TP.parse(S("DAD: He gets up at five.", "-me and him: we play every day.\n-He says that every day.", "DAD: I never had that at his age."));

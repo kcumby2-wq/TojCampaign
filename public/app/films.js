@@ -592,7 +592,7 @@
       body.names_ok = namesOk(btn, asked);
       btn.disabled = true;
       try {
-        if (p) { body.seen = p.updated_at; var r = await t.post("/api/studio-films/films/" + id + "/people/" + p.id, body, "PATCH"); t.toast((r.uncleared ? "Saved. It needs clearing again." : "Saved.") + (r.story_coded ? " The film's title or story had their name: it has the code now." : "")); }
+        if (p) { body.seen = p.updated_at; var r = await t.post("/api/studio-films/films/" + id + "/people/" + p.id, body, "PATCH"); t.toast((r.uncleared ? "Saved. It needs clearing again." : "Saved.") + (r.story_named ? " The film's title or story still has their name: change it now." : r.story_coded ? " The film's title or story had their name: it has the code now." : "")); }
         else { body.person_code = s.person_code; await t.post("/api/studio-films/films/" + id + "/people", body); t.toast("Card added."); }
         T().go("#film/" + id);
       } catch (e) { if (nameAsk(btn, e, asked, ["title_may_have_name", "story_may_have_name"])) return; btn.disabled = false; say("pMsg", why(e), true); }

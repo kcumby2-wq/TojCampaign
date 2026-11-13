@@ -156,7 +156,8 @@ function askOrRefuse(words, ctx, where, issues, what) {
   else for (const w of open) ctx.asks.add(w);
 }
 // A minor's name run into a hashtag or a word: four letters or more as
-// utils/studio-films.js minorRunIns reads it; three, certain where camelCase
+// utils/studio-films.js minorRunIns reads it (an ordinary word that starts
+// or ends with one, "island" for an Isla, is asked); three, certain where camelCase
 // starts and ends it ("#PrayForKai", "KaiStrong"), asked at the start or the
 // end of a word in a tag ("#teamkai", "#kaistrong"). In an ordinary word a
 // three-letter one is the word ("same" for a Sam). 041's studio_minor_run_in
@@ -410,16 +411,26 @@ function maskNames(text, people) {
     }
   }
   // One word of a minor's name run into another word ("#PrayForJamie",
-  // "JamieStrong", "#teamjamie"): four letters or more, anywhere in a word;
-  // an everyday one ("hope") written with its capital ("#PrayForHope"), or in
-  // a tag ("#prayforhope"), not in an ordinary word ("hopeful"). Three
-  // letters: where camelCase starts and ends it ("#PrayForKai", "KaiStrong"),
-  // or at the start or the end of a word in a tag ("#teamkai"), never in an
-  // ordinary word ("same" for a Sam).
+  // "JamieStrong", "#teamjamie"): four letters or more, anywhere in a tag,
+  // and in an ordinary word where it's the name (utils/studio-films.js
+  // minorRunIns: "Jamiestrong", "JamieStrong"), not where the word is a word
+  // ("island" for an Isla, "umbrella" for an Ella); an everyday one ("hope")
+  // written with its capital ("#PrayForHope"), or in a tag ("#prayforhope"),
+  // not in an ordinary word ("hopeful"). Three letters: where camelCase
+  // starts and ends it ("#PrayForKai", "KaiStrong"), or at the start or the
+  // end of a word in a tag ("#teamkai"), never in an ordinary word ("same"
+  // for a Sam).
   const inTag = (str, off) => {
     let a = off;
     while (a > 0 && !/\s/u.test(str[a - 1])) a -= 1;
     return /[#@]/.test(str.slice(a, off));
+  };
+  const chunkAt = (str, off, len) => {
+    let a = off;
+    let b = off + len;
+    while (a > 0 && !/\s/u.test(str[a - 1])) a -= 1;
+    while (b < str.length && !/\s/u.test(str[b])) b += 1;
+    return str.slice(a, b);
   };
   for (const x of subjects.filter((v) => v.minor)) {
     for (const w of x.full.toLowerCase().split(/[^\p{L}\p{M}]+/u).filter((v) => Array.from(v).length >= 3)) {
@@ -443,7 +454,9 @@ function maskNames(text, people) {
           const j = at + w.length;
           const here = short
             ? (camel && bounds.has(at) && bounds.has(j)) || (tag && (at === 0 || j === low.length))
-            : !U.EVERYDAY_NAMES.has(w) || /\p{Lu}/u.test(tok[at]) || tag;
+            : U.EVERYDAY_NAMES.has(w)
+              ? /\p{Lu}/u.test(tok[at]) || tag
+              : tag || U.minorRunIns(chunkAt(str, off, tok.length), [{ name: x.full, is_minor: true }]).sure.includes(w);
           if (here) {
             res += tok.slice(i, at) + ` ${mark(x.by)} `;
             i = j;

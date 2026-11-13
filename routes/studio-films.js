@@ -433,11 +433,12 @@ router.patch("/films/:id/people/:pid", member, withDb(async (req, res, sb) => {
   const reviewerChanged = ["reviewer_relation", "reviewer_name", "reviewer_email"].some((k) => k in value && value[k] !== current[k]);
   if (reviewerChanged && !isProducer(req)) return res.status(403).json({ error: "producer_only" });
   const next = { ...current, ...value };
-  // A correction to a minor never waits on the title or the story: the
-  // database swaps their name's words there for the card's code (041).
+  // A correction to a minor never waits on the title or the story for their
+  // own name: the database swaps its words there for the card's code (039).
+  // The rest of the change (a reviewer set with it) is read as any is.
   const correction = value.is_minor === true && !current.is_minor;
-  if ((value.name || value.reviewer_name || "is_minor" in value) && !correction) {
-    const against = U.cardAgainstFilm(film, next, U.namesOkWords(body.names_ok));
+  if (value.name || value.reviewer_name || "is_minor" in value) {
+    const against = U.cardAgainstFilm(film, correction ? { ...next, name: null } : next, U.namesOkWords(body.names_ok));
     if (against) return res.status(against.fields ? 400 : 409).json(against);
   }
   if (!Object.keys(value).length) return res.json({ person: current });
@@ -445,11 +446,16 @@ router.patch("/films/:id/people/:pid", member, withDb(async (req, res, sb) => {
     const rows = await rpcRows(sb, "studio_card_save", { p_person: current.id, p_seen: body.seen, p_patch: value, p_by: me(req) });
     if (!rows.length) return res.status(409).json({ error: "changed_meanwhile" });
     let coded = false;
+    let named = false;
     if (correction) {
       const after = await filmById(sb, film.id);
       coded = !!after && (after.title !== film.title || after.one_sentence !== film.one_sentence);
+      // What the swap couldn't change (the film's rules kept it, or a form
+      // of the name it doesn't reach): said, so it's changed by hand.
+      const still = after && U.cardAgainstFilm(after, { ...rows[0], reviewer_name: null });
+      named = !!still && (still.error === "title_has_name" || still.error === "story_has_name");
     }
-    res.json({ person: { ...rows[0], gaps: U.clearanceGaps(rows[0]) }, uncleared: !!current.cleared_at && !rows[0].cleared_at, ...(coded ? { story_coded: true } : {}) });
+    res.json({ person: { ...rows[0], gaps: U.clearanceGaps(rows[0]) }, uncleared: !!current.cleared_at && !rows[0].cleared_at, ...(coded ? { story_coded: true } : {}), ...(named ? { story_named: true } : {}) });
   } catch (e) {
     refused(res, e);
   }

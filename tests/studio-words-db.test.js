@@ -580,6 +580,21 @@ test("a correction to a minor doesn't wait on the film's title or story: their n
   assert.equal(r.status, 200, JSON.stringify(r.data));
   assert.equal(r.data.story_coded, true);
   assert.equal((await pool.query("select one_sentence from studio_films where id = $1", [film.id])).rows[0].one_sentence, "WT02 runs this drill every morning.");
+  // A form of the name the old swap didn't reach ("Ty2", "Ty_23") becomes the code too.
+  const g = await aFilm([{ person_code: "WT03", name: "Ty Lo", role: "athlete", speaker: true, release_on_file: true, covers: { face: true, name: true, voice: true }, reviewer_relation: "self", reviewer_name: "Ty Lo", reviewer_email: "tylo@x.test" }]);
+  const g0 = (await pool.query("select updated_at from studio_films where id = $1", [g.film.id])).rows[0];
+  ok(await films("PATCH", `/films/${g.film.id}`, { seen: g0.updated_at, one_sentence: "Ty2 runs this drill, Ty_23 films it, and Ty never misses." }, "lead"), "story ty2");
+  const gc = (await pool.query("select updated_at from studio_film_people where id = $1", [g.people[1].id])).rows[0];
+  const gr = ok(await films("PATCH", `/films/${g.film.id}/people/${g.people[1].id}`, { seen: gc.updated_at, is_minor: true, reviewer_relation: "parent", reviewer_name: "Mai Lo", reviewer_email: "mai@x.test" }, "lead"), "corrected ty2");
+  assert.deepEqual([gr.story_coded, gr.story_named], [true, undefined]);
+  assert.equal((await pool.query("select one_sentence from studio_films where id = $1", [g.film.id])).rows[0].one_sentence, "WT032 runs this drill, WT03_23 films it, and WT03 never misses.");
+  // A correction that also sets a reviewer whose name the story has is read as any change is.
+  const h = await aFilm([{ person_code: "WT04", name: "Bo Diaz", role: "athlete", speaker: true, release_on_file: true, covers: { face: true, name: true, voice: true }, reviewer_relation: "self", reviewer_name: "Bo Diaz", reviewer_email: "bo@x.test" }]);
+  const h0 = (await pool.query("select updated_at from studio_films where id = $1", [h.film.id])).rows[0];
+  ok(await films("PATCH", `/films/${h.film.id}`, { seen: h0.updated_at, one_sentence: "Lin drives him to every early practice." }, "lead"), "story lin");
+  const hc = (await pool.query("select updated_at from studio_film_people where id = $1", [h.people[1].id])).rows[0];
+  const hr = await films("PATCH", `/films/${h.film.id}/people/${h.people[1].id}`, { seen: hc.updated_at, is_minor: true, reviewer_relation: "parent", reviewer_name: "Lin Hale", reviewer_email: "lin2@x.test" }, "lead");
+  assert.deepEqual([hr.status, hr.data.error], [409, "story_has_name"]);
   // A new card with a name in the story still waits for the story to change.
   const f1 = (await pool.query("select updated_at from studio_films where id = $1", [film.id])).rows[0];
   ok(await films("PATCH", `/films/${film.id}`, { seen: f1.updated_at, one_sentence: "Rhea runs this drill every morning." }, "lead"), "story 2");
@@ -599,6 +614,26 @@ test("a minor's card waits for a kept line with their name run into a tag; three
   const f2 = await aFilm([{ person_code: "WK07", name: "Kai Lund", role: "athlete", is_minor: true, release_on_file: true, covers: {} }, { person_code: "WS07", name: "Sam Lund", role: "athlete", is_minor: true, release_on_file: true, covers: {} }]);
   const run = async (x) => (await pool.query("select studio_minor_run_in($1, $2) as x", [f2.film.id, x])).rows[0].x;
   assert.deepEqual([await run("We all wore #PrayForKai bands"), await run("The town is KaiStrong"), await run("#teamkai on every truck"), await run("the same drill"), await run("the kaiser roll")], [true, true, false, false, false]);
+  // Four letters or more: beside a tag's or a file's word, or initials in a
+  // handle; an ordinary word that starts or ends with the name isn't.
+  const f3 = await aFilm([{ person_code: "WI07", name: "Isla Moss", role: "athlete", is_minor: true, release_on_file: true, covers: {} }, { person_code: "WE07", name: "Ella Lund", role: "athlete", is_minor: true, release_on_file: true, covers: {} }]);
+  const run3 = async (x) => (await pool.query("select studio_minor_run_in($1, $2) as x", [f3.film.id, x])).rows[0].x;
+  for (const x of ["#islastrong", "#teamisla", "islaquote_v2", "instagram.com/islab_hoops", "IslaStrong"]) assert.equal(await run3(x), true, x);
+  for (const x of ["We grew up on the island", "Grab an umbrella", "#islandlife"]) assert.equal(await run3(x), false, x);
+});
+
+test("an ordinary word that holds a minor's name is asked about, kept on the writer's say-so, and a correction leaves it", async () => {
+  const { film, people } = await aFilm();
+  const t = ok(await addTranscript(film, people[0], [{ s: 0, e: 3000, t: "We grew up on the island." }, { s: 3000, e: 6000, t: "Every summer." }]), "transcript").transcript;
+  ok(await films("POST", `/films/${film.id}/people`, { person_code: "WI08", name: "Isla Moss", role: "athlete", is_minor: true, release_on_file: true, covers: {} }, "lead"), "a minor Isla");
+  const asked = await words("POST", `/films/${film.id}/lines`, { transcript_id: t.id, from_cue: 1, to_cue: 1, quote: "We grew up on the island" }, "ed");
+  assert.deepEqual([asked.status, asked.data.words], [400, ["isla"]], JSON.stringify(asked.data));
+  ok(await words("POST", `/films/${film.id}/lines`, { transcript_id: t.id, from_cue: 1, to_cue: 1, quote: "We grew up on the island", names_ok: ["isla"] }, "ed"), "kept");
+  // A minor Ella's card goes in beside it; an adult Liam corrected to a minor leaves it.
+  ok(await films("POST", `/films/${film.id}/people`, { person_code: "WE08", name: "Ella Ruiz", role: "athlete", is_minor: true, release_on_file: true, covers: {} }, "lead"), "Ella");
+  const liam = ok(await films("POST", `/films/${film.id}/people`, { person_code: "WL08", name: "Liam Cruz", role: "coach", release_on_file: true, covers: {} }, "lead"), "Liam").person;
+  ok(await films("PATCH", `/films/${film.id}/people/${liam.id}`, { seen: liam.updated_at, is_minor: true, reviewer_relation: "parent", reviewer_name: "Ana Cruz", reviewer_email: "ana@x.test" }, "lead"), "corrected");
+  assert.equal((await pool.query("select count(*)::int as n from studio_words where film_id = $1 and quote = 'We grew up on the island'", [film.id])).rows[0].n, 1);
 });
 
 test("the correction's flag is read only from inside the correction", async () => {
