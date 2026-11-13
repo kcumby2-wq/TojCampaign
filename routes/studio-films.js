@@ -400,6 +400,22 @@ router.post("/films/:id/notes", member, withDb(async (req, res, sb) => {
 }));
 
 // ── Clearance cards ──────────────────────────────────────────────────────
+// What the film keeps in words (Real words) that names a minor by a name run
+// into another word, as the app reads it (utils/studio-films.js
+// minorRunIns: "#letsgojamie", "#bigjamieenergy"), past what the database's
+// own screen reads (041's studio_minor_run_in).
+const KEPT_COLS = "id,kind,quote,text,title,note";
+async function keptRunIns(sb, filmId, name) {
+  const { data, error } = await sb.from("studio_words").select(KEPT_COLS).eq("film_id", filmId);
+  // Before 041 there's nothing kept in words.
+  if (error && /42P01|PGRST205/.test(String(error.code || "")) ) return [];
+  if (error) throw Object.assign(new Error(error.message), { db: error });
+  const rows = data || [];
+  const who = [{ name, is_minor: true }];
+  return rows.filter((w) => U.minorRunIns([w.quote, w.text, w.title, w.note].filter(Boolean).join("\n"), who).sure.length > 0);
+}
+const KEPT_REFUSAL = "a line, caption, title or note kept on this film names someone on this card: remove it (Real words) first";
+
 router.post("/films/:id/people", member, withDb(async (req, res, sb) => {
   const film = await filmById(sb, req.params.id);
   if (!film) return res.status(404).json({ error: "not_found" });
@@ -411,6 +427,7 @@ router.post("/films/:id/people", member, withDb(async (req, res, sb) => {
   const against = U.cardAgainstFilm(film, value, U.namesOkWords(bodyOf(req).names_ok));
   if (against) return res.status(against.fields ? 400 : 409).json(against);
   try {
+    if (value.is_minor && (await keptRunIns(sb, film.id, value.name)).length) return res.status(409).json({ error: "refused", reason: KEPT_REFUSAL });
     const person = await run(sb.from("studio_film_people").insert({ ...value, film_id: film.id, created_by: me(req) }).select().single());
     res.json({ person: { ...person, gaps: U.clearanceGaps(person) } });
   } catch (e) {
@@ -433,29 +450,42 @@ router.patch("/films/:id/people/:pid", member, withDb(async (req, res, sb) => {
   const reviewerChanged = ["reviewer_relation", "reviewer_name", "reviewer_email"].some((k) => k in value && value[k] !== current[k]);
   if (reviewerChanged && !isProducer(req)) return res.status(403).json({ error: "producer_only" });
   const next = { ...current, ...value };
-  // A correction to a minor never waits on the title or the story for their
-  // own name: the database swaps its words there for the card's code (039).
-  // The rest of the change (a reviewer set with it) is read as any is.
+  // A correction to a minor never waits on the title or the story: it's the
+  // safety step. The database swaps the words of their name there for the
+  // card's code (039); what's left (the parent set with it, an everyday word
+  // asked about before) is said after, to change by hand.
   const correction = value.is_minor === true && !current.is_minor;
-  if (value.name || value.reviewer_name || "is_minor" in value) {
-    const against = U.cardAgainstFilm(film, correction ? { ...next, name: null } : next, U.namesOkWords(body.names_ok));
+  if ((value.name || value.reviewer_name || "is_minor" in value) && !correction) {
+    const against = U.cardAgainstFilm(film, next, U.namesOkWords(body.names_ok));
     if (against) return res.status(against.fields ? 400 : 409).json(against);
   }
   if (!Object.keys(value).length) return res.json({ person: current });
   try {
+    if (!correction && next.is_minor && value.name && value.name !== current.name && (await keptRunIns(sb, film.id, value.name)).length) {
+      return res.status(409).json({ error: "refused", reason: KEPT_REFUSAL });
+    }
     const rows = await rpcRows(sb, "studio_card_save", { p_person: current.id, p_seen: body.seen, p_patch: value, p_by: me(req) });
     if (!rows.length) return res.status(409).json({ error: "changed_meanwhile" });
     let coded = false;
     let named = false;
+    let removed = 0;
     if (correction) {
+      // What names them goes with the correction: the database's screen
+      // took its share, and what the app reads as their name run into a
+      // word goes now.
+      for (const w of await keptRunIns(sb, film.id, rows[0].name)) {
+        const gone = await rpcRows(sb, "studio_words_remove", { p_word: w.id });
+        removed += gone.length;
+      }
       const after = await filmById(sb, film.id);
       coded = !!after && (after.title !== film.title || after.one_sentence !== film.one_sentence);
-      // What the swap couldn't change (the film's rules kept it, or a form
-      // of the name it doesn't reach): said, so it's changed by hand.
-      const still = after && U.cardAgainstFilm(after, { ...rows[0], reviewer_name: null });
-      named = !!still && (still.error === "title_has_name" || still.error === "story_has_name");
+      // What the swap couldn't change (the film's rules kept it, a form of
+      // the name it doesn't reach, the parent's name, an everyday word that
+      // was asked about while they were an adult): said, so it's changed by
+      // hand. Nothing said before counts now.
+      named = !!after && !!U.cardAgainstFilm(after, rows[0]);
     }
-    res.json({ person: { ...rows[0], gaps: U.clearanceGaps(rows[0]) }, uncleared: !!current.cleared_at && !rows[0].cleared_at, ...(coded ? { story_coded: true } : {}), ...(named ? { story_named: true } : {}) });
+    res.json({ person: { ...rows[0], gaps: U.clearanceGaps(rows[0]) }, uncleared: !!current.cleared_at && !rows[0].cleared_at, ...(coded ? { story_coded: true } : {}), ...(named ? { story_named: true } : {}), ...(removed ? { words_removed: removed } : {}) });
   } catch (e) {
     refused(res, e);
   }

@@ -329,11 +329,20 @@ test("other voices are nobody's however a file marks them: >>, a name in bracket
   assert.deepEqual(voice(p), [["COACH", "I ran this drill in 2017."], ["INTERVIEWER", "Why that year?"], ["COACH", "Because nobody filmed it."]]);
   p = TP.parse(S("COACH: I ran this drill in 2017.", "(INTERVIEWER) Why that year?", "COACH: Because nobody filmed it."));
   assert.deepEqual(TP.only(p.cues, "COACH").map((c) => c.t), ["I ran this drill in 2017.", "Because nobody filmed it."]);
-  // Words after a sound note are nobody's (someone else may say them); a note
-  // on how the speaker says it ("[laughs]", "(sighs)", "[SCOFFS]") isn't a voice.
+  // A note isn't a voice: a sound, how the speaker says it, the language,
+  // the editor's own; the voice goes on.
   p = TP.parse(S("[APPLAUSE] Thank you all.", "[MUSIC PLAYING]", "I ran it every Sunday. [laughs]", "[DOOR CLOSES] And that was it.", "(sighs) It was hard.", "[SCOFFS] Yeah, right.", "[SCOFFS] Sure."));
-  assert.deepEqual(voice(p), [["two", "Thank you all."], [null, "I ran it every Sunday."], ["two", "And that was it."], [null, "It was hard."], [null, "Yeah, right."], [null, "Sure."]]);
+  assert.deepEqual(voice(p), [[null, "Thank you all."], [null, "I ran it every Sunday."], [null, "And that was it."], [null, "It was hard."], [null, "Yeah, right."], [null, "Sure."]]);
   assert.equal(p.labelled, false);
+  p = TP.parse(S("[in Spanish] Mi papá corría.", "That was some [bleep] call, man.", "He told [Coach Hooks] he'd be there.", "[laughs nervously] I don't know."));
+  assert.deepEqual([p.mixed, TP.only(p.cues, null).length], [0, 4]);
+  p = TP.parse(S("COACH: I ran it.", "[whistle blows] Same cones, same field.", "[sighs heavily] My dad made sure.", "INTERVIEWER: Why?", "COACH: [chuckles softly] Every single Sunday."));
+  assert.deepEqual(TP.only(p.cues, "COACH").map((c) => c.t), ["I ran it.", "Same cones, same field.", "My dad made sure.", "Every single Sunday."]);
+  // A label or a name in parentheses mid-line after a sentence's end, italics, a sung line: another voice.
+  p = TP.parse(S("COACH: I ran it.", "COACH: Every Sunday. INTERVIEWER: Why Sunday?", "COACH: Every Sunday. (INTERVIEWER) Why that day?", "COACH: Church."));
+  assert.deepEqual(TP.only(p.cues, "COACH").map((c) => c.t), ["I ran it.", "Every Sunday.", "Every Sunday.", "Church."]);
+  p = TP.parse(S("I ran every day.", "<i>Why that year?</i>", "Because nobody filmed it.", "♪ We are the champions ♪", "Again."));
+  assert.deepEqual(TP.only(p.cues, null).map((c) => c.t), ["I ran every day.", "Because nobody filmed it.", "Again."]);
   // Marks in the middle of a line, a voice in lower case or with more in its
   // brackets, a voice named with a word sound notes use, a label with a note
   // after the name: the other voice's words are nobody's, or theirs.
