@@ -91,6 +91,10 @@ Before a graphic is saved or sent, the server checks its words and its credit by
 - one word of a minor's name (four letters or more) run into a tag or a word is the name where a word starts or ends (`#jordanstrong`, `#teamjordan`, "jordanstrong forever"); an everyday one is asked about (`#hopestrong`);
 - a line in Title Case is read as a shout-out: its last word, and a word right after "Go", "Thanks", "You", "Birthday", "Coach" and the like, is the name for anyone the graphic can't name ("Way To Go Hope", "Go Hope Go", "Thank You Coach Will", "Keep the Faith" for a Faith): write it in sentence case if it isn't one; An everyday word that's also such a name, at the start of a sentence ("Will never quit"), is asked about; the writer's "not a name here" counts for that exact text. Mid-sentence with a capital ("we ran it with Will"), it's a name. The credit names a speaker only if they're an adult, cleared, and their release covers their name and lists the format. A closed film makes no graphics. Drafts stay in this session only, for a day at most. Until Kyron and Coach Hooks turn on *The graphics system*, every graphic carries a **PROPOSED** band and nothing goes to review; the screen reads the switch afresh before saving or sending. The fonts are in `public/app/fonts` (SIL Open Font License, `OFL.txt`) and cached with the app.
 
+## The season slate
+
+**Studio → Films → Season slate** (`#film-slate`): the tour's stops (the Pylon calendar in `gfs_events`, a week back to six months on; cancelled ones left out), each with the films planned for it and where each one is in its ten steps. On a stop: *Plan a film here* starts a film already planned for it, *Link a film…* plans a film in progress for it, and *Unlink* takes a film off it. A film's room shows its stop. A film is planned only against a stop on the calendar; a pulled one changes no more. The slate reads the stops' public details only (name, dates, city).
+
 ## Posting and takedowns
 
 Only Kyron records posts, after the final sign-off, and only cuts every speaker in them approved, with everyone in them cleared.
@@ -210,9 +214,9 @@ All under `/api/studio-films` (team members with Studio; writes are JSON from th
 
 | Method | Path | Who |
 |---|---|---|
-| GET | `/meta`, `/today`, `/films`, `/films/:id` | members |
-| POST | `/films` | members (the producer assigns director and editor) |
-| PATCH | `/films/:id` (with `seen`) | members |
+| GET | `/meta`, `/today`, `/films`, `/films/:id` (with its `stop`), `/slate?from=&to=` | members |
+| POST | `/films` (`gfs_event_id`: a stop on the calendar) | members (the producer assigns director and editor) |
+| PATCH | `/films/:id` (with `seen`; `gfs_event_id` links or unlinks a stop) | members |
 | POST | `/films/:id/archive`, `/films/:id/second-yes`, `/films/:id/steps/:step/reopen` | producer |
 | POST | `/films/:id/steps/:step/done` (Speaker review: `{ cut_ids }`) | the step's owner or the producer (Publish: Kyron) |
 | POST/PATCH/DELETE | `/films/:id/people[/:pid]` | members (who approves, and a new consent: the producer) |
