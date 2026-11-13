@@ -596,6 +596,31 @@ test("a discarded draft gives back what its refresh folded in, and its refresh n
   assert.ok((await pool.query("select undone_at from studio_refresh_marks where run_id = $1", [r3])).rows[0].undone_at);
 });
 
+test("a discard that began before its refresh ended and folded a rule still opens the rule again", async () => {
+  const { film } = await aFilm();
+  for (let i = 0; i < 3; i++) ok(await films("POST", `/films/${film.id}/cut-notes`, { note: `Late slate on take ${i}`, label: "late slate" }, "lead"), "note");
+  const r = (await pool.query("insert into agent_runs (role, task, status, created_by) values ('kit-refresher', 'x', 'running', 'lead@toj.test') returning id")).rows[0].id;
+  await pool.query("select * from studio_refresh_start($1, 'same-work', 'monthly', 'lead@toj.test', '{}', '{}', array['late slate'], true)", [r]);
+  const base = (await pool.query("select id, kit, title from studio_kits where slug = 'same-work' order by version desc limit 1")).rows[0];
+  const kit = base ? base.kit : { schema: "toj.studio.kit/v1", slug: "same-work", columns: [] };
+  const d = (await pool.query("insert into studio_kits (slug, version, title, status, kit, source_run_id, created_by) values ('same-work', (select coalesce(max(version), 1) + 1 from studio_kits where slug = 'same-work'), 'Same Work', 'draft', $1, $2, 'lead@toj.test') returning id", [kit, r])).rows[0].id;
+  // The discard's transaction starts first; the refresh ends and folds the rule meanwhile.
+  const a = await pool.connect();
+  try {
+    await a.query("begin");
+    await a.query("select now()");
+    await new Promise((res) => setTimeout(res, 20));
+    await pool.query("select * from studio_refresh_end($1, 'drafted')", [r]);
+    await a.query("update studio_kits set status = 'discarded', discarded_by = 'kyron@toj.test', discarded_at = now() where id = $1", [d]);
+    await a.query("commit");
+  } finally {
+    a.release();
+  }
+  const latest = (await pool.query("select status from studio_label_marks where kit_slug = 'same-work' and label = 'late slate' order by decided_at desc, id limit 1")).rows[0];
+  assert.equal(latest.status, "reopened");
+  assert.equal((await pool.query("select count(*)::int as n from studio_rule_candidates('same-work') where label = 'late slate'")).rows[0].n, 1);
+});
+
 test("what a refresh draws on is given only as it starts", async () => {
   const { film } = await aFilm();
   const w = ok(await learn("POST", `/films/${film.id}/wraps`, { worked: "Two cards per camera, always" }, "dir"), "wrap").wrap;

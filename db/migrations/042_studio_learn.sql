@@ -314,7 +314,10 @@ begin
                        where l.status = 'folded' and l.run_id = new.run_id)) then
     raise exception 'a rule is open again only when the draft its refresh made is discarded';
   end if;
-  new.decided_at := now();
+  -- The time it's made, not its transaction's start: the latest decision is
+  -- the one made last (a discard waiting on the kit's lock while a refresh
+  -- ends and folds the rule reopens it after the fold, though it began first).
+  new.decided_at := clock_timestamp();
   return new;
 end $$;
 
