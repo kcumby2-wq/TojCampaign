@@ -195,6 +195,18 @@ Migration 042, API `routes/studio-learn.js`, screens in `public/app/learn.js` an
 
 **The gear re-check.** Today shows *Gear re-check due* a month after the last one that ran through (a draft, or nothing to change), or when there's never been one. *Re-check gear* goes through the Brief Writer as before, and the run it starts (on the Same Work kit only) is marked as the gear re-check.
 
+## Kits for every line of work
+
+Five more kits are written and in the repo (`agents/studio/proposals/`), each with TOJ's rules as a locked card:
+
+- **A Pylon stop**: the crew, the two angles every game, youth creators, holds on a clip that's out, the keep-out list.
+- **Pylon packages**: the six-piece minimum, and the release before anyone films a player.
+- **Subject Medias sessions**: staffing, no promises, and never alone with a minor.
+- **Subject Medias marketplace events**: families' choices at check-in, the two QR codes, review before anything is for sale.
+- **The creator fellowship**: the first eight weeks' curriculum, and that it teaches the work without promising followers, exposure or paid work.
+
+None is in use. **Studio → Proposed kits** lists each with its counts. An approver taps *Make it a draft*, which saves v1 of that kit as a draft marked "Proposed in the repo", with no checks run. The review screen shows every card as new. The draft is then read card by card and approved or discarded like any other. While a draft or an approved version is open, the proposal points to it; changes to an approved one go through a refresh. A discarded one can be drafted again.
+
 ## Tool approvals
 
 The kit's rule: a tool touches footage only once the producer has checked its terms and added it, with a one-line reason. Three switches start **off**; only Kyron turns them on, and the reason is kept:
@@ -264,6 +276,8 @@ The kit learns (`/api/studio-learn`):
 
 A kit run takes `{ purpose: "monthly", sources: { wraps, suggestions, labels }, again }` (approvers) or `{ purpose: "gear" }` (the Same Work kit), as JSON from the app's own pages, from a person (not the automation key). It answers 409 `refresh_refused` with the reason when it can't start (running already, run this month without `again`, or something picked was decided, folded or taken meanwhile), 400 `brief_has_name` with the `words` read as names, and 400 `brief_may_have_name` with the `words` to ask about (send them back as `names_ok` with the same brief). A name check that refuses answers `{ error: "invalid", fields: ["…_has_name"], words }`; one that asks, `fields: ["…_may_have_name"]`. Discarding a draft answers `given_back: true` when its refresh's items are open again.
 
+Proposed kits: GET `/api/studio-agents/proposals` (anyone on Studio, or the key); POST `/api/studio-agents/proposals/:slug/draft` (approvers, as JSON from the app's own pages), which answers `{ id, version }`, or 409 `drafted_already` with the open draft or approved version.
+
 The taste library (`/api/studio-taste`): GET `?q=&tag=&limit=`, GET `/tags`, GET `/:id`, POST (members); PATCH `/:id` with `seen`, POST `/:id/archive` (whoever added it, the producer). Briefs: GET `/api/studio-agents/briefs/unstarted`; POST `/api/studio-agents/briefs/:id/set-aside` `{ aside }`; a kit run started from a brief sends `{ from_brief, direction }`.
 
 The speakers' review page: `POST /api/studio-review/view {token}` and `POST /api/studio-review/decide {token, decision, name, note, confirm}` (POST and JSON only, from the site's own pages, 30 tries per visitor per 10 minutes).
@@ -272,7 +286,7 @@ Their own page (`/api/studio-speaker`, the same rules): `POST /send-link {email}
 
 ## Setup
 
-1. Apply `db/migrations/039_studio_films.sql` (tables, rules, the bucket `studio-films`), then `040_studio_craft.sql` (notes, delivery checks, stills and slides), then `041_studio_words.sql` (transcripts, lines, directions, the taste library, brief marks), then `042_studio_learn.sql` (wrap-ups, suggested edits, rule decisions, refresh marks and what each was given), then `043_studio_speaker.sql` (their own page's links). None has been applied anywhere yet: each goes on fresh, in order (040 isn't written to upgrade an earlier draft of itself).
+1. Apply `db/migrations/039_studio_films.sql` (tables, rules, the bucket `studio-films`), then `040_studio_craft.sql` (notes, delivery checks, stills and slides), then `041_studio_words.sql` (transcripts, lines, directions, the taste library, brief marks), then `042_studio_learn.sql` (wrap-ups, suggested edits, rule decisions, refresh marks and what each was given), then `043_studio_speaker.sql` (their own page's links), then `044_studio_proposals.sql` (one open draft of a proposed kit at a time). None has been applied anywhere yet: each goes on fresh, in order (040 isn't written to upgrade an earlier draft of itself).
 2. Optional settings on Render: `STUDIO_SITE_BASE` (default `https://www.tojcampaign.com`), `STUDIO_REVIEW_REPLY_TO`, `STUDIO_REVIEW_MAX_MB` (raise it after the Supabase Pro upgrade), `STUDIO_REVIEW_WORKER=off` to stop the worker on a server.
 3. Kyron turns on *Review copies in storage* (Studio → Films → Tool approvals) once he's checked Supabase's terms, and *Claude reads transcripts* once he's checked Anthropic's terms for interview transcripts.
 4. Email works as for the rest of the app (`EMAIL_USER`/`EMAIL_PASS` or `SMTP_*`); without it, review links aren't made.

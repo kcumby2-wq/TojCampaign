@@ -197,8 +197,8 @@ async function saveDraft(sb, { stage, runId, role, result, slug, requestedBy }) 
 }
 
 // ── Proposed kits ────────────────────────────────────────────────────────
-// What's proposed in the repo, each with its checks and where it stands:
-// drafted (a draft or an approved version of its slug exists) or not.
+// What's proposed in the repo, each with its checks and where it stands: its
+// newest open draft and its approved version, if either exists.
 async function listProposals(sb) {
   const out = [];
   const rows = [];
@@ -212,8 +212,12 @@ async function listProposals(sb) {
   }
   for (const p of K.proposedKits()) {
     const check = K.checkKit({ ...p.kit, version: 1 });
-    const mine = rows.filter((r) => r.slug === p.slug && r.status !== "discarded");
-    const lead = String(p.kit.lead_html || "").replace(/<[^>]+>/g, "").trim();
+    const mine = rows.filter((r) => r.slug === p.slug);
+    const pick = (status) => {
+      const r = mine.find((x) => x.status === status);
+      return r ? { id: r.id, version: r.version } : null;
+    };
+    const lead = String(p.kit.lead_html || "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
     out.push({
       slug: p.slug,
       title: p.title,
@@ -222,7 +226,8 @@ async function listProposals(sb) {
       counts: check.counts,
       blockers: check.blockers.length,
       builtin: K.builtinKits().some((b) => b.slug === p.slug),
-      kit: mine[0] ? { id: mine[0].id, version: mine[0].version, status: mine[0].status } : null,
+      draft: pick("draft"),
+      approved: pick("approved"),
     });
   }
   return out;
@@ -236,10 +241,12 @@ async function draftProposal(sb, slug, by) {
   if (K.builtinKits().some((b) => b.slug === slug)) return { error: "in_use_already" };
   const check = K.checkKit({ ...p.kit, version: 1 });
   if (!check.ok) return { error: "fix_blockers_first", blockers: check.blockers };
-  const { data: open, error: e1 } = await sb.from("studio_kits").select("id,version,status").eq("slug", slug).in("status", ["draft", "approved"]).limit(1);
-  if (e1) throw new Error(e1.message);
-  if (open && open[0]) return { error: "drafted_already", kit: open[0] };
   for (let attempt = 0; attempt < 3; attempt++) {
+    // Read on every try: two approvers at once both pick the same version,
+    // one insert wins, and the other finds that draft here and stops.
+    const { data: open, error: e1 } = await sb.from("studio_kits").select("id,version,status").eq("slug", slug).in("status", ["draft", "approved"]).order("version", { ascending: false }).limit(1);
+    if (e1) throw new Error(e1.message);
+    if (open && open[0]) return { error: "drafted_already", kit: open[0] };
     const version = await nextVersion(sb, slug);
     const kit = { ...K.clone(p.kit), slug, version, as_of: today() };
     const row = {

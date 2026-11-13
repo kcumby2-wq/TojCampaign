@@ -112,7 +112,21 @@ function proposedKits() {
     files = [];
   }
   for (const f of files) {
-    const kit = JSON.parse(fs.readFileSync(path.join(PROPOSALS_DIR, f), "utf8"));
+    let kit;
+    try {
+      kit = JSON.parse(fs.readFileSync(path.join(PROPOSALS_DIR, f), "utf8"));
+    } catch (e) {
+      console.warn(`[studio] proposed kit ${f} doesn't read: ${e.message}`);
+      continue;
+    }
+    if (!kit || typeof kit.slug !== "string" || !/^[a-z0-9][a-z0-9-]{1,62}$/.test(kit.slug)) {
+      console.warn(`[studio] proposed kit ${f} has no usable slug`);
+      continue;
+    }
+    if (out.some((p) => p.slug === kit.slug)) {
+      console.warn(`[studio] proposed kit ${f} repeats the slug ${kit.slug}`);
+      continue;
+    }
     out.push({ slug: kit.slug, title: kit.title, file: f, kit });
   }
   proposalCache = out;
