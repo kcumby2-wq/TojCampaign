@@ -250,12 +250,17 @@ test("a title or a file name is read harder than a sentence: run-together, camel
   assert.deepEqual(U.minorRunIns("#hopestrong", [{ name: "Hope Field", is_minor: true }]), { sure: ["hope"], maybe: [], edge: ["hope"], loose: [] });
   assert.deepEqual(U.minorRunIns("#teamfield", [{ name: "Hope Field", is_minor: true }]), { sure: [], maybe: ["field"], edge: ["field"], loose: [] });
   // An ordinary word that starts or ends with a name: asked; a file name reads it as the name.
-  assert.deepEqual(U.minorRunIns("We grew up on the island", [{ name: "Isla Moss", is_minor: true }]), { sure: [], maybe: ["isla"], edge: ["isla"], loose: ["isla"] });
+  assert.deepEqual(U.minorRunIns("We grew up on the island", [{ name: "Isla Moss", is_minor: true }]), { sure: [], maybe: ["isla"], edge: [], loose: [] });
   assert.deepEqual(U.idNames("jordanxyz_v2", kidd), ["jordan"]);
   // A title: a name with a word beside it is the name; an everyday one run in is asked.
   assert.deepEqual(U.titleNames("Jordanfootball season", kidd).sure, ["jordan"]);
   assert.deepEqual(U.titleNames("Summertime grind", [{ name: "Summer Ray", is_minor: true }]), { sure: [], maybe: ["summer"] });
   assert.deepEqual(U.titleNames("the Jordanian team", kidd), { sure: [], maybe: ["jordan"] });
+  // An ordinary word's letters are asked everywhere, a file name's too.
+  const isla = [{ name: "Isla Moss", is_minor: true }];
+  assert.deepEqual(U.minorRunIns("#island", isla), { sure: [], maybe: ["isla"], edge: [], loose: [] });
+  assert.deepEqual(U.idNames("island_trip_2026.mov", isla), []);
+  assert.deepEqual(U.idNames("isla_trip_2026.mov", isla), ["isla"]);
   // "for" alone isn't a word a name runs into ("forward" for a Ward).
   assert.deepEqual(U.idNames("forward_pass_drill", [{ name: "Ward Bell", is_minor: true }]), []);
   // A file name has no one to ask: an everyday word run in at a word's start or end counts there.
