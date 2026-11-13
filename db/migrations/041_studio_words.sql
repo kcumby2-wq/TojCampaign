@@ -251,16 +251,18 @@ begin
 end $$;
 
 -- One word of a minor's name on the film's cards (not an everyday word) run
--- into another word: where camelCase starts and ends it ("#PrayForJamie",
--- "JamieStrong", "#PrayForKai", "KaiStrong": three letters or more), or, four
--- letters or more, beside a word a tag or a file name runs a name into
--- ("#teamjamie", "jamiestrong", "#prayforjamie", "jamiequote"), or with
--- initials after it in a tag or a handle ("jamieb_hoops"). An ordinary word
--- that starts or ends with one ("island" for an Isla, "umbrella" for an
--- Ella) isn't: the app asks about it, and keeps it once the writer says it
--- isn't a name here. The app reads the same (utils/studio-films.js
--- minorRunIns and its words beside, utils/studio-words.js runIns: a
--- three-letter one in a lower-case tag is asked about there); 039's
+-- into another word, where it's the name for certain without an English
+-- word list: where camelCase starts and ends it ("#PrayForJamie",
+-- "JamieStrong", "#PrayForKai", "KaiStrong": three letters or more), or,
+-- four letters or more, right beside a word a tag or a file name runs a
+-- name into ("#teamjamie", "jamiestrong", "#prayforjamie", "jamiequote",
+-- "#letsgojamie"). The app reads more, with English words
+-- (utils/studio-films.js minorRunIns: "#jordanfootball", "#bigjamieenergy"),
+-- and it holds a card back, or takes a corrected minor's lines with them,
+-- for what it reads (routes/studio-films.js keptRunIns); an English word
+-- that holds a name ("island" for an Isla) is asked there and kept once the
+-- writer says it isn't one, so it's never read here. utils/studio-words.js
+-- runIns: a three-letter one in a lower-case tag is asked about. 039's
 -- studio_names_in reads whole words.
 create or replace function public.studio_minor_run_in(p_film uuid, p_text text) returns boolean
 language sql stable set search_path = '' as $$
@@ -287,7 +289,9 @@ language sql stable set search_path = '' as $$
          'snow', 'sonny', 'south', 'spring', 'star', 'steel', 'sterling', 'stone', 'storm', 'stormy', 'strong', 'sue',
          'summer', 'sunday', 'sunny', 'sweet', 'swift', 'tad', 'tank', 'true', 'trust', 'tucker', 'valor', 'violet',
          'wade', 'walker', 'ward', 'warren', 'waters', 'way', 'wells', 'west', 'white', 'will', 'willow', 'winter',
-         'wise', 'wolf', 'wood', 'woods', 'worth', 'wren', 'young']))
+         'wise', 'wolf', 'wood', 'woods', 'worth', 'wren', 'young',
+         'amber', 'angel', 'carol', 'christian', 'crystal', 'daisy', 'destiny', 'genesis', 'glen', 'harmony', 'iris', 'jasmine',
+         'journey', 'lyric', 'melody', 'olive', 'robin', 'trinity']))
   ), beside as (
     -- utils/studio-films.js runBeside: the file words, the tags' last words,
     -- and the words a tag starts a name with.
@@ -300,24 +304,18 @@ language sql stable set search_path = '' as $$
       'interviews', 'sitdown',
       'nation', 'fam', 'family', 'gang', 'forever', 'crew', 'squad', 'army', 'pride', 'power', 'time', 'era', 'way', 'life', 'season', 'szn', 'mode',
       'legacy', 'love', 'fans', 'stan', 'club', 'world', 'vibes', 'energy', 'effect', 'magic', 'made', 'proud', 'hype', 'goat', 'goats',
-      'go', 'pray', 'prayfor', 'for', 'thanks', 'thankyou', 'happy', 'happybirthday', 'birthday', 'bday', 'congrats', 'congratulations', 'proudof',
+      'go', 'letsgo', 'gogo', 'pray', 'prayfor', 'thanks', 'thankyou', 'welove', 'weloveyou', 'thegoat', 'allday', 'happy', 'happybirthday', 'birthday', 'bday', 'congrats', 'congratulations', 'proudof',
       'proudofyou', 'coach', 'dear', 'hey', 'shoutout', 'welcome', 'free', 'justice', 'lil', 'big', 'our', 'my', 'iloveyou', 'loveyou', 'missyou',
       'ilove', 'rip', 'day', 'week', 'night', 'watch', 'game', 'games', 'show', 'hoops', 'ball', 'bball', 'mvp']) as b
   ), hay as (
     select ' ' || btrim(regexp_replace(lower(regexp_replace(coalesce(p_text, ''), '([[:lower:]])([[:upper:]])', '\1 \2', 'g')), '[^[:alpha:]]+', ' ', 'g')) || ' ' as split,
            ' ' || btrim(regexp_replace(lower(coalesce(p_text, '')), '[^[:alpha:]]+', ' ', 'g')) || ' ' as plain
-  ), tags as (
-    -- A tag, a handle, a link or a file name: its words, each with a space
-    -- on either side.
-    select ' ' || btrim(regexp_replace(lower(t[1]), '[^[:alpha:]]+', ' ', 'g')) || ' ' as words
-      from regexp_matches(coalesce(p_text, ''), '([^[:space:]]*(?:[#@_0-9]|[[:alnum:]][./][[:alnum:]])[^[:space:]]*)', 'g') as t
   )
   select p_text is not null and exists (
     select 1 from w, hay
      where hay.split like '% ' || w.word || ' %'
-        or char_length(w.word) >= 4 and (
-             exists (select 1 from beside where hay.plain like '% ' || w.word || beside.b || ' %' or hay.plain like '% ' || beside.b || w.word || ' %')
-          or exists (select 1 from tags where tags.words ~ (' ' || w.word || '[[:alpha:]]{1,2} '))))
+        or char_length(w.word) >= 4
+           and exists (select 1 from beside where hay.plain like '% ' || w.word || beside.b || ' %' or hay.plain like '% ' || beside.b || w.word || ' %'))
 $$;
 
 create or replace function public.studio_transcripts_gate() returns trigger
