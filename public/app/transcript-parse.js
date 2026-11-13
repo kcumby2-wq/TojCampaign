@@ -135,10 +135,10 @@
   // words the transcript says are missing ("[inaudible]").
   var BRACKET = /^\s*[\[(]\s*([^\[\]()]{1,60}?)\s*[\])]\s*:?\s*(.*)$/u;
   var MID_BRACKET = /[\[(][^\[\]()]{1,60}[\])]/g;
-  var MANNER = /^(?:(?:laugh|chuckl|giggl|sigh|scoff|snort|smirk|smil|grin|nod|shrug|winc|hum|mutter|mumbl|stammer|stutter|paus|hesitat|exhal|inhal|breath|snif|cough|gasp|groan|grunt|sob|whisper|yawn|clear|tear|sniffl)\w*|cr(?:y|ies|ying)|emotional|quietly|softly|beat|long|silence|voice (?:breaks|breaking|cracks|cracking))(?:\s+[\p{L}'’-]+){0,3}$/iu;
+  var MANNER = /^(?:(?:laugh|chuckl|giggl|sigh|scoff|snort|smirk|smil|grin|nod|shrug|winc|hum|mutter|mumbl|stammer|stutter|paus|hesitat|exhal|inhal|breath|snif|cough|gasp|groan|grunt|sob|whisper|yawn|clear|tear|sniffl)\w*|cr(?:y|ies|ying)|emotional|quietly|softly|beat|long|silence|voice (?:breaks|cracks|\p{L}+ing))(?:\s+[\p{L}'’-]+){0,3}$/iu;
   var LANGUAGE = /^(?:(?:in|speaking|speaks|speaking in)\s+)?(?:spanish|english|french|portuguese|creole|haitian creole|korean|vietnamese|tagalog|arabic|chinese|mandarin|cantonese|japanese|german|italian|russian|polish|hindi|samoan|tongan|swahili|somali|amharic|urdu|farsi|persian|hebrew|greek|turkish|ukrainian|asl|sign language)$/i;
   var EDITORIAL = /^(?:bleep\w*|beep\w*|censored|expletive\w*|sic|redacted|unclear|\?+|\.\.\.|…|[\d][\d,.:\s'’–-]*s?)$/i;
-  var PERSON = /^(?:man|men|woman|women|boy|boys|girl|girls|kid|kids|child|children|teen|teens|guy|guys|lady|ladies|person|people|someone|somebody|voice|voices|reporter|interviewer|narrator|announcer|commentator|host|crowd|audience|fan|fans|spectator|spectators|player|players|teammate|teammates|coach|coaches|referee|ref|umpire|official|mom|mother|dad|father|parent|parents|brother|sister|friend|student|students|teacher|everyone|group|tv|radio|pa|speaker|caller|offscreen|off-screen|other|another|unidentified)$/i;
+  var PERSON = /^(?:man|men|male|woman|women|female|boy|boys|girl|girls|kid|kids|child|children|teen|teens|guy|guys|lady|ladies|person|people|someone|somebody|voice|voices|reporter|interviewer|narrator|announcer|commentator|host|producer|director|crew|cameraman|camerawoman|crowd|audience|fan|fans|spectator|spectators|player|players|teammate|teammates|coach|coaches|trainer|captain|opponent|referee|ref|umpire|official|mom|mother|dad|father|parent|parents|brother|sister|son|daughter|husband|wife|aunt|uncle|cousin|grandma|grandpa|grandmother|grandfather|nana|papa|friend|student|students|teacher|everyone|group|tv|radio|pa|speaker|caller|offscreen|off-screen|off-camera|other|another|unidentified)$/i;
   function manner(s) {
     var t = String(s || "").trim();
     MISSING_RE.lastIndex = 0;
@@ -150,12 +150,14 @@
   function voiceOf(inside) {
     var t = String(inside || "").trim().replace(/\s+/g, " ");
     if (!t || manner(t)) return "";
-    var first = t.split(/[\s,]+/)[0];
+    var words = t.split(/[\s,]+/).map(function (w) { return w.replace(/['’]s$/i, ""); });
+    var person = words.some(function (w) { return PERSON.test(w); }) || /\boff[\s-]?(?:camera|screen|mic)\b/i.test(t);
     // Written like a name ("COACH", "Coach Hooks", "Mrs Lopez"): a label.
-    if (/^\p{L}/u.test(t) && LABEL_LIKE.test(t) && (PERSON.test(first) || !soundNote(t))) return "label";
-    // Who they are, in lower case or with more ("man", "crowd chanting",
+    if (/^\p{L}/u.test(t) && LABEL_LIKE.test(t) && (PERSON.test(words[0]) || !soundNote(t))) return "label";
+    // Who they are, in lower case or with more ("man", "male voice",
+    // "woman's voice", "crowd chanting", "grandma", "off camera",
     // "INTERVIEWER, OFF-SCREEN"): a voice nobody names.
-    if (PERSON.test(first)) return "person";
+    if (person) return "person";
     return "";
   }
   // A line cut where another voice starts in the middle of it: at ">>", at a
@@ -168,6 +170,10 @@
   function cutLine(raw) {
     var cuts = [];
     var m;
+    // A line that starts in italics and goes on: the italics are a line of
+    // their own ("<i>Why that year?</i> Because nobody filmed it.").
+    var lead = /^\s*<i>[\s\S]*?<\/i>/i.exec(raw);
+    if (lead && /\S/.test(raw.slice(lead[0].length))) cuts.push(lead[0].length);
     var labelOnly = function (before) { return /^\s*(?:[-‐‑–—]\s*|>{2,}\s*)?[^:\s][^:]{0,40}:\s*$/u.test(before); };
     MID_CHEVRON.lastIndex = 0;
     while ((m = MID_CHEVRON.exec(raw))) if (/\S/.test(raw.slice(0, m.index))) cuts.push(m.index);
@@ -181,7 +187,10 @@
       if (!who) continue;
       var afterSentence = /[.!?…]["”’)]?\s*$/.test(before);
       var caps = /^[\p{Lu}\p{M}\p{N} .,'’-]+$/u.test(inside.trim());
-      if (who === "person" || caps || afterSentence) cuts.push(m.index);
+      // A person in the middle of a sentence that goes on in lower case is
+      // in the background ("We did it [crowd cheering] every one of us").
+      var goesOn = !afterSentence && /^\s*\p{Ll}/u.test(raw.slice(m.index + m[0].length));
+      if ((who === "person" && !goesOn) || caps || afterSentence) cuts.push(m.index);
     }
     MID_LABEL.lastIndex = 0;
     while ((m = MID_LABEL.exec(raw))) {
@@ -220,7 +229,11 @@
     // own; the first piece of the subtitle's first line starts it.
     var lines = [];
     var first = [];
-    given.forEach(function (raw, li) { cutLine(raw).forEach(function (piece, k) { lines.push(piece); first.push(li === 0 && k === 0); }); });
+    given.forEach(function (raw, li) {
+      // Italics as converted subtitles keep them ({\i1}…{\i0}).
+      var r = String(raw).replace(/\{\\i1\}/gi, "<i>").replace(/\{\\i0\}/gi, "</i>");
+      cutLine(r).forEach(function (piece, k) { lines.push(piece); first.push(li === 0 && k === 0); });
+    });
     // A line all in italics ("<i>Why that year?</i>"), as subtitles mark an
     // off-screen voice (sometimes the speaker's own voice-over), and a sung
     // line ("♪ We are the champions ♪"): nobody's.
@@ -231,7 +244,8 @@
       var whole = (opens || italic) && (/<\/i>$/i.test(tr) || !/<\/i>/i.test(tr)) && !/<\/i>.*\S/i.test(tr.replace(/<\/i>$/i, "")) ;
       if (opens && !/<\/i>/i.test(tr)) italic = true;
       else if (/<\/i>/i.test(tr)) italic = false;
-      if (whole || /^[♪♫]/.test(tr)) {
+      // Sung: a note at either end, or wrapped in # as some subtitles mark it.
+      if (whole || /^[♪♫]|[♪♫]$/.test(tr) || /^#\s.*\s#$/.test(tr)) {
         if (!(cur && cur.kind === "other" && cur.sung)) { begin("other", ""); cur.sung = true; }
         cur.text.push(raw);
         return;
@@ -403,7 +417,9 @@
         if (labelled && p.odd) { p.text = p.who + ": " + p.text; who = TWO; }
         else if (labelled) who = p.who;
         else if (p.br) who = TWO;
-        else { p.text = p.who + ": " + p.text; who = p.dash || p.chev ? TWO : last; }
+        // Written once in a file with no labels: a label that looks like one
+        // ("Producer: Why that year?") is another voice; "Listen: …" is words.
+        else { p.text = p.who + ": " + p.text; who = p.dash || p.chev || (!p.odd && !NOT_LABEL.test(p.who)) ? TWO : last; }
       } else if (p.kind === "dash" || p.kind === "chev" || p.kind === "other") who = TWO;
       else who = last;
       if (!labelled && chevrons) who = TWO;
@@ -433,7 +449,21 @@
       if (!(k in seen)) { seen[k] = speakers.length; speakers.push({ who: c.who, cues: 0 }); }
       speakers[seen[k]].cues++;
     });
-    return { ok: true, format: format, frames: frames, fps: frames ? fps : null, drop: frames && drop, cues: cues, speakers: speakers, labelled: labelled, mixed: mixed, voices: speakers.length };
+    // The brackets read as notes, not voices (the speaker's voice goes on
+    // past them), for the editor to check: "[whistle blows]", "[laughs]".
+    var notes = [];
+    raw.forEach(function (c) {
+      c.lines.forEach(function (l) {
+        var m;
+        var re = /[\[(]([^\[\]()]{1,60})[\])]/g;
+        while ((m = re.exec(l)) && notes.length < 12) {
+          var t = m[1].trim().replace(/\s+/g, " ");
+          MISSING_RE.lastIndex = 0;
+          if (t && !voiceOf(t) && !MISSING_RE.test("[" + t + "]") && !/^(?:o\.?\s?s\.?|v\.?\s?o\.?|cont['’]?d\.?)$/i.test(t) && notes.indexOf(t.toLowerCase()) < 0) notes.push(t.toLowerCase());
+        }
+      });
+    });
+    return { ok: true, format: format, frames: frames, fps: frames ? fps : null, drop: frames && drop, cues: cues, speakers: speakers, labelled: labelled, mixed: mixed, voices: speakers.length, notes: notes };
   }
 
   // A speaker's cues, numbered again from 1. A cue that comes after someone

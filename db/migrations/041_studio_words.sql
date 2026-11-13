@@ -310,13 +310,15 @@ language sql stable set search_path = '' as $$
   ), hay as (
     select ' ' || btrim(regexp_replace(lower(regexp_replace(coalesce(p_text, ''), '([[:lower:]])([[:upper:]])', '\1 \2', 'g')), '[^[:alpha:]]+', ' ', 'g')) || ' ' as split,
            ' ' || btrim(regexp_replace(lower(coalesce(p_text, '')), '[^[:alpha:]]+', ' ', 'g')) || ' ' as plain
+  ), alt as (
+    select '(?:' || string_agg(b, '|' order by char_length(b) desc) || ')*' as a from beside
   )
+  -- A name's letters first (cheap), then the pattern, built once.
   select p_text is not null and exists (
-    select 1 from w, hay
-     where hay.split like '% ' || w.word || ' %'
-        or char_length(w.word) >= 4
-           and hay.plain ~ (' (?:' || (select string_agg(b, '|' order by char_length(b) desc) from beside) || ')*' || w.word
-                            || '(?:' || (select string_agg(b, '|' order by char_length(b) desc) from beside) || ')* '))
+    select 1 from w, hay, alt
+     where strpos(hay.plain, w.word) > 0
+       and (hay.split like '% ' || w.word || ' %'
+            or char_length(w.word) >= 4 and hay.plain ~ (' ' || alt.a || w.word || alt.a || ' ')))
 $$;
 
 create or replace function public.studio_transcripts_gate() returns trigger

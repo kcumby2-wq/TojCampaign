@@ -343,6 +343,15 @@ test("other voices are nobody's however a file marks them: >>, a name in bracket
   assert.deepEqual(TP.only(p.cues, "COACH").map((c) => c.t), ["I ran it.", "Every Sunday.", "Every Sunday.", "Church."]);
   p = TP.parse(S("I ran every day.", "<i>Why that year?</i>", "Because nobody filmed it.", "♪ We are the champions ♪", "Again."));
   assert.deepEqual(TP.only(p.cues, null).map((c) => c.t), ["I ran every day.", "Because nobody filmed it.", "Again."]);
+  // More voices in brackets, a label written once, italics and lyrics written other ways.
+  p = TP.parse(S("COACH: I ran it.", "[male voice] Why that year?", "COACH: Because.", "[woman's voice] Really?", "COACH: Yes.", "[grandma] He was up first.", "COACH: True.", "[off camera] Why?", "COACH: Done."));
+  assert.deepEqual(TP.only(p.cues, "COACH").map((c) => c.t), ["I ran it.", "Because.", "Yes.", "True.", "Done."]);
+  p = TP.parse(S("I ran every day.", "Producer: Why that year?", "{\\i1}Why then?{\\i0}", "<i>Why then?</i> Because nobody filmed it.", "# We are the champions #", "We are the champions ♪", "Listen: you show up."));
+  assert.deepEqual(TP.only(p.cues, null).map((c) => c.t), ["I ran every day.", "Because nobody filmed it.", "Listen: you show up."]);
+  // A manner note that starts with "voice", and a background note mid-sentence, keep the voice; notes are listed.
+  p = TP.parse(S("I ran.", "[voice trembling] He never missed one.", "We did it [crowd cheering] every single one of us.", "[whistle blows] Again."));
+  assert.deepEqual(TP.only(p.cues, null).map((c) => c.t), ["I ran.", "He never missed one.", "We did it every single one of us.", "Again."]);
+  assert.deepEqual(p.notes, ["voice trembling", "whistle blows"]);
   // Marks in the middle of a line, a voice in lower case or with more in its
   // brackets, a voice named with a word sound notes use, a label with a note
   // after the name: the other voice's words are nobody's, or theirs.
