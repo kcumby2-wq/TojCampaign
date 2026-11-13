@@ -148,9 +148,10 @@ function capitalizedAtStart(raw, w) {
 // for certain where it starts or ends the word and the rest is a word a tag
 // or a file name runs a name into ("strong", "team", "quote", "prayfor") or
 // four letters or more ("#jordanfootball", "#welovejordan", "#jordansarmy",
-// "Jordanfootball season"); beside another word of the name; with initials
-// after it in a tag or a handle ("kayleeb_hoops"); or where camelCase starts
-// or ends it ("JordanStrong"). An ordinary word that starts or ends with one
+// "Jordanfootball season"); beside another word of the name; anywhere it
+// starts or ends a word in a tag, a handle, a link or a file name
+// ("kayleeb_hoops", "#letsgojamie"); or where camelCase starts or ends it
+// ("JordanStrong"). An ordinary word that starts or ends with one
 // is asked: a short ending or start ("island" for an Isla, "William" for a
 // Liam, "theory" for a Theo, "Jordanian"), or a word on ORDINARY_RUNS
 // ("umbrella" for an Ella, "#islandlife"). An everyday word ("hope") is the
@@ -229,7 +230,7 @@ function minorRunIns(textValue, people) {
             if (!everyday(w)) loose.add(w);
           }
           if (!everyday(w)) {
-            if (!ordinaryHere && (camel || byWord || own || rest || (r.tag && !head && Array.from(tail).length <= 2))) sure.add(w);
+            if (!ordinaryHere && (camel || byWord || own || rest || (r.tag && atEdge))) sure.add(w);
             else maybe.add(w);
           } else if ((clear && !surname && !RUN_COMPOUNDS.has(r.low) && !FILE_COMPOUNDS.has(r.low)) || own) sure.add(w);
           else maybe.add(w);
