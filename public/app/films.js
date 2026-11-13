@@ -48,6 +48,7 @@
     email_not_set_up: "The app can't send email yet (Render's email settings), so no link was made.",
     too_many_links_today: "That address has had 20 links today. Try tomorrow, or call them.",
     no_reviewer: "That card doesn't say who approves the cut.",
+    card_not_cleared: "Clear the card first: its email hasn't been checked yet.",
     exists: "There's already a live link for that cut and reviewer.",
     version_taken: "That version number was just used: open the film again and send it as the next version.",
     id_taken: "That upload's id is already in use: start the upload again.",
@@ -227,9 +228,10 @@
     var today = new Date().toISOString().slice(0, 10);
     function filmRow(f) {
       var w = f.where || {};
-      var b = w.state === "published" ? badge("Published", "ok") : w.state === "active" ? badge(w.label, "gold") : "";
+      // A pulled film stays where it was planned, marked, and can't be moved.
+      var b = f.pulled ? badge("Consent pulled", "bad") : w.state === "published" ? badge("Published", "ok") : w.state === "active" ? badge(w.label, "gold") : "";
       return '<div class="li"><a class="grow" href="#film/' + h(f.id) + '" style="text-decoration:none;color:inherit"><div class="name" style="font-size:15px">' + h(f.title) + '</div><div class="sub">' + h([fmtLabel(f.kit_slug, f.format), f.athlete_id].join(" · ")) + "</div></a>" + b +
-        '<button type="button" class="btn ghost small" data-unlink="' + h(f.id) + '" style="flex:0 0 auto">Unlink</button></div>';
+        (f.pulled ? "" : '<button type="button" class="btn ghost small" data-unlink="' + h(f.id) + '" style="flex:0 0 auto">Unlink</button>') + "</div>";
     }
     function stopCard(e) {
       var films = e.films || [];
@@ -253,6 +255,7 @@
         msgBox("slMsg") +
         (ahead.length ? ahead.map(stopCard).join("") : '<p class="empty">No stops on the calendar in the next six months.</p>') +
         (past.length ? '<section class="sec"><h2 class="sec-h">Last week</h2>' + past.map(stopCard).join("") + "</section>" : "") +
+        ((d.elsewhere || []).length ? '<section class="sec"><h2 class="sec-h">Planned for a stop not shown here</h2><p class="sub" style="margin:0">' + h("Its stop is further out, in another region, or was cancelled. Open the film to plan it again.") + '</p><div class="list">' + d.elsewhere.map(filmRow).join("") + "</div></section>" : "") +
         "</div>");
       document.querySelectorAll("[data-link]").forEach(function (b) { b.addEventListener("click", function () { linking = b.dataset.link; draw(); }); });
       var c = document.getElementById("linkCancel");
@@ -267,6 +270,7 @@
         b.addEventListener("click", function () {
           var f = null;
           d.events.forEach(function (e) { (e.films || []).forEach(function (x) { if (x.id === b.dataset.unlink) f = x; }); });
+          (d.elsewhere || []).forEach(function (x) { if (x.id === b.dataset.unlink) f = x; });
           if (f) setStop(f, null, b);
         });
       });
@@ -369,7 +373,7 @@
       var covers = "Release covers: " + (["face", "name", "jersey", "voice"].filter(function (k) { return cov[k]; }).join(", ") || "nothing identifying") + ((cov.formats || []).length ? " · " + cov.formats.map(function (x) { return fmtLabel(f.kit_slug, x); }).join(", ") : "");
       var who = p.reviewer_email ? (p.reviewer_relation === "self" ? "Approves their own cut" : "Approved by " + (p.reviewer_relation === "guardian" ? "legal guardian" : "parent") + " " + p.reviewer_name) + " · " + p.reviewer_email : "";
       // Their own page (every film with them, and taking consent back), by email.
-      var pageBtn = d.can.producer && p.reviewer_email ? '<button type="button" class="btn ghost small" data-pagelink="' + h(p.id) + '">Send their page</button>' : "";
+      var pageBtn = d.can.producer && p.reviewer_email && p.cleared_at ? '<button type="button" class="btn ghost small" data-pagelink="' + h(p.id) + '">Send their page</button>' : "";
       return '<article class="card tight"><div class="row"><div class="grow"><div class="name" style="font-size:15px">' + h(p.name) + ' <span class="sub">' + h(p.person_code) + '</span></div><div class="sub">' + h(tags) + "</div></div>" + state + "</div>" +
         '<p class="body" style="font-size:13.5px">' + h(covers) + (who ? "<br>" + h(who) : "") + (p.cleared_at ? "<br>Cleared by " + h(p.cleared_by) + " · " + h(t.ago(p.cleared_at)) : "") + (p.gaps && p.gaps.length && !p.cleared_at ? '<br><span class="warnc">Still needed: ' + h(p.gaps.join("; ")) + "</span>" : "") + "</p>" +
         (closed || p.consent_pulled_at ? (pageBtn ? '<div class="btn-row">' + pageBtn + "</div>" : "") : '<div class="btn-row"><a class="btn ghost small" href="#film-person/' + h(f.id) + "/" + h(p.id) + '">Edit card</a>' +

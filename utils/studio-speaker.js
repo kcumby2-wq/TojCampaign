@@ -39,8 +39,10 @@ function pageEmail({ relations = [], link }) {
   };
 }
 
-// Make a link for an email and send it (a new link stops the older ones).
-// No email, no link: one that couldn't be sent is stopped at once. Replies
+// Make a link for an email and send it. Once the email is accepted, the new
+// link stops the older ones (studio_speaker_supersede): an ask that can't be
+// sent leaves the person's working link as it was. No email, no link: one
+// that couldn't be sent is stopped at once. Replies
 // go back to the person (or an address nobody reads), never to staff: a
 // reply quotes the link. Returns { sent } or { sent: false, why }.
 async function issueLink(sb, mailer, { email, sentBy, relations }) {
@@ -58,6 +60,7 @@ async function issueLink(sb, mailer, { email, sentBy, relations }) {
     await sb.rpc("studio_speaker_sign_out", { p_proof: proof }).then(() => {}, () => {});
     return { sent: false, why: sent && sent.reason === "email_not_configured" ? "email_not_set_up" : "email" };
   }
+  await sb.rpc("studio_speaker_supersede", { p_proof: proof }).then(() => {}, () => {});
   return { sent: true };
 }
 
@@ -72,7 +75,9 @@ async function viewFor(sb, email) {
     if (error) throw new Error(error.message);
     return data || [];
   };
-  const cards = await q(sb.from("studio_film_people").select("id,film_id,person_code,role,is_minor,reviewer_relation,cleared_at,consent_pulled_at,covers").eq("reviewer_email", email));
+  // Only cards the producer cleared: an email on an unchecked card isn't
+  // known to be theirs yet.
+  const cards = await q(sb.from("studio_film_people").select("id,film_id,person_code,role,is_minor,reviewer_relation,cleared_at,consent_pulled_at,covers").eq("reviewer_email", email).not("cleared_at", "is", null));
   if (!cards.length) return { people: [] };
   const filmIds = [...new Set(cards.map((c) => c.film_id))];
   const cardIds = cards.map((c) => c.id);
@@ -82,7 +87,8 @@ async function viewFor(sb, email) {
     q(sb.from("studio_films").select("id,kit_slug,format,lane,post_date,pulled_at,archived_at").in("id", filmIds)),
     q(sb.from("studio_film_steps").select("film_id,step,status").in("film_id", filmIds)),
     q(sb.from("studio_film_cuts").select("id,film_id,format,ratio,version,people").in("film_id", filmIds)),
-    q(sb.from("studio_reviews").select("cut_id,person_id,decision,decided_at,withdrawn_at").in("person_id", cardIds).not("decided_at", "is", null)),
+    // Only this approver's own decisions (a card's approver can change).
+    q(sb.from("studio_reviews").select("cut_id,person_id,decision,decided_at,withdrawn_at").in("person_id", cardIds).eq("reviewer_email", email).not("decided_at", "is", null)),
     q(sb.from("studio_reviews").select("person_id,expires_at").in("person_id", cardIds).is("decided_at", null).not("link_hash", "is", null).gt("expires_at", now)),
     q(sb.from("studio_film_posts").select("film_id,cut_id,platform,url,posted_at,removed_at").in("film_id", filmIds)),
     q(sb.from("studio_takedowns").select("person_code,requested_at,due_at,source,closed_at").in("person_code", codes)),
@@ -128,7 +134,11 @@ async function viewFor(sb, email) {
       code,
       relation: mine[0].reviewer_relation,
       is_minor: mine.some((c) => c.is_minor),
-      pulled: mine.some((c) => c.consent_pulled_at),
+      // Taken back on every card (no film with them goes on), or still live on
+      // some: after a new consent, the old takedown is history and the page
+      // offers to take the new one back.
+      pulled: mine.every((c) => c.consent_pulled_at),
+      live: mine.some((c) => !c.consent_pulled_at),
       takedown: td ? { requested_at: td.requested_at, due_at: td.due_at, by_speaker: td.source === "speaker", closed: !!td.closed_at } : null,
       films: mine
         .map((c) => {

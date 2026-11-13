@@ -19,12 +19,12 @@ const T = require("../utils/team");
 
 let pool, server, base;
 const cookies = {};
-const as = { kyron: "kyron@toj.test", dir: "dir@toj.test", out: "out@toj.test" };
+const as = { kyron: "kyron@toj.test", dir: "dir@toj.test", out: "out@toj.test", west: "west@toj.test" };
 
 before(async () => {
   pool = await makeSchema(URL_, SCHEMA, ["018_studio_kits.sql", "019_team.sql", "020_native_push.sql", "024_gfs_events.sql", "039_studio_films.sql"]);
   setSupabase(pgSupabase(pool, SCHEMA));
-  await pool.query("insert into team_members (email, role, tools) values ('dir@toj.test', 'member', array['studio']), ('out@toj.test', 'member', array['gfs'])");
+  await pool.query("insert into team_members (email, role, tools, regions) values ('dir@toj.test', 'member', array['studio'], array['south_central']), ('out@toj.test', 'member', array['gfs'], array['south_central']), ('west@toj.test', 'member', array['studio'], array['west'])");
   const app = express();
   app.use(express.json());
   app.use(session({ secret: "slate", resave: false, saveUninitialized: false }));
@@ -66,7 +66,9 @@ test("the slate lists the tour's stops in order, each with its films, and the fi
   const a = ok(await call("POST", "/films", { kit_slug: "same-work", title: "S0101 hero", lane: "youth", format: "hero", athlete_id: "S0101", gfs_event_id: dallas }, "dir"), "planned film").film;
   const b = ok(await call("POST", "/films", { kit_slug: "same-work", title: "S0102 hero", lane: "youth", format: "hero", athlete_id: "S0102" }, "dir"), "unplanned film").film;
   const s = ok(await call("GET", "/slate", undefined, "dir"), "slate");
-  assert.deepEqual(s.events.map((e) => e.code), ["DAL27", "HOU27"]);
+  assert.deepEqual(s.events.map((e) => e.name), ["Pylon Dallas", "Pylon Houston"]);
+  // Only what a stop's public page shows.
+  assert.deepEqual(Object.keys(s.events[0]).sort(), ["city", "ends_on", "films", "id", "name", "series", "starts_on", "state"]);
   assert.deepEqual(s.events[0].films.map((f) => f.id), [a.id]);
   assert.equal(s.events[0].films[0].where.state, "active");
   assert.deepEqual(s.events[1].films, []);
@@ -87,5 +89,26 @@ test("a film is planned only against a stop that's on the calendar, and the slat
   assert.deepEqual([r.status, r.data.fields], [400, ["gfs_event_id"]]);
   assert.equal((await call("GET", "/slate", undefined, "out")).status, 403);
   const wide = ok(await call("GET", `/slate?from=${day(-90)}&to=${day(400)}`, undefined, "dir"), "a wider window");
-  assert.ok(wide.events.some((e) => e.code === "OLD26") && wide.events.some((e) => e.code === "FAR28"));
+  assert.ok(wide.events.some((e) => e.name === "Pylon last spring") && wide.events.some((e) => e.name === "Pylon next fall"));
+  assert.ok(!wide.events.some((e) => e.name === "Pylon cancelled"));
+});
+
+test("the slate shows a member only their Pylon regions' stops; a cancelled stop can't be planned; a film planned out of view is still listed", async () => {
+  const west = await stop("WST27", "Pylon West", 15, 15);
+  await pool.query("update gfs_events set region = 'west' where id = $1", [west]);
+  const sc = ok(await call("GET", "/slate", undefined, "dir"), "south central member");
+  assert.ok(!sc.events.some((e) => e.name === "Pylon West"));
+  const w = ok(await call("GET", "/slate", undefined, "west"), "west member");
+  assert.deepEqual(w.events.map((e) => e.name), ["Pylon West"]);
+  const all = ok(await call("GET", "/slate", undefined, "kyron"), "Kyron");
+  assert.ok(all.events.some((e) => e.name === "Pylon West") && all.events.some((e) => e.name === "Pylon Dallas"));
+  // A cancelled stop isn't on the calendar for planning.
+  const cancelled = (await pool.query("select id from gfs_events where code = 'CAN27'")).rows[0].id;
+  const r = await call("POST", "/films", { kit_slug: "same-work", title: "S0301 hero", lane: "youth", format: "hero", athlete_id: "S0301", gfs_event_id: cancelled }, "dir");
+  assert.deepEqual([r.status, r.data.fields], [400, ["gfs_event_id"]]);
+  // Planned for a stop further out than the slate shows: listed, not lost.
+  const far = (await pool.query("select id from gfs_events where code = 'FAR28'")).rows[0].id;
+  const f = ok(await call("POST", "/films", { kit_slug: "same-work", title: "S0302 hero", lane: "youth", format: "hero", athlete_id: "S0302", gfs_event_id: far }, "dir"), "far film").film;
+  const s = ok(await call("GET", "/slate", undefined, "dir"), "slate");
+  assert.ok(s.elsewhere.some((x) => x.id === f.id && x.pulled === false));
 });

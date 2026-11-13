@@ -91,6 +91,7 @@
     <div id="people"></div>
     <div class="foot">
       <button class="btn no" type="button" id="signOut">Sign out of this page</button>
+      <div class="err" id="signOutErr" role="alert"></div>
       <p class="note">Signing out stops this link. You can ask for a new one any time. Please don't forward your link: anyone with it can see this page and take your consent back.</p>
     </div>
   </div>
@@ -119,6 +120,7 @@
   } catch (e) {}
   try { history.replaceState(null, "", location.pathname); } catch (e) {}
   function forget() { token = ""; try { sessionStorage.removeItem(KEY); } catch (e) {} }
+  function alertLine(text) { $("signOutErr").textContent = text; }
   function post(path, body) {
     return fetch("/api/studio-speaker/" + path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body), credentials: "omit" })
       .then(function (r) { return r.json().catch(function () { return {}; }).then(function (d) { return { status: r.status, data: d || {} }; }); });
@@ -199,6 +201,10 @@
     var h = el("h2", null, w.head + " ");
     h.appendChild(el("span", "pill", p.code));
     sec.appendChild(h);
+    if (!p.pulled && p.takedown) {
+      // Taken back before, and given again since: the old takedown is history.
+      sec.appendChild(el("p", "note", "Consent was taken back on " + when(p.takedown.requested_at) + ", and given again since. What's below is the consent as it is now."));
+    }
     if (p.pulled) {
       var c = el("div", "card alert");
       var td = p.takedown;
@@ -211,7 +217,7 @@
     }
     if (!p.films.length) sec.appendChild(el("p", "note", "No films yet."));
     p.films.forEach(function (f) { sec.appendChild(film(f, w)); });
-    if (!p.pulled) sec.appendChild(pullBox(p, w));
+    if (p.live !== false && !p.pulled) sec.appendChild(pullBox(p, w));
     return sec;
   }
 
@@ -307,7 +313,7 @@
         if (r.status === 200 && r.data.ok) load();
         else if (r.status === 409 && r.data.error === "already_taken_back") load();
         else if (r.status === 404) { forget(); askFor("That link isn't active anymore, so nothing was taken back. Ask for a new link here, or tell the producer: they can take it back for you."); }
-        else if (r.status === 400 && r.data.error === "note_has_name") again("Please take names out of the note" + (r.data.words && r.data.words.length ? " (" + r.data.words.join(", ") + ")" : "") + ". It's kept with the takedown.");
+        else if (r.status === 409 && r.data.error === "ask_the_team") { btn.disabled = true; btn.textContent = w.action; err.textContent = "Someone else approves for some of these films too, so nothing was taken back here. The team has your request and will call you today to take it back with you."; }
         else if (r.status === 429) again("Too many tries from here just now. Wait a minute, then try again.");
         else again("We couldn't record that just now. Wait a minute and try again. If it keeps failing, tell the producer: they can take it back for you.");
       }).catch(function () { again("Network error. Please try again."); });
@@ -318,7 +324,14 @@
   $("signOut").addEventListener("click", function () {
     $("signOut").disabled = true;
     var t = token;
-    post("sign-out", { token: t }).then(function () { forget(); show("out"); }, function () { forget(); show("out"); });
+    post("sign-out", { token: t }).then(function (r) {
+      if (r.status === 200 && r.data && r.data.ok) { forget(); show("out"); return; }
+      $("signOut").disabled = false;
+      alertLine("We couldn't sign you out just now: this link still works. Try again in a minute, or close this page.");
+    }, function () {
+      $("signOut").disabled = false;
+      alertLine("Network error: this link still works. Try again in a minute.");
+    });
   });
 
   load();

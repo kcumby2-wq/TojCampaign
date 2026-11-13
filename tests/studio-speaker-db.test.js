@@ -310,13 +310,12 @@ test("taking consent back from the page: only with a live link, only for their o
   // Someone else's person: refused, and they're untouched.
   assert.equal((await page("/pull", { token, person_code: "C4002", confirm: true })).data.error, "not_yours");
   assert.equal((await page("/pull", { token, person_code: "ZZ999", confirm: true })).data.error, "not_yours");
-  // A note keeps no names (only this person's cards are checked).
-  const named = await page("/pull", { token, person_code: "C4001", confirm: true, note: "Lee Moe wants out" });
-  assert.deepEqual([named.status, named.data.error], [400, "note_has_name"]);
   assert.equal((await pool.query("select count(*)::int as n from studio_film_people where consent_pulled_at is not null and film_id = $1", [film.id])).rows[0].n, 0);
 
+  // A note with a name in it isn't refused (the page can't be used to check
+  // a name): it's kept with the code instead.
   mails = [];
-  const r = ok(await page("/pull", { token, person_code: "c4001", confirm: true, note: "Changed my mind about being filmed." }), "pull");
+  const r = ok(await page("/pull", { token, person_code: "c4001", confirm: true, note: "Lee Moe changed his mind about being filmed." }), "pull");
   assert.ok(r.due_at);
   const td = (await pool.query("select * from studio_takedowns where person_code = 'C4001'")).rows[0];
   assert.deepEqual([td.source, td.requested_by], ["speaker", "the speaker, on their page"]);
@@ -324,6 +323,9 @@ test("taking consent back from the page: only with a live link, only for their o
   const cards = (await pool.query("select person_code, consent_pulled_at, pulled_by from studio_film_people where film_id = $1 order by person_code", [film.id])).rows;
   assert.ok(cards[0].consent_pulled_at);
   assert.equal(cards[0].pulled_by, "the speaker, on their page");
+  const kept = (await pool.query("select pulled_note from studio_film_people where film_id = $1 and person_code = 'C4001'", [film.id])).rows[0].pulled_note;
+  assert.match(kept, /^C4001 changed his mind/);
+  assert.doesNotMatch(kept, /Lee|Moe/);
   assert.equal(cards[1].consent_pulled_at, null, "Max is untouched");
   assert.ok((await pool.query("select pulled_at from studio_films where id = $1", [film.id])).rows[0].pulled_at, "the film stops");
   // Staff hear at once, as mail that must go, with the code and no name.
@@ -371,7 +373,7 @@ test("the producer sends the page from a card", async () => {
   const r = await films("POST", `/films/${film.id}/people/${people[0].id}/page-link`, {}, "lead");
   assert.deepEqual([r.status, r.data.error], [502, "email_not_set_up"]);
   const live = (await pool.query("select count(*)::int as n from studio_speaker_links where email = 'ira@x.test' and revoked_at is null and expires_at > now()")).rows[0].n;
-  assert.equal(live, 0, "the unsent link is stopped, and so is the older one");
+  assert.equal(live, 1, "the unsent link is stopped, and the one they have still works");
 });
 
 test("the database keeps every link as it was made, and only the server reaches it", async () => {
@@ -392,10 +394,90 @@ test("the database keeps every link as it was made, and only the server reaches 
   for (const role of ["anon", "authenticated"]) {
     const t = (await pool.query(`select has_table_privilege($1, '${SCHEMA}.studio_speaker_links', 'select') as s`, [role])).rows[0].s;
     assert.equal(t, false, role);
-    for (const fn of ["studio_speaker_email(text)", "studio_speaker_sign_out(text)", "studio_speaker_pull(text, text, text)"]) {
+    for (const fn of ["studio_speaker_email(text)", "studio_speaker_sign_out(text)", "studio_speaker_supersede(text)", "studio_speaker_pull(text, text, text)"]) {
       assert.equal((await pool.query(`select has_function_privilege($1, '${SCHEMA}.${fn}', 'execute') as x`, [role])).rows[0].x, false, `${role} ${fn}`);
     }
   }
   assert.equal((await pool.query(`select has_function_privilege('service_role', '${SCHEMA}.studio_speaker_pull(text, text, text)', 'execute') as x`)).rows[0].x, true);
   assert.equal((await pool.query(`select has_table_privilege('service_role', '${SCHEMA}.studio_speaker_links', 'truncate') as x`)).rows[0].x, false);
+});
+
+test("an ask that can't be emailed leaves the working link; a sent one stops the older; two at once leave one", async () => {
+  await aFilm(() => [self("C6001", "Ada Quill", "ada@x.test")]);
+  const first = await linkFor("ada@x.test");
+  // Anyone can ask for the address: with mail down, the link they have stays.
+  mailOk = false;
+  ok(await page("/send-link", { email: "ada@x.test" }), "ask, mail down");
+  await wait(120);
+  assert.equal((await page("/view", { token: first })).status, 200, "the working link still works");
+  mailOk = true;
+  speakerRouter._reset();
+  mails = [];
+  const second = await linkFor("ada@x.test");
+  await wait(100);
+  assert.equal((await page("/view", { token: first })).status, 404, "a sent link stops the older one");
+  assert.equal((await page("/view", { token: second })).status, 200);
+  // Two made at the same moment: one stays live, the later one.
+  speakerRouter._reset();
+  mails = [];
+  await Promise.all([page("/send-link", { email: "ada@x.test" }), page("/send-link", { email: "ada@x.test" })]);
+  await wait(200);
+  const live = (await pool.query("select count(*)::int as n from studio_speaker_links where email = 'ada@x.test' and revoked_at is null and expires_at > now()")).rows[0].n;
+  assert.equal(live, 1);
+});
+
+test("after a new consent, the page offers to take it back again, and the old takedown is history", async () => {
+  const { film } = await aFilm(() => [self("C6101", "Bo Lark", "bo@x.test")]);
+  const token = await linkFor("bo@x.test");
+  ok(await page("/pull", { token, person_code: "C6101", confirm: true }), "pull");
+  // Everything on the takedown is done, so it closes.
+  for (const it of (await pool.query("select i.id from studio_takedown_items i join studio_takedowns t on t.id = i.takedown_id where t.person_code = 'C6101' and i.done_at is null")).rows) {
+    ok(await films("POST", `/takedown-items/${it.id}/done`, {}, "lead"), "item done");
+  }
+  assert.ok((await pool.query("select closed_at from studio_takedowns where person_code = 'C6101'")).rows[0].closed_at, "the takedown closed");
+  // The producer records the new consent on a new card, on a new film.
+  let film2 = ok(await films("POST", "/films", { kit_slug: "same-work", title: "C6101 again", lane: "youth", athlete_id: "C6101", format: "hero" }, "lead"), "start").film;
+  const add = await films("POST", `/films/${film2.id}/people`, { ...self("C6101", "Bo Lark", "bo@x.test"), reconsent_note: "Signed a new release in person with the producer" }, "lead");
+  const p2 = ok(add, "new card with new consent").person;
+  ok(await films("POST", `/films/${film2.id}/people/${p2.id}/clear`, { seen: p2.updated_at }, "lead"), "clear");
+  const v = ok(await page("/view", { token }), "view");
+  assert.deepEqual([v.people[0].pulled, v.people[0].live], [false, true]);
+  assert.ok(v.people[0].takedown, "the old takedown is still shown");
+  ok(await page("/pull", { token, person_code: "C6101", confirm: true }), "take the new consent back too");
+  void film;
+});
+
+test("a page pull another person's approval shares goes to the team, and nothing is taken back", async () => {
+  // A parent's card from when the athlete was a minor; now the athlete approves for themself.
+  const { film, people } = await aFilm((code) => [{ person_code: code, name: "Cy Dove", role: "athlete", is_minor: true, speaker: true, release_on_file: true, covers: { voice: true, formats: ["hero"] }, reviewer_relation: "parent", reviewer_name: "Pat Dove", reviewer_email: "pat@x.test" }]);
+  const code = people[0].person_code;
+  let film2 = ok(await films("POST", "/films", { kit_slug: "same-work", title: `${code} now`, lane: "youth", athlete_id: code, format: "hero" }, "lead"), "start").film;
+  let p2 = ok(await films("POST", `/films/${film2.id}/people`, self(code, "Cy Dove", "cy@x.test"), "lead"), "adult card").person;
+  ok(await films("POST", `/films/${film2.id}/people/${p2.id}/clear`, { seen: p2.updated_at }, "lead"), "clear");
+  const token = await linkFor("pat@x.test");
+  mails = [];
+  const r = await page("/pull", { token, person_code: code, confirm: true, note: "Cy Dove wants this stopped" });
+  assert.deepEqual([r.status, r.data.error], [409, "ask_the_team"]);
+  assert.equal((await pool.query("select count(*)::int as n from studio_film_people where person_code = $1 and consent_pulled_at is not null", [code])).rows[0].n, 0);
+  const alert = await mailTo("kyron@toj.test", /Asked to take consent back/);
+  assert.ok(alert);
+  assert.doesNotMatch(alert.text, /Cy|Dove|pat@/);
+  void film;
+});
+
+test("an uncleared card's email gets no page; a new approver doesn't see the old one's decisions as theirs", async () => {
+  // Uncleared: the email isn't checked yet.
+  let film = ok(await films("POST", "/films", { kit_slug: "same-work", title: "S7001 hero", lane: "youth", athlete_id: "S7001", format: "hero" }, "lead"), "start").film;
+  const p = ok(await films("POST", `/films/${film.id}/people`, self("C7001", "Di Fern", "di@x.test"), "lead"), "card").person;
+  mails = [];
+  ok(await page("/send-link", { email: "di@x.test" }), "ask");
+  await wait(120);
+  assert.equal(mails.filter((m) => m.to.includes("di@x.test")).length, 0);
+  assert.equal((await films("POST", `/films/${film.id}/people/${p.id}/page-link`, {}, "lead")).data.error, "card_not_cleared");
+  // The previous approver's decision isn't shown as the new one's.
+  const { film: f2, people } = await aFilm(() => [self("C7101", "Eve Moss", "eve@x.test")]);
+  await pool.query("insert into studio_reviews (film_id, cut_id, person_id, reviewer_email, reviewer_relation, asked_fingerprint, asked_by, decision, decided_at, decided_name) select $1, c.id, $2, 'old@x.test', 'self', repeat('a', 64), 'lead@toj.test', 'approved', now(), 'Old Name' from studio_film_cuts c where c.film_id = $1 limit 1", [f2.id, people[0].id]).catch(() => {});
+  const token = await linkFor("eve@x.test");
+  const v = ok(await page("/view", { token }), "view");
+  assert.equal(v.people[0].films[0].approvals.length, 0);
 });

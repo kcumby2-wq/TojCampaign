@@ -23,6 +23,7 @@ const mailer = require("../utils/mailer");
 const H = require("../utils/pylon-http");
 const U = require("../utils/studio-films");
 const SP = require("../utils/studio-speaker");
+const W = require("../utils/studio-words");
 const worker = require("../utils/studio-review-worker");
 
 const router = express.Router();
@@ -65,7 +66,7 @@ router.post("/send-link", safe(async (req, res) => {
   // takes. The look-up and the email happen after the answer.
   res.json({ ok: true });
   try {
-    const { data: cards, error } = await sb.from("studio_film_people").select("reviewer_relation").eq("reviewer_email", email).limit(50);
+    const { data: cards, error } = await sb.from("studio_film_people").select("reviewer_relation").eq("reviewer_email", email).not("cleared_at", "is", null).limit(50);
     if (error || !cards || !cards.length) return;
     const out = await SP.issueLink(sb, mailer, { email, sentBy: "self", relations: [...new Set(cards.map((c) => c.reviewer_relation))] });
     if (!out.sent) console.warn("[studio-speaker] a page link wasn't sent:", out.why);
@@ -98,7 +99,7 @@ router.post("/pull", safe(async (req, res) => {
   const code = U.code(body.person_code);
   if (!code) return res.status(400).json({ error: "person_code" });
   if (body.confirm !== true) return res.status(400).json({ error: "confirm_first" });
-  const note = U.cleanNotes(body.note, 500) || null;
+  const typed = U.cleanNotes(body.note, 500) || null;
   const sb = getSupabase();
   if (!sb) return res.status(503).json({ error: "storage_unavailable" });
   // The link and the person first: nothing below answers anyone else.
@@ -109,21 +110,33 @@ router.post("/pull", safe(async (req, res) => {
     return res.status(503).json({ error: "storage_unavailable" });
   }
   if (!email) return res.status(404).json({ error: "link_not_active" });
-  const { data: cards, error: cardsError } = await sb.from("studio_film_people").select("name,reviewer_name,is_minor,reviewer_email").eq("person_code", code);
+  const { data: cards, error: cardsError } = await sb.from("studio_film_people").select("person_code,name,reviewer_name,reviewer_relation,is_minor,reviewer_email,cleared_at").eq("person_code", code);
   if (cardsError) return res.status(503).json({ error: "storage_unavailable" });
-  if (!(cards || []).some((c) => String(c.reviewer_email || "").toLowerCase() === email)) return res.status(403).json({ error: "not_yours" });
-  // A note is kept with the takedown: no names in it (only this person's
-  // cards are checked, so the words it names are theirs).
-  if (note) {
-    const words = [...new Set([...U.namesIn(note, cards, { strong: true }), ...U.minorWords(note, cards), ...U.namesIn(note, cards), ...U.minorMaybe(note, cards)])];
-    if (words.length) return res.status(400).json({ error: "note_has_name", words: words.slice(0, 10) });
-  }
+  if (!(cards || []).some((c) => c.cleared_at && String(c.reviewer_email || "").toLowerCase() === email)) return res.status(403).json({ error: "not_yours" });
+  // A note is kept with the takedown, with any name on their cards written as
+  // the code: nothing is refused for a name, so the page can't be used to
+  // check one.
+  const note = typed ? W.maskNames(typed, cards).replace(/\s+/g, " ").trim().slice(0, 500) || null : null;
   const { data, error } = await sb.rpc("studio_speaker_pull", { p_proof: U.sha256(body.token), p_person_code: code, p_note: note });
   if (error) {
     const msg = String(error.message || "");
     if (/not active/.test(msg)) return res.status(404).json({ error: "link_not_active" });
     if (/not on a card/.test(msg)) return res.status(403).json({ error: "not_yours" });
     if (/already taken back/.test(msg)) return res.status(409).json({ error: "already_taken_back" });
+    // Someone else approves for some of their films (the athlete for
+    // themself, now an adult, say): the team takes it from here.
+    if (/another person approves/.test(msg)) {
+      res.status(409).json({ error: "ask_the_team" });
+      push.notifySoon(push.teamEmails("approver"), { title: "Asked to take consent back", body: `Someone who approves for ${code} asked on their page to take consent back. Another person approves for some of the films: call them both.`, url: "/app/#films", tag: `pull-ask-${code}` });
+      mailer.sendMail({
+        to: [...staffEmails()],
+        subject: `Asked to take consent back: ${code}`,
+        text: `Someone a card names as the one who approves for ${code} asked on their own Same Work page to take consent back. Another person approves for some of ${code}'s films (the athlete themself, now an adult, or another parent), so nothing was taken back yet.\n\nCall them both today, then take it back from the card if that's what they want.${note ? `\n\nTheir note: ${note}` : ""}\n`,
+        critical: true,
+        pool: "studio_review",
+      }).catch(() => {});
+      return;
+    }
     if (error.code === "P0001") return res.status(409).json({ error: "refused", reason: msg.slice(0, 300) });
     console.error("[studio-speaker] pull failed:", error.code || "");
     return res.status(503).json({ error: "storage_unavailable" });
@@ -154,7 +167,10 @@ router.post("/sign-out", safe(async (req, res) => {
   if (!wellFormed(token)) return res.json({ ok: true });
   const sb = getSupabase();
   if (!sb) return res.status(503).json({ error: "storage_unavailable" });
-  await sb.rpc("studio_speaker_sign_out", { p_proof: U.sha256(token) }).then(() => {}, () => {});
+  // Said only once the link is stopped (or was already): if the database
+  // couldn't be reached, the page says so and the link still works.
+  const { error } = await sb.rpc("studio_speaker_sign_out", { p_proof: U.sha256(token) });
+  if (error) return res.status(503).json({ error: "storage_unavailable" });
   res.json({ ok: true });
 }));
 

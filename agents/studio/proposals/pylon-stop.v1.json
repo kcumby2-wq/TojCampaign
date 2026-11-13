@@ -33,7 +33,7 @@
         {
           "type": "note",
           "title": "The rules nobody breaks",
-          "body": "<ol><li><b>No screening, no crew.</b> A contract, a background check and minor-safety training, each less than a year old at the event.</li><li><b>A youth creator (16 or 17) shoots or shadows,</b> never leads or edits, and works only beside a confirmed, screened adult on site.</li><li><b>The roster decides.</b> An athlete on hold, kept out, or without capture or marketing consent never appears on Pylon's channels.</li><li><b>A takedown follows the athlete</b> to every event, and their clips come off every surface.</li><li><b>Nothing posts on Pylon's channels</b> until an approver has read the keep-out list and cleared it.</li><li><b>No names in a brief, a sign or a crew message:</b> team and jersey only, and never why someone is held.</li><li><b>Never alone with a minor.</b> No locker rooms, no one-to-one filming without a parent there.</li></ol>",
+          "body": "<ol><li><b>Real moments only.</b> No AI-made athletes, no synthetic edits of a real one, and no words put in anyone's mouth.</li><li><b>No release, no camera.</b> Consent is confirmed before anyone is filmed. Anything public shows a minor only wide and non-identifying (no face, name or jersey number), and only with capture and marketing consent on the roster. Texas youth: until counsel clears it, Kyron decides before the first Texas event whether family-only copies may show them.</li><li><b>No promises.</b> Nothing says or suggests an offer, a scholarship, a roster spot, exposure, followers or paid work.</li><li><b>No marks you don't own.</b> Pylon's marks only as Pylon's agreement allows; no NFL marks, broadcast footage or school logos on minors.</li><li><b>Never alone with a minor.</b> No locker rooms, training rooms or changing areas, and no one-to-one filming without a parent there.</li><li><b>A pulled consent means pulled footage.</b> When a family takes consent back, it comes down everywhere within 72 hours, and it follows the athlete to every event.</li><li><b>Nothing publishes without the approver.</b> Nothing posts on Pylon's channels until an approver has read the keep-out list and cleared it.</li><li><b>No screening, no crew.</b> A contract, a background check and minor-safety training, each less than a year old at the event.</li><li><b>A youth creator (16 or 17)</b> shoots or shadows, never leads or edits, and works only beside a confirmed, screened adult on site.</li><li><b>The roster decides.</b> An athlete on hold, kept out, or without capture or marketing consent never appears on Pylon's channels.</li><li><b>No names in a brief, a sign or a crew message:</b> team and jersey only, and never why someone is held.</li></ol>",
           "locked": true
         },
         {
@@ -183,7 +183,7 @@
         {
           "type": "note",
           "title": "Pieces that name athletes",
-          "body": "<p>A \"Who Is ___?\" feature, an interview or a tracked Top Performer names its athletes, and each is checked for capture and marketing consent. A cleared piece is checked again whenever its names change.</p>"
+          "body": "<p>A \"Who Is ___?\" feature, an interview or a tracked Top Performer names an athlete only if they're 18 or older (checked), with their own capture and marketing consent; a minor stays unnamed and wide. A cleared piece is checked again whenever its names change.</p>"
         }
       ]
     },

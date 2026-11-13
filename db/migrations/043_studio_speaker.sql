@@ -1,18 +1,19 @@
 -- 043: a speaker's own page (routes/studio-speaker.js, public/my-films.html;
 -- docs/studio-films.md). Builds on 039. Service role only.
 --
---   * Anyone whose email is on a clearance card as the one who approves (the
---     speaker themself, or a minor's parent or guardian) can get a link to
+--   * Anyone whose email is on a cleared clearance card as the one who
+--     approves (the speaker themself, or a minor's parent or guardian) can get a link to
 --     their own page: every film they (or their child) are in, where it is,
 --     what they approved, what's posted, the words of theirs that were kept,
 --     and a way to take their consent back themselves.
 --   * The link's token never reaches the database: the server sends the
 --     token's hash (the proof); this keeps the proof's hash. A link lasts 7
---     days, a new one stops the old ones for that email, and signing out
---     stops it.
+--     days, a new one stops the old ones for that email once its email is
+--     accepted, and signing out stops it.
 --   * Taking consent back from the page is the same pull as staff make
 --     (039's studio_pull_consent), with source 'speaker', and only for a
---     person whose card names that email.
+--     person whose cleared card names that email, when no other person
+--     approves for any of their films.
 
 create table if not exists public.studio_speaker_links (
   id uuid primary key default gen_random_uuid(),
@@ -39,9 +40,9 @@ begin
     new.expires_at := now() + interval '7 days';
     new.last_used_at := null;
     new.revoked_at := null;
-    -- A new link stops the older ones for that email.
-    update public.studio_speaker_links set revoked_at = now()
-     where email = new.email and revoked_at is null and expires_at > now();
+    -- The older links for that email are stopped once this one's email is
+    -- accepted (studio_speaker_supersede), not here: an ask that can't be
+    -- sent leaves the working link as it was.
     return new;
   end if;
   if row(new.email, new.proof_hash, new.sent_by, new.created_at, new.expires_at)
@@ -84,8 +85,34 @@ begin
   return found;
 end $$;
 
--- Take consent back from the page: the link has to be live, and a card for
--- that person has to name the link's email as the one who approves. Then
+-- Once a link's email is accepted: the older live links for that email stop.
+-- Only older ones (by when they were made, then id), under the email's lock,
+-- so two links made at once leave one live: the later.
+create or replace function public.studio_speaker_supersede(p_proof text)
+returns integer
+language plpgsql volatile set search_path = '' as $$
+declare
+  me record;
+  n integer;
+begin
+  select l.id, l.email, l.created_at into me from public.studio_speaker_links l
+   where l.proof_hash = encode(sha256(convert_to(coalesce(p_proof, ''), 'UTF8')), 'hex');
+  if me.id is null then
+    return 0;
+  end if;
+  perform pg_advisory_xact_lock(hashtextextended('studio.page:' || me.email, 0));
+  update public.studio_speaker_links l set revoked_at = now()
+   where l.email = me.email and l.revoked_at is null and l.expires_at > now()
+     and (l.created_at < me.created_at or (l.created_at = me.created_at and l.id < me.id));
+  get diagnostics n = row_count;
+  return n;
+end $$;
+
+-- Take consent back from the page: the link has to be live, and a cleared
+-- card for that person has to name the link's email as the one who
+-- approves. If another person approves for some of their films (the
+-- athlete, now an adult, for themself; another parent), the page doesn't
+-- take those back: the team does, after talking to both. Then
 -- it's 039's pull, with source 'speaker', written as who they are to the
 -- person (never their email or name).
 create or replace function public.studio_speaker_pull(p_proof text, p_person_code text, p_note text)
@@ -106,7 +133,7 @@ begin
     raise exception 'this page link is not active';
   end if;
   select p.reviewer_relation into rel from public.studio_film_people p
-   where p.person_code = code and lower(p.reviewer_email) = e
+   where p.person_code = code and lower(p.reviewer_email) = e and p.cleared_at is not null
    order by p.created_at desc limit 1;
   if rel is null then
     raise exception 'that person is not on a card this link is for';
@@ -116,6 +143,11 @@ begin
   perform pg_advisory_xact_lock(hashtextextended('studio.code:' || code, 0));
   if not exists (select 1 from public.studio_film_people p where p.person_code = code and p.consent_pulled_at is null) then
     raise exception 'consent is already taken back';
+  end if;
+  if exists (select 1 from public.studio_film_people p
+              where p.person_code = code and p.consent_pulled_at is null
+                and p.reviewer_email is not null and lower(p.reviewer_email) <> e) then
+    raise exception 'another person approves for some of these films';
   end if;
   update public.studio_speaker_links l set last_used_at = now()
    where l.proof_hash = encode(sha256(convert_to(coalesce(p_proof, ''), 'UTF8')), 'hex');
@@ -130,7 +162,7 @@ declare
   fn text;
 begin
   foreach fn in array array['public.studio_speaker_links_gate()', 'public.studio_speaker_email(text)', 'public.studio_speaker_sign_out(text)',
-                            'public.studio_speaker_pull(text, text, text)'] loop
+                            'public.studio_speaker_supersede(text)', 'public.studio_speaker_pull(text, text, text)'] loop
     execute format('revoke all on function %s from public', fn);
     foreach r in array array['anon', 'authenticated'] loop
       if exists (select 1 from pg_roles where rolname = r) then
@@ -146,6 +178,6 @@ begin
   if exists (select 1 from pg_roles where rolname = 'service_role') then
     execute 'revoke truncate, trigger, references on public.studio_speaker_links from service_role';
     execute 'grant execute on function public.studio_speaker_email(text), public.studio_speaker_sign_out(text), '
-      'public.studio_speaker_pull(text, text, text) to service_role';
+      'public.studio_speaker_supersede(text), public.studio_speaker_pull(text, text, text) to service_role';
   end if;
 end $$;

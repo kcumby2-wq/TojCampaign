@@ -5,10 +5,10 @@
   "as_of": "2026-11-12",
   "title": "Creator Fellowship Curriculum Kit",
   "eyebrow": "Subject Medias · creator fellowship · the first eight weeks",
-  "lead_html": "<p>The fellowship's first eight weeks, seat by seat: what a fellow learns, does and shows before they work a paid stop, as Milanote cards. Copy a card here and paste it onto a fellow's board.</p>",
+  "lead_html": "<p>The fellowship's first eight weeks, seat by seat: what a fellow learns, does and shows before they can join a region's crew pool, as Milanote cards. Copy a card here and paste it onto a fellow's board.</p>",
   "board_name": "Creator Fellowship: Curriculum",
   "stats_label": "Proposed Nov 12, 2026",
-  "footer_html": "<p>Built from the TOJ app's fellowship guide and the Pylon crew rules (Nov 12, 2026). The weeks and the sign-offs are proposed: Kyron confirms them by approving the kit.</p>",
+  "footer_html": "<p>Built from the TOJ app's fellowship guide and the Pylon crew rules (Nov 12, 2026). The weeks and the sign-offs are proposed: they're confirmed when an approver approves the kit.</p>",
   "assets": null,
   "source": {
     "title": "TOJ app guides: fellowship applications, Pylon events (the crew rules)",
@@ -28,7 +28,7 @@
         {
           "type": "note",
           "title": "The rules nobody breaks",
-          "body": "<ol><li><b>16 or 17: shadow, shooter or photographer only.</b> Never a lead, never an editor, always beside a confirmed, screened adult on site.</li><li><b>No screening, no crew:</b> a contract, a background check and minor-safety training, each less than a year old at the event.</li><li><b>Never alone with a minor,</b> never in a locker room, never messaging or selling to a family as a youth creator.</li><li><b>Real work only.</b> No AI-made athletes, no synthetic edits of a real one.</li><li><b>No promises.</b> The fellowship teaches the work; it doesn't promise followers, exposure or paid work.</li></ol>",
+          "body": "<ol><li><b>Real moments only.</b> No AI-made athletes, no synthetic edits of a real one, and no words put in anyone's mouth.</li><li><b>No release, no camera.</b> Consent is confirmed before anyone is filmed. Anything public shows a minor only wide and non-identifying (no face, name or jersey number), and only with a parent's or guardian's verified yes, recorded by staff. Texas youth: until counsel clears it, Kyron decides before the first Texas event whether family-only copies may show them.</li><li><b>No promises.</b> Nothing says or suggests an offer, a scholarship, a roster spot, exposure, followers or paid work.</li><li><b>No marks you don't own.</b> No NFL marks, broadcast footage or team logos you don't have the right to use, and no school logos on minors.</li><li><b>Never alone with a minor.</b> No locker rooms, training rooms or changing areas, and no one-to-one filming without a parent there.</li><li><b>A pulled consent means pulled footage.</b> When a family takes consent back, it comes down everywhere within 72 hours, and it follows the athlete to every event.</li><li><b>Nothing publishes without the approver.</b> Nothing goes public without an approver's OK.</li><li><b>16 or 17: shadow, shooter or photographer only.</b> Never a lead, never an editor, always beside a confirmed, screened adult on site.</li><li><b>No screening, no crew:</b> a contract, a background check and minor-safety training, each less than a year old at the event.</li><li><b>A fellow's footage stays in GFS storage.</b> Never posted, kept or shared by the fellow; reviews happen in the app.</li><li><b>Never messaging or selling to a family</b> as a youth creator.</li></ol>",
           "locked": true
         },
         {
@@ -73,7 +73,7 @@
         {
           "type": "note",
           "title": "Week 4: stills (photographer)",
-          "body": "<ul><li>The athlete's number readable, the moment, the light.</li><li>Candid between plays, never staged.</li><li>Shows: 40 frames from one game, culled to the best 12.</li></ul>"
+          "body": "<ul><li>The moment and the light, wide enough to read the play. The frames stay in GFS storage for review: a fellow never posts or keeps them.</li><li>Candid between plays, never staged.</li><li>Shows: 40 frames from one game, culled to the best 12.</li></ul>"
         },
         {
           "type": "note",

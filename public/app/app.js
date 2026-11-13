@@ -972,7 +972,7 @@
       '<div class="screen">' + backBtn("#today", "Today") +
       '<div><p class="kicker">' + h(row.title) + " · " + h(roleLabel(row.role)) + '</p><h1 class="title">' + h((row.status === "draft" ? "Draft v" : row.status + " v") + row.version) + "</h1></div>" +
       '<div class="btn-row" style="gap:8px;flex-wrap:wrap">' +
-      '<span class="badge ' + (row.eval_status === "failed_after_retries" ? "bad" : "ok") + '">' + h(evalLabel(row.eval_status)) + "</span>" +
+      '<span class="badge ' + (row.eval_status === "failed_after_retries" ? "bad" : row.eval_status === "not_run" ? "warn" : "ok") + '">' + h(evalLabel(row.eval_status)) + "</span>" +
       '<span class="badge">' + t.changed + " changed · " + t.added + " added · " + t.removed + " removed · " + t.same + " untouched</span>" +
       (base ? '<span class="badge ' + (lockedChanged ? "bad" : "") + '">' + (lockedChanged ? "Rule cards changed" : "Rule cards untouched") + "</span>" : "") +
       (row.check && !row.check.ok ? '<span class="badge bad">' + row.check.blockers.length + " problem(s) to fix</span>" : "") + "</div>" +

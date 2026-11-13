@@ -60,6 +60,7 @@ const S = require("../agents/studio/service");
 const K = require("../agents/studio/kit");
 const worker = require("../utils/studio-review-worker");
 const SP = require("../utils/studio-speaker");
+const G = require("../utils/gfs");
 
 const router = express.Router();
 const safe = H.safe("studio-films");
@@ -168,8 +169,8 @@ function noteNames(text, people, body) {
 // A film is planned against a tour stop (gfs_events): it has to be one.
 async function eventMissing(sb, value) {
   if (!value.gfs_event_id) return false;
-  const ev = await run(sb.from("gfs_events").select("id").eq("id", value.gfs_event_id).maybeSingle());
-  return !ev;
+  const ev = await run(sb.from("gfs_events").select("id,status").eq("id", value.gfs_event_id).maybeSingle());
+  return !ev || ev.status === "cancelled";
 }
 async function filmById(sb, id) {
   if (!idOk(id)) return null;
@@ -273,9 +274,11 @@ router.get("/films", member, withDb(async (req, res, sb) => {
 }));
 
 // ── The season slate ─────────────────────────────────────────────────────
-// The tour's stops (gfs_events, public on their own pages) from a week back
-// to six months on, each with the films planned against it, and the films
-// in progress planned against none (to link one).
+// The tour's stops (gfs_events) from a week back to six months on, each with
+// the films planned against it, and the films in progress planned against
+// none (to link one). Only what a stop's public page shows (name, series,
+// city, dates), and only the stops in the Pylon regions the person sees
+// (approvers and Kyron: all of them), as the Pylon tool scopes them.
 const SLATE_BACK_DAYS = 7;
 const SLATE_AHEAD_DAYS = 183;
 const dayIso = (d) => d.toISOString().slice(0, 10);
@@ -283,23 +286,31 @@ router.get("/slate", member, withDb(async (req, res, sb) => {
   const isDay = (v) => typeof v === "string" && /^\d{4}-\d{2}-\d{2}$/.test(v) && !Number.isNaN(Date.parse(v + "T00:00:00Z"));
   const from = isDay(req.query.from) ? req.query.from : dayIso(new Date(Date.now() - SLATE_BACK_DAYS * 86400000));
   const to = isDay(req.query.to) ? req.query.to : dayIso(new Date(Date.now() + SLATE_AHEAD_DAYS * 86400000));
-  let qe = sb.from("gfs_events").select("id,code,name,series,size,region,city,state,venue,starts_on,ends_on,status").gte("ends_on", from).lte("starts_on", to);
-  if (req.query.series) qe = qe.eq("series", U.clean(req.query.series, 60));
-  const events = ((await run(qe.order("starts_on", { ascending: true }).limit(200))) || []).filter((e) => e.status !== "cancelled");
+  const regions = G.regionsOf(req.team);
+  let events = [];
+  if (regions.length) {
+    let qe = sb.from("gfs_events").select("id,name,series,city,state,starts_on,ends_on").gte("ends_on", from).lte("starts_on", to).neq("status", "cancelled").in("region", regions);
+    if (req.query.series) qe = qe.eq("series", U.clean(req.query.series, 60));
+    events = (await run(qe.order("starts_on", { ascending: true }).limit(200))) || [];
+  }
   const open = (await run(sb.from("studio_films").select("id,title,kit_slug,lane,format,athlete_id,post_date,gfs_event_id,pulled_at,updated_at").is("archived_at", null).order("created_at", { ascending: false }).limit(500))) || [];
   const ids = events.map((e) => e.id);
   const linked = open.filter((f) => f.gfs_event_id && ids.includes(f.gfs_event_id));
   const steps = linked.length ? (await run(sb.from("studio_film_steps").select("film_id,step,position,status").in("film_id", linked.map((f) => f.id)))) || [] : [];
   const view = (f) => {
     const mine = steps.filter((s) => s.film_id === f.id);
-    return { id: f.id, title: f.title, kit_slug: f.kit_slug, lane: f.lane, format: f.format, athlete_id: f.athlete_id, post_date: f.post_date, updated_at: f.updated_at, where: mine.length ? where(f, mine) : null };
+    return { id: f.id, title: f.title, kit_slug: f.kit_slug, lane: f.lane, format: f.format, athlete_id: f.athlete_id, post_date: f.post_date, updated_at: f.updated_at, pulled: !!f.pulled_at, where: mine.length ? where(f, mine) : null };
   };
   res.json({
     from,
     to,
     events: events.map((e) => ({ ...e, films: linked.filter((f) => f.gfs_event_id === e.id).map(view) })),
-    // Films in progress planned against no stop (or one outside the window).
+    // Films in progress planned against no stop, to link one.
     unplaced: open.filter((f) => !f.pulled_at && !f.gfs_event_id).map((f) => ({ id: f.id, title: f.title, format: f.format, athlete_id: f.athlete_id, updated_at: f.updated_at })),
+    // Films planned for a stop that isn't on this slate (outside the window,
+    // in a region the person doesn't see, or since cancelled): listed, so no
+    // planned film goes missing.
+    elsewhere: open.filter((f) => f.gfs_event_id && !ids.includes(f.gfs_event_id)).map((f) => ({ id: f.id, title: f.title, kit_slug: f.kit_slug, format: f.format, athlete_id: f.athlete_id, updated_at: f.updated_at, pulled: !!f.pulled_at })),
   });
 }));
 
@@ -575,14 +586,16 @@ router.post("/films/:id/people/:pid/page-link", member, withDb(async (req, res, 
   if (!isProducer(req)) return res.status(403).json({ error: "producer_only" });
   const film = await filmById(sb, req.params.id);
   if (!film || !idOk(req.params.pid)) return res.status(404).json({ error: "not_found" });
-  const person = await run(sb.from("studio_film_people").select("id,person_code,reviewer_email,reviewer_relation").eq("id", req.params.pid).eq("film_id", film.id).maybeSingle());
+  const person = await run(sb.from("studio_film_people").select("id,person_code,reviewer_email,reviewer_relation,cleared_at").eq("id", req.params.pid).eq("film_id", film.id).maybeSingle());
   if (!person) return res.status(404).json({ error: "not_found" });
+  // Only a cleared card: its email has been checked to be theirs.
+  if (!person.cleared_at) return res.status(409).json({ error: "card_not_cleared" });
   const email = U.email(person.reviewer_email);
   if (!email) return res.status(409).json({ error: "no_reviewer" });
   if (!linkAllowed(email)) return res.status(429).json({ error: "too_many_links_today" });
   // Who they approve for, across every card with that email: the email says
   // "you", "your child" or both.
-  const cards = (await run(sb.from("studio_film_people").select("reviewer_relation").eq("reviewer_email", email).limit(50))) || [];
+  const cards = (await run(sb.from("studio_film_people").select("reviewer_relation").eq("reviewer_email", email).not("cleared_at", "is", null).limit(50))) || [];
   const relations = [...new Set(cards.map((c) => c.reviewer_relation).concat(person.reviewer_relation))];
   const out = await SP.issueLink(sb, mailer, { email, sentBy: me(req), relations });
   if (!out.sent) {

@@ -8,7 +8,7 @@
   "lead_html": "<p>How a Subject Medias booking runs, from the request on subjectmedias.com to a delivered session, as Milanote cards. Copy a card here and paste it onto the booking's board.</p>",
   "board_name": "Subject Medias: Session Playbook",
   "stats_label": "Proposed Nov 12, 2026",
-  "footer_html": "<p>Built from the TOJ app's Subject Medias bookings guide (Nov 12, 2026). The shoot-day cards are proposed standards: Kyron confirms them by approving the kit.</p>",
+  "footer_html": "<p>Built from the TOJ app's Subject Medias bookings guide (Nov 12, 2026). The shoot-day cards are proposed standards: they're confirmed when an approver approves the kit.</p>",
   "assets": null,
   "source": {
     "title": "TOJ app guide: Subject Medias bookings",
@@ -28,7 +28,7 @@
         {
           "type": "note",
           "title": "The rules nobody breaks",
-          "body": "<ol><li><b>An athlete is a team and a jersey number.</b> The form never asks for a name; nobody adds one.</li><li><b>Only a screened adult works a booking:</b> a contract, a background check and safety training within the year on the game's date. A youth creator never does, since a booking has no screened adult beside them.</li><li><b>The session is the family's.</b> Nothing from it posts anywhere public without a parent or guardian's written yes.</li><li><b>No promises</b> of exposure, followers or an offer.</li><li><b>Never alone with a minor.</b></li></ol>",
+          "body": "<ol><li><b>Real moments only.</b> No AI-made athletes, no synthetic edits of a real one, and no words put in anyone's mouth.</li><li><b>No release, no camera.</b> Consent is confirmed before anyone is filmed. Anything public shows a minor only wide and non-identifying (no face, name or jersey number), and only with the family's written yes. Texas youth: until counsel clears it, Kyron decides before the first Texas event whether family-only copies may show them.</li><li><b>No promises.</b> Nothing says or suggests an offer, a scholarship, a roster spot, exposure, followers or paid work.</li><li><b>No marks you don't own.</b> No NFL marks, broadcast footage or team logos you don't have the right to use, and no school logos on minors.</li><li><b>Never alone with a minor.</b> No locker rooms, training rooms or changing areas, and no one-to-one filming without a parent there.</li><li><b>A pulled consent means pulled footage.</b> When a family takes consent back, it comes down everywhere within 72 hours, and it follows the athlete to every event.</li><li><b>Nothing publishes without the approver.</b> Nothing goes public without an approver's OK.</li><li><b>An athlete is a team and a jersey number.</b> The form never asks for a name; nobody adds one.</li><li><b>Only a screened adult works a booking:</b> a contract, a background check and safety training within the year on the game's date. A youth creator never does, since a booking has no screened adult beside them.</li><li><b>The session is the family's.</b> Nothing from it posts anywhere public without a parent or guardian's written yes.</li></ol>",
           "locked": true
         }
       ]
@@ -74,7 +74,7 @@
         {
           "type": "note",
           "title": "On the field",
-          "body": "<ul><li>Find the athlete by jersey in warm-ups. Confirm with the booker if they're there.</li><li>Every play they're in, plus the moments between: the huddle, the sideline, the walk off.</li><li>Wide enough to see the play, tight enough to see them.</li><li>Never alone with a minor, never in a locker room.</li></ul>"
+          "body": "<ul><li>Find the athlete by jersey in warm-ups. Confirm with the booker if they're there.</li><li>Every play they're in, plus the moments between: the huddle, the sideline, the walk off.</li><li>Wide enough to see the play, tight enough to see them: this is the family's copy. Nothing public without their written yes, and public shows a minor wide (the rules card).</li><li>Never alone with a minor, never in a locker room.</li></ul>"
         },
         {
           "type": "note",
