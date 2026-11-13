@@ -540,7 +540,7 @@
       t.show(null,
         '<div class="screen">' + back + '<h1 class="title sm">' + (p ? "Clearance card" : "Add a card") + '</h1><p class="lede">Everyone on camera gets one. The name stays on this card; everything else carries the code.' + (p && p.cleared_at ? " Changing a cleared card clears it again." : "") + "</p>" +
         (p ? '<div class="field"><span class="label">Code</span><div class="name">' + h(p.person_code) + "</div></div>" : '<div class="field"><label class="label" for="pCode">Code <small>(the athlete ID; a parent adds -P1)</small></label><input class="input" id="pCode" maxlength="20" autocapitalize="characters" placeholder="' + h(f.athlete_id) + '" value="' + h(s.person_code) + '"></div>') +
-        '<div class="field"><label class="label" for="pName">Name</label><input class="input" id="pName" maxlength="80" autocomplete="off" value="' + h(s.name) + '"></div>' +
+        '<div class="field"><label class="label" for="pName">Name</label><input class="input" id="pName" maxlength="80" autocomplete="off" aria-describedby="pNameHint" value="' + h(s.name) + '"><span class="sub" id="pNameHint">First name first, as on the release.</span></div>' +
         '<div class="field"><label class="label" for="pRole">Role</label><select class="input" id="pRole">' + ["athlete", "parent", "guardian", "coach", "other"].map(function (r) { return '<option value="' + r + '"' + (s.role === r ? " selected" : "") + ">" + r + "</option>"; }).join("") + "</select></div>" +
         '<div style="display:flex;flex-direction:column;gap:8px">' +
         sw("texas_youth", "Texas youth athlete", "Unidentifiable until counsel clears it: no face, name or jersey number", ty) +

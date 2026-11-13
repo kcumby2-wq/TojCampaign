@@ -170,6 +170,11 @@ test("the delivery check: the server checks what the phone read, and keeps it as
   assert.deepEqual((await films("POST", `/films/${film.id}/delivery-checks`, { file_name: "x.mp4", format: "hero", ratio: "9x16" }, "ed")).data.fields, ["size"]);
   assert.equal((await room(film.id)).delivery_checks.length, 2);
   await assert.rejects(pool.query("update studio_delivery_checks set passed = true where id = $1", [bad.id]), /kept as it was checked/);
+  // A card with a middle name: its first and last name, as typed or run
+  // together, are the name to the database too.
+  ok(await films("POST", `/films/${film.id}/people`, { person_code: "D0009", name: "Grace Ann Long", role: "athlete", is_minor: true, release_on_file: true, covers: { voice: true } }, "lead"), "card");
+  for (const t of ["Grace Long ran it", "gracelong quote v"]) assert.equal((await pool.query("select studio_names_in($1, $2) as x", [film.id, t])).rows[0].x, true, t);
+  assert.equal((await pool.query("select studio_names_in($1, 'a long grace period') as x", [film.id])).rows[0].x, false);
   await assert.rejects(pool.query("delete from studio_delivery_checks"), /kept as it was checked/);
   await assert.rejects(pool.query("truncate studio_delivery_checks"), /kept as it was checked/);
 });
@@ -569,6 +574,14 @@ test("a tag or a Title Case line reads each word as a sentence start; a whole na
   const chants = [{ person_code: "AG1", name: "Ava Green", is_minor: true }, { person_code: "LW1", name: "Leo West", is_minor: true }, { person_code: "GL1", name: "Grace Long", is_minor: true }, { person_code: "DD1", name: "Dan Day", is_minor: true }];
   for (const [t, want] of [["#gogreen", "asked green"], ["#gowest", "asked west"], ["#golong", "asked long"], ["#heyday", "asked day"], ["#GoGreen", "asked green"], ["#GoWest", "asked west"]]) assert.equal(judge(t, chants), want, t);
   for (const t of ["#gograce", "#heygrace", "#GoGrace", "#happybirthdayava"]) assert.equal(judge(t, chants), "refused", t);
+  // A chant's surname is the card's last word: a second first name is the name.
+  const two = [{ person_code: "MG1", name: "Mary Grace Long", is_minor: true }];
+  for (const t of ["#GoGrace", "#gograce", "#heygrace"]) assert.equal(judge(t, two), "refused", t);
+  assert.equal(judge("#golong", two), "asked long");
+  // A first and last name, when the card has a middle name too: the whole name.
+  const mid = [{ person_code: "GL2", name: "Grace Ann Long", is_minor: true }, { person_code: "HF3", name: "Hope Marie Field", is_minor: true }];
+  for (const t of ["#GraceLong", "#gracelong", "#GoGraceLong", "#HopeField", "#hopefield", "#GoHopeField", "Grace Long"]) assert.equal(judge(t, mid), "refused", t);
+  for (const t of ["gracelong_quote_v1", "hopefield_quote_v1"]) assert.ok(U.idNames(t, mid).length > 0, t);
 });
 
 test("the phone keeps an ordinary shot line, and a place's own name stays online", () => {
@@ -590,6 +603,7 @@ test("the phone keeps an ordinary shot line, and a place's own name stays online
   assert.deepEqual(U.titleNames("Teamsam", sam), { sure: [], maybe: ["sam"] });
   // Editing words built from an everyday name and a file word are words.
   assert.deepEqual(U.idNames("blackframe_v1 whitecard_intro shortcut_v2", [{ name: "Kim Black", is_minor: true }, { name: "Ana White", is_minor: true }, { name: "Bo Short", is_minor: true }]), []);
+  assert.deepEqual(U.idNames("clipart_v2 spotted_broll greencard_promo", [{ name: "Art Diaz", is_minor: true }, { name: "Ted Ruiz", is_minor: true }, { name: "Ava Green", is_minor: true }]), []);
   // A place that's only ordinary words, typed with its capitals, keeps them all.
   for (const [place, line] of [["Park High School", "park high school at dawn"], ["Court Street Park", "court street park, wide"], ["Home Field", "home field lights"],
     ["The Rowe house on High Street", "the bus down high street"], ["Home Field, Riverside", "home field lights at dawn"], ["park high school gym", "after the gym, warm-up"]]) {

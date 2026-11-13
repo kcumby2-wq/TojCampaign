@@ -59,6 +59,14 @@ const sha256 = (s) => crypto.createHash("sha256").update(String(s), "utf8").dige
 // ("JamieRivers" in a file name). A lone two-letter first name isn't caught:
 // it would catch "an" and "al" too.
 const nameParts = (full) => String(full || "").toLowerCase().split(/[^\p{L}\p{M}]+/u).filter(Boolean);
+// The forms a whole name is written in: as on the card, and, for a name of
+// three words or more, its first and last without the middle ones ("Grace
+// Long", "#GraceLong", "gracelong_quote" for a Grace Ann Long: release forms
+// carry full legal names).
+function nameForms(full) {
+  const parts = nameParts(full);
+  return parts.length >= 3 ? [parts, [parts[0], parts[parts.length - 1]]] : [parts];
+}
 function nameWords(people) {
   const words = new Set();
   for (const p of people || []) {
@@ -76,12 +84,13 @@ function namesIn(textValue, people, { strong = false } = {}) {
   const found = new Set(strong ? [] : nameWords(people).filter((w) => hay.includes(" " + w + " ")));
   for (const p of people || []) {
     for (const full of [p.name, p.reviewer_name]) {
-      const parts = nameParts(full);
-      if (parts.length > 1 && hay.includes(" " + parts.join(" ") + " ")) found.add(parts.join(" "));
-      // Run together as one word ("JamieRivers", "#jamierivers"): the whole
-      // word, so "speed limits" is never "Ed Li".
-      const joined = parts.join("");
-      if (parts.length > 1 && Array.from(joined).length >= 5 && hay.includes(" " + joined + " ")) found.add(joined);
+      for (const parts of nameForms(full)) {
+        if (parts.length > 1 && hay.includes(" " + parts.join(" ") + " ")) found.add(parts.join(" "));
+        // Run together as one word ("JamieRivers", "#jamierivers"): the whole
+        // word, so "speed limits" is never "Ed Li".
+        const joined = parts.join("");
+        if (parts.length > 1 && Array.from(joined).length >= 5 && hay.includes(" " + joined + " ")) found.add(joined);
+      }
     }
   }
   return [...found];
@@ -182,9 +191,11 @@ function nameHits(textValue, person, { minRun = 5, minWord = 3 } = {}) {
   const sure = new Set();
   const maybe = new Set();
   const parts = nameParts(person && person.name);
-  if (parts.length > 1 && hay.includes(" " + parts.join(" ") + " ")) sure.add(parts.join(" "));
-  const joined = parts.join("");
-  if (parts.length > 1 && Array.from(joined).length >= minRun && tokens.has(joined)) sure.add(joined);
+  for (const form of nameForms(person && person.name)) {
+    if (form.length > 1 && hay.includes(" " + form.join(" ") + " ")) sure.add(form.join(" "));
+    const joined = form.join("");
+    if (form.length > 1 && Array.from(joined).length >= minRun && tokens.has(joined)) sure.add(joined);
+  }
   for (const w of parts) {
     if (Array.from(w).length < minWord || !hay.includes(" " + w + " ")) continue;
     if (!everyday(w)) sure.add(w);
@@ -253,7 +264,8 @@ const FILE_WORDS = new Set(("quote quotes card cards promo promos cut cuts edit 
   "frame frames spot spots sizzle recap highlight highlights feature profile interview interviews sitdown").split(" "));
 // Editing words built from an everyday word that's a name and a file word
 // ("blackframe" for a Black, "shortcut" for a Short): the word, not a name.
-const FILE_COMPOUNDS = new Set("blackframe blackframes whiteframe whiteframes whitecard whitecards blackcard blackcards shortcut shortcuts".split(" "));
+const FILE_COMPOUNDS = new Set(("blackframe blackframes whiteframe whiteframes whitecard whitecards blackcard blackcards shortcut shortcuts " +
+  "clipart cliparts spotted greencard greencards").split(" "));
 function idNames(textValue, people) {
   const raw = String(textValue || "");
   const hay = " " + splitWords(raw).toLowerCase().replace(/[^\p{L}\p{M}]+/gu, " ") + " ";
@@ -262,9 +274,11 @@ function idNames(textValue, people) {
   const look = (name, minor) => {
     const parts = nameParts(name);
     if (!parts.length) return;
-    const joined = parts.join("");
-    if (parts.length > 1 && hay.includes(" " + parts.join(" ") + " ")) out.add(parts.join(" "));
-    if (parts.length > 1 && Array.from(joined).length >= (minor ? 4 : 5) && tokens.some((t) => t.includes(joined))) out.add(joined);
+    for (const form of nameForms(name)) {
+      const joined = form.join("");
+      if (form.length > 1 && hay.includes(" " + form.join(" ") + " ")) out.add(form.join(" "));
+      if (form.length > 1 && Array.from(joined).length >= (minor ? 4 : 5) && tokens.some((t) => t.includes(joined))) out.add(joined);
+    }
     for (const w of parts) {
       if (Array.from(w).length < (minor ? 2 : 3) || EVERYDAY_2.has(w)) continue;
       if (hay.includes(" " + w + " ")) out.add(w);
@@ -310,15 +324,17 @@ function titleNames(textValue, people) {
   const look = (name, minor) => {
     const parts = nameParts(name);
     if (!parts.length) return;
-    const joined = parts.join("");
-    const len = Array.from(joined).length;
-    if (parts.length > 1 && hay.includes(" " + parts.join(" ") + " ")) sure.add(parts.join(" "));
-    if (parts.length > 1 && len >= (minor ? 4 : 5)) {
-      for (const t of tokens) {
-        const i = t.indexOf(joined);
-        if (i < 0) continue;
-        if (i === 0 || len >= 7) sure.add(joined);
-        else maybe.add(joined);
+    for (const form of nameForms(name)) {
+      const joined = form.join("");
+      const len = Array.from(joined).length;
+      if (form.length > 1 && hay.includes(" " + form.join(" ") + " ")) sure.add(form.join(" "));
+      if (form.length > 1 && len >= (minor ? 4 : 5)) {
+        for (const t of tokens) {
+          const i = t.indexOf(joined);
+          if (i < 0) continue;
+          if (i === 0 || len >= 7) sure.add(joined);
+          else maybe.add(joined);
+        }
       }
     }
     for (const w of parts) {
@@ -597,10 +613,12 @@ function shoutOuts(all) {
   for (const tag of String(all || "").match(TAG) || []) read(tagWords(tag).toLowerCase().split(/\n+/).filter((w) => /^[\p{L}\p{M}]+$/u.test(w)), false);
   return { sure, goHey };
 }
-// After "go" or "hey": a first name, or a name word that's no everyday word,
-// is the name ("#GoGrace", "#gojordan"); an everyday-word surname is asked
-// about ("#GoGreen" for an Ava Green, "#heyday" for a Dan Day).
-const chantOnly = (parts, k, w) => k > 0 && everyday(w);
+// After "go" or "hey": a first name (any word but the last: "Mary Grace
+// Long" goes by Grace), or a name word that's no everyday word, is the name
+// ("#GoGrace", "#gojordan"); an everyday-word surname, the card's last word,
+// is asked about ("#GoGreen" for an Ava Green, "#heyday" for a Dan Day).
+// Cards are written first name first.
+const chantOnly = (parts, k, w) => parts.length > 1 && k === parts.length - 1 && everyday(w);
 // A tag typed all in lower case has no words to read: a shout-out's own
 // letters right before a name word that ends the tag (or before it and a
 // last "go") name them ("#happybirthdaygrace", "#gohope", "#gohopego",
@@ -701,7 +719,16 @@ function publicText(all) {
 // ("#gojordankidd"); { ask } (the tag) when it's a short one inside a word
 // ("edli" in "#SpeedLimit", "alko" in "#WalkOff"); or nothing.
 function inTags(all, name, minRun) {
-  const parts = nameParts(name);
+  let sure = false;
+  const ask = [];
+  for (const form of nameForms(name)) {
+    const r = inTagsOf(all, form, minRun);
+    if (r.sure) sure = true;
+    for (const t of r.ask || []) ask.push(t);
+  }
+  return { sure, ask: [...new Set(ask)] };
+}
+function inTagsOf(all, parts, minRun) {
   const joined = parts.join("");
   if (parts.length < 2 || Array.from(joined).length < minRun) return {};
   let sure = false;
