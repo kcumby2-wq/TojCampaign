@@ -197,7 +197,7 @@ Migration 042, API `routes/studio-learn.js`, screens in `public/app/learn.js` an
 
 ## Kits for every line of work
 
-Five more kits are written and in the repo (`agents/studio/proposals/`). Each carries the seven rules nobody breaks, worded for its line of work, on a locked card in its first column, as the production guardrails ask: anything public shows a minor only wide and non-identifying (no face, name or jersey number), and only with verified consent; footage made for a family (a package, a session, a clip they buy) goes only to that family; and for Texas youth, Kyron decides with counsel before the first Texas event whether family-only copies may show them. The kits:
+Five more kits are written and in the repo (`agents/studio/proposals/`). Each carries the seven rules nobody breaks, worded for its line of work, on a locked card in its first column, as the production guardrails ask: close or identifying shots of a minor (a face, a readable number) go to their family only, never public; anything public shows a minor only wide and non-identifying (no face, name or jersey number), and only with verified consent; footage made for a family (a package, a session, a clip they buy) goes only to that family; and for Texas youth, Kyron decides with counsel before the first Texas event whether family-only copies may show them. The kits:
 
 - **A Pylon stop**: the crew, the two angles every game, youth creators, holds on a clip that's out, the keep-out list.
 - **Pylon packages**: the six-piece minimum, and the release before anyone films a player.
