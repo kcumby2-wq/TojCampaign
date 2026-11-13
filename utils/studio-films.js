@@ -251,6 +251,9 @@ const FILE_WORDS = new Set(("quote quotes card cards promo promos cut cuts edit 
   "cover covers title titles draft drafts strong team hero heroes teaser teasers trailer intro outro broll bts vo mix master export exports " +
   "select selects graphic graphics gfx thumb thumbs thumbnail poster posters still stills photo photos pic pics carousel post posts short shorts " +
   "frame frames spot spots sizzle recap highlight highlights feature profile interview interviews sitdown").split(" "));
+// Editing words built from an everyday word that's a name and a file word
+// ("blackframe" for a Black, "shortcut" for a Short): the word, not a name.
+const FILE_COMPOUNDS = new Set("blackframe blackframes whiteframe whiteframes whitecard whitecards blackcard blackcards shortcut shortcuts".split(" "));
 function idNames(textValue, people) {
   const raw = String(textValue || "");
   const hay = " " + splitWords(raw).toLowerCase().replace(/[^\p{L}\p{M}]+/gu, " ") + " ";
@@ -278,11 +281,14 @@ function idNames(textValue, people) {
   // "hopeful_promo" and "kicking_drill" are ordinary words.
   for (const w of minorRunIns(raw, people).sure) out.add(w);
   const words = raw.toLowerCase().split(/[^\p{L}\p{M}]+/u).filter(Boolean);
+  // A three-letter one too, beside such a word ("samquote_v2", "Teamsam",
+  // "samstrong"; "same_drill" is the word).
   for (const p of people || []) {
     if (!p || !p.is_minor) continue;
     for (const w of nameParts(p.name)) {
-      if (Array.from(w).length < 4 || !everyday(w)) continue;
-      if (words.some((t) => t !== w && ((t.startsWith(w) && FILE_WORDS.has(t.slice(w.length))) || (t.endsWith(w) && FILE_WORDS.has(t.slice(0, t.length - w.length)))))) out.add(w);
+      const n = Array.from(w).length;
+      if (n < 3 || (n >= 4 && !everyday(w))) continue;
+      if (words.some((t) => t !== w && !FILE_COMPOUNDS.has(t) && ((t.startsWith(w) && FILE_WORDS.has(t.slice(w.length))) || (t.endsWith(w) && FILE_WORDS.has(t.slice(0, t.length - w.length)))))) out.add(w);
     }
   }
   return [...out];
@@ -334,6 +340,15 @@ function titleNames(textValue, people) {
   const runIn = minorRunIns(raw, people);
   for (const w of runIn.sure) sure.add(w);
   for (const w of runIn.maybe) maybe.add(w);
+  // A minor's three-letter name beside a word a file name uses ("Teamsam",
+  // "Samquote"): asked.
+  for (const p of people || []) {
+    if (!p || !p.is_minor) continue;
+    for (const w of nameParts(p.name)) {
+      if (Array.from(w).length !== 3) continue;
+      if (tokens.some((t) => t !== w && !FILE_COMPOUNDS.has(t) && ((t.startsWith(w) && FILE_WORDS.has(t.slice(3))) || (t.endsWith(w) && FILE_WORDS.has(t.slice(0, t.length - 3)))))) maybe.add(w);
+    }
+  }
   for (const w of sure) maybe.delete(w);
   return { sure: [...sure], maybe: [...maybe] };
 }
@@ -562,45 +577,64 @@ function shoutLead(words, i) {
   if (words[i - 1] === "go" && (i === words.length - 1 || words[i + 1] === "go")) return true;
   return SHOUT_LEAD_2.some((ph) => ph.length <= i && ph.every((x, k) => words[i - ph.length + k] === x));
 }
+// { sure, goHey } (goHey: the words after "go" or "hey": a shout-out to a
+// first name, "#GoGrace", but a chant as often for a surname that's an
+// everyday word, "Go Green", "#GoWest": publicNames asks about those).
 function shoutOuts(all) {
-  const out = new Set();
+  const sure = new Set();
+  const goHey = new Set();
   const read = (words, lastToo) => {
-    if (lastToo && words.length) out.add(words[words.length - 1]);
+    if (lastToo && words.length) sure.add(words[words.length - 1]);
     words.forEach((w, i) => {
-      if (shoutLead(words, i)) out.add(w);
+      if (!shoutLead(words, i)) return;
+      if (words[i - 1] === "go" || words[i - 1] === "hey") goHey.add(w);
+      else sure.add(w);
     });
   };
   for (const line of String(all || "").split(/\r?\n/)) {
     if (titleCaseLine(line)) read((line.replace(TAG, " ").match(/[\p{L}\p{M}][\p{L}\p{M}'’]*/gu) || []).map((w) => w.toLowerCase().replace(/['’]s$/u, "")), true);
   }
   for (const tag of String(all || "").match(TAG) || []) read(tagWords(tag).toLowerCase().split(/\n+/).filter((w) => /^[\p{L}\p{M}]+$/u.test(w)), false);
-  return out;
+  return { sure, goHey };
 }
+// After "go" or "hey": a first name, or a name word that's no everyday word,
+// is the name ("#GoGrace", "#gojordan"); an everyday-word surname is asked
+// about ("#GoGreen" for an Ava Green, "#heyday" for a Dan Day).
+const chantOnly = (parts, k, w) => k > 0 && everyday(w);
 // A tag typed all in lower case has no words to read: a shout-out's own
 // letters right before a name word that ends the tag (or before it and a
 // last "go") name them ("#happybirthdaygrace", "#gohope", "#gohopego",
-// "#thankscoachrivers").
+// "#thankscoachrivers"). { sure, maybe }: after "go" or "hey", an
+// everyday-word surname is asked about ("#gogreen", "#heyday"; chantOnly).
 const SHOUT_RUN = /(?:birthday|bday|congrats|congratulations|thanks|thankyou|thanku|loveyou|missyou|proudofyou|coach|dear|hey|go)$/;
 function lowerTagShouts(all, p) {
-  const names = nameParts(p && p.name).filter((w) => Array.from(w).length >= 3);
-  if (!names.length) return [];
-  const out = new Set();
+  const parts = nameParts(p && p.name);
+  const names = parts.filter((w) => Array.from(w).length >= 3);
+  const sure = new Set();
+  const maybe = new Set();
+  if (!names.length) return { sure: [], maybe: [] };
   for (const tag of String(all || "").match(TAG) || []) {
     for (const piece of tagWords(tag).toLowerCase().split(/\n+/)) {
       if (!/^[\p{L}\p{M}]+$/u.test(piece)) continue;
       for (const w of names) {
         for (const end of [w, w + "go"]) {
-          if (piece.length > end.length && piece.endsWith(end) && SHOUT_RUN.test(piece.slice(0, piece.length - end.length))) out.add(w);
+          if (piece.length <= end.length || !piece.endsWith(end)) continue;
+          const lead = SHOUT_RUN.exec(piece.slice(0, piece.length - end.length));
+          if (!lead) continue;
+          if ((lead[0] === "go" || lead[0] === "hey") && chantOnly(parts, parts.indexOf(w), w)) maybe.add(w);
+          else sure.add(w);
         }
       }
     }
   }
-  return [...out];
+  for (const w of sure) maybe.delete(w);
+  return { sure: [...sure], maybe: [...maybe] };
 }
 // An adult's name word (four letters or more) run into a word of a tag: the
 // name where it ends the word ("#teamrivers", "#coachrivers"), or starts it
 // before a tag's usual last word ("#riversstrong", "#riversnation"); asked
-// where it starts another word ("#riverside") or is an everyday one. Tags only.
+// where it starts another word ("#riverside"), sits inside one
+// ("#coachriversrocks"), or is an everyday one. Tags only.
 const TAG_TAILS = new Set(("strong nation fam family gang forever crew squad army pride power time era way life season szn mode legacy love fans " +
   "team stan nation club world vibes energy effect magic made pride proud hype goat goats").split(" "));
 function tagRunIns(all, p) {
@@ -614,7 +648,10 @@ function tagRunIns(all, p) {
         if (piece === w) continue;
         const atEnd = piece.endsWith(w);
         const atStart = piece.startsWith(w);
-        if (!atEnd && !atStart) continue;
+        if (!atEnd && !atStart) {
+          if (!everyday(w) && piece.includes(w)) maybe.add(w);
+          continue;
+        }
         if (!everyday(w) && (atEnd || TAG_TAILS.has(piece.slice(w.length)))) sure.add(w);
         else maybe.add(w);
       }
@@ -696,8 +733,8 @@ function publicNames(all, p) {
   // You Coach Will"), or in a lower-case tag's ("#happybirthdaygrace"): the
   // name, for anyone the graphic can't name.
   const shouted = shoutOuts(all);
-  if (nameParts(p.name).some((w) => Array.from(w).length >= (minor ? 2 : 3) && shouted.has(w))) return true;
-  if (lowerTagShouts(all, p).length) return true;
+  if (nameParts(p.name).some((w, k, parts) => Array.from(w).length >= (minor ? 2 : 3) && (shouted.sure.has(w) || (shouted.goHey.has(w) && !chantOnly(parts, k, w))))) return true;
+  if (lowerTagShouts(all, p).sure.length) return true;
   // An adult's name run into a tag ("#teamrivers").
   if (!minor && tagRunIns(all, p).sure.length) return true;
   // A minor: one word of their name run into a tag or a word where a word
@@ -733,6 +770,12 @@ function graphicsAsks(texts, people, { format = null, ok = new Set() } = {}) {
   for (const p of people || []) {
     if (!mayName(p, format)) {
       for (const w of nameHits(all, p, p.is_minor ? { minRun: 4, minWord: 2 } : {}).maybe) out.add(w);
+      // "Go Green", "#gogreen" for an Ava Green: a chant as often as a name, asked.
+      const goHey = shoutOuts(raw).goHey;
+      nameParts(p.name).forEach((w, k, parts) => {
+        if (goHey.has(w) && chantOnly(parts, k, w)) out.add(w);
+      });
+      for (const w of lowerTagShouts(raw, p).maybe) out.add(w);
       for (const tag of inTags(raw, p.name, p.is_minor ? 4 : 5).ask || []) out.add(tag);
       // One word of a minor's name inside a word, or an everyday one run in
       // ("#hopestrong"), or a three-letter one run into a tag ("#samstrong"): asked.

@@ -563,6 +563,12 @@ test("a tag or a Title Case line reads each word as a sentence start; a whole na
   assert.equal(judge("#riverside", rivers), "asked rivers", "another word that starts with it: asked");
   // "you", "love" and a "go" before more words aren't shout-outs alone: asked.
   for (const [t, want] of [["You Will Never Walk Alone", "asked will"], ["Love Will Find A Way", "asked will"], ["Go Chase Your Dreams", "asked chase"]]) assert.equal(judge(t, shout), want, t);
+  // An adult's name inside a word of a tag: asked.
+  for (const t of ["#coachriversrocks", "#teamriversforever", "#thankscoachriversforeverything"]) assert.equal(judge(t, rivers), "asked rivers", t);
+  // After "go" or "hey", an everyday-word surname is a chant as often: asked. A first name is the name.
+  const chants = [{ person_code: "AG1", name: "Ava Green", is_minor: true }, { person_code: "LW1", name: "Leo West", is_minor: true }, { person_code: "GL1", name: "Grace Long", is_minor: true }, { person_code: "DD1", name: "Dan Day", is_minor: true }];
+  for (const [t, want] of [["#gogreen", "asked green"], ["#gowest", "asked west"], ["#golong", "asked long"], ["#heyday", "asked day"], ["#GoGreen", "asked green"], ["#GoWest", "asked west"]]) assert.equal(judge(t, chants), want, t);
+  for (const t of ["#gograce", "#heygrace", "#GoGrace", "#happybirthdayava"]) assert.equal(judge(t, chants), "refused", t);
 });
 
 test("the phone keeps an ordinary shot line, and a place's own name stays online", () => {
@@ -576,6 +582,14 @@ test("the phone keeps an ordinary shot line, and a place's own name stays online
   for (const line of ["westlake gym at dawn", "Riverside run at dawn", "pickup on oak, then the drive", "the rowe driveway", "kidd laces up", "Dana brings the sled", "jordanstrong at dawn"]) {
     assert.equal(U.offlineSafe(line, people, { places }), false, line);
   }
+  // A minor's three-letter name beside a word a file or a tag uses stays online; "same" is the word.
+  const sam = [{ name: "Sam Ortiz", is_minor: true }];
+  assert.equal(U.offlineSafe("samstrong at dawn", sam, { places: [] }), false);
+  assert.equal(U.offlineSafe("the same drill at dawn", sam, { places: [] }), true);
+  assert.deepEqual(U.idNames("samquote_v2", sam), ["sam"]);
+  assert.deepEqual(U.titleNames("Teamsam", sam), { sure: [], maybe: ["sam"] });
+  // Editing words built from an everyday name and a file word are words.
+  assert.deepEqual(U.idNames("blackframe_v1 whitecard_intro shortcut_v2", [{ name: "Kim Black", is_minor: true }, { name: "Ana White", is_minor: true }, { name: "Bo Short", is_minor: true }]), []);
   // A place that's only ordinary words, typed with its capitals, keeps them all.
   for (const [place, line] of [["Park High School", "park high school at dawn"], ["Court Street Park", "court street park, wide"], ["Home Field", "home field lights"],
     ["The Rowe house on High Street", "the bus down high street"], ["Home Field, Riverside", "home field lights at dawn"], ["park high school gym", "after the gym, warm-up"]]) {
