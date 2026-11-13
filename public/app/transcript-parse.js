@@ -147,9 +147,11 @@
   // language or editor's note is read as a voice too (ROLE_LIKE).
   var ROLE_WORD = /^(?:scout|recruiter|agent|officer|police|cop|nurse|doctor|medic|paramedic|pastor|priest|preacher|minister|chaplain|manager|neighbor|neighbour|principal|counselor|counsellor|therapist|sheriff|deputy|judge|lawyer|dispatcher|operator|pilot|driver|guard|security|staff|staffer|assistant|volunteer|stranger|bystander|witness|journalist|anchor|analyst|interpreter|translator|boss|owner|clerk|cashier|waiter|waitress|voiceover|voice-over|narration|teammate)s?$/i;
   // One word that's a sound or a thing, not a voice.
-  var SOUND_NOUN = /^(?:clatter\w*|shutter\w*|rumbl\w*|gunshots?|gunfire|explosions?|heartbeats?|fireworks?|traffic|echo\w*|feedback|ringtone|alarms?|chimes?|timer|motor|generator|water|waves?|birdsong|birds?|dogs?|crickets?|helicopter|plane|train|truck|cars?|phone|tv|radio)$/i;
+  var SOUND_NOUN = /^(?:clatter\w*|shutter\w*|rumbl\w*|gunshots?|gunfire|explosions?|heartbeats?|fireworks?|traffic|echo\w*|feedback|ringtone|alarms?|chimes?|timer|motor|generator|water|waves?|birdsong|birds?|dogs?|crickets?|helicopter|plane|train|truck|cars?|phone|tv|radio|hiccups?|sneezes?|burps?|yawns?|boom|thump|thud|pop|crack|snap|smack|slap|whack|crunch|clang|clank|ding|bang|zap|swoosh|drumroll|fanfare|instrumental|melody|chorus|tune|jingle|score|soundtrack|timeout|halftime|touchdown|foul|swish|kickoff|whistle|buzzer|horn|goal|score|replay)$/i;
+  // How it's said, in one word ("[sarcastic]", "[hoarse]"): the speaker's.
+  var TONE = /^(?:sarcastic|sarcastically|angry|upset|calm|proud|hoarse|excited|nervous|serious|joking|jokingly|emotional|tearful|annoyed|frustrated|happy|sad|quiet|loud|softly|shaky|breathless|amazed|surprised|confused|deadpan|mocking|teasing|playful|exasperated|incredulous|whispered|muttered|singsong|mumbled)$/i;
   // The footage or the edit, not a voice ("[flashback]", "[slow motion]").
-  var FRAME_NOTE = /^(?:flashback|archive|archival|montage|slow[- ]?mo(?:tion)?|replay|highlights?|intro|outro|title|titles|caption|captions|graphic|graphics|text|on[- ]?screen text|chyron|transition|cut|edit|b-?roll|phonetic|phonetically|sp|translated|translation|transcribed|continued|cont)$/i;
+  var FRAME_NOTE = /^(?:flashback|archive|archival|montage|slow[- ]?mo(?:tion)?|replay|highlights?|intro|outro|title|titles|caption|captions|graphic|graphics|text|on[- ]?screen text|chyron|transition|cut|edit|b-?roll|phonetic|phonetically|sp|translated|translation|transcribed|continued|cont|name|names|profanity|curse|curses|cursing|swearing|swears|expletive|explicit|bleeped|redacted|blank|number|address|school|team)$/i;
   function manner(s) {
     var t = String(s || "").trim();
     MISSING_RE.lastIndex = 0;
@@ -164,18 +166,39 @@
   // A sound people make in the background: the speaker's words go on
   // ("[players warming up]", "[kids playing in background]", "[radio
   // static]"), unless they're saying something ("[crowd chanting]").
-  var BACKGROUND = /\b(?:playing|plays|warming up|practi[cs]ing|running|training|drilling|stretching|in (?:the )?background|noises?|static|murmur\w*|chatter\w*|indistinct\w*|laugh\w*|clapping|claps|applau\w*|footsteps|breathing|celebrating)\b/i;
+  // Two kinds: what people do ("[players warming up]") is a note wherever it
+  // stands; people heard ("[kids laughing]", "[man in background]") are a
+  // voice when words follow on the line, and a note on a line of their own.
+  var BACKGROUND = /\b(?:playing|plays|warming up|practi[cs]ing|running|training|drilling|stretching|noises?|static|clapping|claps|applau\w*|footsteps|breathing|lifting|throwing|catching|tackling|blocking|skating|dribbling)\b/i;
+  var HEARD = /\b(?:in (?:the )?background|murmur\w*|chatter\w*|indistinct\w*|laugh\w*|giggl\w*|celebrat\w*|cheer\w*|whoop\w*|chant\w*)\b/i;
+  // A voice coming through something ("[over phone]", "[on speakerphone]").
+  var THROUGH = /^(?:(?:over|through|via|from)\s+(?:the\s+|a\s+)?(?:phone|telephone|speaker(?:\s?phone)?|radio|intercom|walkie(?:[- ]talkie)?|pa|p\.a\.|tv|television|loudspeaker|headset|earpiece|video call|facetime)|on\s+(?:the\s+)?(?:speaker\s?phone|intercom|radio|pa|loudspeaker|video call|facetime))$/i;
   var SAYING = /\b(?:say\w*|said|shout\w*|yell\w*|chant\w*|call\w*|holler\w*|ask\w*|answer\w*|speak\w*|talk(?:s|ing)?(?! indistinct)|whisper\w*|scream\w*|reply\w*|repl(?:y|ies)|respond\w*|cheer\w*|counting|instruct\w*|sing\w*)\b/i;
   // Somebody else heard from afar ("[distant shouting]", "[muffled talking]").
   var DISTANT_VOICE = /^(?:distant|faint|far-off|faraway|muffled|background|unseen|off-?screen|off-?camera)\s+(?:shout|yell|call|holler|chant|talk|speak|scream|whisper|conversation|question|reply|answer)\w*$/i;
+  // The editor's own reading of a bracket ("[scout]" is someone; "[boom]"
+  // is a note), set for the parse in hand: parse(text, { readAs }).
+  var READ_AS = null;
+  var bracketKey = function (t) { return String(t || "").trim().replace(/\s+/g, " ").toLowerCase(); };
   function voiceOf(inside) {
     var t = String(inside || "").trim().replace(/\s+/g, " ");
-    if (!t || manner(t) || FRAME_NOTE.test(t)) return "";
+    if (!t) return "";
+    var mine = READ_AS && READ_AS[bracketKey(t)];
+    if (mine === "note") return "";
+    if (mine === "voice") return "person";
+    return voiceRead(t);
+  }
+  function noteWord(t) {
+    return soundNote(t) || SOUND_NOUN.test(t) || TONE.test(t) || FRAME_NOTE.test(t);
+  }
+  function voiceRead(t) {
+    if (manner(t) || FRAME_NOTE.test(t) || TONE.test(t)) return "";
+    if (THROUGH.test(t)) return "person";
     if (ABOUT_SPEAKER.test(t)) return "";
     var words = t.split(/[\s,]+/).map(function (w) { return w.replace(/['’]s$/i, ""); });
     var person = words.some(function (w) { return PERSON.test(w) || ROLE_WORD.test(w); }) || /\boff[\s-]?(?:camera|screen|mic)\b/i.test(t);
     // Written like a name ("COACH", "Coach Hooks", "Mrs Lopez"): a label.
-    if (/^\p{L}/u.test(t) && LABEL_LIKE.test(t) && (PERSON.test(words[0]) || ROLE_WORD.test(words[0]) || !soundNote(t))) return "label";
+    if (/^\p{L}/u.test(t) && LABEL_LIKE.test(t) && (PERSON.test(words[0]) || ROLE_WORD.test(words[0]) || !noteWord(t))) return "label";
     if (person && BACKGROUND.test(t) && !SAYING.test(t)) return "";
     // Who they are, in lower case or with more ("man", "male voice",
     // "woman's voice", "crowd chanting", "grandma", "off camera", "scout",
@@ -183,7 +206,7 @@
     if (person || DISTANT_VOICE.test(t)) return "person";
     // One lower-case word that isn't a sound, a thing, an action ("-ing",
     // "-ed", "-s") or a manner ("-ly"): someone ("[recruiter]", "[nurse]").
-    if (/^\p{Ll}[\p{Ll}-]{1,24}$/u.test(t) && !soundNote(t) && !SOUND_NOUN.test(t) && !/(?:ing|ed|ly|s)$/.test(t)) return "person";
+    if (/^\p{Ll}[\p{Ll}-]{1,24}$/u.test(t) && !noteWord(t) && !/(?:ing|ed|ly|s)$/.test(t)) return "person";
     return "";
   }
   // A line cut where another voice starts in the middle of it: at ">>", at a
@@ -263,10 +286,11 @@
     // own; the first piece of the subtitle's first line starts it.
     var lines = [];
     var first = [];
+    var from = [];
     given.forEach(function (raw, li) {
       // Italics as converted subtitles keep them ({\i1}…{\i0}).
       var r = String(raw).replace(/\{\\i1\}/gi, "<i>").replace(/\{\\i0\}/gi, "</i>");
-      cutLine(r).forEach(function (piece, k) { lines.push(piece); first.push(li === 0 && k === 0); });
+      cutLine(r).forEach(function (piece, k) { lines.push(piece); first.push(li === 0 && k === 0); from.push(li); });
     });
     // A line all in italics ("<i>Why that year?</i>"), as subtitles mark an
     // off-screen voice (sometimes the speaker's own voice-over), and a sung
@@ -281,10 +305,15 @@
       // Sung: a note at either end, or wrapped in # as some subtitles mark it.
       if (whole || /^[♪♫]|[♪♫]$/.test(tr) || /^#\s.*\s#$/.test(tr)) {
         if (!(cur && cur.kind === "other" && cur.sung)) { begin("other", ""); cur.sung = true; }
+        cur.lead = whole && idx < lines.length - 1 && from[idx + 1] === from[idx];
         cur.text.push(raw);
         return;
       }
+      // What follows an italic question on its own line is the voice from
+      // before it, answering ("<i>Why?</i> Because nobody filmed it.").
+      var resume = !!(cur && cur.sung && cur.lead && idx > 0 && from[idx - 1] === from[idx]);
       if (cur && cur.sung) cur = null;
+      if (resume) { begin(null, undefined); cur.resume = true; }
       // Split the line at each voice tag.
       var segs = [];
       var at = 0;
@@ -317,6 +346,8 @@
           var starts = first[idx] || !!dash || !!chev;
           var br = BRACKET.exec(body);
           var bw = br ? voiceOf(br[1]) : "";
+          // People heard, on a line of their own, are a note ("[kids laughing]").
+          if (bw === "person" && !br[2].trim() && HEARD.test(br[1]) && !(READ_AS && READ_AS[bracketKey(br[1])] === "voice")) bw = "";
           if (bw) {
             // A name in brackets: a label (in a file with no labels, a voice
             // nobody names: nobody's). A person in lower case, or a name with
@@ -347,7 +378,17 @@
     return out;
   }
 
+  // opts.readAs: the editor's reading of brackets, { "<bracket, lower case>":
+  // "voice" | "note" }, for this parse only.
   function parse(text, opts) {
+    READ_AS = opts && opts.readAs && typeof opts.readAs === "object" ? opts.readAs : null;
+    try {
+      return parseIn(text, opts);
+    } finally {
+      READ_AS = null;
+    }
+  }
+  function parseIn(text, opts) {
     var fps = opts && FPS.indexOf(Number(opts.fps)) >= 0 ? Number(opts.fps) : null;
     var src = String(text || "").replace(/^﻿/, "").replace(/\r\n?/g, "\n");
     if (!src.trim()) return { ok: false, error: "empty" };
@@ -408,7 +449,7 @@
     var counts = {};
     var split = [];
     raw.forEach(function (c) {
-      var ps = partsOf(c.lines).map(function (pt) { return { kind: pt.kind, who: pt.who, dash: !!pt.dash, chev: !!pt.chev, br: !!pt.br, odd: !!pt.odd, text: pt.text.join(" ") }; })
+      var ps = partsOf(c.lines).map(function (pt) { return { kind: pt.kind, who: pt.who, dash: !!pt.dash, chev: !!pt.chev, br: !!pt.br, odd: !!pt.odd, resume: !!pt.resume, text: pt.text.join(" ") }; })
         .filter(function (pt) { return /[\p{L}\p{N}]/u.test(cleanText(pt.text)); });
       if (!ps.length) return;
       ps.forEach(function (pt) {
@@ -424,7 +465,7 @@
         var a = c.s == null ? null : Math.round(c.s + ((c.e - c.s) * acc) / all);
         acc += n[k];
         var b = c.s == null ? null : k === ps.length - 1 ? c.e : Math.round(c.s + ((c.e - c.s) * acc) / all);
-        split.push({ s: a, e: b, kind: pt.kind, who: pt.who, dash: pt.dash, chev: pt.chev, br: pt.br, odd: pt.odd, text: pt.text, sub: ps.length > 1 });
+        split.push({ s: a, e: b, kind: pt.kind, who: pt.who, dash: pt.dash, chev: pt.chev, br: pt.br, odd: pt.odd, resume: pt.resume, text: pt.text, sub: ps.length > 1 });
       });
     });
     // Once the file uses labels (a voice tag, "Speaker 1", or any typed label
@@ -439,6 +480,7 @@
     var labelled = Object.keys(counts).some(function (k) { return k.charAt(0) !== "?" || counts[k] >= 2; });
     var chevrons = split.some(function (p) { return p.kind === "chev" || p.chev; });
     var last = labelled ? "" : null;
+    var before = last;
     var cues = [];
     var total = 0;
     var mixed = 0;
@@ -455,6 +497,7 @@
         // ("Producer: Why that year?") is another voice; "Listen: …" is words.
         else { p.text = p.who + ": " + p.text; who = p.dash || p.chev || (!p.odd && !NOT_LABEL.test(p.who) && !ONCE_WORDS.test(p.who.split(/\s+/)[0])) ? TWO : last; }
       } else if (p.kind === "dash" || p.kind === "chev" || p.kind === "other") who = TWO;
+      else if (p.resume) who = before;
       else who = last;
       if (!labelled && chevrons) who = TWO;
       // In a file with labels, what follows nobody's with no label is
@@ -462,7 +505,10 @@
       if (who === TWO) {
         mixed++;
         if (labelled) last = TWO;
-      } else last = who;
+      } else {
+        last = who;
+        before = who;
+      }
       var tx = cleanText(p.text);
       if (!tx || !/[\p{L}\p{N}]/u.test(tx)) continue;
       if (p.s != null && p.e != null && p.e > MAX_MS) { late++; continue; }
@@ -483,21 +529,35 @@
       if (!(k in seen)) { seen[k] = speakers.length; speakers.push({ who: c.who, cues: 0 }); }
       speakers[seen[k]].cues++;
     });
-    // The brackets read as notes, not voices (the speaker's voice goes on
-    // past them), for the editor to check: "[whistle blows]", "[laughs]".
+    // Every bracket in the file and how it was read, for the editor to check
+    // and change (parse again with { readAs }): "voice" (someone the file
+    // doesn't name), "speaker" (a name, read as a label), or "note" (the
+    // voice goes on past it: "[whistle blows]", "[laughs]"). notes: the ones
+    // read as notes.
     var notes = [];
+    var brackets = [];
+    var at = {};
     raw.forEach(function (c) {
       c.lines.forEach(function (l) {
         var m;
         var re = /[\[(]([^\[\]()]{1,60})[\])]/g;
-        while ((m = re.exec(l)) && notes.length < 12) {
+        while ((m = re.exec(l))) {
           var t = m[1].trim().replace(/\s+/g, " ");
           MISSING_RE.lastIndex = 0;
-          if (t && !voiceOf(t) && !MISSING_RE.test("[" + t + "]") && !/^(?:o\.?\s?s\.?|v\.?\s?o\.?|cont['’]?d\.?)$/i.test(t) && notes.indexOf(t.toLowerCase()) < 0) notes.push(t.toLowerCase());
+          if (!t || !/\p{L}/u.test(t) || MISSING_RE.test("[" + t + "]") || /^(?:o\.?\s?s\.?|v\.?\s?o\.?|cont['’]?d\.?)$/i.test(t)) continue;
+          var k = bracketKey(t);
+          if (k in at) { brackets[at[k]].count++; continue; }
+          if (brackets.length >= 60) continue;
+          var v = voiceOf(t);
+          // On a line of its own, people heard are a note.
+          if (v === "person" && !l.replace(m[0], "").replace(/<[^>]*>/g, "").trim() && HEARD.test(t) && !(READ_AS && READ_AS[k] === "voice")) v = "";
+          at[k] = brackets.length;
+          brackets.push({ key: k, text: t, read: v === "label" ? "speaker" : v ? "voice" : "note", set: !!(READ_AS && READ_AS[k]), count: 1 });
+          if (!v && notes.length < 12) notes.push(k);
         }
       });
     });
-    return { ok: true, format: format, frames: frames, fps: frames ? fps : null, drop: frames && drop, cues: cues, speakers: speakers, labelled: labelled, mixed: mixed, voices: speakers.length, notes: notes };
+    return { ok: true, format: format, frames: frames, fps: frames ? fps : null, drop: frames && drop, cues: cues, speakers: speakers, labelled: labelled, mixed: mixed, voices: speakers.length, notes: notes, brackets: brackets };
   }
 
   // A speaker's cues, numbered again from 1. A cue that comes after someone
