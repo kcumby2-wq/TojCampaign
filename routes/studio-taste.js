@@ -44,9 +44,16 @@ function fileLink(url) {
   }
   let path = u.pathname.toLowerCase().replace(/%2e/g, ".").replace(/%2f/g, "/");
   path = path.replace(/;[^/]*/g, "").replace(/\/+$/, "");
-  // Instagram's /p/<id>/media/ address sends the picture itself.
-  const media = /(^|\.)instagram\.com$/.test(u.hostname.toLowerCase()) && /^\/(p|reel|tv)\/[^/]+\/media$/.test(path);
-  return FILE_END.test(path) || media || IMAGE_QUERY.test(u.search.replace(/^\?/, "").toLowerCase()) || IMAGE_HOST.test(u.hostname.toLowerCase());
+  const host = u.hostname.toLowerCase();
+  const query = u.search.replace(/^\?/, "").toLowerCase();
+  // Instagram's /p/<id>/media/ address sends the picture itself; so do
+  // Cloudinary's delivery addresses and Google Drive's download address
+  // (041's studio_taste_file_link reads the same).
+  const media = (/(^|\.)instagram\.com$/.test(host) && /^\/(p|reel|tv)\/[^/]+\/media$/.test(path))
+    || (/(^|\.)cloudinary\.com$/.test(host) && /\/(image|video)\/(upload|fetch|private|authenticated)\//.test(path + "/"))
+    || (host === "drive.google.com" && /^\/uc/.test(path) && /(^|&)export=/.test(query))
+    || /(^|\.)(drive\.usercontent\.google\.com|images\.ctfassets\.net|videos\.ctfassets\.net)$/.test(host);
+  return FILE_END.test(path) || media || IMAGE_QUERY.test(query) || IMAGE_HOST.test(host);
 }
 
 router.use((req, res, next) => {
@@ -111,8 +118,8 @@ function tasteInput(raw, { partial = false } = {}) {
 async function namesInTaste(sb, value) {
   const words = [value.title, value.note, value.take, value.leave, ...(value.tags || [])].filter(Boolean).join("\n");
   if (!words) return false;
-  const { data } = await sb.from("studio_film_people").select("name,reviewer_name,is_minor").limit(10000);
-  const cards = data || [];
+  // Every page of them (the API caps one answer at 1,000 rows).
+  const cards = await U.everyCardRows(sb);
   return U.namesIn(words, cards, { strong: true }).length > 0 || U.minorWords(words, cards).length > 0;
 }
 const view = (row) => ({ id: row.id, ref: `Taste ${row.ref_no}`, ref_no: row.ref_no, title: row.title, url: row.url, kind: row.kind, note: row.note, take: row.take, leave: row.leave, tags: row.tags || [], added_by: row.added_by, created_at: row.created_at, updated_at: row.updated_at, archived_at: row.archived_at });

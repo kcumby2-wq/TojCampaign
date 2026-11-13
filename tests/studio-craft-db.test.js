@@ -170,6 +170,11 @@ test("the delivery check: the server checks what the phone read, and keeps it as
   assert.deepEqual((await films("POST", `/films/${film.id}/delivery-checks`, { file_name: "x.mp4", format: "hero", ratio: "9x16" }, "ed")).data.fields, ["size"]);
   assert.equal((await room(film.id)).delivery_checks.length, 2);
   await assert.rejects(pool.query("update studio_delivery_checks set passed = true where id = $1", [bad.id]), /kept as it was checked/);
+  // A card with a middle name: its first and last name, as typed or run
+  // together, are the name to the database too.
+  ok(await films("POST", `/films/${film.id}/people`, { person_code: "D0009", name: "Grace Ann Long", role: "athlete", is_minor: true, release_on_file: true, covers: { voice: true } }, "lead"), "card");
+  for (const t of ["Grace Long ran it", "gracelong quote v"]) assert.equal((await pool.query("select studio_names_in($1, $2) as x", [film.id, t])).rows[0].x, true, t);
+  assert.equal((await pool.query("select studio_names_in($1, 'a long grace period') as x", [film.id])).rows[0].x, false);
   await assert.rejects(pool.query("delete from studio_delivery_checks"), /kept as it was checked/);
   await assert.rejects(pool.query("truncate studio_delivery_checks"), /kept as it was checked/);
 });
@@ -538,13 +543,48 @@ test("a tag or a Title Case line reads each word as a sentence start; a whole na
   for (const t of ["#gojordankidd", "#believeinjordankidd", "#gohopefield", "#letsgohopefield", "#teamtyng"]) {
     assert.equal(judge(t, whole, new Set([t])), "refused", t);
   }
-  // One word of a minor's name run into a tag or a word: the name where a
-  // word starts or ends; an everyday one is asked about.
-  for (const t of ["#jordanstrong", "#teamjordan", "#prayforjordan", "#kiddstrong", "#JORDANSTRONG", "jordanstrong forever"]) assert.equal(judge(t, whole), "refused", t);
-  assert.equal(judge("#hopestrong", whole), "asked hope");
+  // One word of a minor's name run into a tag or a word beside a tag's or a
+  // file's word: the name; an everyday one only as a first name.
+  for (const t of ["#jordanstrong", "#teamjordan", "#prayforjordan", "#kiddstrong", "#JORDANSTRONG", "jordanstrong forever", "#hopestrong", "#teamhope"]) assert.equal(judge(t, whole), "refused", t);
+  assert.equal(judge("#gofield", whole), "asked field");
+  // An ordinary word that starts or ends with a minor's name is asked about, never refused.
+  const ordinary = [{ person_code: "IM1", name: "Isla Moss", is_minor: true }, { person_code: "LC1", name: "Liam Cruz", is_minor: true }, { person_code: "EL2", name: "Ella Ruiz", is_minor: true }];
+  for (const [t, want] of [["We grew up on the island", "asked isla"], ["William coached me", "asked liam"], ["Grab an umbrella", "asked ella"]]) assert.equal(judge(t, ordinary), want, t);
   assert.equal(judge("#SpeedLimit", whole), "asked #speedlimit");
   assert.equal(judge("#WalkOff", whole), "asked #walkoff");
   assert.equal(judge("#WalkOff", whole, new Set(["#walkoff"])), "passes");
+  // A three-letter name run into a word of a tag, at its start or end: asked, never refused.
+  const three = [{ person_code: "SO1", name: "Sam Ortiz", is_minor: true }, { person_code: "ML1", name: "Mia Lee", is_minor: true }, { person_code: "MC1", name: "Max Cole", is_minor: true }];
+  for (const [t, want] of [["#samstrong", "asked sam"], ["#teamsam", "asked sam"], ["#prayformia", "asked mia"], ["#maxstrong", "asked max"], ["#samedrill", "asked sam"]]) assert.equal(judge(t, three), want, t);
+  assert.equal(judge("#samstrong", three, new Set(["sam"])), "passes");
+  // A shout-out written as a tag: refused; one with no shout-out word stays a question.
+  const shout = [{ person_code: "HF2", name: "Hope Field", is_minor: true }, { person_code: "GK1", name: "Grace Kim", is_minor: true },
+    { person_code: "CY2", name: "Chase Young", is_minor: true }, { person_code: "WY1", name: "Will Young", is_minor: true }];
+  for (const t of ["#WayToGoHope", "#HappyBirthdayGrace", "#GoHopeGo", "#WeLoveYouGrace", "#ProudOfYouChase", "#ThankYouCoachWill"]) assert.equal(judge(t, shout), "refused", t);
+  for (const [t, want] of [["#NeverLoseHope", "asked hope"], ["#GoChaseYourDreams", "asked chase"]]) assert.equal(judge(t, shout), want, t);
+  // A tag typed all in lower case: a shout-out's own letters before a name that ends it.
+  for (const t of ["#happybirthdaygrace", "#gohope", "#weloveyougrace", "#proudofyouchase", "#congratsgrace", "#gohopego"]) assert.equal(judge(t, shout), "refused", t);
+  assert.equal(judge("#nevergiveup", shout), "passes");
+  // An adult the release doesn't let a graphic name: their name run into a tag.
+  const rivers = [{ person_code: "JR9", name: "Jamie Rivers", is_minor: false }];
+  for (const t of ["#thankscoachrivers", "#coachrivers", "#teamrivers", "#riversstrong", "#dearjamie"]) assert.equal(judge(t, rivers), "refused", t);
+  assert.equal(judge("#riverside", rivers), "asked rivers", "another word that starts with it: asked");
+  // "you", "love" and a "go" before more words aren't shout-outs alone: asked.
+  for (const [t, want] of [["You Will Never Walk Alone", "asked will"], ["Love Will Find A Way", "asked will"], ["Go Chase Your Dreams", "asked chase"]]) assert.equal(judge(t, shout), want, t);
+  // An adult's name inside a word of a tag: asked.
+  for (const t of ["#coachriversrocks", "#teamriversforever", "#thankscoachriversforeverything"]) assert.equal(judge(t, rivers), "asked rivers", t);
+  // After "go" or "hey", an everyday-word surname is a chant as often: asked. A first name is the name.
+  const chants = [{ person_code: "AG1", name: "Ava Green", is_minor: true }, { person_code: "LW1", name: "Leo West", is_minor: true }, { person_code: "GL1", name: "Grace Long", is_minor: true }, { person_code: "DD1", name: "Dan Day", is_minor: true }];
+  for (const [t, want] of [["#gogreen", "asked green"], ["#gowest", "asked west"], ["#golong", "asked long"], ["#heyday", "asked day"], ["#GoGreen", "asked green"], ["#GoWest", "asked west"]]) assert.equal(judge(t, chants), want, t);
+  for (const t of ["#gograce", "#heygrace", "#GoGrace", "#happybirthdayava"]) assert.equal(judge(t, chants), "refused", t);
+  // A chant's surname is the card's last word: a second first name is the name.
+  const two = [{ person_code: "MG1", name: "Mary Grace Long", is_minor: true }];
+  for (const t of ["#GoGrace", "#gograce", "#heygrace"]) assert.equal(judge(t, two), "refused", t);
+  assert.equal(judge("#golong", two), "asked long");
+  // A first and last name, when the card has a middle name too: the whole name.
+  const mid = [{ person_code: "GL2", name: "Grace Ann Long", is_minor: true }, { person_code: "HF3", name: "Hope Marie Field", is_minor: true }];
+  for (const t of ["#GraceLong", "#gracelong", "#GoGraceLong", "#HopeField", "#hopefield", "#GoHopeField", "Grace Long"]) assert.equal(judge(t, mid), "refused", t);
+  for (const t of ["gracelong_quote_v1", "hopefield_quote_v1"]) assert.ok(U.idNames(t, mid).length > 0, t);
 });
 
 test("the phone keeps an ordinary shot line, and a place's own name stays online", () => {
@@ -558,10 +598,28 @@ test("the phone keeps an ordinary shot line, and a place's own name stays online
   for (const line of ["westlake gym at dawn", "Riverside run at dawn", "pickup on oak, then the drive", "the rowe driveway", "kidd laces up", "Dana brings the sled", "jordanstrong at dawn"]) {
     assert.equal(U.offlineSafe(line, people, { places }), false, line);
   }
-  // A place that's only ordinary words keeps them all.
+  // A minor's three-letter name beside a word a file or a tag uses stays online; "same" is the word.
+  const sam = [{ name: "Sam Ortiz", is_minor: true }];
+  assert.equal(U.offlineSafe("samstrong at dawn", sam, { places: [] }), false);
+  assert.equal(U.offlineSafe("the same drill at dawn", sam, { places: [] }), true);
+  assert.deepEqual(U.idNames("samquote_v2", sam), ["sam"]);
+  assert.deepEqual(U.titleNames("Teamsam", sam), { sure: [], maybe: ["sam"] });
+  // Editing words built from an everyday name and a file word are words.
+  assert.deepEqual(U.idNames("blackframe_v1 whitecard_intro shortcut_v2", [{ name: "Kim Black", is_minor: true }, { name: "Ana White", is_minor: true }, { name: "Bo Short", is_minor: true }]), []);
+  assert.deepEqual(U.idNames("clipart_v2 spotted_broll greencard_promo", [{ name: "Art Diaz", is_minor: true }, { name: "Ted Ruiz", is_minor: true }, { name: "Ava Green", is_minor: true }]), []);
+  // A place that's only ordinary words, typed with its capitals, keeps them all.
   for (const [place, line] of [["Park High School", "park high school at dawn"], ["Court Street Park", "court street park, wide"], ["Home Field", "home field lights"],
-    ["The Rowe house on High Street", "the bus down high street"], ["Home Field, Riverside", "home field lights at dawn"]]) {
+    ["The Rowe house on High Street", "the bus down high street"], ["Home Field, Riverside", "home field lights at dawn"], ["park high school gym", "after the gym, warm-up"]]) {
     assert.equal(U.offlineSafe(line, people, { places: [place] }), false, place);
+  }
+  // Typed in sentence case, a place made of ordinary words keeps them too.
+  for (const [place, line] of [["Park high school gym", "warm-up at park high"], ["Home field, Riverside", "home field lights at dawn"], ["Court street park", "court street park at dusk"], ["The Rowe house on High street", "the bus down high street"]]) {
+    assert.equal(U.offlineSafe(line, people, { places: [place] }), false, place);
+  }
+  // Ordinary words that describe a place (lower case, or one alone) don't keep a line off the phone.
+  for (const [place, line] of [["Westlake High School, practice field behind the gym", "after practice, on the field"], ["Riverside Park, by the track", "laps on the track"],
+    ["Home, then the bus at the high school", "then the bus to the field"]]) {
+    assert.equal(U.offlineSafe(line, people, { places: [place] }), true, place);
   }
 });
 

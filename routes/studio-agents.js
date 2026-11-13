@@ -756,6 +756,16 @@ router.post("/brief", member, async (req, res) => {
     const startedAt = Date.now();
     let stage = null;
     try {
+      // Taste notes are shared by every film: read with every card's name
+      // (any film's) as a code. If the cards can't be read, nor can the notes.
+      let everyone = null;
+      try {
+        everyone = await U.everyCardRows(sb, "id,name,reviewer_name,reviewer_relation,is_minor,person_code");
+      } catch (e) {
+        everyone = null;
+      }
+      const W = require("../utils/studio-words");
+      scope.maskTaste = everyone ? (x) => (x == null ? x : W.maskNames(x, everyone)) : () => "(not shown: the cards couldn't be read to screen it)";
       const result = await runBrief({
         role: "brief-writer",
         task,

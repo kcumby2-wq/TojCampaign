@@ -394,6 +394,12 @@ language sql stable set search_path = '' as $$
     select btrim(regexp_replace(lower(n.full_name), '[^[:alpha:]]+', ' ', 'g')) as spaced, n.minor
       from public.studio_film_people p, lateral (values (p.name, p.is_minor), (p.reviewer_name, false)) as n(full_name, minor)
      where p.film_id = p_film and n.full_name is not null
+  ), forms as (
+    -- The whole name as on the card, and, for three words or more, its first
+    -- and last ("grace long" for a Grace Ann Long; utils/studio-films.js nameForms).
+    select spaced, minor from names
+    union all
+    select split_part(spaced, ' ', 1) || ' ' || regexp_replace(spaced, '^.* ', ''), minor from names where spaced like '% % %'
   ), minor_words as (
     select w from names, lateral regexp_split_to_table(names.spaced, ' ') as w
      where names.minor and char_length(w) >= 2
@@ -423,11 +429,11 @@ language sql stable set search_path = '' as $$
          'wise', 'wolf', 'wood', 'woods', 'worth', 'wren', 'young']))
   )
   select p_text is not null and p_film is not null and (exists (
-    select 1 from names, hay
-     where (names.spaced like '% %' and hay.words like '% ' || names.spaced || ' %')
+    select 1 from forms, hay
+     where (forms.spaced like '% %' and hay.words like '% ' || forms.spaced || ' %')
         -- Run together as one word ("JamieRivers"): the whole word only.
-        or (names.spaced like '% %' and char_length(replace(names.spaced, ' ', '')) >= 5
-            and hay.words like '% ' || replace(names.spaced, ' ', '') || ' %'))
+        or (forms.spaced like '% %' and char_length(replace(forms.spaced, ' ', '')) >= 5
+            and hay.words like '% ' || replace(forms.spaced, ' ', '') || ' %'))
     or exists (select 1 from minor_words, hay where hay.words like '% ' || minor_words.w || ' %'))
 $$;
 
@@ -543,23 +549,55 @@ begin
   return new;
 end $$;
 
--- A card added or renamed: the film's title and story are read against it
--- (the card's gate took the film's row lock, so a title saved in the same
--- instant waits, and is read against the card in turn).
+-- A card added or renamed: the film's title and story are read against the
+-- cards, this one with them (the card's gate took the film's row lock, so a
+-- title saved in the same instant waits, and is read against the card in
+-- turn). The message speaks of the film's cards: a title from before a rule
+-- changed could hold another card's name.
+-- A correction to a minor never waits on them (as on the lines, 041): inside
+-- the correction, the words of their name the title or the story has are
+-- swapped for the card's code, wherever a word of it stands on its own
+-- among letters ("Ty", "Ty's", "Ty2", "Ty_23"; not "Tyler"), where the
+-- film's own rules let them change (a pulled film's stay as they were; the
+-- server reads them after, and says so). The one definition (041 leaves it).
 create or replace function public.studio_people_title_names() returns trigger
 language plpgsql set search_path = '' as $$
 declare
   f public.studio_films%rowtype;
+  t text;
+  s text;
+  w text;
 begin
   if tg_op = 'UPDATE' and row(new.name, new.reviewer_name, new.is_minor) is not distinct from row(old.name, old.reviewer_name, old.is_minor) then
     return null;
   end if;
   select * into f from public.studio_films where id = new.film_id;
+  if tg_op = 'UPDATE' and new.is_minor and not old.is_minor then
+    t := f.title;
+    s := f.one_sentence;
+    -- The name run together, then each word of it: what's read as a name now.
+    for w in select x from (select regexp_replace(lower(new.name), '[^[:alpha:]]+', '', 'g') as x
+                            union select y from regexp_split_to_table(lower(new.name), '[^[:alpha:]]+') as y) z
+              where char_length(x) >= 2 order by char_length(x) desc loop
+      if public.studio_names_in(new.film_id, w) then
+        t := regexp_replace(t, '(?<![[:alpha:]])' || w || '(?![[:alpha:]])', new.person_code, 'gi');
+        s := regexp_replace(s, '(?<![[:alpha:]])' || w || '(?![[:alpha:]])', new.person_code, 'gi');
+      end if;
+    end loop;
+    if t is distinct from f.title or s is distinct from f.one_sentence then
+      begin
+        update public.studio_films set title = t, one_sentence = s where id = f.id;
+      exception when others then
+        null;
+      end;
+    end if;
+    return null;
+  end if;
   if public.studio_names_in(new.film_id, f.title) then
-    raise exception 'the film''s title has a name on this card: change the title first';
+    raise exception 'the film''s title has a name from its cards in it: change the title first';
   end if;
   if f.one_sentence is not null and public.studio_names_in(new.film_id, f.one_sentence) then
-    raise exception 'the film''s story has a name on this card: change the story first';
+    raise exception 'the film''s story has a name from its cards in it: change the story first';
   end if;
   return null;
 end $$;

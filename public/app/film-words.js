@@ -268,7 +268,9 @@
     // are are both picked by hand.
     var s = { text: null, name: "", fps: null, parsed: null, who: undefined, person: null, label: "Interview " + ((d.transcripts || []).length + 1), only: false };
 
-    function chosen() { return s.parsed && s.parsed.ok && s.who !== undefined ? P().only(s.parsed.cues, s.who) : []; }
+    // A pause alone is a gap only in a file with no labels (its questions may
+    // have been cut out); in a labelled one, the other voices' lines are.
+    function chosen() { return s.parsed && s.parsed.ok && s.who !== undefined ? P().only(s.parsed.cues, s.who, { pauses: P().pausesFor(s.parsed) }) : []; }
     function paint() {
       var p = s.parsed;
       var body = "";
@@ -283,10 +285,11 @@
           body += '<div class="field"><span class="label" id="whoLabel">Whose lines in the file are the speaker\'s?</span><div role="radiogroup" aria-labelledby="whoLabel" style="display:flex;flex-direction:column;gap:8px">' + p.speakers.map(function (x, i) {
             var first = p.cues.find(function (c) { return c.who === x.who; });
             return '<button type="button" class="radio" role="radio" aria-checked="' + (s.who === x.who) + '" data-who="' + i + '"><span class="r"></span><div class="grow"><div class="name" style="font-size:15px">' + h(x.who || "(no label: a voice the file doesn't name)") + '</div><div class="sub">' + h(x.cues + " lines · “" + (first ? first.t.slice(0, 70) : "") + (first && first.t.length > 70 ? "…" : "") + "”") + "</div></div></button>";
-          }).join("") + '</div><p class="sub" style="margin:4px 0 0">Only those lines go. The other voices\' lines stay on this phone, and a subtitle with two voices in it is split between them.</p></div>';
+          }).join("") + '</div><p class="sub" style="margin:4px 0 0">Only those lines go. The other voices\' lines stay on this phone, and a subtitle with two voices in it is split between them.' + (p.mixed ? " " + h(p.mixed + " line" + (p.mixed === 1 ? "" : "s") + " with another voice in them and no label (dashed, after \">>\" or a bracket, and the lines with them) stay on this phone: they're nobody's here.") : "") + "</p></div>";
         } else {
           s.who = null;
-          body += '<div class="card tight" style="border-color:#5A4A2A"><p class="body" style="font-size:14px;margin:0">This file has no speaker labels, so every line in it goes as the speaker\'s words. If the questions are in it, export it again with speaker names, or take them out first.' + (p.mixed ? " " + h(p.mixed + " line" + (p.mixed === 1 ? "" : "s") + " from subtitles with two voices in them (the “- ” lines) stay on this phone.") : "") + "</p>" +
+          if (!p.voices) body += '<div class="card tight" style="border-color:#5A4A2A"><p class="body" style="font-size:14px;margin:0">This file marks where the voice changes but names no one, so none of its lines can go as the speaker\'s words. Export it again with speaker labels.</p></div>';
+          else body += '<div class="card tight" style="border-color:#5A4A2A"><p class="body" style="font-size:14px;margin:0">This file has no speaker labels, so every line in it goes as the speaker\'s words. If the questions are in it, export it again with speaker names, or take them out first.' + (p.mixed ? " " + h(p.mixed + " line" + (p.mixed === 1 ? "" : "s") + " with another voice in them (dashed, after \">>\" or a bracket, and the lines with them) stay on this phone.") : "") + "</p>" +
             '<label class="row" style="gap:10px;cursor:pointer;min-height:40px"><input type="checkbox" class="switch" id="onlyThem"' + (s.only ? " checked" : "") + '><span class="body" style="font-size:14px;color:var(--ink)">Only the speaker\'s words are in this file</span></label></div>';
         }
         body += '<div class="field"><span class="label" id="personLabel">Whose words are they?</span>' + (people.length ? '<div role="radiogroup" aria-labelledby="personLabel" style="display:flex;flex-direction:column;gap:8px">' + people.map(function (x) {
@@ -308,6 +311,13 @@
         '<div class="dock"><div class="dock-inner"><button type="button" class="btn block" id="trSend"' + (ready ? "" : " disabled") + ">" + (c2.length ? "Send " + c2.length + " lines" : "Send the speaker's lines") + "</button></div></div>");
       wire();
       if (T().radios) T().radios();
+      // A choice made with the arrow keys repaints the screen: the focus goes
+      // back to the choice, so the next arrow key works too.
+      if (s.focus) {
+        var back2 = document.querySelector("[data-" + s.focus + '][aria-checked="true"]');
+        if (back2) back2.focus();
+        s.focus = null;
+      }
     }
     function read() {
       var r = P().parse(s.text, { fps: s.fps });
@@ -331,13 +341,13 @@
       var fps = document.getElementById("fps");
       if (fps) fps.addEventListener("change", function () { s.fps = Number(fps.value) || null; if (s.fps) read(); });
       Array.prototype.forEach.call(document.querySelectorAll("[data-who]"), function (b) {
-        b.addEventListener("click", function () { s.who = s.parsed.speakers[Number(b.dataset.who)].who; paint(); });
+        b.addEventListener("click", function () { s.who = s.parsed.speakers[Number(b.dataset.who)].who; s.focus = document.activeElement === b ? "who" : null; paint(); });
       });
       Array.prototype.forEach.call(document.querySelectorAll("[data-person]"), function (b) {
         b.addEventListener("click", function () {
           var x = people.find(function (q) { return q.id === b.dataset.person; });
           if (x && x.why_not) return T().toast("Not now: " + hold(x.why_not) + ".");
-          s.person = b.dataset.person; paint();
+          s.person = b.dataset.person; s.focus = document.activeElement === b ? "person" : null; paint();
         });
       });
       var only = document.getElementById("onlyThem");
@@ -351,7 +361,7 @@
         var cues = chosen().map(function (c) { return c.gap ? { s: c.s, e: c.e, t: c.t, gap: true } : { s: c.s, e: c.e, t: c.t }; });
         btn.disabled = true; btn.textContent = "Sending…";
         try {
-          await T().post("/api/studio-words/films/" + encodeURIComponent(id) + "/transcripts", { person_id: s.person, label: (s.label || "").trim(), frames: !!p.frames, fps: p.frames ? p.fps : null, drop: !!p.drop, cues: cues });
+          await T().post("/api/studio-words/films/" + encodeURIComponent(id) + "/transcripts", { person_id: s.person, label: (s.label || "").trim(), frames: !!p.frames, fps: p.frames ? p.fps : null, drop: !!p.drop, labelled: !!p.labelled, voices: p.voices, cues: cues });
           T().toast("Transcript added: " + cues.length + " lines.");
           T().go("#film-words/" + id);
         } catch (e) {
@@ -374,7 +384,7 @@
       d = await t.api("/api/studio-words/films/" + encodeURIComponent(tr.film_id));
     } catch (e) { if (e.stale) throw e; return F().failed(t.backBtn("#films", "Films"), e); }
     var back = t.backBtn("#film-words/" + tr.film_id, "Real words");
-    var opts = { frames: tr.frames, fps: tr.fps, drop: tr.drop_frame };
+    var opts = { frames: tr.frames, fps: tr.fps, drop: tr.df_timecode };
     var used = {};
     var all = [].concat((d.words || {}).lines || [], (d.words || {}).captions || []);
     ((d.words || {}).structures || []).concat((d.words || {}).cutdowns || []).forEach(function (g) { all = all.concat(g.beats); });
@@ -390,9 +400,12 @@
       var q = s.find.trim().toLowerCase();
       var hits = q ? tr.cues.filter(function (c) { return c.t.toLowerCase().indexOf(q) >= 0; }) : tr.cues;
       var shown = hits.slice(0, s.limit);
-      return '<div class="list" id="cues">' + shown.map(function (c) {
+      return '<div class="list" id="cues">' + shown.map(function (c, k) {
         var on = s.from != null && c.n >= s.from && c.n <= s.to;
-        return '<button type="button" class="li" data-cue="' + c.n + '" aria-pressed="' + on + '" style="align-items:flex-start;min-height:0;padding:10px 14px;' + (on ? "background:#1A2C45;box-shadow:inset 3px 0 0 var(--gold)" : "") + '"><div style="flex:none;width:96px"><div ' + TC + ">" + h(P().tc(c.s, opts)) + '</div><div class="sub" style="font-size:12px">' + c.n + (used[c.n] ? " · kept" : "") + '</div></div><div class="grow body" style="font-size:14.5px;color:var(--ink)">' + h(c.t) + "</div></button>";
+        // A gap: someone else's words, or a long pause, came before this
+        // line. A kept line doesn't reach across it.
+        var gapMark = c.gap && (k > 0 || q) ? '<div class="sub" role="separator" style="font-size:12px;padding:4px 14px;color:var(--muted)">' + h("· a question or a long pause here: a line doesn't reach across it ·") + "</div>" : "";
+        return gapMark + '<button type="button" class="li" data-cue="' + c.n + '" aria-pressed="' + on + '" style="align-items:flex-start;min-height:0;padding:10px 14px;' + (on ? "background:#1A2C45;box-shadow:inset 3px 0 0 var(--gold)" : "") + '"><div style="flex:none;width:96px"><div ' + TC + ">" + h(P().tc(c.s, opts)) + '</div><div class="sub" style="font-size:12px">' + c.n + (used[c.n] ? " · kept" : "") + '</div></div><div class="grow body" style="font-size:14.5px;color:var(--ink)">' + h(c.t) + "</div></button>";
       }).join("") + "</div>" + (hits.length > shown.length ? '<button type="button" class="btn ghost small" id="more">Show more (' + (hits.length - shown.length) + " left)</button>" : "") + (q && !hits.length ? '<p class="empty">No line has those words.</p>' : "");
     }
     function dock() {
@@ -409,7 +422,9 @@
       var y = window.scrollY;
       t.show(null,
         '<div class="screen">' + back +
-        '<div><p class="kicker">' + h(tr.label + (tr.code ? " · " + tr.code + " " + tr.role : "")) + '</p><h1 class="title sm">Pick the lines</h1>' +
+        '<div><p class="kicker">' + h(tr.label + (tr.code ? " · " + tr.code + " " + tr.role : "")) + (d.film.closed ? "" : ' <button type="button" class="btn ghost small" id="trRename" style="min-height:0;padding:2px 10px;margin-left:6px">Rename</button>') + "</p>" +
+        (s.renaming ? '<div class="row" style="gap:8px;margin:6px 0"><label class="sr" for="trNewLabel">New label</label><input class="input grow" id="trNewLabel" maxlength="60" value="' + h(s.renaming.value) + '" placeholder="No names: Interview 1"><button type="button" class="btn small" id="trRenameGo">Save</button><button type="button" class="btn ghost small" id="trRenameNo">Cancel</button></div><p class="sub" role="status" id="trRenameMsg" style="margin:0"></p>' : "") +
+        '<h1 class="title sm">Pick the lines</h1>' +
         (tr.on_hold ? '<p class="body err">On hold: ' + h(hold(tr.on_hold)) + ". Nothing more is kept from it for now.</p>" : closed ? '<p class="lede" style="font-size:15px">Read only: the film is closed, or it isn\'t yours to edit.</p>' : '<p class="lede" style="font-size:15px">Tap a line to start, then tap another to end (12 at most). Trim the words to the line you want: they have to be the speaker\'s own, word for word.</p>') + "</div>" +
         '<label class="sr" for="kFind">Find words</label><input class="input" id="kFind" type="search" placeholder="Find words" value="' + h(s.find) + '">' +
         '<div id="cueBox" style="display:flex;flex-direction:column;gap:10px">' + list() + "</div>" + (s.from != null && !closed ? '<div style="height:260px" aria-hidden="true"></div>' : "") + "</div>" + dock());
@@ -437,6 +452,28 @@
         wireList();
       });
       wireList();
+      // Rename the transcript (a word of a name in its label holds a card back).
+      var rn = document.getElementById("trRename");
+      if (rn) rn.addEventListener("click", function () { s.renaming = s.renaming ? null : { value: tr.label }; paint(true); var i = document.getElementById("trNewLabel"); if (i) i.focus(); });
+      var rnIn = document.getElementById("trNewLabel");
+      if (rnIn) rnIn.addEventListener("input", function () { s.renaming.value = rnIn.value; });
+      var rnNo = document.getElementById("trRenameNo");
+      if (rnNo) rnNo.addEventListener("click", function () { s.renaming = null; paint(true); });
+      var rnGo = document.getElementById("trRenameGo");
+      if (rnGo) rnGo.addEventListener("click", async function () {
+        rnGo.disabled = true;
+        try {
+          var r = await T().post("/api/studio-words/transcripts/" + encodeURIComponent(tr.id), { label: (s.renaming.value || "").trim() }, "PATCH");
+          tr.label = r.transcript.label;
+          s.renaming = null;
+          paint(true);
+          T().toast("Renamed.");
+        } catch (e) {
+          rnGo.disabled = false;
+          var f = (e.data && e.data.fields) || [];
+          F().say("trRenameMsg", f.indexOf("label_has_name") >= 0 ? "No names in a label: \"Interview 1\", \"Walk and talk\"." : f.indexOf("label") >= 0 ? "Give it a label." : why(e), true);
+        }
+      });
       if (closed || s.from == null) return;
       Array.prototype.forEach.call(document.querySelectorAll("[data-kind]"), function (b) { b.addEventListener("click", function () { s.kind = b.dataset.kind; paint(true); }); });
       var text = document.getElementById("kText"), note = document.getElementById("kNote"), after = document.getElementById("kAfter");
