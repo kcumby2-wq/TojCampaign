@@ -219,16 +219,17 @@ function minorRunIns(textValue, people) {
           const clear = (!head && RUN_CLEAR.has(tail)) || (!tail && RUN_CLEAR.has(head));
           const own = parts.some((x) => x !== w && Array.from(x).length >= 2 && (head.endsWith(x) || tail.startsWith(x)));
           const atEdge = !head || !tail;
-          // The rest a word in its own right ("football", "welove"), unless
-          // the letters are an ordinary word's ("umbrella", "#islandlife").
-          const rest = atEdge && Array.from(head || tail).length >= 4 &&
-            !ORDINARY_RUNS.some((o) => { const j = o.indexOf(w); return j >= 0 && r.low.startsWith(o, i - j); });
-          if (atEdge || camel) {
+          // The letters an ordinary word's ("umbrella", "#islandlife",
+          // "#island", "island_trip.mov"): asked, a file name's too.
+          const ordinaryHere = !camel && ORDINARY_RUNS.some((o) => { const j = o.indexOf(w); return j >= 0 && r.low.startsWith(o, i - j); });
+          // The rest a word in its own right ("football", "welove").
+          const rest = atEdge && Array.from(head || tail).length >= 4;
+          if ((atEdge || camel) && !ordinaryHere) {
             edge.add(w);
             if (!everyday(w)) loose.add(w);
           }
           if (!everyday(w)) {
-            if (camel || byWord || own || rest || (r.tag && !head && Array.from(tail).length <= 2)) sure.add(w);
+            if (!ordinaryHere && (camel || byWord || own || rest || (r.tag && !head && Array.from(tail).length <= 2))) sure.add(w);
             else maybe.add(w);
           } else if ((clear && !surname && !RUN_COMPOUNDS.has(r.low) && !FILE_COMPOUNDS.has(r.low)) || own) sure.add(w);
           else maybe.add(w);
