@@ -132,17 +132,22 @@ async function readable(sb, film, people) {
     const p = people.find((x) => x.id === t.person_id);
     if (!p || W.whyNot(p)) continue;
     const shown = t.cues.map((c) => ({ ...c, t: W.maskNames(c.t, people) }));
-    out.push({ ref: `T${out.length + 1}`, id: t.id, person_id: t.person_id, speaker: W.speakerLabel(p), label: t.label, frames: !!t.frames, fps: t.fps == null ? null : Number(t.fps), drop_frame: !!t.drop_frame, cues: t.cues, shown });
+    out.push({ ref: `T${out.length + 1}`, id: t.id, person_id: t.person_id, speaker: W.speakerLabel(p), label: t.label, frames: !!t.frames, fps: t.fps == null ? null : Number(t.fps), df_timecode: !!t.df_timecode, cues: t.cues, shown });
   }
   return out;
 }
 // Whether an agent may still read a transcript, right now: the switch is
 // on, the film open, the transcript still there, its speaker's words still
 // usable. null, or why not.
-async function stillReadable(sb, filmId, transcriptId) {
+async function stillOpen(sb, filmId) {
   if (!(await toolOn(sb, "claude_transcripts"))) return "Kyron turned off \"Claude reads transcripts\"";
   const f = await filmById(sb, filmId);
   if (!f || closed(f)) return "the film was closed";
+  return null;
+}
+async function stillReadable(sb, filmId, transcriptId) {
+  const open = await stillOpen(sb, filmId);
+  if (open) return open;
   const t = await run(sb.from("studio_transcripts").select("id,person_id").eq("id", transcriptId).maybeSingle());
   if (!t) return "that transcript was removed";
   const p = await run(sb.from("studio_film_people").select("*").eq("id", t.person_id).maybeSingle());
@@ -159,7 +164,7 @@ function wordsView(rows, transcripts, people) {
   };
   const line = (r) => {
     const t = tr.get(r.transcript_id) || {};
-    const opts = { frames: !!t.frames, fps: t.fps == null ? null : Number(t.fps), drop: !!t.drop_frame };
+    const opts = { frames: !!t.frames, fps: t.fps == null ? null : Number(t.fps), drop: !!t.df_timecode };
     return { id: r.id, quote: r.quote, from_cue: r.from_cue, to_cue: r.to_cue, start_ms: r.start_ms, end_ms: r.end_ms, at: `${W.TP.tc(r.start_ms, opts)}–${W.TP.tc(r.end_ms, opts)}`, transcript_id: r.transcript_id, label: t.label || null, speaker: who(r.person_id), note: r.note, text: r.text, made_by: r.made_by, run_id: r.run_id, created_at: r.created_at };
   };
   const groups = (kind) =>
@@ -207,7 +212,7 @@ router.get("/films/:id", member, withDb(async (req, res, sb) => {
   if (!film) return res.status(404).json({ error: "not_found" });
   const people = await peopleOf(sb, film.id);
   const [transcripts, rows, directions, links, claudeOn] = await Promise.all([
-    run(sb.from("studio_transcripts").select("id,person_id,label,frames,fps,drop_frame,cue_count,words,duration_ms,created_by,created_at").eq("film_id", film.id).order("created_at", { ascending: true })),
+    run(sb.from("studio_transcripts").select("id,person_id,label,frames,fps,df_timecode,cue_count,words,duration_ms,created_by,created_at").eq("film_id", film.id).order("created_at", { ascending: true })),
     run(sb.from("studio_words").select("*").eq("film_id", film.id).order("created_at", { ascending: true }).limit(2000)),
     run(sb.from("studio_film_directions").select("*").eq("film_id", film.id).order("created_at", { ascending: false }).limit(5)),
     run(sb.from("studio_film_runs").select("run_id,kind,created_at").eq("film_id", film.id).order("created_at", { ascending: false }).limit(10)),
@@ -237,7 +242,7 @@ router.get("/transcripts/:tid", member, withDb(async (req, res, sb) => {
   if (!t) return res.status(404).json({ error: "not_found" });
   const people = await peopleOf(sb, t.film_id);
   const p = people.find((x) => x.id === t.person_id);
-  res.json({ transcript: { id: t.id, film_id: t.film_id, label: t.label, frames: !!t.frames, fps: t.fps == null ? null : Number(t.fps), drop_frame: !!t.drop_frame, cues: t.cues, code: p && p.person_code, role: p && p.role, on_hold: p ? W.whyNot(p) : "not_on_this_film" } });
+  res.json({ transcript: { id: t.id, film_id: t.film_id, label: t.label, frames: !!t.frames, fps: t.fps == null ? null : Number(t.fps), df_timecode: !!t.df_timecode, cues: t.cues, code: p && p.person_code, role: p && p.role, on_hold: p ? W.whyNot(p) : "not_on_this_film" } });
 }));
 
 // ── Transcripts ──────────────────────────────────────────────────────────
@@ -255,9 +260,31 @@ router.post("/films/:id/transcripts", member, withDb(async (req, res, sb) => {
   if (errors.length) return res.status(400).json({ error: "invalid", fields: errors });
   if (U.idNames(value.label, people).length) return res.status(400).json({ error: "invalid", fields: ["label_has_name"] });
   try {
-    const t = await run(sb.from("studio_transcripts").insert({ film_id: film.id, person_id: p.id, label: value.label, frames: value.frames, fps: value.fps, drop_frame: value.drop_frame, cues: value.cues, cue_count: value.cues.length, words: value.words, duration_ms: value.duration_ms, created_by: me(req) }).select("id,person_id,label,cue_count,words,duration_ms,created_at").single());
+    const t = await run(sb.from("studio_transcripts").insert({ film_id: film.id, person_id: p.id, label: value.label, frames: value.frames, fps: value.fps, df_timecode: value.df_timecode, cues: value.cues, cue_count: value.cues.length, words: value.words, duration_ms: value.duration_ms, created_by: me(req) }).select("id,person_id,label,cue_count,words,duration_ms,created_at").single());
     await T.logActivity(me(req), "studio_transcript_added", p.person_code, { film_id: film.id, cues: value.cues.length });
     res.json({ transcript: t });
+  } catch (e) {
+    refused(res, e);
+  }
+}));
+
+// A transcript's label, renamed (a word of a name in it holds a card back):
+// whoever added it, the film's people, or the producer.
+router.patch("/transcripts/:tid", member, withDb(async (req, res, sb) => {
+  if (!idOk(req.params.tid)) return res.status(404).json({ error: "not_found" });
+  const t = await run(sb.from("studio_transcripts").select("id,film_id,created_by").eq("id", req.params.tid).maybeSingle());
+  if (!t) return res.status(404).json({ error: "not_found" });
+  const film = await filmById(sb, t.film_id);
+  if (!film) return res.status(404).json({ error: "not_found" });
+  if (closed(film)) return res.status(409).json({ error: "film_closed" });
+  if (t.created_by !== me(req) && !onFilm(req, film)) return res.status(403).json({ error: "not_your_film" });
+  const label = W.clean(bodyOf(req).label, W.LABEL_MAX);
+  if (!label) return res.status(400).json({ error: "invalid", fields: ["label"] });
+  if (U.idNames(label, await peopleOf(sb, film.id)).length) return res.status(400).json({ error: "invalid", fields: ["label_has_name"] });
+  try {
+    const rows = await run(sb.from("studio_transcripts").update({ label }).eq("id", t.id).select("id,label"));
+    if (!rows || !rows.length) return res.status(404).json({ error: "not_found" });
+    res.json({ transcript: rows[0] });
   } catch (e) {
     refused(res, e);
   }
@@ -324,11 +351,14 @@ router.delete("/words/:wid", member, withDb(async (req, res, sb) => {
 }));
 
 // ── Agent runs ───────────────────────────────────────────────────────────
+// The run's rows and the one-at-a-time check, in one step under the film's
+// lock (041's studio_film_run_start): two asks at once start one run.
 async function startRun(sb, req, film, role, kind, task) {
-  const row = await run(sb.from("agent_runs").insert({ role, client_id: null, task, status: "running", created_by: me(req) }).select("id").single());
-  await run(sb.from("studio_film_runs").insert({ run_id: row.id, film_id: film.id, kind, created_by: me(req) }));
-  return row.id;
+  const rows = await rpcRows(sb, "studio_film_run_start", { p_film: film.id, p_kind: kind, p_role: role, p_task: task, p_by: me(req) });
+  const r = rows[0];
+  return r && typeof r === "object" ? r.run_id || Object.values(r)[0] : r;
 }
+const startRefused = (res, e) => (/already running/.test(String(((e && e.db) || e || {}).message || "")) ? res.status(409).json({ error: "already_running" }) : refused(res, e));
 async function finishRun(sb, runId, patch, history, keepJudgeWords) {
   await sb.from("agent_runs").update({ ...patch, completed_at: nowIso() }).eq("id", runId);
   if (history && history.length) {
@@ -366,10 +396,22 @@ router.post("/films/:id/ask-claude", member, withDb(async (req, res, sb) => {
     },
     transcripts,
     people,
-    // Read again before every page Claude reads: the switch, the film, the
-    // transcript and its speaker. The first "no" stops the run.
+    // Read again before every page Claude reads and before the set is
+    // handed back: the switch, the film, every transcript read so far and its
+    // speaker. The first "no" stops the run, and nothing more goes to the
+    // model (agents/orchestrator-factory.js aborts its next request).
     recheck: (transcriptId) => stillReadable(sb, film.id, transcriptId),
+    read: new Set(),
     control: { stopped: null },
+  };
+  // Asked again before the judge reads the set, and before a retry.
+  scope.recheckRun = async () => {
+    if (!scope.read.size) return stillOpen(sb, film.id);
+    for (const id of scope.read) {
+      const why = await stillReadable(sb, film.id, id);
+      if (why) return why;
+    }
+    return null;
   };
   const task = [
     `Film ${film.athlete_id}: ${scope.film.format_label}${scope.film.spec ? ` (${scope.film.spec})` : ""}, lane ${film.lane}.`,
@@ -381,7 +423,7 @@ router.post("/films/:id/ask-claude", member, withDb(async (req, res, sb) => {
   try {
     runId = await startRun(sb, req, film, "words-editor", "words", task);
   } catch (e) {
-    return refused(res, e);
+    return startRefused(res, e);
   }
   res.json({ ok: true, run_id: runId, transcripts: transcripts.length });
   await T.logActivity(me(req), "studio_words_claude", film.athlete_id, { film_id: film.id, transcripts: transcripts.length, run_id: runId });
@@ -453,6 +495,8 @@ router.post("/films/:id/directions", member, withDb(async (req, res, sb) => {
   const titles = kit && kit.kit && Array.isArray(kit.kit.columns) ? kit.kit.columns.flatMap((c) => (c.cards || []).map((k) => k.title)).slice(0, 200) : [];
   const plan = film.plan || {};
   const mask = (x) => (x == null ? null : W.maskNames(x, people));
+  // Every card on every film, for the taste notes every film shares.
+  const everyone = await U.everyCardRows(sb, "id,name,reviewer_name,reviewer_relation,is_minor,person_code");
   const scope = {
     film: {
       athlete_id: film.athlete_id,
@@ -478,7 +522,7 @@ router.post("/films/:id/directions", member, withDb(async (req, res, sb) => {
     kitCard: (title) => (kit ? F.cardFor(kit.kit, title) : null),
     searchTaste: async (q, tag) => rpcRows(sb, "studio_taste_search", { p_q: q || null, p_tag: tag || null, p_limit: 12 }),
     // Taste notes are read with every card's name (any film's) as a code too.
-    maskTaste: (x) => (x == null ? x : W.maskNames(x, people)),
+    maskTaste: (x) => (x == null ? x : W.maskNames(x, everyone)),
     tasteByRef: async (n) => (await run(sb.from("studio_taste").select("*").eq("ref_no", n).maybeSingle())) || null,
   };
   const task = [
@@ -491,7 +535,7 @@ router.post("/films/:id/directions", member, withDb(async (req, res, sb) => {
   try {
     runId = await startRun(sb, req, film, "film-directions", "directions", task);
   } catch (e) {
-    return refused(res, e);
+    return startRefused(res, e);
   }
   res.json({ ok: true, run_id: runId });
   await T.logActivity(me(req), "studio_directions", film.athlete_id, { film_id: film.id, run_id: runId });

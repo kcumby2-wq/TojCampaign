@@ -247,7 +247,44 @@ test("a title or a file name is read harder than a sentence: run-together, camel
   const kidd = [{ name: "Jordan Kidd", is_minor: true }];
   for (const t of ["teamjordan", "Kiddstrong season"]) assert.deepEqual(U.titleNames(t, kidd).sure.length, 1, t);
   for (const f of ["jordanquote_v2", "kiddquote", "quotejordan"]) assert.ok(U.idNames(f, kidd).length, f);
-  assert.deepEqual(U.minorRunIns("#hopestrong", [{ name: "Hope Field", is_minor: true }]), { sure: [], maybe: ["hope"] });
+  assert.deepEqual(U.minorRunIns("#hopestrong", [{ name: "Hope Field", is_minor: true }]), { sure: ["hope"], maybe: [], edge: ["hope"], loose: [] });
+  assert.deepEqual(U.minorRunIns("#teamfield", [{ name: "Hope Field", is_minor: true }]), { sure: [], maybe: ["field"], edge: ["field"], loose: [] });
+  // An ordinary word that starts or ends with a name: asked; a file name reads it as the name.
+  assert.deepEqual(U.minorRunIns("We grew up on the island", [{ name: "Isla Moss", is_minor: true }]), { sure: [], maybe: ["isla"], edge: [], loose: [] });
+  assert.deepEqual(U.idNames("jordanxyz_v2", kidd), ["jordan"]);
+  // A title: a name with a word beside it is the name; an everyday one run in is asked.
+  assert.deepEqual(U.titleNames("Jordanfootball season", kidd).sure, ["jordan"]);
+  assert.deepEqual(U.titleNames("Summertime grind", [{ name: "Summer Ray", is_minor: true }]), { sure: [], maybe: ["summer"] });
+  assert.deepEqual(U.titleNames("the Jordanian team", kidd), { sure: [], maybe: ["jordan"] });
+  // An ordinary word's letters are asked everywhere, a file name's too.
+  const isla = [{ name: "Isla Moss", is_minor: true }];
+  assert.deepEqual(U.minorRunIns("#island", isla), { sure: [], maybe: ["isla"], edge: [], loose: [] });
+  assert.deepEqual(U.idNames("island_trip_2026.mov", isla), []);
+  assert.deepEqual(U.idNames("isla_trip_2026.mov", isla), ["isla"]);
+  // An English word that holds a name's letters is the word; a name run into
+  // English words is the name.
+  const pool = [{ name: "Kim Tran", is_minor: true }, { name: "Chris Young", is_minor: true }, { name: "Phil Moss", is_minor: true }, { name: "Ally Moss", is_minor: true }, { name: "Jamie Ortiz", is_minor: true }];
+  for (const t of ["Transfer portal", "Merry Christmas", "#merrychristmas", "#Philadelphia", "Basically unstoppable"]) assert.deepEqual(U.minorRunIns(t, pool).sure, [], t);
+  for (const t of ["#letsgojamie", "#bigjamieenergy", "#jamiethegoat", "#weloveyoujamie"]) assert.deepEqual(U.minorRunIns(t, pool).sure, ["jamie"], t);
+  assert.deepEqual(U.idNames("transfer_portal_v1", pool), []);
+  // A name's own plural reading wins in a tag ("angels" in "#angelsquad", "nicks" in "#nicksworld").
+  for (const [t, n] of [["#nicksquad", "Nick Lee"], ["#nicksworld", "Nick Lee"], ["#mikesarmy", "Mike Ray"], ["#angelsquad", "Angel Diaz"], ["#angelsarmy", "Angel Diaz"]]) assert.ok(U.minorRunIns(t, [{ name: n, is_minor: true }]).sure.length, t);
+  // A long run isn't read as words: the work stays small, and the name in it is asked about.
+  const t0 = Date.now();
+  const runs = Array.from({ length: 10 }, (_, k) => ("theannateamannawins" + k).repeat(220).slice(0, 4000));
+  U.graphicsProblems(runs, [{ name: "Anna Moss", is_minor: true }], { format: "quote_card" });
+  U.graphicsAsks(runs, [{ name: "Anna Moss", is_minor: true }], { format: "quote_card" });
+  assert.ok(Date.now() - t0 < 2000, `${Date.now() - t0} ms`);
+  // Names that are plainly common words are everyday words ("Journey", "Crystal", "Angel").
+  for (const [t, n] of [["The journey continues", "Journey Cole"], ["Crystal clear focus", "Crystal Ray"]]) assert.deepEqual(U.strictNames(t.toLowerCase(), [{ name: n, is_minor: true }]), [], t);
+  // "for" alone isn't a word a name runs into ("forward" for a Ward).
+  assert.deepEqual(U.idNames("forward_pass_drill", [{ name: "Ward Bell", is_minor: true }]), []);
+  // A file name has no one to ask: an everyday word run in at a word's start or end counts there.
+  for (const f of ["hopequote_v02", "quotehope", "HopeQuote"]) assert.deepEqual(U.idNames(f, [{ name: "Hope Field", is_minor: true }]), ["hope"], f);
+  assert.deepEqual(U.idNames("ourhopefam", [{ name: "Hope Field", is_minor: true }]), [], "inside a word, it's another word");
+  // Only beside a word a file name uses: ordinary words that start or end with one stay ordinary.
+  for (const [f, name] of [["hopeful_promo", "Hope Field"], ["kicking_drill_v2", "Sam King"], ["milestone_v1", "Miles Stone"], ["downhill_sprints", "Ty Hill"]]) assert.deepEqual(U.idNames(f, [{ name, is_minor: true }]), [], f);
+  assert.deepEqual(U.idNames("teamhope_final", [{ name: "Hope Field", is_minor: true }]), ["hope"]);
   assert.deepEqual(U.titleNames("The walkout", [{ name: "Al Ko", is_minor: true }]), { sure: [], maybe: ["alko"] });
   assert.ok(U.titleNames("Jordankidd drive", [{ name: "Jordan Kidd", is_minor: true }]).sure.includes("jordankidd"));
   // A title or story sent unchanged isn't asked about again; a certain name in it still counts.
@@ -309,6 +346,10 @@ test("a title and a card saved in the same instant: the database lets one throug
   const film = ok(await films("POST", "/films", { kit_slug: "same-work", title: `${code} hero`, lane: "youth", athlete_id: code, format: "hero" }, "lead"), "start").film;
   ok(await films("POST", `/films/${film.id}/people`, { person_code: code, name: "Ty Ng", role: "athlete", is_minor: true, release_on_file: true, covers: { voice: true } }, "lead"), "card");
   await assert.rejects(pool.query("update studio_films set title = 'Ty Ng first season' where id = $1", [film.id]), /carries no name/);
+  // A card whose name a title already has: refused, in words for the film's cards.
+  const code2 = "R" + String(8000 + ++n);
+  const f2 = ok(await films("POST", "/films", { kit_slug: "same-work", title: "Sam Roe first season", lane: "college", athlete_id: code2, format: "hero" }, "lead"), "start 2").film;
+  await assert.rejects(pool.query("insert into studio_film_people (film_id, person_code, name, role, is_minor, release_on_file, covers, created_by) values ($1, $2, 'Sam Roe', 'athlete', false, true, '{}', 'lead@toj.test')", [f2.id, code2]), /title has a name from its cards in it/);
 });
 
 test("an approval comes from the reviewer the card names now; a card change stops its links", async () => {

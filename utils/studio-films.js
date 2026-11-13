@@ -59,6 +59,14 @@ const sha256 = (s) => crypto.createHash("sha256").update(String(s), "utf8").dige
 // ("JamieRivers" in a file name). A lone two-letter first name isn't caught:
 // it would catch "an" and "al" too.
 const nameParts = (full) => String(full || "").toLowerCase().split(/[^\p{L}\p{M}]+/u).filter(Boolean);
+// The forms a whole name is written in: as on the card, and, for a name of
+// three words or more, its first and last without the middle ones ("Grace
+// Long", "#GraceLong", "gracelong_quote" for a Grace Ann Long: release forms
+// carry full legal names).
+function nameForms(full) {
+  const parts = nameParts(full);
+  return parts.length >= 3 ? [parts, [parts[0], parts[parts.length - 1]]] : [parts];
+}
 function nameWords(people) {
   const words = new Set();
   for (const p of people || []) {
@@ -76,12 +84,13 @@ function namesIn(textValue, people, { strong = false } = {}) {
   const found = new Set(strong ? [] : nameWords(people).filter((w) => hay.includes(" " + w + " ")));
   for (const p of people || []) {
     for (const full of [p.name, p.reviewer_name]) {
-      const parts = nameParts(full);
-      if (parts.length > 1 && hay.includes(" " + parts.join(" ") + " ")) found.add(parts.join(" "));
-      // Run together as one word ("JamieRivers", "#jamierivers"): the whole
-      // word, so "speed limits" is never "Ed Li".
-      const joined = parts.join("");
-      if (parts.length > 1 && Array.from(joined).length >= 5 && hay.includes(" " + joined + " ")) found.add(joined);
+      for (const parts of nameForms(full)) {
+        if (parts.length > 1 && hay.includes(" " + parts.join(" ") + " ")) found.add(parts.join(" "));
+        // Run together as one word ("JamieRivers", "#jamierivers"): the whole
+        // word, so "speed limits" is never "Ed Li".
+        const joined = parts.join("");
+        if (parts.length > 1 && Array.from(joined).length >= 5 && hay.includes(" " + joined + " ")) found.add(joined);
+      }
     }
   }
   return [...found];
@@ -119,7 +128,8 @@ const EVERYDAY_NAMES = new Set(("ace april archer art ash august autumn baker be
   "meadow mercy miles misty moon noble north ocean page park pat patience peace pearl penny pepper pierce piper pope porter power price pride prince " +
   "queen rain ranger raven ray read rebel reed rice rich ridge river rob rock rocky rose royal ruby rush rusty sage saint sandy scout shade shadow " +
   "shepherd shore short silver sky small smith snow sonny south spring star steel sterling stone storm stormy strong sue summer sunday sunny sweet " +
-  "swift tad tank true trust tucker valor violet wade walker ward warren waters way wells west white will willow winter wise wolf wood woods worth wren young").split(" "));
+  "swift tad tank true trust tucker valor violet wade walker ward warren waters way wells west white will willow winter wise wolf wood woods worth wren young" +
+  " amber angel carol christian crystal daisy destiny genesis glen harmony iris jasmine journey lyric melody olive robin trinity").split(" "));
 const everyday = (w) => EVERYDAY_2.has(w) || EVERYDAY_NAMES.has(w);
 function capitalizedAtStart(raw, w) {
   const re = /[\p{L}\p{M}]+/gu;
@@ -135,35 +145,173 @@ function capitalizedAtStart(raw, w) {
 }
 // One word of a minor's name (four letters or more) run into other letters
 // ("#jordanstrong", "#teamjordan", "kiddquote", "Kiddstrong season"):
-// { sure, maybe }. Where a word of the run starts or ends (its first or last
-// letter, or a capital after a small letter), it's the name for certain,
-// unless it's also an everyday word ("#hopestrong" for a Hope: asked); inside
-// a word, asked ("#ourjordanfam"). The word alone is read by the other screens.
+// { sure, maybe, edge, loose }. An English word that holds the name's
+// letters is the word, asked about where questions can be asked: "island"
+// for an Isla, "transfer" for a Tran, "basically" for an Ally,
+// "Philadelphia" for a Phil, "#islandlife" ("island" holds it). Otherwise a
+// name that's no everyday word is the name for certain where the letters on
+// each side are English words or nothing ("#jordanfootball", "#letsgojamie",
+// "#jamiethegoat", "#bigjamieenergy", "Jordanfootball season", a possessive
+// s too: "#jordansarmy"), a word a tag or a file name runs a name into
+// ("kiddquote"), another word of the name, initials after it in a tag or a
+// handle ("kayleeb_hoops", "#jordanxo"), or where camelCase starts or ends
+// it ("JordanStrong"); anything else is asked ("#jordanbae"). An everyday
+// word ("hope") is the name only as a first name beside a word that says so
+// ("#hopestrong", "#teamhope", "#gohope"); beside a word that's as often a
+// phrase ("#summertime", "#faithlife"), as a surname ("#teamgreen" for an
+// Ava Green), or in an everyday word made that way ("#lifelong"), asked.
+// The word alone is read by the other screens.
+// edge: every word found where a word of the run starts or ends, everyday
+// or not, unless an English word holds it; loose: those that are no
+// everyday word (a file name, with no one to ask, reads "jordanxyz_v2" as
+// Jordan's).
+//
+// The English words: SCOWL's, as hunspell's en_US list has them, every
+// form, lower case (utils/data/words-en.txt.gz, utils/data/README.md).
+let ENGLISH = null;
+function englishWords() {
+  if (ENGLISH) return ENGLISH;
+  try {
+    const zlib = require("zlib");
+    const fs = require("fs");
+    const raw = zlib.gunzipSync(fs.readFileSync(require("path").join(__dirname, "data", "words-en.txt.gz"))).toString("utf8");
+    ENGLISH = new Set(raw.split("\n").filter(Boolean));
+  } catch (e) {
+    // Without it the run-in screen still works, more often asking: say so.
+    console.warn("[studio-films] the English word list didn't load (utils/data/words-en.txt.gz):", e && e.message);
+    ENGLISH = new Set();
+  }
+  for (const w of OWN_WORDS) ENGLISH.add(w);
+  return ENGLISH;
+}
+const WORD_MAX = 24;
+// Words the app and its tools use that the list doesn't have.
+const OWN_WORDS = ["milanote", "sportsclippers", "subjectmedias", "groundfloorsports", "tojcampaign", "pylon", "hudl", "maxpreps", "davinci", "capcut"];
+// How a run of letters reads as English words, worked out once for it:
+// ends[b] when its first b letters are words end to end, starts[a] when its
+// letters from a on are. A run longer than RUN_READ isn't read as words
+// (the name in it is asked about): the work stays small whatever's typed.
+const RUN_READ = 140;
+function wordReading(tok) {
+  const W = englishWords();
+  const n = tok.length;
+  const ends = new Array(n + 1).fill(false);
+  const starts = new Array(n + 1).fill(false);
+  ends[0] = true;
+  starts[n] = true;
+  for (let b = 1; b <= n; b++) {
+    for (let a = Math.max(0, b - WORD_MAX); a < b; a++) if (ends[a] && W.has(tok.slice(a, b))) { ends[b] = true; break; }
+  }
+  for (let a = n - 1; a >= 0; a--) {
+    for (let b = a + 1; b <= Math.min(n, a + WORD_MAX); b++) if (starts[b] && W.has(tok.slice(a, b))) { starts[a] = true; break; }
+  }
+  return { ends, starts };
+}
+// A word longer than the name holds its letters there, in a reading of the
+// whole run as words ("island" in "islandlife" for an Isla, "christmas" in
+// "merrychristmas" for a Chris; not "hopes" in "hopestrong"). The name with
+// a plural's s isn't such a word ("angels" in "angelsquad": the name's own
+// reading, Angel's squad).
+function heldByWord(tok, i, len, rd) {
+  const W = englishWords();
+  const name = tok.slice(i, i + len);
+  for (let a = Math.max(0, i - WORD_MAX); a <= i; a++) {
+    if (!rd.ends[a]) continue;
+    for (let b = i + len; b <= Math.min(tok.length, a + WORD_MAX); b++) {
+      if (b - a <= len || !rd.starts[b]) continue;
+      const word = tok.slice(a, b);
+      if (a === i && (word === name + "s" || word === name + "es")) continue;
+      if (W.has(word)) return true;
+    }
+  }
+  return false;
+}
+// Whether an English word holds a name's letters at i in a run of letters
+// (for code that masks names: utils/studio-words.js maskNames).
+function heldInRun(low, i, len) {
+  if (low.length > RUN_READ) return false;
+  return heldByWord(low, i, len, wordReading(low));
+}
+let RUN_BESIDE = null;
+const runBeside = () => RUN_BESIDE || (RUN_BESIDE = new Set([...FILE_WORDS, ...TAG_TAILS, ...("go pray prayfor thanks thankyou happy happybirthday birthday bday " +
+  "congrats congratulations proudof proudofyou coach dear hey shoutout welcome free justice lil big our my iloveyou loveyou missyou ilove rip " +
+  "day week night watch highlights game games show hoops ball bball mvp").split(" ")]));
+// Beside an everyday first name, the words that say it's the name.
+const RUN_CLEAR = new Set(("strong nation fam gang squad crew army fans stan team go hey pray prayfor thanks thankyou happybirthday birthday bday " +
+  "congrats congratulations proudof proudofyou dear welove iloveyou loveyou missyou shoutout").split(" "));
+const RUN_COMPOUNDS = new Set(("lifelong daylong weeklong nightlong yearlong seasonlong powerhouse clubhouse showcase lovebird lovebirds " +
+  "freewill willpower truelove bigdeal").split(" "));
+// A run of text with no space that's a tag, a handle, a link or a file name:
+// it starts with # or @, has a digit or an underscore, or a dot or a slash
+// between letters.
+function tagChunks(raw) {
+  const out = [];
+  for (const c of raw.matchAll(/\S+/gu)) {
+    const s = c[0];
+    if (/^[^\p{L}\p{N}]*[#@]/u.test(s) || (/[_\p{N}]/u.test(s) && /\p{L}/u.test(s)) || /[\p{L}\p{N}][./][\p{L}\p{N}]/u.test(s)) out.push([c.index, c.index + s.length]);
+  }
+  return out;
+}
 function minorRunIns(textValue, people) {
+  const raw = String(textValue || "");
   const sure = new Set();
   const maybe = new Set();
+  const edge = new Set();
+  const loose = new Set();
+  const chunks = tagChunks(raw);
   const runs = [];
-  for (const m of String(textValue || "").matchAll(/[\p{L}\p{M}]+/gu)) {
+  for (const m of raw.matchAll(/[\p{L}\p{M}]+/gu)) {
     const tok = m[0];
-    const edges = new Set([0, tok.length]);
-    for (let i = 1; i < tok.length; i++) if (/\p{Lu}/u.test(tok[i]) && /\p{Ll}/u.test(tok[i - 1])) edges.add(i);
-    runs.push({ low: tok.toLowerCase(), edges });
+    const inner = new Set();
+    for (let i = 1; i < tok.length; i++) if (/\p{Lu}/u.test(tok[i]) && /\p{Ll}/u.test(tok[i - 1])) inner.add(i);
+    runs.push({ low: tok.toLowerCase(), inner, tag: chunks.some(([a, b]) => m.index >= a && m.index < b) });
   }
+  const beside = runBeside();
   for (const p of people || []) {
     if (!p || !p.is_minor) continue;
-    for (const w of nameParts(p.name)) {
-      if (Array.from(w).length < 4) continue;
+    const parts = nameParts(p.name);
+    parts.forEach((w, k) => {
+      if (Array.from(w).length < 4) return;
+      // A surname: the card's last word (cards are written first name first).
+      const surname = parts.length > 1 && k === parts.length - 1;
       for (const r of runs) {
         if (r.low === w) continue;
         for (let i = r.low.indexOf(w); i >= 0; i = r.low.indexOf(w, i + 1)) {
-          if ((r.edges.has(i) || r.edges.has(i + w.length)) && !everyday(w)) sure.add(w);
+          const head = r.low.slice(0, i);
+          const tail = r.low.slice(i + w.length);
+          const camel = r.inner.has(i) || r.inner.has(i + w.length);
+          const byWord = (!head && beside.has(tail)) || (!tail && beside.has(head));
+          const clear = (!head && (RUN_CLEAR.has(tail) || (tail[0] === "s" && RUN_CLEAR.has(tail.slice(1))))) || (!tail && RUN_CLEAR.has(head));
+          const own = parts.some((x) => x !== w && Array.from(x).length >= 2 && (head.endsWith(x) || tail.startsWith(x)));
+          const atEdge = !head || !tail;
+          // How the run reads as English words (once per run; none past
+          // RUN_READ letters).
+          if (r.reading === undefined) r.reading = r.low.length <= RUN_READ ? wordReading(r.low) : null;
+          const rd = r.reading;
+          // An English word holds the letters ("island", "transfer",
+          // "#islandlife"): the word, asked, a file name's too.
+          const held = !camel && !!rd && heldByWord(r.low, i, w.length, rd);
+          // English words (or nothing) on each side: "football", "letsgo",
+          // a possessive s ("sarmy").
+          const j = i + w.length;
+          const headWords = !!rd && rd.ends[i];
+          const tailWords = !!rd && (rd.starts[j] || (r.low[j] === "s" && j + 1 < r.low.length && rd.starts[j + 1]));
+          if ((atEdge || camel) && !held) {
+            edge.add(w);
+            if (!everyday(w)) loose.add(w);
+          }
+          if (!everyday(w)) {
+            const initials = r.tag && atEdge && !head && Array.from(tail).length <= 2;
+            if (!held && (camel || byWord || own || initials || (headWords && tailWords))) sure.add(w);
+            else maybe.add(w);
+          } else if (!held && ((clear && !surname && !RUN_COMPOUNDS.has(r.low) && !FILE_COMPOUNDS.has(r.low)) || own)) sure.add(w);
           else maybe.add(w);
         }
       }
-    }
+    });
   }
   for (const w of sure) maybe.delete(w);
-  return { sure: [...sure], maybe: [...maybe] };
+  return { sure: [...sure], maybe: [...maybe], edge: [...edge], loose: [...loose] };
 }
 // Where a text names a person, for certain or maybe: their whole name; the
 // name run together as one word ("#TyNg", "JamieRivers": the whole token,
@@ -177,9 +325,11 @@ function nameHits(textValue, person, { minRun = 5, minWord = 3 } = {}) {
   const sure = new Set();
   const maybe = new Set();
   const parts = nameParts(person && person.name);
-  if (parts.length > 1 && hay.includes(" " + parts.join(" ") + " ")) sure.add(parts.join(" "));
-  const joined = parts.join("");
-  if (parts.length > 1 && Array.from(joined).length >= minRun && tokens.has(joined)) sure.add(joined);
+  for (const form of nameForms(person && person.name)) {
+    if (form.length > 1 && hay.includes(" " + form.join(" ") + " ")) sure.add(form.join(" "));
+    const joined = form.join("");
+    if (form.length > 1 && Array.from(joined).length >= minRun && tokens.has(joined)) sure.add(joined);
+  }
   for (const w of parts) {
     if (Array.from(w).length < minWord || !hay.includes(" " + w + " ")) continue;
     if (!everyday(w)) sure.add(w);
@@ -271,19 +421,27 @@ const personKey = (name, minor) => nameParts(name).join(" ") + (minor ? "|m" : "
 // Names anyone on the cards has, for what's shared beyond one film (a kit,
 // the month's refresh, what's sent to a model for the kit): { sure, maybe,
 // minor } (minor: the sure ones that are a minor's).
-//   sure:  a whole name, or one run together as a word ("JamieRivers"); a
-//          word of a name that's no everyday word (three letters or more, a
-//          minor's from two), a reviewer's too; a minor's name word (four
-//          letters or more) run into a tag, a handle, a link or a file name
-//          ("#jordanstrong", "jordan_final_v2"), or where camelCase starts or
-//          ends it ("JordanStrong"); and, for the minors on the film it's
-//          written about ({ film }), an everyday word that's their name with
-//          a capital mid-sentence ("talked to Will after").
-//   maybe: an everyday word that's a name with a capital (anyone else's
-//          mid-sentence, "Mark IV"; anyone's at a sentence's start, "Hope
-//          never quits"; a month's or a day's name); a minor's everyday-word
-//          name run into a tag ("#hopestrong"), or any minor's name inside a
-//          tag's word ("#ourjordanfam"); an adult's name word run into a tag.
+//   sure:  a whole name, or one run together as a word ("JamieRivers"), and
+//          a first and last name without the middle one ("Grace Long" for a
+//          Grace Ann Long); a word of a name that's no everyday word (three
+//          letters or more, a minor's from two), a reviewer's too, and its
+//          plain plural or possessive ("Jordans", "Kaylees") or with a
+//          letter held ("Kayleeee"); a whole name
+//          run into a tag, a handle, a link or a file name
+//          ("#teamjordanreyes"); a minor's name word (four letters or more)
+//          run into one beside a tag's own word ("#jordanstrong",
+//          "#teamjordan"), another word of their name, or initials
+//          ("kayleeb_hoops"), or where camelCase starts or ends it
+//          ("JordanStrong"); a minor's everyday-word name beside a tag's own
+//          word ("#hopestrong", "#teamhope": a first name); and an everyday
+//          word that's a minor's name with a capital mid-sentence ("Ask Hope
+//          before the drill").
+//   maybe: an everyday word that's a name with a capital at a sentence's
+//          start ("Hope never quits"), anyone's; an adult's mid-sentence
+//          ("Mark IV"); a month's or a day's name; a minor's everyday-word
+//          surname beside a tag's word ("#gogreen", "#teamgreen") or in an
+//          everyday word ("#lifelong"); any other minor's name inside a tag's
+//          word ("#ourjordanfam"); an adult's name word run into a tag.
 // A name run into an ordinary word isn't read at all ("Milanote", "state").
 //
 // The words a tag or a file name runs a name into ("#jordanstrong",
@@ -296,32 +454,60 @@ const KIT_TAG_WORDS = new Set(("strong nation fam family gang forever crew squad
   "final finals cut cuts edit edits quote quotes card cards promo promos reel reels clip clips hero teaser trailer draft drafts export exports " +
   "master mix select selects graphic graphics gfx thumb thumbnail poster still stills photo photos interview sitdown broll bts intro outro recap " +
   "highlight feature profile story stories film films").split(" "));
+// Everyday words made of a tag's word and an everyday word that's a name too
+// ("#lifelong" for a Long, "#willpower" for a Will): the word, as written.
+const KIT_COMPOUNDS = new Set(("lifelong daylong weeklong nightlong yearlong seasonlong powerhouse clubhouse showcase lovebird lovebirds " +
+  "freewill willpower truelove bigdeal").split(" "));
+// Other ways a word may write a name: its plain plural or possessive,
+// without the apostrophe ("Jordans", "Kaylees", "Joneses"), and a letter
+// held ("Kayleeee", "Jordannn"): the name, three letters or more.
+const plainStems = (w) => {
+  const out = new Set();
+  const held = [w, w.replace(/(\p{L})\1{2,}/gu, "$1"), w.replace(/(\p{L})\1{2,}/gu, "$1$1")];
+  for (const x of new Set(held)) {
+    if (x !== w) out.add(x);
+    if (x.length >= 4 && x.endsWith("s") && !x.endsWith("ss")) out.add(x.slice(0, -1));
+    // "es" only where English adds it: after s, x, z, ch or sh ("Joneses",
+    // "Maxes"; not "times", "lines").
+    if (x.length >= 5 && /(?:[sxz]|[cs]h)es$/.test(x)) out.add(x.slice(0, -2));
+  }
+  return [...out];
+};
 // The cards are indexed once per list (thousands of them, read for each of a
-// month's wrap-ups): by each word of a name, and by the name run together.
+// month's wrap-ups): by each word of a name, by the name run together, and,
+// for a name of three words or more, by its first and last.
 const KIT_INDEX = new WeakMap();
 function kitIndex(people) {
   const list = Array.isArray(people) ? people : [];
   const had = KIT_INDEX.get(list);
   if (had) return had;
-  const ix = { byWord: new Map(), byJoined: new Map(), runWords: new Map() };
+  const ix = { byWord: new Map(), byJoined: new Map(), runWords: new Map(), runJoined: new Map() };
   const add = (map, k, e) => {
     if (!map.has(k)) map.set(k, []);
     map.get(k).push(e);
   };
   const seen = new Set();
-  const entry = (full, isMinor) => {
-    const parts = nameParts(full);
-    if (!parts.length) return;
-    const e = { parts, isMinor, key: personKey(full, isMinor) };
-    if (seen.has(e.key)) return;
-    seen.add(e.key);
+  const one = (parts, isMinor, key) => {
+    if (seen.has(key)) return;
+    seen.add(key);
+    const e = { parts, isMinor, key };
     for (const w of new Set(parts)) {
       const n = Array.from(w).length;
       if (n >= (isMinor ? 2 : 3)) add(ix.byWord, w, e);
       if (n >= 4) add(ix.runWords, w, e);
     }
     const joined = parts.join("");
-    if (parts.length > 1 && Array.from(joined).length >= (isMinor ? 4 : 5)) add(ix.byJoined, joined, e);
+    if (parts.length > 1 && Array.from(joined).length >= (isMinor ? 4 : 5)) {
+      add(ix.byJoined, joined, e);
+      add(ix.runJoined, joined, e);
+    }
+  };
+  const entry = (full, isMinor) => {
+    const parts = nameParts(full);
+    if (!parts.length) return;
+    const key = personKey(full, isMinor);
+    one(parts, isMinor, key);
+    if (parts.length >= 3) one([parts[0], parts[parts.length - 1]], isMinor, key + "|fl");
   };
   for (const p of list) {
     if (!p) continue;
@@ -330,6 +516,17 @@ function kitIndex(people) {
   }
   KIT_INDEX.set(list, ix);
   return ix;
+}
+// How a run reads around a name's letters at i (minorRunIns' reading):
+// held, an English word holds them; words, English words (or nothing) on
+// each side.
+function runRead(low, i, len, camel) {
+  const rd = low.length <= RUN_READ ? wordReading(low) : null;
+  const j = i + len;
+  return {
+    held: !camel && !!rd && heldByWord(low, i, len, rd),
+    words: !!rd && rd.ends[i] && (rd.starts[j] || (low[j] === "s" && j + 1 < low.length && rd.starts[j + 1])),
+  };
 }
 function kitNames(textValue, people, { film = [] } = {}) {
   const raw = String(textValue || "").normalize("NFC");
@@ -343,7 +540,6 @@ function kitNames(textValue, people, { film = [] } = {}) {
   // Where a name can be run into other letters: tags, and camelCase words.
   const special = words.filter((w) => w.tag || w.inner.length);
   const ordinary = (w) => everyday(w) || DATE_WORDS.has(w);
-  const here = new Set((film || []).filter((p) => p && p.name).map((p) => personKey(p.name, !!p.is_minor)));
   const sure = new Set();
   const maybe = new Set();
   const minor = new Set();
@@ -352,6 +548,8 @@ function kitNames(textValue, people, { film = [] } = {}) {
     sure.add(w);
     if (isMinor) minor.add(w);
   };
+  // Another word of the same name right beside it ("#jordanreyesfam").
+  const besideOwn = (e, w, head, tail) => e.parts.some((p) => p !== w && p.length >= 2 && (head.endsWith(p) || tail.startsWith(p)));
   const read = (ix) => {
     for (const [low, hits] of byLow) {
       // The name run together as one word.
@@ -367,16 +565,41 @@ function kitNames(textValue, people, { film = [] } = {}) {
           // starts sentences all the time).
           else if (h.start) {
             if (!EVERYDAY_2.has(low)) put(low, false);
-          } else put(low, e.isMinor && here.has(e.key) && !DATE_WORDS.has(low), e.isMinor);
+          } else put(low, e.isMinor && !DATE_WORDS.has(low), e.isMinor);
         }
+      }
+      // A plain plural or possessive of a name that's no everyday word, or
+      // one with a letter held ("Jordans mom called", "KAYLEES DRILL",
+      // "the Kayleeee energy").
+      // An English word is the word ("Times are hard", "the lens", "Jeans").
+      for (const st of englishWords().has(low) ? [] : plainStems(low)) {
+        // A three-letter name's only with a capital ("Tims mom", "TIMS"; not
+        // "three times", "the lens").
+        if (Array.from(st).length === 3 && !hits.some((h) => h.cap)) continue;
+        for (const e of ix.byJoined.get(st) || []) put(st, true, e.isMinor);
+        for (const e of ix.byWord.get(st) || []) if (!ordinary(st) && Array.from(st).length >= 3) put(st, true, e.isMinor);
       }
     }
     // In a tag, a handle, a link or a file name, and in camelCase: any name
     // word run in. Certain only where its letters start or end a word for
-    // sure (camelCase, or a tag's own word beside it: "#jordanstrong",
-    // "#teamjordan", "jordanfinal"); asked otherwise ("#teamstate" holds a
-    // Tate, or "team state").
+    // sure (camelCase, or a tag's own word or another word of the name
+    // beside it: "#jordanstrong", "#teamjordan", "jordanfinal"), and for a
+    // minor's name that's no everyday word with initials after it
+    // ("kayleeb_hoops"); asked otherwise ("#teamstate" holds a Tate, or
+    // "team state"; "#dallascowboys" a Dallas, or the team).
     for (const t of special) {
+      for (const [j, list] of ix.runJoined) {
+        if (t.low === j || t.low.length <= j.length) continue;
+        for (let i = t.low.indexOf(j); i >= 0; i = t.low.indexOf(j, i + 1)) {
+          const camel = t.inner.includes(i) || t.inner.includes(i + j.length);
+          if (!t.tag && !camel) continue;
+          const head = t.low.slice(0, i);
+          const tail = t.low.slice(i + j.length);
+          // A whole name run into a tag ("#teamjordanreyes").
+          const clear = camel || Array.from(j).length >= 6 || (!head && (!tail || KIT_TAG_WORDS.has(tail))) || (!tail && KIT_TAG_WORDS.has(head));
+          for (const e of list) put(j, clear, e.isMinor);
+        }
+      }
       for (const [w, list] of ix.runWords) {
         if (t.low === w || t.low.length <= w.length) continue;
         for (let i = t.low.indexOf(w); i >= 0; i = t.low.indexOf(w, i + 1)) {
@@ -384,24 +607,51 @@ function kitNames(textValue, people, { film = [] } = {}) {
           if (!t.tag && !camel) continue;
           const head = t.low.slice(0, i);
           const tail = t.low.slice(i + w.length);
-          const clear = camel || (!head && KIT_TAG_WORDS.has(tail)) || (!tail && KIT_TAG_WORDS.has(head));
+          const byTagWord = (!head && KIT_TAG_WORDS.has(tail)) || (!tail && KIT_TAG_WORDS.has(head));
+          const r = runRead(t.low, i, w.length, camel);
           for (const e of list) {
-            if (e.isMinor) put(w, clear && !ordinary(w), true);
-            else if ((clear || !head || !tail) && !ordinary(w)) put(w, false);
+            const own = besideOwn(e, w, head, tail);
+            if (e.isMinor) {
+              // A handle's initials after it: "kayleeb_hoops", "@jordanrb";
+              // English words on each side: "#jordanfootball", "#letsgojamie"
+              // (utils/studio-films.js minorRunIns). An English word holding
+              // it is the word ("#islandlife", "#Philadelphia"): asked.
+              if (!ordinary(w)) put(w, !r.held && (camel || byTagWord || own || (t.tag && !head && tail.length <= 2) || r.words), true);
+              else {
+                // "#hopestrong", "#teamhope": the name, beside a word that
+                // says so (RUN_CLEAR). A phrase's word ("#summertime"), a
+                // surname that's an everyday word ("#gogreen", "#teamgreen"
+                // for a Green) and an everyday word ("#lifelong") are asked.
+                // A surname: the card's last word (cards are written first
+                // name first; "Mary Grace Long" goes by Grace).
+                const surname = e.parts.length > 1 && e.parts.lastIndexOf(w) === e.parts.length - 1;
+                const clearBy = (!head && (RUN_CLEAR.has(tail) || (tail[0] === "s" && RUN_CLEAR.has(tail.slice(1))))) || (!tail && RUN_CLEAR.has(head));
+                put(w, !r.held && ((clearBy && !surname && !KIT_COMPOUNDS.has(t.low)) || own), true);
+              }
+            } else if ((camel || byTagWord || !head || !tail) && !ordinary(w) && !r.held) put(w, own, false);
           }
         }
       }
     }
-    // In an ordinary word, only beside a tag's own word: "Jordanstrong",
-    // "teamjordan" (never "Milanote", "state", "label").
+    // In an ordinary word, only where it starts or ends it with a tag's own
+    // word or English words beside it ("Jordanstrong", "teamjordan",
+    // "Jordanfootball season"); an English word holding it is the word
+    // ("Milanote", "state", "label", "island", "transfer").
     for (const low of byLow.keys()) {
-      if (low.length < 6) continue;
-      for (const tw of KIT_TAG_WORDS) {
-        if (low.length < tw.length + 4) continue;
-        for (const w of [low.endsWith(tw) ? low.slice(0, low.length - tw.length) : null, low.startsWith(tw) ? low.slice(tw.length) : null]) {
-          if (!w) continue;
-          for (const e of ix.runWords.get(w) || []) {
-            if (e.isMinor) put(w, !ordinary(w), true);
+      if (low.length < 6 || englishWords().has(low)) continue;
+      for (let k = 4; k <= low.length - 2; k++) {
+        for (const [w, i] of [[low.slice(0, k), 0], [low.slice(low.length - k), low.length - k]]) {
+          const joined = ix.runJoined.get(w) || [];
+          const single = ix.runWords.get(w) || [];
+          if (!joined.length && !single.length) continue;
+          const rest = i ? low.slice(0, i) : low.slice(k);
+          const byTagWord = KIT_TAG_WORDS.has(rest);
+          const r = runRead(low, i, k, false);
+          if (r.held) continue;
+          for (const e of joined) put(w, byTagWord || r.words, e.isMinor);
+          for (const e of single) {
+            if (!byTagWord && !r.words) continue;
+            if (e.isMinor) put(w, !ordinary(w) || false, true);
             else if (!ordinary(w)) put(w, false);
           }
         }
@@ -413,32 +663,15 @@ function kitNames(textValue, people, { film = [] } = {}) {
   for (const w of sure) maybe.delete(w);
   return { sure: [...sure], maybe: [...maybe], minor: [...minor] };
 }
-// Every card on every film (what every film shares is read against them
-// all): page by page, after the last id read, until a page comes back
-// empty, since the API answers with a capped number of rows (1,000 by
-// default) whatever the limit asked. cols must include id.
-async function everyCardRows(sb, cols = "id,name,reviewer_name,is_minor") {
-  const out = [];
-  let after = null;
-  while (out.length < 200000) {
-    let q = sb.from("studio_film_people").select(cols).order("id", { ascending: true }).limit(1000);
-    if (after) q = q.gt("id", after);
-    const { data, error } = await q;
-    if (error) throw Object.assign(new Error(error.message), { db: error });
-    if (!data || !data.length) break;
-    out.push(...data);
-    after = data[data.length - 1].id;
-  }
-  return out;
-}
 // A text with what the app wrote into it taken out (a kit's title, its
 // columns' and cards' titles, a format's name; dates), to check only what a
-// person wrote. Exact, longest first; each one leaves a space.
+// person wrote. Exact and whole, longest first; each one leaves a space.
 const DATE_RE = /\b(?:(?:January|February|March|April|May|June|July|August|September|October|November|December) \d{4}|(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec)\.? \d{1,2}, \d{4})\b/g;
 function withoutKnown(textValue, known) {
   let out = String(textValue || "").normalize("NFC");
   const list = [...new Set((known || []).map((k) => String(k || "").normalize("NFC").trim()).filter((k) => k.length >= 2))].sort((a, b) => b.length - a.length);
-  for (const k of list) out = out.split(k).join(" ");
+  // Whole words only: "Gear" leaves "Geary" as written.
+  for (const k of list) out = out.replace(new RegExp("(?<![\\p{L}\\p{N}\\p{M}])" + k.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "(?![\\p{L}\\p{N}\\p{M}])", "gu"), " ");
   return out.replace(DATE_RE, " ");
 }
 // The words of a card's name a sentence may hold, to ask about: an everyday
@@ -463,6 +696,15 @@ function strictMaybe(textValue, people) {
 function splitWords(raw) {
   return String(raw || "").replace(/(\p{Ll})(\p{Lu})/gu, "$1 $2").replace(/(\p{Lu})(\p{Lu}\p{Ll})/gu, "$1 $2");
 }
+// Words a file name runs a name into ("hopequote", "teamhope").
+const FILE_WORDS = new Set(("quote quotes card cards promo promos cut cuts edit edits final finals reel reels slide slides story stories clip clips " +
+  "cover covers title titles draft drafts strong team hero heroes teaser teasers trailer intro outro broll bts vo mix master export exports " +
+  "select selects graphic graphics gfx thumb thumbs thumbnail poster posters still stills photo photos pic pics carousel post posts short shorts " +
+  "frame frames spot spots sizzle recap highlight highlights feature profile interview interviews sitdown").split(" "));
+// Editing words built from an everyday word that's a name and a file word
+// ("blackframe" for a Black, "shortcut" for a Short): the word, not a name.
+const FILE_COMPOUNDS = new Set(("blackframe blackframes whiteframe whiteframes whitecard whitecards blackcard blackcards shortcut shortcuts " +
+  "clipart cliparts spotted greencard greencards").split(" "));
 function idNames(textValue, people) {
   const raw = String(textValue || "");
   const hay = " " + splitWords(raw).toLowerCase().replace(/[^\p{L}\p{M}]+/gu, " ") + " ";
@@ -471,9 +713,11 @@ function idNames(textValue, people) {
   const look = (name, minor) => {
     const parts = nameParts(name);
     if (!parts.length) return;
-    const joined = parts.join("");
-    if (parts.length > 1 && hay.includes(" " + parts.join(" ") + " ")) out.add(parts.join(" "));
-    if (parts.length > 1 && Array.from(joined).length >= (minor ? 4 : 5) && tokens.some((t) => t.includes(joined))) out.add(joined);
+    for (const form of nameForms(name)) {
+      const joined = form.join("");
+      if (form.length > 1 && hay.includes(" " + form.join(" ") + " ")) out.add(form.join(" "));
+      if (form.length > 1 && Array.from(joined).length >= (minor ? 4 : 5) && tokens.some((t) => t.includes(joined))) out.add(joined);
+    }
     for (const w of parts) {
       if (Array.from(w).length < (minor ? 2 : 3) || EVERYDAY_2.has(w)) continue;
       if (hay.includes(" " + w + " ")) out.add(w);
@@ -485,8 +729,23 @@ function idNames(textValue, people) {
     if (p.reviewer_name) look(p.reviewer_name, false);
   }
   // One word of a minor's name run into a word where a word starts or ends
-  // ("jordanquote_v2", "quotejordan").
-  for (const w of minorRunIns(raw, people).sure) out.add(w);
+  // ("jordanquote_v2", "quotejordan", "jordanxyz_v2": a file name has no one
+  // to ask). An everyday one ("hope") only when the rest of the word is one a
+  // file name uses ("hopequote_v02", "quotehope"): "hopeful_promo" and
+  // "kicking_drill" are ordinary words.
+  const runIn = minorRunIns(raw, people);
+  for (const w of [...runIn.sure, ...runIn.loose]) out.add(w);
+  const words = raw.toLowerCase().split(/[^\p{L}\p{M}]+/u).filter(Boolean);
+  // A three-letter one too, beside such a word ("samquote_v2", "Teamsam",
+  // "samstrong"; "same_drill" is the word).
+  for (const p of people || []) {
+    if (!p || !p.is_minor) continue;
+    for (const w of nameParts(p.name)) {
+      const n = Array.from(w).length;
+      if (n < 3 || (n >= 4 && !everyday(w))) continue;
+      if (words.some((t) => t !== w && !FILE_COMPOUNDS.has(t) && ((t.startsWith(w) && FILE_WORDS.has(t.slice(w.length))) || (t.endsWith(w) && FILE_WORDS.has(t.slice(0, t.length - w.length)))))) out.add(w);
+    }
+  }
   return [...out];
 }
 // Names in a film's title. A title is read like a file name (any word of a
@@ -506,15 +765,17 @@ function titleNames(textValue, people) {
   const look = (name, minor) => {
     const parts = nameParts(name);
     if (!parts.length) return;
-    const joined = parts.join("");
-    const len = Array.from(joined).length;
-    if (parts.length > 1 && hay.includes(" " + parts.join(" ") + " ")) sure.add(parts.join(" "));
-    if (parts.length > 1 && len >= (minor ? 4 : 5)) {
-      for (const t of tokens) {
-        const i = t.indexOf(joined);
-        if (i < 0) continue;
-        if (i === 0 || len >= 7) sure.add(joined);
-        else maybe.add(joined);
+    for (const form of nameForms(name)) {
+      const joined = form.join("");
+      const len = Array.from(joined).length;
+      if (form.length > 1 && hay.includes(" " + form.join(" ") + " ")) sure.add(form.join(" "));
+      if (form.length > 1 && len >= (minor ? 4 : 5)) {
+        for (const t of tokens) {
+          const i = t.indexOf(joined);
+          if (i < 0) continue;
+          if (i === 0 || len >= 7) sure.add(joined);
+          else maybe.add(joined);
+        }
       }
     }
     for (const w of parts) {
@@ -533,9 +794,20 @@ function titleNames(textValue, people) {
     look(p.name, !!p.is_minor);
     if (p.reviewer_name) look(p.reviewer_name, false);
   }
+  // An everyday word run in ("Hopestrong") is asked in a title: it's words
+  // someone chose ("Summertime grind").
   const runIn = minorRunIns(raw, people);
-  for (const w of runIn.sure) sure.add(w);
+  for (const w of runIn.sure) (EVERYDAY_NAMES.has(w) ? maybe : sure).add(w);
   for (const w of runIn.maybe) maybe.add(w);
+  // A minor's three-letter name beside a word a file name uses ("Teamsam",
+  // "Samquote"): asked.
+  for (const p of people || []) {
+    if (!p || !p.is_minor) continue;
+    for (const w of nameParts(p.name)) {
+      if (Array.from(w).length !== 3) continue;
+      if (tokens.some((t) => t !== w && !FILE_COMPOUNDS.has(t) && ((t.startsWith(w) && FILE_WORDS.has(t.slice(3))) || (t.endsWith(w) && FILE_WORDS.has(t.slice(0, t.length - 3)))))) maybe.add(w);
+    }
+  }
   for (const w of sure) maybe.delete(w);
   return { sure: [...sure], maybe: [...maybe] };
 }
@@ -613,24 +885,56 @@ function contactIn(text) {
 // field" stays on the phone; "westlake gym" doesn't.
 const PLACE_SKIP = new Set(("the a an at of on in by and to for from near with s st street road rd ave avenue " +
   "high middle school practice field fields track gym court courts park family home").split(" "));
-// A place's ordinary words are skipped only when it has a word of its own
-// ("Westlake" in "Westlake High School practice field"): "Park High School"
-// or "Court Street Park" is all ordinary words, so they all count.
+// A place's ordinary words (these, and the ordinary words a shot line may
+// start with: "then", "bus", "field") are skipped when it has a word of its
+// own ("Westlake" in "Westlake High School practice field"). A place named
+// with ordinary words only is named by them as typed with its capitals, two
+// or more in a row ("Park High School", "Court Street Park", "Home Field"):
+// lower case, they describe ("practice field behind the gym", "by the
+// track"), and one alone isn't a name ("Home"). A location typed all in
+// lower case can't be read that way, so there every word but the small ones
+// counts.
 const PLACE_GLUE = new Set(["the", "a", "an", "at", "of", "on", "in", "by", "and", "to", "for", "from", "near", "with", "s"]);
 function placeWords(locations) {
   const out = new Set();
-  // Each part of a location is a place of its own: "The Rowe house on High
-  // Street" is the Rowe house and High Street; "Home Field, Riverside" is
-  // Home Field and Riverside.
-  const parts = [];
-  for (const l of Array.isArray(locations) ? locations : []) parts.push(...String(l || "").split(/\s*[,;()/&|–—]\s*|\s+(?:on|at|near|off|by|in|and|of|behind|next to|across from)\s+/i));
-  for (const l of parts) {
-    const words = String(l || "").match(/[\p{L}\p{M}]+/gu) || [];
-    const own = words.some((w) => !PLACE_SKIP.has(w.toLowerCase()) && (/^\p{Lu}/u.test(w) || Array.from(w).length >= 4));
-    for (const w of words) {
-      const lw = w.toLowerCase();
-      if (own ? PLACE_SKIP.has(lw) : PLACE_GLUE.has(lw)) continue;
-      if (/^\p{Lu}/u.test(w) || Array.from(lw).length >= 4) out.add(lw);
+  const ordinary = (lw) => PLACE_SKIP.has(lw) || COMMON_FIRST.has(lw);
+  for (const loc of Array.isArray(locations) ? locations : []) {
+    const typed = String(loc || "");
+    const caps = /\p{Lu}/u.test(typed);
+    // Each part of a location is a place of its own: "The Rowe house on High
+    // Street" is the Rowe house and High Street; "Home Field, Riverside" is
+    // Home Field and Riverside.
+    for (const part of typed.split(/\s*[,;()/&|–—]\s*|\s+(?:on|at|near|off|by|in|and|of|behind|next to|across from)\s+/i)) {
+      const words = part.match(/[\p{L}\p{M}]+/gu) || [];
+      const ownWord = (w) => !ordinary(w.toLowerCase()) && (/^\p{Lu}/u.test(w) || Array.from(w).length >= 4);
+      if (words.some(ownWord)) {
+        for (const w of words) if (ownWord(w)) out.add(w.toLowerCase());
+        continue;
+      }
+      // Typed all in lower case, or in sentence case ("Park high school gym":
+      // a capital on its first word only, two words or more): can't be told
+      // from a name, so every word but the small ones counts.
+      const plain = words.filter((w) => !PLACE_GLUE.has(w.toLowerCase()));
+      const sentence = plain.length >= 2 && /^\p{Lu}/u.test(words[0]) && plain.slice(1).every((w) => !/^\p{Lu}/u.test(w));
+      if (!caps || sentence) {
+        for (const w of words) {
+          const lw = w.toLowerCase();
+          if (!PLACE_GLUE.has(lw) && Array.from(lw).length >= 3) out.add(lw);
+        }
+        continue;
+      }
+      let run = [];
+      const flush = () => {
+        if (run.length >= 2) run.forEach((w) => out.add(w));
+        run = [];
+      };
+      for (const w of words) {
+        const lw = w.toLowerCase();
+        if (PLACE_GLUE.has(lw)) continue;
+        if (/^\p{Lu}/u.test(w)) run.push(lw);
+        else flush();
+      }
+      flush();
     }
   }
   return out;
@@ -717,21 +1021,120 @@ function graphicsCredit(p, as, format) {
 const TAG = /[#@][\p{L}\p{M}\p{N}_.]+/gu;
 // (Title Case as titles read it: titleCase, above.)
 const titleCaseLine = (line) => titleCase(line);
-// A shout-out names someone: in a line in Title Case, the last word ("Way
-// To Go Hope", "Happy Birthday Grace") and a word after a shout-out's own
-// word ("Go Hope Go", "Thank You Coach Will").
-const SHOUT_LEAD = new Set("go thanks thank you congrats congratulations birthday dear hey love coach mr mrs ms miss".split(" "));
+// A shout-out names someone: a word after a shout-out's own words ("Thank
+// You Coach Will", "Happy Birthday Grace", "We Love You Grace", "Proud Of You
+// Chase"), and after "go" where the name ends the shout-out or another "go"
+// follows ("Go Hope Go", "Way To Go Hope"; "Go Chase Your Dreams" is asked
+// about instead). In a line in Title Case, the last word too ("Never Lose
+// Hope"). In a hashtag, its words read the same way, all but the last-word
+// rule ("#HappyBirthdayGrace", "#GoHopeGo"; "#NeverLoseHope" is asked about).
+const SHOUT_LEAD = new Set("thanks congrats congratulations birthday dear hey coach mr mrs ms miss".split(" "));
+const SHOUT_LEAD_2 = ["thank you", "love you", "miss you", "proud of you"].map((x) => x.split(" "));
+function shoutLead(words, i) {
+  if (!i) return false;
+  if (SHOUT_LEAD.has(words[i - 1])) return true;
+  if (words[i - 1] === "go" && (i === words.length - 1 || words[i + 1] === "go")) return true;
+  return SHOUT_LEAD_2.some((ph) => ph.length <= i && ph.every((x, k) => words[i - ph.length + k] === x));
+}
+// { sure, goHey } (goHey: the words after "go" or "hey": a shout-out to a
+// first name, "#GoGrace", but a chant as often for a surname that's an
+// everyday word, "Go Green", "#GoWest": publicNames asks about those).
 function shoutOuts(all) {
-  const out = new Set();
-  for (const line of String(all || "").split(/\r?\n/)) {
-    if (!titleCaseLine(line)) continue;
-    const words = (line.replace(TAG, " ").match(/[\p{L}\p{M}][\p{L}\p{M}'’]*/gu) || []).map((w) => w.toLowerCase().replace(/['’]s$/u, ""));
-    if (words.length) out.add(words[words.length - 1]);
+  const sure = new Set();
+  const goHey = new Set();
+  const read = (words, lastToo) => {
+    if (lastToo && words.length) sure.add(words[words.length - 1]);
     words.forEach((w, i) => {
-      if (i && SHOUT_LEAD.has(words[i - 1])) out.add(w);
+      if (!shoutLead(words, i)) return;
+      if (words[i - 1] === "go" || words[i - 1] === "hey") goHey.add(w);
+      else sure.add(w);
     });
+  };
+  for (const line of String(all || "").split(/\r?\n/)) {
+    if (titleCaseLine(line)) read((line.replace(TAG, " ").match(/[\p{L}\p{M}][\p{L}\p{M}'’]*/gu) || []).map((w) => w.toLowerCase().replace(/['’]s$/u, "")), true);
   }
-  return out;
+  for (const tag of String(all || "").match(TAG) || []) read(tagWords(tag).toLowerCase().split(/\n+/).filter((w) => /^[\p{L}\p{M}]+$/u.test(w)), false);
+  return { sure, goHey };
+}
+// After "go" or "hey": a first name (any word but the last: "Mary Grace
+// Long" goes by Grace), or a name word that's no everyday word, is the name
+// ("#GoGrace", "#gojordan"); an everyday-word surname, the card's last word,
+// is asked about ("#GoGreen" for an Ava Green, "#heyday" for a Dan Day).
+// Cards are written first name first.
+const chantOnly = (parts, k, w) => parts.length > 1 && k === parts.length - 1 && everyday(w);
+// A tag typed all in lower case has no words to read: a shout-out's own
+// letters right before a name word that ends the tag (or before it and a
+// last "go") name them ("#happybirthdaygrace", "#gohope", "#gohopego",
+// "#thankscoachrivers"). { sure, maybe }: after "go" or "hey", an
+// everyday-word surname is asked about ("#gogreen", "#heyday"; chantOnly).
+const SHOUT_RUN = /(?:birthday|bday|congrats|congratulations|thanks|thankyou|thanku|loveyou|missyou|proudofyou|coach|dear|hey|go)$/;
+function lowerTagShouts(all, p) {
+  const parts = nameParts(p && p.name);
+  const names = parts.filter((w) => Array.from(w).length >= 3);
+  const sure = new Set();
+  const maybe = new Set();
+  if (!names.length) return { sure: [], maybe: [] };
+  for (const tag of String(all || "").match(TAG) || []) {
+    for (const piece of tagWords(tag).toLowerCase().split(/\n+/)) {
+      if (!/^[\p{L}\p{M}]+$/u.test(piece)) continue;
+      for (const w of names) {
+        for (const end of [w, w + "go"]) {
+          if (piece.length <= end.length || !piece.endsWith(end)) continue;
+          const lead = SHOUT_RUN.exec(piece.slice(0, piece.length - end.length));
+          if (!lead) continue;
+          if ((lead[0] === "go" || lead[0] === "hey") && chantOnly(parts, parts.indexOf(w), w)) maybe.add(w);
+          else sure.add(w);
+        }
+      }
+    }
+  }
+  for (const w of sure) maybe.delete(w);
+  return { sure: [...sure], maybe: [...maybe] };
+}
+// An adult's name word (four letters or more) run into a word of a tag: the
+// name where it ends the word ("#teamrivers", "#coachrivers"), or starts it
+// before a tag's usual last word ("#riversstrong", "#riversnation"); asked
+// where it starts another word ("#riverside"), sits inside one
+// ("#coachriversrocks"), or is an everyday one. Tags only.
+const TAG_TAILS = new Set(("strong nation fam family gang forever crew squad army pride power time era way life season szn mode legacy love fans " +
+  "team stan nation club world vibes energy effect magic made pride proud hype goat goats").split(" "));
+function tagRunIns(all, p) {
+  const sure = new Set();
+  const maybe = new Set();
+  const names = nameParts(p && p.name).filter((w) => Array.from(w).length >= 4);
+  for (const tag of String(all || "").match(TAG) || []) {
+    for (const piece of tagWords(tag).toLowerCase().split(/\n+/)) {
+      if (!/^[\p{L}\p{M}]+$/u.test(piece)) continue;
+      for (const w of names) {
+        if (piece === w) continue;
+        const atEnd = piece.endsWith(w);
+        const atStart = piece.startsWith(w);
+        if (!atEnd && !atStart) {
+          if (!everyday(w) && piece.includes(w)) maybe.add(w);
+          continue;
+        }
+        if (!everyday(w) && (atEnd || TAG_TAILS.has(piece.slice(w.length)))) sure.add(w);
+        else maybe.add(w);
+      }
+    }
+  }
+  for (const w of sure) maybe.delete(w);
+  return { sure: [...sure], maybe: [...maybe] };
+}
+// A minor's three-letter name run into a word of a tag, where that word
+// starts or ends ("#samstrong", "#teamsam", "#prayformia"): asked, never
+// refused (four letters and more: minorRunIns).
+function shortTagRunIns(all, p) {
+  const out = new Set();
+  const short = nameParts(p && p.name).filter((w) => Array.from(w).length === 3);
+  if (!short.length) return [];
+  for (const tag of String(all || "").match(TAG) || []) {
+    for (const piece of tagWords(tag).toLowerCase().split(/\n+/)) {
+      if (!/^[\p{L}\p{M}]+$/u.test(piece)) continue;
+      for (const w of short) if (piece !== w && (piece.startsWith(w) || piece.endsWith(w))) out.add(w);
+    }
+  }
+  return [...out];
 }
 function tagWords(tag) {
   return tag
@@ -759,7 +1162,16 @@ function publicText(all) {
 // ("#gojordankidd"); { ask } (the tag) when it's a short one inside a word
 // ("edli" in "#SpeedLimit", "alko" in "#WalkOff"); or nothing.
 function inTags(all, name, minRun) {
-  const parts = nameParts(name);
+  let sure = false;
+  const ask = [];
+  for (const form of nameForms(name)) {
+    const r = inTagsOf(all, form, minRun);
+    if (r.sure) sure = true;
+    for (const t of r.ask || []) ask.push(t);
+  }
+  return { sure, ask: [...new Set(ask)] };
+}
+function inTagsOf(all, parts, minRun) {
   const joined = parts.join("");
   if (parts.length < 2 || Array.from(joined).length < minRun) return {};
   let sure = false;
@@ -788,9 +1200,13 @@ function publicNames(all, p) {
   const minor = !!p.is_minor;
   if (strictNames(publicText(all), [{ name: p.name, is_minor: minor }]).length > 0 || !!inTags(all, p.name, minor ? 4 : 5).sure) return true;
   // A word of the name in a Title Case shout-out ("Way To Go Hope", "Thank
-  // You Coach Will"): the name, for anyone the graphic can't name.
+  // You Coach Will"), or in a lower-case tag's ("#happybirthdaygrace"): the
+  // name, for anyone the graphic can't name.
   const shouted = shoutOuts(all);
-  if (nameParts(p.name).some((w) => Array.from(w).length >= (minor ? 2 : 3) && shouted.has(w))) return true;
+  if (nameParts(p.name).some((w, k, parts) => Array.from(w).length >= (minor ? 2 : 3) && (shouted.sure.has(w) || (shouted.goHey.has(w) && !chantOnly(parts, k, w))))) return true;
+  if (lowerTagShouts(all, p).sure.length) return true;
+  // An adult's name run into a tag ("#teamrivers").
+  if (!minor && tagRunIns(all, p).sure.length) return true;
   // A minor: one word of their name run into a tag or a word where a word
   // starts or ends ("#jordanstrong", "#teamjordan").
   return minor && minorRunIns(all, [p]).sure.length > 0;
@@ -824,10 +1240,18 @@ function graphicsAsks(texts, people, { format = null, ok = new Set() } = {}) {
   for (const p of people || []) {
     if (!mayName(p, format)) {
       for (const w of nameHits(all, p, p.is_minor ? { minRun: 4, minWord: 2 } : {}).maybe) out.add(w);
+      // "Go Green", "#gogreen" for an Ava Green: a chant as often as a name, asked.
+      const goHey = shoutOuts(raw).goHey;
+      nameParts(p.name).forEach((w, k, parts) => {
+        if (goHey.has(w) && chantOnly(parts, k, w)) out.add(w);
+      });
+      for (const w of lowerTagShouts(raw, p).maybe) out.add(w);
       for (const tag of inTags(raw, p.name, p.is_minor ? 4 : 5).ask || []) out.add(tag);
       // One word of a minor's name inside a word, or an everyday one run in
-      // ("#hopestrong"): asked.
-      if (p.is_minor) for (const w of minorRunIns(raw, [p]).maybe) out.add(w);
+      // ("#hopestrong"), or a three-letter one run into a tag ("#samstrong"): asked.
+      if (p.is_minor) for (const w of [...minorRunIns(raw, [p]).maybe, ...shortTagRunIns(raw, p)]) out.add(w);
+      // An adult's everyday-word name run into a tag ("#hopestrong" for a Hope): asked.
+      else for (const w of tagRunIns(raw, p).maybe) out.add(w);
     }
     if (p.reviewer_name && p.reviewer_relation !== "self") {
       for (const w of nameHits(all, { name: p.reviewer_name }).maybe) out.add(w);
@@ -1188,7 +1612,27 @@ function reviewReceipt({ reviewerName, decision, formatLabel, decidedName }) {
   };
 }
 
+// Every card on every film (what every film shares is read against them
+// all): page by page, after the last id read, until a page comes back
+// empty, since the API answers with a capped number of rows (1,000 by
+// default) whatever the limit asked. cols must include id.
+async function everyCardRows(sb, cols = "id,name,reviewer_name,is_minor") {
+  const out = [];
+  let after = null;
+  while (out.length < 200000) {
+    let q = sb.from("studio_film_people").select(cols).order("id", { ascending: true }).limit(1000);
+    if (after) q = q.gt("id", after);
+    const { data, error } = await q;
+    if (error) throw Object.assign(new Error(error.message), { db: error });
+    if (!data || !data.length) break;
+    out.push(...data);
+    after = data[data.length - 1].id;
+  }
+  return out;
+}
+
 module.exports = {
+  everyCardRows,
   LANES,
   FORMATS,
   RATIOS,
@@ -1216,12 +1660,12 @@ module.exports = {
   strictMaybe,
   kitNames,
   withoutKnown,
-  everyCardRows,
   DATE_WORDS,
   idNames,
   titleNames,
   titleCase,
   minorRunIns,
+  heldInRun,
   cardAgainstFilm,
   EVERYDAY_2,
   EVERYDAY_NAMES,

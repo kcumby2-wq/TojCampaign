@@ -121,6 +121,43 @@ create index if not exists studio_refresh_sources_ref_idx on public.studio_refre
 alter table public.studio_refresh_sources enable row level security;
 
 -- ── Gates ─────────────────────────────────────────────────────────────────
+-- The ways a text may write a name the cards' check (039's studio_names_in)
+-- reads: as written; with a letter held three times or more taken back to
+-- one and to two ("Kayleeee", "Jordannn"); and with a word's plain plural
+-- or possessive taken back to a name of five letters or more ("Jordans mom
+-- called", "KAYLEES DRILL"), and "es" after s, x, z, ch or sh ("the
+-- Joneses"). Shorter names' plurals are the app's to read ("Tims mom", not
+-- "three times": utils/studio-films.js kitNames). Each read on its own, so
+-- no name is made across them.
+create or replace function public.studio_text_forms(p_text text) returns text[]
+language sql immutable set search_path = '' as $$
+  select array_agg(distinct f) from (
+    select h, unnest(array[h, regexp_replace(h, '([[:alpha:]]{5,})[sS]\M', '\1', 'g'),
+                         regexp_replace(h, '([[:alpha:]]{2,}(?:[sSxXzZ]|[cCsS][hH]))[eE][sS]\M', '\1', 'g')]) as f
+      from unnest(array[p_text, regexp_replace(p_text, '([[:alpha:]])\1{2,}', '\1', 'g'),
+                        regexp_replace(p_text, '([[:alpha:]])\1{2,}', '\1\1', 'g')]) as h) x
+   where f is not null
+$$;
+create or replace function public.studio_names_in_forms(p_film uuid, p_text text) returns boolean
+language sql stable set search_path = '' as $$
+  select p_text is not null and exists (select 1 from unnest(public.studio_text_forms(p_text)) as f where public.studio_names_in(p_film, f))
+$$;
+create or replace function public.studio_names_in_any_forms(p_text text) returns boolean
+language sql stable set search_path = '' as $$
+  select p_text is not null and exists (select 1 from unnest(public.studio_text_forms(p_text)) as f where public.studio_names_in_any(f))
+$$;
+
+-- The draft a refresh made was discarded (018's kits: a database without
+-- them has no drafts, so nothing is ever given back there).
+create or replace function public.studio_refresh_discarded(p_run uuid) returns boolean
+language plpgsql stable set search_path = '' as $$
+begin
+  if p_run is null or to_regclass('public.studio_kits') is null then
+    return false;
+  end if;
+  return exists (select 1 from public.studio_kits k where k.source_run_id = p_run and k.status = 'discarded' and k.approved_at is null);
+end $$;
+
 create or replace function public.studio_film_wraps_gate() returns trigger
 language plpgsql set search_path = '' as $$
 begin
@@ -142,6 +179,7 @@ begin
       -- (studio_refresh_unfold, for that refresh only).
       if new.folded_at is null and new.folded_run_id is null and old.folded_run_id is not null
          and current_setting('studio.unfolding', true) = old.folded_run_id::text
+         and public.studio_refresh_discarded(old.folded_run_id)
          and row(new.worked, new.missed, new.change, new.card_title) is not distinct from row(old.worked, old.missed, old.change, old.card_title) then
         new.updated_at := now();
         return new;
@@ -162,8 +200,8 @@ begin
   end if;
   -- No names: the film's cards (the history's rule), and every film's, since
   -- wrap-ups go into the kit's refresh (040's studio_names_in_any).
-  if public.studio_names_in(new.film_id, concat_ws(' ', new.worked, new.missed, new.change, new.card_title))
-     or public.studio_names_in_any(concat_ws(' ', new.worked, new.missed, new.change, new.card_title)) then
+  if public.studio_names_in_forms(new.film_id, concat_ws(' ', new.worked, new.missed, new.change, new.card_title))
+     or public.studio_names_in_any_forms(concat_ws(' ', new.worked, new.missed, new.change, new.card_title)) then
     raise exception 'wrap-ups keep no names: write the code instead';
   end if;
   if tg_op = 'INSERT' then
@@ -188,7 +226,7 @@ begin
   end if;
   if tg_op = 'INSERT' then
     -- A kit never carries a name (040's studio_names_in_any: every film's cards).
-    if public.studio_names_in_any(concat_ws(' ', new.suggestion, new.why, new.decided_note)) then
+    if public.studio_names_in_any_forms(concat_ws(' ', new.suggestion, new.why, new.decided_note)) then
       raise exception 'a suggested edit keeps no names';
     end if;
     if new.status <> 'open' then
@@ -206,7 +244,8 @@ begin
     -- (studio_refresh_unfold, for that refresh only).
     if old.status = 'folded' and new.status = 'open' and old.folded_run_id is not null and new.folded_run_id is null
        and new.decided_by is null and new.decided_at is null and new.decided_note is null
-       and current_setting('studio.unfolding', true) = old.folded_run_id::text then
+       and current_setting('studio.unfolding', true) = old.folded_run_id::text
+       and public.studio_refresh_discarded(old.folded_run_id) then
       return new;
     end if;
     -- Only its run going (agent_runs on delete set null) changes it now.
@@ -216,7 +255,7 @@ begin
     end if;
     return new;
   end if;
-  if new.decided_note is not null and public.studio_names_in_any(new.decided_note) then
+  if new.decided_note is not null and public.studio_names_in_any_forms(new.decided_note) then
     raise exception 'a decision keeps no names';
   end if;
   if old.status = 'open' and new.status <> 'open' then
@@ -250,9 +289,9 @@ begin
   -- a kit. A declined one, or one open again, stays out of every kit: one
   -- that's a rule in the making on the kit's notes now, naming someone on a
   -- card added since, can still be declined (its label is in those notes).
-  if public.studio_names_in_any(new.note)
-     or (new.status = 'folded' and public.studio_names_in_any(new.label))
-     or (new.status = 'declined' and public.studio_names_in_any(new.label)
+  if public.studio_names_in_any_forms(new.note)
+     or (new.status = 'folded' and public.studio_names_in_any_forms(new.label))
+     or (new.status = 'declined' and public.studio_names_in_any_forms(new.label)
          and not exists (select 1 from public.studio_rule_candidates(new.kit_slug) c where c.label = new.label)) then
     raise exception 'a rule decision keeps no names';
   end if;
@@ -270,13 +309,17 @@ begin
   end if;
   if new.status = 'reopened' and (new.run_id is null or new.note is not null
        or current_setting('studio.unfolding', true) is distinct from new.run_id::text
+       or not public.studio_refresh_discarded(new.run_id)
        or not exists (select 1 from (select x.status, x.run_id from public.studio_label_marks x
                                       where x.kit_slug = new.kit_slug and x.label = new.label
                                       order by x.decided_at desc, x.id limit 1) l
                        where l.status = 'folded' and l.run_id = new.run_id)) then
     raise exception 'a rule is open again only when the draft its refresh made is discarded';
   end if;
-  new.decided_at := now();
+  -- The time it's made, not its transaction's start: the latest decision is
+  -- the one made last (a discard waiting on the kit's lock while a refresh
+  -- ends and folds the rule reopens it after the fold, though it began first).
+  new.decided_at := clock_timestamp();
   return new;
 end $$;
 
@@ -299,7 +342,8 @@ begin
       -- Undone, once: the draft it made was discarded (studio_refresh_unfold).
       if old.outcome = 'drafted' and old.undone_at is null and new.undone_at is not null
          and new.outcome = old.outcome and new.ended_at is not distinct from old.ended_at
-         and current_setting('studio.unfolding', true) = old.run_id::text then
+         and current_setting('studio.unfolding', true) = old.run_id::text
+         and public.studio_refresh_discarded(old.run_id) then
         new.undone_at := now();
         return new;
       end if;
@@ -513,14 +557,12 @@ begin
   -- Its draft discarded before it ended (studio_refresh_unfold found it
   -- still running): undone now, and nothing is folded in. (Kits are 018's;
   -- without them there's no draft to discard.)
-  if p_outcome = 'drafted' and to_regclass('public.studio_kits') is not null then
-    if exists (select 1 from public.studio_kits k where k.source_run_id = p_run and k.status = 'discarded') then
-      perform set_config('studio.unfolding', p_run::text, true);
-      update public.studio_refresh_marks set undone_at = now() where run_id = p_run;
-      perform set_config('studio.unfolding', '', true);
-      return query select 0, 0;
-      return;
-    end if;
+  if p_outcome = 'drafted' and public.studio_refresh_discarded(p_run) then
+    perform set_config('studio.unfolding', p_run::text, true);
+    update public.studio_refresh_marks set undone_at = now() where run_id = p_run;
+    perform set_config('studio.unfolding', '', true);
+    return query select 0, 0;
+    return;
   end if;
   if m.kind = 'monthly' and p_outcome = 'drafted' then
     for x in select s.ref_id from public.studio_refresh_sources s where s.run_id = p_run and s.kind = 'wrap' order by s.ref_id loop
@@ -577,7 +619,9 @@ begin
   end if;
   perform pg_advisory_xact_lock(hashtextextended('studio.refresh:' || m.kit_slug, 0));
   select * into m from public.studio_refresh_marks where run_id = p_run for update;
-  if m.outcome is distinct from 'drafted' or m.undone_at is not null then
+  -- Only for a discarded draft: nothing else gives back what a refresh
+  -- folded in.
+  if m.outcome is distinct from 'drafted' or m.undone_at is not null or not public.studio_refresh_discarded(p_run) then
     return query select 0;
     return;
   end if;
@@ -608,7 +652,8 @@ end $$;
 create or replace function public.studio_kits_discarded() returns trigger
 language plpgsql set search_path = '' as $$
 begin
-  if new.status = 'discarded' and old.status is distinct from 'discarded' and new.source_run_id is not null then
+  -- A draft discarded (an approved kit is never given back, whatever its row says).
+  if new.status = 'discarded' and old.status = 'draft' and new.source_run_id is not null then
     perform public.studio_refresh_unfold(new.source_run_id, new.discarded_by);
   end if;
   return null;
@@ -654,7 +699,8 @@ begin
     'public.studio_open_wraps(text)', 'public.studio_refresh_live(public.studio_refresh_marks)',
     'public.studio_refresh_start(uuid, text, text, text, uuid[], uuid[], text[], boolean)', 'public.studio_refresh_end(uuid, text)',
     'public.studio_refresh_holds(text, uuid, text, text)', 'public.studio_label_decline(text, text, text, text)',
-    'public.studio_refresh_unfold(uuid, text)', 'public.studio_kits_discarded()'] loop
+    'public.studio_refresh_unfold(uuid, text)', 'public.studio_kits_discarded()', 'public.studio_refresh_discarded(uuid)',
+    'public.studio_names_in_forms(uuid, text)', 'public.studio_names_in_any_forms(text)', 'public.studio_text_forms(text)'] loop
     execute format('revoke all on function %s from public', fn);
     foreach r in array array['anon', 'authenticated'] loop
       if exists (select 1 from pg_roles where rolname = r) then
@@ -676,6 +722,7 @@ begin
       'public.studio_refresh_live(public.studio_refresh_marks), '
       'public.studio_refresh_start(uuid, text, text, text, uuid[], uuid[], text[], boolean), public.studio_refresh_end(uuid, text), '
       'public.studio_refresh_holds(text, uuid, text, text), public.studio_label_decline(text, text, text, text), '
-      'public.studio_refresh_unfold(uuid, text) to service_role';
+      'public.studio_refresh_unfold(uuid, text), public.studio_refresh_discarded(uuid), '
+      'public.studio_names_in_forms(uuid, text), public.studio_names_in_any_forms(text), public.studio_text_forms(text) to service_role';
   end if;
 end $$;

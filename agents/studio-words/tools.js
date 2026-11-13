@@ -46,6 +46,24 @@ function toolsFor(ctx) {
   const checkCtx = { transcripts: scope.transcripts, people: scope.people || [], byClaude: true };
   const control = scope.control || { stopped: null };
   const stopNote = () => `Stopped: ${control.stopped}. Don't read or hand back anything more; say that the run stopped.`;
+  // A stop ends the run here: nothing more goes to the model (the runner's
+  // next request is aborted; agents/orchestrator-factory.js).
+  const stop = (why) => {
+    if (typeof control.stop === "function") control.stop(why);
+    else control.stopped = control.stopped || why;
+    return stopNote();
+  };
+  // What Claude has read so far: each is asked again before anything more
+  // (a page, a set handed back), since all of it rides in every request.
+  const readSoFar = scope.read instanceof Set ? scope.read : new Set();
+  const recheck = async (more) => {
+    if (typeof scope.recheck !== "function") return null;
+    for (const id of new Set([...readSoFar, ...(more || [])])) {
+      const why = await scope.recheck(id);
+      if (why) return why;
+    }
+    return null;
+  };
 
   const list = betaTool({
     name: "words_transcripts",
@@ -73,15 +91,14 @@ function toolsFor(ctx) {
       required: ["transcript"],
     },
     run: async ({ transcript, from_cue }) => {
-      if (control.stopped) return stopNote();
+      if (control.stopped) return stop(control.stopped);
       const t = scope.transcripts.find((x) => x.ref === transcript);
       if (!t) return refused(`no transcript "${transcript}". Call words_transcripts.`);
-      // Read again, now: the switch, the film, the transcript, its speaker.
-      const why = typeof scope.recheck === "function" ? await scope.recheck(t.id) : null;
-      if (why) {
-        control.stopped = why;
-        return stopNote();
-      }
+      // Read again, now: the switch, the film, this transcript and every one
+      // read before it, and their speakers.
+      const why = await recheck([t.id]);
+      if (why) return stop(why);
+      readSoFar.add(t.id);
       const from = Math.max(1, Math.floor(Number(from_cue) || 1));
       const to = from + PAGE - 1;
       const body = W.transcriptText(t, { from, to });
@@ -161,7 +178,9 @@ function toolsFor(ctx) {
       required: ["lines", "structures"],
     },
     run: async (input) => {
-      if (control.stopped) return stopNote();
+      if (control.stopped) return stop(control.stopped);
+      const why = await recheck([]);
+      if (why) return stop(why);
       const { issues, value } = W.checkWords(input, checkCtx);
       if (issues.length) return refused("fix these and send the whole set again.", issues);
       stage.submits++;
@@ -182,7 +201,7 @@ function wordsText(v, transcripts = []) {
   const t = (id) => transcripts.find((x) => x.id === id) || {};
   const at = (q) => {
     const tr = t(q.transcript_id);
-    const opts = { frames: !!tr.frames, fps: tr.fps, drop: !!tr.drop_frame };
+    const opts = { frames: !!tr.frames, fps: tr.fps, drop: !!tr.df_timecode };
     return `${tr.ref || "?"}#${q.from_cue}${q.to_cue !== q.from_cue ? "–" + q.to_cue : ""} ${W.TP.tc(q.start_ms, opts)}–${W.TP.tc(q.end_ms, opts)}`;
   };
   const out = [];

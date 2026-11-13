@@ -83,7 +83,16 @@ function transcriptInput(raw) {
   value.fps = value.frames ? Number(r.fps) : null;
   if (value.frames && !TP.FPS.includes(value.fps)) errors.push("fps");
   // Drop-frame (";"), only at the rates that have it.
-  value.drop_frame = value.frames && r.drop === true && (value.fps === 29.97 || value.fps === 59.94);
+  value.df_timecode = value.frames && r.drop === true && (value.fps === 29.97 || value.fps === 59.94);
+  // A file with speaker labels for two voices or more: its questions are
+  // other voices' lines, so a pause alone isn't a gap there
+  // (public/app/transcript-parse.js pausesFor). One whose only label is the
+  // speaker's may have had its questions cut out. An older phone sends no
+  // count: one, so a pause is a gap (a line can't bridge it; nothing goes
+  // that shouldn't).
+  value.labelled = r.labelled === true;
+  value.voices = Number.isInteger(r.voices) && r.voices >= 0 && r.voices <= 500 ? r.voices : 1;
+  const pauses = TP.pausesFor({ labelled: value.labelled, voices: value.voices });
   const list = Array.isArray(r.cues) ? r.cues : null;
   if (!list || !list.length) errors.push("cues");
   else if (list.length > TP.MAX_CUES) errors.push("too_many_cues");
@@ -100,9 +109,10 @@ function transcriptInput(raw) {
       }
       total += t.length;
       // A cue after someone else's words (the browser marks it: a question
-      // left out), or after a long pause: a line doesn't reach back across it.
+      // left out), or, unless the file names two voices, after a long pause:
+      // a line doesn't reach back across it.
       const prev = cues[cues.length - 1];
-      const gap = !!prev && (c.gap === true || s - prev.e > TP.PAUSE_MS || s < prev.s);
+      const gap = !!prev && (c.gap === true || (pauses && s - prev.e > TP.PAUSE_MS) || s < prev.s);
       cues.push(gap ? { n: cues.length + 1, s, e, t, gap: true } : { n: cues.length + 1, s, e, t });
     }
     if (total > TP.MAX_TOTAL) errors.push("too_long");
@@ -145,6 +155,49 @@ function askOrRefuse(words, ctx, where, issues, what) {
   if (ctx.byClaude || !ctx.asks) issues.push({ where, issue: `${what} has "${open.join('", "')}", a word of a name on the film's cards: pick another` });
   else for (const w of open) ctx.asks.add(w);
 }
+// A minor's name run into a hashtag or a word: four letters or more as
+// utils/studio-films.js minorRunIns reads it (an ordinary word that starts
+// or ends with one, "island" for an Isla, is asked); three, certain where camelCase
+// starts and ends it ("#PrayForKai", "KaiStrong"), asked at the start or the
+// end of a word in a tag ("#teamkai", "#kaistrong"). In an ordinary word a
+// three-letter one is the word ("same" for a Sam). 041's studio_minor_run_in
+// reads the certain ones.
+function runIns(text, people) {
+  const r = U.minorRunIns(text, people);
+  const sure = new Set(r.sure);
+  const maybe = new Set(r.maybe);
+  const raw = String(text || "");
+  const shorts = new Set();
+  for (const p of people || []) if (p && p.is_minor) for (const w of String(p.name || "").toLowerCase().split(/[^\p{L}\p{M}]+/u)) if (Array.from(w).length === 3) shorts.add(w);
+  if (shorts.size) {
+    const tags = [...raw.matchAll(/[#@][^\s#@]+/gu)].map((c) => [c.index, c.index + c[0].length]);
+    for (const m of raw.matchAll(/[\p{L}\p{M}]+/gu)) {
+      const tok = m[0];
+      const low = tok.toLowerCase();
+      if (low.length !== tok.length) continue;
+      const bounds = new Set([0, tok.length]);
+      let camel = false;
+      for (let i = 1; i < tok.length; i++) {
+        if (/\p{Lu}/u.test(tok[i]) && /\p{Ll}/u.test(tok[i - 1])) {
+          bounds.add(i);
+          camel = true;
+        }
+      }
+      const inTag = tags.some(([a, b]) => m.index >= a && m.index < b);
+      for (const w of shorts) {
+        if (low === w) continue;
+        for (let i = low.indexOf(w); i >= 0; i = low.indexOf(w, i + 1)) {
+          const j = i + w.length;
+          const everyday = U.EVERYDAY_NAMES.has(w);
+          if (camel && bounds.has(i) && bounds.has(j)) (everyday ? maybe : sure).add(w);
+          else if (inTag && (i === 0 || j === low.length) && !everyday) maybe.add(w);
+        }
+      }
+    }
+  }
+  for (const w of sure) maybe.delete(w);
+  return { sure: [...sure], maybe: [...maybe] };
+}
 function checkQuote(pick, ctx, where) {
   const p = pick && typeof pick === "object" ? pick : {};
   const tr = (ctx.transcripts || []).find((t) => t.ref === p.transcript || t.id === p.transcript);
@@ -163,12 +216,15 @@ function checkQuote(pick, ctx, where) {
     }[found.why] || "not found";
     return { ok: false, issue: { where, issue: why } };
   }
-  if (namesTrouble(found.quote, ctx.people)) return { ok: false, issue: { where, issue: "this line names someone on the film's cards (or a word of a minor's name): pick another" } };
+  // A minor's name run into a hashtag or a word ("#PrayForJamie") counts too:
+  // the name where a word starts or ends, asked about inside one.
+  const runIn = runIns(found.quote, ctx.people);
+  if (namesTrouble(found.quote, ctx.people) || runIn.sure.length) return { ok: false, issue: { where, issue: "this line names someone on the film's cards (or a word of a minor's name): pick another" } };
   // One word of an adult's name ("Darnell taught me everything"): Claude
   // picks another; a person is asked.
   const nw = nameWords(found.quote, ctx.people);
   const held = [];
-  askOrRefuse([...nw.sure, ...nw.maybe], ctx, where, held, "this line");
+  askOrRefuse([...nw.sure, ...nw.maybe, ...runIn.maybe], ctx, where, held, "this line");
   if (held.length) return { ok: false, issue: held[0] };
   const voice = K.lintWords(found.quote, where);
   if (voice.length) return { ok: false, issue: { where, issue: `${voice[0].issue} (on screen the kit allows none): pick another line` } };
@@ -187,7 +243,7 @@ function ownWords(text, max, where, ctx, issues) {
   if (t) {
     const nw = nameWords(t, ctx.people);
     // A word of a minor's name run into a hashtag or a word counts too ("#jordanstrong").
-    const runIn = U.minorRunIns(t, ctx.people);
+    const runIn = runIns(t, ctx.people);
     if (namesTrouble(t, ctx.people) || nw.sure.length || runIn.sure.length) issues.push({ where, issue: "no names here: the code or the role instead" });
     else askOrRefuse([...nw.maybe, ...runIn.maybe], ctx, where, issues, "this");
     for (const q of writtenLines(t)) {
@@ -303,7 +359,7 @@ function rowsFor(value) {
 // A transcript as Claude reads it: numbered cues with their times, the
 // names in them as codes (tr.shown, when the route masked them).
 function transcriptText(tr, { from = 1, to = Infinity } = {}) {
-  const opts = { frames: !!tr.frames, fps: tr.fps, drop: !!tr.drop_frame };
+  const opts = { frames: !!tr.frames, fps: tr.fps, drop: !!tr.df_timecode };
   return (tr.shown || tr.cues)
     .filter((c) => c.n >= from && c.n <= to)
     .map((c) => `${tr.ref}#${c.n} [${TP.tc(c.s, opts)}–${TP.tc(c.e, opts)}]${c.gap ? " (after a question or a pause: a line doesn't reach back across it)" : ""} ${c.t}`)
@@ -354,12 +410,93 @@ function maskNames(text, people) {
       if (n >= 3 || (x.minor && n === 2 && !U.EVERYDAY_2.has(w.toLowerCase()))) swap(w, x.by);
     }
   }
+  // One word of a minor's name run into another word ("#PrayForJamie",
+  // "JamieStrong", "#teamjamie"): four letters or more, anywhere in a tag,
+  // and in an ordinary word where it's the name (utils/studio-films.js
+  // minorRunIns: "Jamiestrong", "JamieStrong"), not where the word is a word
+  // ("island" for an Isla, "umbrella" for an Ella); an everyday one ("hope")
+  // written with its capital ("#PrayForHope"), or in a tag ("#prayforhope"),
+  // not in an ordinary word ("hopeful"). Three letters: where camelCase
+  // starts and ends it ("#PrayForKai", "KaiStrong"), or at the start or the
+  // end of a word in a tag ("#teamkai"), never in an ordinary word ("same"
+  // for a Sam).
+  // The chunk (a run with no space) a token sits in, found once per chunk:
+  // tokens come in order, so the last one found is reused.
+  let span = { str: null, a: 0, b: 0 };
+  const spanAt = (str, off) => {
+    if (span.str !== str || off < span.a || off >= span.b) {
+      let a = off;
+      let b = off;
+      while (a > 0 && !/\s/u.test(str[a - 1])) a -= 1;
+      while (b < str.length && !/\s/u.test(str[b])) b += 1;
+      span = { str, a, b };
+    }
+    return span;
+  };
+  const inTag = (str, off) => /[#@]/.test(str.slice(spanAt(str, off).a, off));
+  // The run-in reading, once per chunk and name (a long run of letters with
+  // the name many times in it is read once, not once a time); a chunk past
+  // 200 characters isn't read: a name that's no everyday word in it is
+  // coded wherever it stands.
+  const reads = new Map();
+  const runInSure = (chunk, full, w) => {
+    if (chunk.length > 200) return true;
+    const key = full + "\u0000" + chunk;
+    if (!reads.has(key)) reads.set(key, new Set(U.minorRunIns(chunk, [{ name: full, is_minor: true }]).sure));
+    return reads.get(key).has(w);
+  };
+  const chunkAt = (str, off) => {
+    const sp = spanAt(str, off);
+    return str.slice(sp.a, sp.b);
+  };
+  for (const x of subjects.filter((v) => v.minor)) {
+    for (const w of x.full.toLowerCase().split(/[^\p{L}\p{M}]+/u).filter((v) => Array.from(v).length >= 3)) {
+      const short = Array.from(w).length === 3;
+      out = out.replace(/[\p{L}\p{M}]+/gu, (tok, off, str) => {
+        const low = tok.toLowerCase();
+        if (low === w || !low.includes(w)) return tok;
+        if (low.length !== tok.length) return short ? tok : ` ${mark(x.by)} `;
+        const tag = inTag(str, off);
+        const bounds = new Set([0, tok.length]);
+        let camel = false;
+        for (let k = 1; k < tok.length; k++) {
+          if (/\p{Lu}/u.test(tok[k]) && /\p{Ll}/u.test(tok[k - 1])) {
+            bounds.add(k);
+            camel = true;
+          }
+        }
+        let res = "";
+        let i = 0;
+        let chunk = null;
+        for (let at = low.indexOf(w); at >= 0; at = low.indexOf(w, at + w.length)) {
+          const j = at + w.length;
+          // In a tag, coded unless an English word holds the letters
+          // ("#islandlife"); in an ordinary word, where it's the name.
+          const here = short
+            ? (camel && bounds.has(at) && bounds.has(j)) || (tag && (at === 0 || j === low.length))
+            : U.EVERYDAY_NAMES.has(w)
+              ? /\p{Lu}/u.test(tok[at]) || tag
+              : tag
+                ? !U.heldInRun(low, at, w.length)
+                : runInSure(chunk === null ? (chunk = chunkAt(str, off)) : chunk, x.full, w);
+          if (here) {
+            res += tok.slice(i, at) + ` ${mark(x.by)} `;
+            i = j;
+          }
+        }
+        return res + tok.slice(i);
+      });
+    }
+  }
   return out.replace(/\u0001(\d+)\u0002/g, (_, k) => codes[Number(k)]);
 }
 
 module.exports = {
+  LABEL_MAX,
+  clean,
   TP,
   maskNames,
+  runIns,
   writtenLines,
   nameWords,
   EMOJI_RUN,

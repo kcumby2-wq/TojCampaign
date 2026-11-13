@@ -634,7 +634,7 @@
       t.show(null,
         '<div class="screen">' + back + '<h1 class="title sm">' + (p ? "Clearance card" : "Add a card") + '</h1><p class="lede">Everyone on camera gets one. The name stays on this card; everything else carries the code.' + (p && p.cleared_at ? " Changing a cleared card clears it again." : "") + "</p>" +
         (p ? '<div class="field"><span class="label">Code</span><div class="name">' + h(p.person_code) + "</div></div>" : '<div class="field"><label class="label" for="pCode">Code <small>(the athlete ID; a parent adds -P1)</small></label><input class="input" id="pCode" maxlength="20" autocapitalize="characters" placeholder="' + h(f.athlete_id) + '" value="' + h(s.person_code) + '"></div>') +
-        '<div class="field"><label class="label" for="pName">Name</label><input class="input" id="pName" maxlength="80" autocomplete="off" value="' + h(s.name) + '"></div>' +
+        '<div class="field"><label class="label" for="pName">Name</label><input class="input" id="pName" maxlength="80" autocomplete="off" aria-describedby="pNameHint" value="' + h(s.name) + '"><span class="sub" id="pNameHint">First name first, as on the release.</span></div>' +
         '<div class="field"><label class="label" for="pRole">Role</label><select class="input" id="pRole">' + ["athlete", "parent", "guardian", "coach", "other"].map(function (r) { return '<option value="' + r + '"' + (s.role === r ? " selected" : "") + ">" + r + "</option>"; }).join("") + "</select></div>" +
         '<div style="display:flex;flex-direction:column;gap:8px">' +
         sw("texas_youth", "Texas youth athlete", "Unidentifiable until counsel clears it: no face, name or jersey number", ty) +
@@ -686,7 +686,7 @@
       body.names_ok = namesOk(btn, asked);
       btn.disabled = true;
       try {
-        if (p) { body.seen = p.updated_at; var r = await t.post("/api/studio-films/films/" + id + "/people/" + p.id, body, "PATCH"); t.toast(r.uncleared ? "Saved. It needs clearing again." : "Saved."); }
+        if (p) { body.seen = p.updated_at; var r = await t.post("/api/studio-films/films/" + id + "/people/" + p.id, body, "PATCH"); t.toast((r.uncleared ? "Saved. It needs clearing again." : "Saved.") + (r.words_removed ? " " + r.words_removed + " kept line" + (r.words_removed === 1 ? "" : "s") + " with their name in it went too." : "") + (r.story_named ? " The film's title or story still reads as naming someone on its cards: change it now." : r.story_coded ? " The film's title or story had their name: it has the code now." : "")); }
         else { body.person_code = s.person_code; await t.post("/api/studio-films/films/" + id + "/people", body); t.toast("Card added."); }
         T().go("#film/" + id);
       } catch (e) { if (nameAsk(btn, e, asked, ["title_may_have_name", "story_may_have_name"])) return; btn.disabled = false; say("pMsg", why(e), true); }

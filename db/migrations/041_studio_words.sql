@@ -31,8 +31,9 @@ create table if not exists public.studio_transcripts (
   label text not null check (char_length(btrim(label)) between 1 and 60),
   frames boolean not null default false,
   fps numeric(6, 3) check (fps is null or fps in (23.976, 24, 25, 29.97, 30, 50, 59.94, 60)),
-  -- Drop-frame timecode (";" before the frames), as the file had it.
-  drop_frame boolean not null default false,
+  -- DF timecode (";" before the frames: 29.97 and 59.94 skip some frame
+  -- labels), as the file had it.
+  df_timecode boolean not null default false,
   -- [{ n, s, e, t, gap }]: the cue's number (1, 2, ...), its start and end
   -- in milliseconds, and its words; gap: true when it comes after someone
   -- else's words (a question the browser left out) or a long pause, which a
@@ -44,7 +45,7 @@ create table if not exists public.studio_transcripts (
   created_by text not null check (char_length(created_by) between 3 and 200),
   created_at timestamptz not null default now(),
   constraint studio_transcripts_fps check ((fps is not null) = frames),
-  constraint studio_transcripts_drop check (not drop_frame or fps in (29.97, 59.94))
+  constraint studio_transcripts_df check (not df_timecode or fps in (29.97, 59.94))
 );
 create index if not exists studio_transcripts_film_idx on public.studio_transcripts (film_id, created_at);
 create index if not exists studio_transcripts_person_idx on public.studio_transcripts (person_id);
@@ -172,6 +173,32 @@ create table if not exists public.studio_film_runs (
 create index if not exists studio_film_runs_film_idx on public.studio_film_runs (film_id, created_at desc);
 alter table public.studio_film_runs enable row level security;
 
+-- One words run and one directions run at a time for a film: under the
+-- film's row lock, the check and the run's two rows in one step (a run
+-- quiet for 90 minutes counts as ended).
+create or replace function public.studio_film_run_start(p_film uuid, p_kind text, p_role text, p_task text, p_by text)
+returns table (run_id uuid)
+language plpgsql volatile set search_path = '' as $$
+declare
+  f public.studio_films;
+  r uuid;
+begin
+  select * into f from public.studio_films where id = p_film for update;
+  if f.id is null then
+    raise exception 'no film %', p_film;
+  end if;
+  if f.pulled_at is not null or f.archived_at is not null then
+    raise exception 'film % is closed', f.id;
+  end if;
+  if exists (select 1 from public.studio_film_runs x join public.agent_runs a on a.id = x.run_id
+              where x.film_id = p_film and x.kind = p_kind and a.status = 'running' and a.created_at > now() - interval '90 minutes') then
+    raise exception 'already running: a % run is going for this film', p_kind;
+  end if;
+  insert into public.agent_runs (role, client_id, task, status, created_by) values (p_role, null, p_task, 'running', p_by) returning id into r;
+  insert into public.studio_film_runs (run_id, film_id, kind, created_by) values (r, p_film, p_kind, p_by);
+  return query select r;
+end $$;
+
 -- ── Gates ─────────────────────────────────────────────────────────────────
 -- Whose words can be kept: an adult speaker whose card is cleared, whose
 -- release covers their voice, and whose consent stands. null when they can
@@ -189,7 +216,8 @@ language sql immutable set search_path = '' as $$
 $$;
 
 -- Whether a quote is in a text from a whole word to a whole word: not
--- inside "4.4", "1,000", "can't" or "well-known".
+-- inside "4.4", "1,000", "5:30", "can't" (or "can´t", "can′t"),
+-- "well-known" or "1990–95" (public/app/transcript-parse.js JOIN).
 create or replace function public.studio_quote_whole(p_text text, p_quote text) returns boolean
 language plpgsql immutable set search_path = '' as $$
 declare
@@ -197,7 +225,7 @@ declare
   off int := 0;
   p int;
   w text := '^[[:alnum:]À-ÖØ-öø-ɏͰ-ϿЀ-ӿ]$';
-  j text := '^[.,''’‘`/-]$';
+  j text := '^[.,''’‘`/:´′ʼ＇‐‑‒–—―-]$';
   b1 text;
   b2 text;
   a1 text;
@@ -222,6 +250,75 @@ begin
   return false;
 end $$;
 
+-- One word of a minor's name on the film's cards (not an everyday word) run
+-- into another word, where it's the name for certain without an English
+-- word list: where camelCase starts and ends it ("#PrayForJamie",
+-- "JamieStrong", "#PrayForKai", "KaiStrong": three letters or more), or,
+-- four letters or more, with only words a tag or a file name runs a name
+-- into on either side ("#teamjamie", "jamiestrong", "#prayforjamie",
+-- "jamiequote", "#letsgojamie", "#bigjamieenergy"). The app reads more, with English words
+-- (utils/studio-films.js minorRunIns: "#jordanfootball", "#bigjamieenergy"),
+-- and it holds a card back, or takes a corrected minor's lines with them,
+-- for what it reads (routes/studio-films.js keptRunIns); an English word
+-- that holds a name ("island" for an Isla) is asked there and kept once the
+-- writer says it isn't one, so it's never read here. utils/studio-words.js
+-- runIns: a three-letter one in a lower-case tag is asked about. 039's
+-- studio_names_in reads whole words.
+create or replace function public.studio_minor_run_in(p_film uuid, p_text text) returns boolean
+language sql stable set search_path = '' as $$
+  with w as (
+    select distinct x as word
+      from public.studio_film_people p, lateral regexp_split_to_table(lower(p.name), '[^[:alpha:]]+') as x
+     where p.film_id = p_film and p.is_minor and char_length(x) >= 3
+       and not (x = any (array[
+         'ace', 'april', 'archer', 'art', 'ash', 'august', 'autumn', 'baker', 'bear', 'bell', 'best', 'bill', 'bird',
+         'bishop', 'black', 'bliss', 'blue', 'bond', 'booth', 'brook', 'brooks', 'brown', 'buck', 'buddy', 'bush',
+         'butler', 'carter', 'case', 'cash', 'chance', 'chase', 'church', 'clay', 'cliff', 'colt', 'cook', 'cooper',
+         'crow', 'dale', 'dash', 'dawn', 'day', 'deal', 'dean', 'don', 'dot', 'dove', 'drew', 'duke', 'dusty', 'early',
+         'earl', 'echo', 'eve', 'fair', 'faith', 'fern', 'field', 'fields', 'fisher', 'flint', 'ford', 'forest', 'fox',
+         'frank', 'free', 'frost', 'gale', 'gene', 'gold', 'golden', 'grace', 'grant', 'gray', 'green', 'grey', 'guy',
+         'hall', 'hardy', 'hart', 'haven', 'hawk', 'hazel', 'heath', 'hero', 'hill', 'hills', 'holly', 'honey',
+         'honor', 'hood', 'hope', 'house', 'hunt', 'hunter', 'ivy', 'jack', 'jade', 'jay', 'jet', 'jewel', 'joy',
+         'judge', 'june', 'justice', 'kind', 'king', 'kit', 'knight', 'lake', 'lance', 'lane', 'lark', 'laurel',
+         'legend', 'liberty', 'light', 'lily', 'link', 'long', 'lord', 'love', 'lucky', 'major', 'march', 'mark',
+         'marsh', 'mason', 'max', 'may', 'meadow', 'mercy', 'miles', 'misty', 'moon', 'noble', 'north', 'ocean',
+         'page', 'park', 'pat', 'patience', 'peace', 'pearl', 'penny', 'pepper', 'pierce', 'piper', 'pope', 'porter',
+         'power', 'price', 'pride', 'prince', 'queen', 'rain', 'ranger', 'raven', 'ray', 'read', 'rebel', 'reed',
+         'rice', 'rich', 'ridge', 'river', 'rob', 'rock', 'rocky', 'rose', 'royal', 'ruby', 'rush', 'rusty', 'sage',
+         'saint', 'sandy', 'scout', 'shade', 'shadow', 'shepherd', 'shore', 'short', 'silver', 'sky', 'small', 'smith',
+         'snow', 'sonny', 'south', 'spring', 'star', 'steel', 'sterling', 'stone', 'storm', 'stormy', 'strong', 'sue',
+         'summer', 'sunday', 'sunny', 'sweet', 'swift', 'tad', 'tank', 'true', 'trust', 'tucker', 'valor', 'violet',
+         'wade', 'walker', 'ward', 'warren', 'waters', 'way', 'wells', 'west', 'white', 'will', 'willow', 'winter',
+         'wise', 'wolf', 'wood', 'woods', 'worth', 'wren', 'young',
+         'amber', 'angel', 'carol', 'christian', 'crystal', 'daisy', 'destiny', 'genesis', 'glen', 'harmony', 'iris', 'jasmine',
+         'journey', 'lyric', 'melody', 'olive', 'robin', 'trinity']))
+  ), beside as (
+    -- utils/studio-films.js runBeside: the file words, the tags' last words,
+    -- and the words a tag starts a name with.
+    select b from unnest(array[
+      'quote', 'quotes', 'card', 'cards', 'promo', 'promos', 'cut', 'cuts', 'edit', 'edits', 'final', 'finals', 'reel', 'reels', 'slide', 'slides',
+      'story', 'stories', 'clip', 'clips', 'cover', 'covers', 'title', 'titles', 'draft', 'drafts', 'strong', 'team', 'hero', 'heroes', 'teaser',
+      'teasers', 'trailer', 'intro', 'outro', 'broll', 'bts', 'vo', 'mix', 'master', 'export', 'exports', 'select', 'selects', 'graphic', 'graphics',
+      'gfx', 'thumb', 'thumbs', 'thumbnail', 'poster', 'posters', 'still', 'stills', 'photo', 'photos', 'pic', 'pics', 'carousel', 'post', 'posts',
+      'short', 'shorts', 'frame', 'frames', 'spot', 'spots', 'sizzle', 'recap', 'highlight', 'highlights', 'feature', 'profile', 'interview',
+      'interviews', 'sitdown',
+      'nation', 'fam', 'family', 'gang', 'forever', 'crew', 'squad', 'army', 'pride', 'power', 'time', 'era', 'way', 'life', 'season', 'szn', 'mode',
+      'legacy', 'love', 'fans', 'stan', 'club', 'world', 'vibes', 'energy', 'effect', 'magic', 'made', 'proud', 'hype', 'goat', 'goats',
+      'go', 'letsgo', 'gogo', 'pray', 'prayfor', 'thanks', 'thankyou', 'welove', 'weloveyou', 'thegoat', 'allday', 'happy', 'happybirthday', 'birthday', 'bday', 'congrats', 'congratulations', 'proudof',
+      'proudofyou', 'coach', 'dear', 'hey', 'shoutout', 'welcome', 'free', 'justice', 'lil', 'big', 'our', 'my', 'iloveyou', 'loveyou', 'missyou',
+      'ilove', 'rip', 'day', 'week', 'night', 'watch', 'game', 'games', 'show', 'hoops', 'ball', 'bball', 'mvp']) as b
+  ), hay as (
+    select ' ' || btrim(regexp_replace(lower(regexp_replace(coalesce(p_text, ''), '([[:lower:]])([[:upper:]])', '\1 \2', 'g')), '[^[:alpha:]]+', ' ', 'g')) || ' ' as split,
+           ' ' || btrim(regexp_replace(lower(coalesce(p_text, '')), '[^[:alpha:]]+', ' ', 'g')) || ' ' as plain
+  )
+  select p_text is not null and exists (
+    select 1 from w, hay
+     where hay.split like '% ' || w.word || ' %'
+        or char_length(w.word) >= 4
+           and hay.plain ~ (' (?:' || (select string_agg(b, '|' order by char_length(b) desc) from beside) || ')*' || w.word
+                            || '(?:' || (select string_agg(b, '|' order by char_length(b) desc) from beside) || ')* '))
+$$;
+
 create or replace function public.studio_transcripts_gate() returns trigger
 language plpgsql set search_path = '' as $$
 declare
@@ -235,8 +332,8 @@ begin
     return old;
   end if;
   if tg_op = 'UPDATE' then
-    if row(new.film_id, new.person_id, new.frames, new.fps, new.drop_frame, new.cues, new.cue_count, new.words, new.duration_ms, new.created_by, new.created_at)
-       is distinct from row(old.film_id, old.person_id, old.frames, old.fps, old.drop_frame, old.cues, old.cue_count, old.words, old.duration_ms, old.created_by, old.created_at) then
+    if row(new.film_id, new.person_id, new.frames, new.fps, new.df_timecode, new.cues, new.cue_count, new.words, new.duration_ms, new.created_by, new.created_at)
+       is distinct from row(old.film_id, old.person_id, old.frames, old.fps, old.df_timecode, old.cues, old.cue_count, old.words, old.duration_ms, old.created_by, old.created_at) then
       raise exception 'a transcript is kept as it came: remove it and add it again';
     end if;
     if public.studio_names_in(new.film_id, new.label) then
@@ -307,7 +404,8 @@ begin
     raise exception 'film % is closed', f.id;
   end if;
   -- Words in our own voice (a title, a note, a caption): no names.
-  if public.studio_names_in(new.film_id, new.title) or public.studio_names_in(new.film_id, new.note) then
+  if public.studio_names_in(new.film_id, new.title) or public.studio_names_in(new.film_id, new.note)
+     or public.studio_minor_run_in(new.film_id, concat_ws(' ', new.title, new.note)) then
     raise exception 'what''s written about a line keeps no names: write the code or the role instead';
   end if;
   if new.kind in ('structure', 'cutdown') then
@@ -354,11 +452,11 @@ begin
   if new.start_ms > new.end_ms or new.start_ms < s_from or new.end_ms > e_to then
     raise exception 'a line''s times are inside its cues';
   end if;
-  if public.studio_names_in(new.film_id, new.quote) then
+  if public.studio_names_in(new.film_id, new.quote) or public.studio_minor_run_in(new.film_id, new.quote) then
     raise exception 'that line names someone on the film''s cards: pick another';
   end if;
   if new.kind = 'caption' then
-    if public.studio_names_in(new.film_id, new.text) then
+    if public.studio_names_in(new.film_id, new.text) or public.studio_minor_run_in(new.film_id, new.text) then
       raise exception 'a caption keeps no names beyond what the speaker said';
     end if;
     if left(new.text, char_length(new.quote) + 2) <> '“' || new.quote || '”' then
@@ -403,32 +501,70 @@ begin
   return null;
 end $$;
 
--- A card added, renamed or corrected to a minor is read against what the
--- film keeps in words: a kept line, caption, title or note, a transcript's
--- label, or the directions. If any names this person, the card waits until
--- those are removed (Real words), as the title and the story do.
+-- A card added or renamed is read against what the film keeps in words: a
+-- kept line, caption, title or note, a transcript's label, or the
+-- directions. If any names this person, the card waits until those are
+-- removed (Real words), as the title and the story do, and the refusal says
+-- which. A card corrected to a minor is the safety step itself, so it never
+-- waits: what names them goes with it (lines and directions; a label is
+-- given the transcript's own code). Runs after studio_people_words (its
+-- name sorts after it), so their own transcripts and lines are gone first.
 create or replace function public.studio_people_kept_names() returns trigger
 language plpgsql set search_path = '' as $$
+declare
+  words_in text := 'select 1';
 begin
   if tg_op = 'UPDATE' and row(new.name, new.reviewer_name, new.is_minor) is not distinct from row(old.name, old.reviewer_name, old.is_minor) then
     return null;
   end if;
+  if tg_op = 'UPDATE' and new.is_minor and not old.is_minor then
+    delete from public.studio_words w where w.film_id = new.film_id and w.kind <> 'beat'
+       and (public.studio_names_in(new.film_id, concat_ws(' ', w.quote, w.text, w.title, w.note))
+            or public.studio_minor_run_in(new.film_id, concat_ws(' ', w.quote, w.text, w.title, w.note)));
+    delete from public.studio_words w where w.film_id = new.film_id and w.kind = 'beat'
+       and (public.studio_names_in(new.film_id, concat_ws(' ', w.quote, w.text, w.title, w.note))
+            or public.studio_minor_run_in(new.film_id, concat_ws(' ', w.quote, w.text, w.title, w.note)));
+    update public.studio_transcripts t
+       set label = coalesce((select p.person_code from public.studio_film_people p where p.id = t.person_id), 'A speaker') || ' transcript'
+     where t.film_id = new.film_id and public.studio_people_label_names(t.label, new.name, new.reviewer_name, true);
+    perform set_config('studio.correcting', new.id::text, true);
+    delete from public.studio_film_directions d where d.film_id = new.film_id
+       and public.studio_names_in(new.film_id, public.studio_json_strings(d.directions) || ' ' || coalesce(d.why_recommended, '') || ' ' || public.studio_json_strings(d.questions));
+    perform set_config('studio.correcting', '', true);
+    return null;
+  end if;
   if exists (select 1 from public.studio_words w where w.film_id = new.film_id
-               and public.studio_names_in(new.film_id, concat_ws(' ', w.quote, w.text, w.title, w.note)))
-     or exists (select 1 from public.studio_transcripts t where t.film_id = new.film_id and public.studio_names_in(new.film_id, t.label))
-     -- A label carries no word of anyone's name at all (as when it's added).
-     or exists (select 1 from public.studio_transcripts t,
-                       lateral regexp_split_to_table(lower(concat_ws(' ', new.name, new.reviewer_name)), '[^[:alpha:]]+') as w
-                 where t.film_id = new.film_id
-                   and char_length(w) >= (case when new.is_minor then 2 else 3 end)
-                   and w <> all (array['he', 'do', 'an', 'so', 'go', 'oh', 'no', 'me', 'my', 'we', 'us', 'it', 'in', 'on', 'at', 'to', 'be', 'by', 'of', 'or', 'up', 'as', 'is', 'am', 'if'])
-                   and (' ' || btrim(regexp_replace(lower(regexp_replace(t.label, '([[:lower:]])([[:upper:]])', '\1 \2', 'g')), '[^[:alpha:]]+', ' ', 'g')) || ' ') like '% ' || w || ' %')
-     or exists (select 1 from public.studio_film_directions d where d.film_id = new.film_id
-                 and public.studio_names_in(new.film_id, public.studio_json_strings(d.directions) || ' ' || coalesce(d.why_recommended, '') || ' ' || public.studio_json_strings(d.questions))) then
-    raise exception 'words kept on this film name someone on this card: remove those lines (Real words) first';
+               and (public.studio_names_in(new.film_id, concat_ws(' ', w.quote, w.text, w.title, w.note))
+                    or new.is_minor and public.studio_minor_run_in(new.film_id, concat_ws(' ', w.quote, w.text, w.title, w.note)))) then
+    raise exception 'a line, caption, title or note kept on this film names someone on this card: remove it (Real words) first';
+  end if;
+  if exists (select 1 from public.studio_transcripts t where t.film_id = new.film_id
+               and (public.studio_names_in(new.film_id, t.label) or public.studio_people_label_names(t.label, new.name, new.reviewer_name, new.is_minor))) then
+    raise exception 'a transcript''s label on this film has a word of a name on this card: rename it (Real words) first';
+  end if;
+  if exists (select 1 from public.studio_film_directions d where d.film_id = new.film_id
+               and public.studio_names_in(new.film_id, public.studio_json_strings(d.directions) || ' ' || coalesce(d.why_recommended, '') || ' ' || public.studio_json_strings(d.questions))) then
+    raise exception 'the film''s directions name someone on this card: talk to Kyron before adding it';
   end if;
   return null;
 end $$;
+
+-- A card added or renamed, and a correction to a minor: 039's
+-- studio_people_title_names (one definition, so running 039 again keeps it).
+
+-- Whether a transcript's label has a word of this name (a label carries no
+-- word of anyone's name at all: three letters or more, two for a minor, not
+-- a two-letter everyday word; its words split where they run together).
+create or replace function public.studio_people_label_names(p_label text, p_name text, p_reviewer text, p_minor boolean) returns boolean
+language sql immutable set search_path = '' as $$
+  select exists (
+    select 1 from regexp_split_to_table(lower(concat_ws(' ', p_name, p_reviewer)), '[^[:alpha:]]+') as w
+     where char_length(w) >= (case when p_minor then 2 else 3 end)
+       and w <> all (array['he', 'do', 'an', 'so', 'go', 'oh', 'no', 'me', 'my', 'we', 'us', 'it', 'in', 'on', 'at', 'to', 'be', 'by', 'of',
+         'or', 'up', 'as', 'is', 'am', 'if', 'hi', 'ok', 'ah', 'eh', 'uh', 'um', 'yo', 'ya', 'ha', 'ho', 'lo', 'la', 'ma', 'pa', 'ye', 'ow', 'ox', 'ax',
+         'id', 're', 'vs'])
+       and (' ' || btrim(regexp_replace(lower(regexp_replace(coalesce(p_label, ''), '([[:lower:]])([[:upper:]])', '\1 \2', 'g')), '[^[:alpha:]]+', ' ', 'g')) || ' ') like '% ' || w || ' %')
+$$;
 
 -- Every string in a JSON value, one to a line (a name after a line break
 -- is a name).
@@ -454,6 +590,10 @@ language sql immutable set search_path = '' as $$
   select (rtrim(regexp_replace(path, ';[^/]*', '', 'g'), '/') ~ '\.(jpe?g|jpe|jfif|pjpeg|pjp|png|apng|gif|webp|heic|heif|avif|bmp|dib|tiff?|svgz?|ico|jxl|jp2|j2k|dng|cr2|nef|arw|raw|psd|mp4|m4v|mov|webm|mkv|avi|wmv|flv|mpe?g|3gp|ts|m3u8)$')
       -- Instagram's /p/<id>/media/ address sends the picture itself.
       or (host ~ '(^|\.)instagram\.com$' and rtrim(path, '/') ~ '^/(p|reel|tv)/[^/]+/media$')
+      -- Cloudinary's delivery addresses, and Google Drive's download address.
+      or (host ~ '(^|\.)cloudinary\.com$' and path ~ '/(image|video)/(upload|fetch|private|authenticated)/')
+      or (host = 'drive.google.com' and path ~ '^/uc' and query ~ '(^|&)export=')
+      or host ~ '(^|\.)(drive\.usercontent\.google\.com|images\.ctfassets\.net|videos\.ctfassets\.net)$'
       or query ~ '(^|&)(format|fm|ext|type|mime)=(jpe?g|png|gif|webp|avif|heic|svg|bmp|image%2f[a-z]+|image/[a-z]+)(&|$)'
       or host ~ '(^|\.)(pbs\.twimg\.com|images\.unsplash\.com|plus\.unsplash\.com|i\.imgur\.com|i\.redd\.it|preview\.redd\.it|lh[0-9]\.googleusercontent\.com|media\.licdn\.com|scontent[a-z0-9.-]*\.fbcdn\.net|scontent[a-z0-9.-]*\.cdninstagram\.com|i\.pinimg\.com|images\.squarespace-cdn\.com|cdn\.shopify\.com|i\.ytimg\.com|img\.youtube\.com|i\.vimeocdn\.com|media\.giphy\.com|i\.giphy\.com|images\.pexels\.com|cdn\.pixabay\.com|live\.staticflickr\.com|farm[0-9]+\.staticflickr\.com|upload\.wikimedia\.org|video\.twimg\.com|v[0-9]+\.cdninstagram\.com)$'
     from p
@@ -476,11 +616,14 @@ begin
     end if;
   end loop;
   -- Every film reads the taste library: no name on any film's cards in it.
-  if public.studio_names_in_any(concat_ws(E'\n', new.title, new.note, new.take, new.leave, array_to_string(new.tags, ' '))) then
+  -- Read when its words are written or change (archiving one written before
+  -- a card always goes through).
+  if (tg_op = 'INSERT' or row(new.title, new.note, new.take, new.leave, new.tags) is distinct from row(old.title, old.note, old.take, old.leave, old.tags))
+     and public.studio_names_in_any(concat_ws(E'\n', new.title, new.note, new.take, new.leave, array_to_string(new.tags, ' '))) then
     raise exception 'taste notes keep no names: they''re read for every film';
   end if;
   -- A link to the work, never to a picture or a video file of it.
-  if public.studio_taste_file_link(new.url) then
+  if (tg_op = 'INSERT' or new.url is distinct from old.url) and public.studio_taste_file_link(new.url) then
     raise exception 'a taste note links to the work, not to a picture or a video file of it';
   end if;
   new.search := setweight(to_tsvector('english', coalesce(new.title, '')), 'A')
@@ -499,6 +642,12 @@ declare
   f public.studio_films;
 begin
   if tg_op = 'DELETE' then
+    -- Only when a card on its film is corrected to a minor, and they name
+    -- them (studio_people_kept_names, in that one statement).
+    if coalesce(current_setting('studio.correcting', true), '') <> '' and pg_trigger_depth() > 1
+       and exists (select 1 from public.studio_film_people p where p.id::text = current_setting('studio.correcting', true) and p.film_id = old.film_id and p.is_minor) then
+      return old;
+    end if;
     raise exception 'directions are kept';
   end if;
   if tg_op = 'UPDATE' then
@@ -566,7 +715,8 @@ create or replace trigger studio_words_gone after delete on public.studio_words
   for each row execute function public.studio_words_gone();
 create or replace trigger studio_film_people_words after update on public.studio_film_people
   for each row execute function public.studio_people_words();
-create or replace trigger studio_film_people_kept_names after insert or update on public.studio_film_people
+-- After studio_film_people_words (triggers run in name order).
+create or replace trigger studio_film_people_words_kept after insert or update on public.studio_film_people
   for each row execute function public.studio_people_kept_names();
 create or replace trigger studio_taste_gate before insert or update or delete on public.studio_taste
   for each row execute function public.studio_taste_gate();
@@ -671,7 +821,8 @@ begin
     'public.studio_brief_marks_gate()', 'public.studio_transcript_remove(uuid)', 'public.studio_words_remove(uuid)',
     'public.studio_words_save(uuid, uuid, text, text, jsonb, boolean)', 'public.studio_taste_search(text, text, int)',
     'public.studio_quote_whole(text, text)', 'public.studio_people_kept_names()', 'public.studio_json_strings(jsonb)',
-    'public.studio_taste_file_link(text)'] loop
+    'public.studio_taste_file_link(text)', 'public.studio_minor_run_in(uuid, text)', 'public.studio_people_label_names(text, text, text, boolean)',
+    'public.studio_film_run_start(uuid, text, text, text, text)'] loop
     execute format('revoke all on function %s from public', fn);
     foreach r in array array['anon', 'authenticated'] loop
       if exists (select 1 from pg_roles where rolname = r) then
@@ -692,6 +843,7 @@ begin
     execute 'grant execute on function public.studio_transcript_remove(uuid), public.studio_words_remove(uuid), '
       'public.studio_words_save(uuid, uuid, text, text, jsonb, boolean), public.studio_taste_search(text, text, int), '
       'public.studio_words_why_not(public.studio_film_people), public.studio_quote_whole(text, text), public.studio_json_strings(jsonb), '
-      'public.studio_taste_file_link(text) to service_role';
+      'public.studio_taste_file_link(text), public.studio_minor_run_in(uuid, text), public.studio_people_label_names(text, text, text, boolean), '
+      'public.studio_film_run_start(uuid, text, text, text, text) to service_role';
   end if;
 end $$;

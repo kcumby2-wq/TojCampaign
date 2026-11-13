@@ -177,8 +177,16 @@ test("a wrap-up goes to the whole kit: no name of anyone on any film's cards, an
   assert.deepEqual((await add({ worked: "Ask Dana about the light" })).data.fields, ["wrap_has_name"]);
   // A word that's surely a name isn't cleared by saying it isn't.
   assert.deepEqual((await add({ worked: "Marcus ran the open", names_ok: ["marcus"] })).data.fields, ["wrap_has_name"]);
-  // The database refuses another film's minor too.
+  // The database refuses another film's minor too, and their name's plain
+  // plural or possessive ("Kenjis").
   await assert.rejects(pool.query("insert into studio_film_wraps (film_id, worked, created_by) values ($1, 'kenji ran it', 'dir@toj.test')", [film.id]), /keep no names/);
+  await assert.rejects(pool.query("insert into studio_film_wraps (film_id, worked, created_by) values ($1, 'KENJIS OPEN RAN LONG', 'dir@toj.test')", [film.id]), /keep no names/);
+  await assert.rejects(pool.query("insert into studio_film_wraps (film_id, worked, created_by) values ($1, 'the Kenjiii energy', 'dir@toj.test')", [film.id]), /keep no names/);
+  // The database leaves short names' plurals to the app: "three times" for a minor Tim is kept.
+  await aFilm([{ person_code: "L9105", name: "Tim Lu", role: "athlete", is_minor: true, release_on_file: true, covers: { voice: true } }]);
+  ok(await add({ worked: "We ran it three times" }), "times");
+  assert.deepEqual((await add({ worked: "the Kenjiii energy" })).data.fields, ["wrap_has_minor_name"]);
+  assert.deepEqual((await add({ worked: "Kenjis open ran long" })).data.fields, ["wrap_has_minor_name"]);
   // A word that's a name only on a card added later: kept now, then held
   // back from the month's brief (and the brief refused) once the card is in.
   const w = ok(await add({ worked: "Riley set the lights early" }), "kept").wrap;
@@ -436,9 +444,12 @@ test("what every film shares is read against every card for names, not for ordin
     assert.deepEqual(read(t), { sure: [], maybe: [], minor: [] }, t);
   }
   // An everyday word that's a name, with a capital: asked, unless it's a
-  // minor's on the film it's written about; a month or a day, always asked.
+  // minor's mid-sentence; at a sentence's start, asked; a month or a day,
+  // always asked.
   assert.deepEqual(read("The Canon 5D Mark IV held up"), { sure: [], maybe: ["mark"], minor: [] });
-  assert.deepEqual(read("talked to Will after"), { sure: [], maybe: ["will"], minor: [] });
+  assert.deepEqual(read("talked to Will after"), { sure: ["will"], maybe: [], minor: ["will"] });
+  assert.deepEqual(read("Ask Hope before the drill").minor, ["hope"]);
+  assert.deepEqual(read("Hope never quits"), { sure: [], maybe: ["hope"], minor: [] });
   assert.deepEqual(read("talked to Will after", { film: [{ name: "Will Park", is_minor: true }] }).minor, ["will"]);
   assert.deepEqual(read("We shot in April", { film: [{ name: "April Moss", is_minor: true }] }), { sure: [], maybe: ["april"], minor: [] });
   assert.deepEqual(read("in lower case: will, hope, mark, kit"), { sure: [], maybe: [], minor: [] });
@@ -448,13 +459,34 @@ test("what every film shares is read against every card for names, not for ordin
   assert.deepEqual(read("coach Dana gave notes"), { sure: ["dana"], maybe: [], minor: [] });
   for (const t of ["#jordanstrong worked", "@jordan.hoops reposted it", "jordan_final_v2.mp4 was the cut", "the JordanStrong graphic", "instagram.com/jordanhoops"]) assert.deepEqual(read(t).minor, ["jordan"], t);
   const sorted = (r) => ({ sure: [...r.sure].sort(), maybe: [...r.maybe].sort(), minor: [...r.minor].sort() });
-  assert.deepEqual(sorted(read("#hopestrong and #ourjordanfam")), { sure: [], maybe: ["hope", "jordan"], minor: [] });
+  // A minor's everyday-word first name beside a tag's word is the name; a
+  // surname that's an everyday word there, and an everyday word, are asked.
+  assert.deepEqual(sorted(read("#hopestrong and #ourjordanfam")), { sure: ["hope", "jordan"], maybe: [], minor: ["hope", "jordan"] });
+  // English words around a minor's name in a tag: the name; an English word holding it: the word, asked.
+  assert.deepEqual(read("#jordanfootball").minor, ["jordan"]);
+  assert.deepEqual(read("Jordanfootball season").minor, ["jordan"]);
+  assert.deepEqual(U.kitNames("#summertime", [{ name: "Summer Ray", is_minor: true }]), { sure: [], maybe: ["summer"], minor: [] });
+  for (const t of ["Times are hard", "three times"]) assert.deepEqual(U.kitNames(t, [{ name: "Tim Ross" }]).sure, [], t);
+  for (const t of ["#golane", "#teamlane", "#lifelong"]) assert.equal(read(t).sure.length, 0, t);
+  assert.deepEqual(U.kitNames("#lifelong", [{ name: "Grace Long", is_minor: true }]).maybe, ["long"]);
+  // A plain plural or possessive; a whole name run into a tag; a minor's
+  // name where a word starts in a handle; a first and last name without the middle one.
+  for (const [t, w] of [["Jordans mom called", "jordan"], ["KIDDS DRILL", "kidd"], ["the Jordannn energy", "jordan"], ["#teamjordankidd", "jordankidd"], ["#jordankiddstrong", "jordankidd"],
+    ["instagram.com/jordanb_hoops", "jordan"]]) assert.ok(read(t).minor.includes(w), t);
+  // Ordinary plurals aren't a short name's: "three times" for a Tim, "the lens" for a Len.
+  const short = [{ name: "Tim Ross" }, { name: "Sid Lane", is_minor: true }, { name: "Liv Park", is_minor: true }, { name: "Len Cruz", is_minor: true }, { name: "Cam Diaz", is_minor: true }];
+  for (const t of ["three times", "both sides", "their lives", "the lens list", "two cams"]) assert.deepEqual(U.kitNames(t, short).sure, [], t);
+  assert.deepEqual(U.kitNames("Tims mom called", short).sure, ["tim"]);
+  assert.deepEqual(U.kitNames("the Joneses", [{ name: "Ann Jones", is_minor: true }]).minor, ["jones"]);
+  const mid = [{ name: "Grace Ann Long", is_minor: true }];
+  for (const t of ["#GraceLong", "#gracelong", "#GoGraceLong", "gracelong_quote_v1", "Grace Long ran it"]) assert.ok(U.kitNames(t, mid).minor.length > 0, t);
   assert.deepEqual(read("#teamrivers"), { sure: [], maybe: ["rivers"], minor: [] });
   // Certain only where a tag's own word is beside the name: "#teamtate", but
   // "#teamstate" (a Tate, or "team state") and "#dallascowboys" are asked.
   assert.deepEqual(read("#teamtate").minor, ["tate"]);
   assert.deepEqual(read("#teamstate"), { sure: [], maybe: ["tate"], minor: [] });
-  assert.deepEqual(U.kitNames("#dallascowboys", [{ name: "Dallas Cole", is_minor: true }]), { sure: [], maybe: ["dallas"], minor: [] });
+  // A name run into English words is the name ("#dallascowboys" for a minor Dallas: Dallas + cowboys).
+  assert.deepEqual(U.kitNames("#dallascowboys", [{ name: "Dallas Cole", is_minor: true }]).minor, ["dallas"]);
   // An ordinary word holds a name only beside a tag's word: "Jordanstrong", "teamjordan".
   assert.deepEqual(read("Jordanstrong all season").minor, ["jordan"]);
   assert.deepEqual(read("the teamjordan shirts").minor, ["jordan"]);
@@ -462,6 +494,8 @@ test("what every film shares is read against every card for names, not for ordin
   const head = "Monthly refresh of Same Work Milanote Kit (v3), April 2027: fold in what the team learned since Oct 3, 2026.";
   assert.deepEqual(read(U.withoutKnown(head, ["Same Work Milanote Kit", "same-work"])), { sure: [], maybe: [], minor: [] });
   assert.deepEqual(read(head).maybe.sort(), ["april", "kit"]);
+  // Whole words only: a kit word inside a longer one stays as written.
+  assert.equal(U.withoutKnown("Gear: ask Geary. Parent notes: Parenteau", ["Gear", "Parent"]).replace(/\s+/g, " ").trim(), ": ask Geary. notes: Parenteau");
 });
 
 test("the month's brief is read for what a person wrote: the kit's own words pass, a name is refused with the word, and a maybe is asked", async () => {
@@ -531,8 +565,26 @@ test("a discarded draft gives back what its refresh folded in, and its refresh n
     (await pool.query("select count(*)::int as n from studio_rule_candidates('same-work') where label = 'missing slate'")).rows[0].n,
   ];
   assert.deepEqual(await folded(), [true, "folded", 0]);
-  // Only the refresh that folded it gives it back, by its draft being discarded.
+  // Only the refresh that folded it gives it back, by its draft being discarded:
+  // not by calling the unfold itself, nor by setting its flag.
   await assert.rejects(pool.query("update studio_film_wraps set folded_at = null, folded_run_id = null where id = $1", [w.id]), /stays as it was/);
+  assert.deepEqual((await pool.query("select * from studio_refresh_unfold($1, 'ed@toj.test')", [run])).rows[0], { reopened: 0 });
+  assert.deepEqual(await folded(), [true, "folded", 0]);
+  const c = await pool.connect();
+  try {
+    for (const q of [["update studio_film_wraps set folded_at = null, folded_run_id = null where id = $1", [w.id], /stays as it was/],
+      ["update studio_kit_suggestions set status = 'open', folded_run_id = null, decided_by = null, decided_at = null where id = $1", [sg.id], /decided already/],
+      ["update studio_refresh_marks set undone_at = now() where run_id = $1", [run], /kept as it was made/],
+      ["insert into studio_label_marks (kit_slug, label, status, uses_at, run_id, decided_by) values ('same-work', 'missing slate', 'reopened', 3, $1, 'ed@toj.test')", [run], /open again only/]]) {
+      await c.query("begin");
+      await c.query("select set_config('studio.unfolding', $1, true)", [run]);
+      await assert.rejects(c.query(q[0], q[1]), q[2], q[0]);
+      await c.query("rollback");
+    }
+  } finally {
+    c.release();
+  }
+  assert.deepEqual(await folded(), [true, "folded", 0]);
   const d = ok(await call("POST", `/api/studio-agents/kits/${draft}/discard`, {}, "kyron"), "discard");
   assert.equal(d.given_back, true);
   assert.deepEqual(await folded(), [false, "open", 1]);
@@ -546,6 +598,12 @@ test("a discarded draft gives back what its refresh folded in, and its refresh n
   const r2 = ok(await startRun({ brief: BRIEF, purpose: "monthly", sources: { wraps: [w.id], suggestions: [sg.id], labels: ["missing slate"] }, again: true }), "again").run_id;
   assert.equal(await ended(r2), "drafted");
   assert.deepEqual(await folded(), [true, "folded", 0]);
+  // Approved, then set to discarded by hand: an approved kit gives nothing back.
+  const d2 = (await pool.query("select id from studio_kits where source_run_id = $1", [r2])).rows[0].id;
+  ok(await call("POST", `/api/studio-agents/kits/${d2}/approve`, {}, "kyron"), "approve");
+  await pool.query("update studio_kits set status = 'discarded', discarded_by = 'kyron@toj.test', discarded_at = now() where id = $1", [d2]);
+  assert.deepEqual(await folded(), [true, "folded", 0]);
+  assert.equal((await pool.query("select undone_at from studio_refresh_marks where run_id = $1", [r2])).rows[0].undone_at, null);
   // A draft discarded while its refresh still runs: nothing is folded in.
   const w2 = ok(await learn("POST", `/films/${film.id}/wraps`, { worked: "Room tone first, every location" }, "dir"), "wrap 2").wrap;
   const r3 = (await pool.query("insert into agent_runs (role, task, status, created_by) values ('kit-refresher', 'x', 'running', 'lead@toj.test') returning id")).rows[0].id;
@@ -556,6 +614,31 @@ test("a discarded draft gives back what its refresh folded in, and its refresh n
   assert.deepEqual((await pool.query("select * from studio_refresh_end($1, 'drafted')", [r3])).rows[0], { folded: 0, skipped: 0 });
   assert.equal((await pool.query("select folded_at from studio_film_wraps where id = $1", [w2.id])).rows[0].folded_at, null);
   assert.ok((await pool.query("select undone_at from studio_refresh_marks where run_id = $1", [r3])).rows[0].undone_at);
+});
+
+test("a discard that began before its refresh ended and folded a rule still opens the rule again", async () => {
+  const { film } = await aFilm();
+  for (let i = 0; i < 3; i++) ok(await films("POST", `/films/${film.id}/cut-notes`, { note: `Late slate on take ${i}`, label: "late slate" }, "lead"), "note");
+  const r = (await pool.query("insert into agent_runs (role, task, status, created_by) values ('kit-refresher', 'x', 'running', 'lead@toj.test') returning id")).rows[0].id;
+  await pool.query("select * from studio_refresh_start($1, 'same-work', 'monthly', 'lead@toj.test', '{}', '{}', array['late slate'], true)", [r]);
+  const base = (await pool.query("select id, kit, title from studio_kits where slug = 'same-work' order by version desc limit 1")).rows[0];
+  const kit = base ? base.kit : { schema: "toj.studio.kit/v1", slug: "same-work", columns: [] };
+  const d = (await pool.query("insert into studio_kits (slug, version, title, status, kit, source_run_id, created_by) values ('same-work', (select coalesce(max(version), 1) + 1 from studio_kits where slug = 'same-work'), 'Same Work', 'draft', $1, $2, 'lead@toj.test') returning id", [kit, r])).rows[0].id;
+  // The discard's transaction starts first; the refresh ends and folds the rule meanwhile.
+  const a = await pool.connect();
+  try {
+    await a.query("begin");
+    await a.query("select now()");
+    await new Promise((res) => setTimeout(res, 20));
+    await pool.query("select * from studio_refresh_end($1, 'drafted')", [r]);
+    await a.query("update studio_kits set status = 'discarded', discarded_by = 'kyron@toj.test', discarded_at = now() where id = $1", [d]);
+    await a.query("commit");
+  } finally {
+    a.release();
+  }
+  const latest = (await pool.query("select status from studio_label_marks where kit_slug = 'same-work' and label = 'late slate' order by decided_at desc, id limit 1")).rows[0];
+  assert.equal(latest.status, "reopened");
+  assert.equal((await pool.query("select count(*)::int as n from studio_rule_candidates('same-work') where label = 'late slate'")).rows[0].n, 1);
 });
 
 test("what a refresh draws on is given only as it starts", async () => {
