@@ -191,7 +191,7 @@ const OWN_WORDS = ["milanote", "sportsclippers", "subjectmedias", "groundfloorsp
 // ends[b] when its first b letters are words end to end, starts[a] when its
 // letters from a on are. A run longer than RUN_READ isn't read as words
 // (the name in it is asked about): the work stays small whatever's typed.
-const RUN_READ = 64;
+const RUN_READ = 140;
 function wordReading(tok) {
   const W = englishWords();
   const n = tok.length;
@@ -225,6 +225,12 @@ function heldByWord(tok, i, len, rd) {
     }
   }
   return false;
+}
+// Whether an English word holds a name's letters at i in a run of letters
+// (for code that masks names: utils/studio-words.js maskNames).
+function heldInRun(low, i, len) {
+  if (low.length > RUN_READ) return false;
+  return heldByWord(low, i, len, wordReading(low));
 }
 let RUN_BESIDE = null;
 const runBeside = () => RUN_BESIDE || (RUN_BESIDE = new Set([...FILE_WORDS, ...TAG_TAILS, ...("go pray prayfor thanks thankyou happy happybirthday birthday bday " +
@@ -1659,6 +1665,7 @@ module.exports = {
   titleNames,
   titleCase,
   minorRunIns,
+  heldInRun,
   cardAgainstFilm,
   EVERYDAY_2,
   EVERYDAY_NAMES,
