@@ -471,13 +471,14 @@ function maskNames(text, people) {
         for (let at = low.indexOf(w); at >= 0; at = low.indexOf(w, at + w.length)) {
           const j = at + w.length;
           // In a tag, coded unless an English word holds the letters
-          // ("#islandlife"); in an ordinary word, where it's the name.
+          // ("#islandlife") and no capital marks the name off ("#ChrisTian");
+          // in an ordinary word, where it's the name.
           const here = short
             ? (camel && bounds.has(at) && bounds.has(j)) || (tag && (at === 0 || j === low.length))
             : U.EVERYDAY_NAMES.has(w)
               ? /\p{Lu}/u.test(tok[at]) || tag
               : tag
-                ? !U.heldInRun(low, at, w.length)
+                ? (camel && bounds.has(at) && bounds.has(j)) || !U.heldInRun(low, at, w.length)
                 : runInSure(chunk === null ? (chunk = chunkAt(str, off)) : chunk, x.full, w);
           if (here) {
             res += tok.slice(i, at) + ` ${mark(x.by)} `;
@@ -486,6 +487,14 @@ function maskNames(text, people) {
         }
         return res + tok.slice(i);
       });
+    }
+  }
+  // A name word left standing on its own once another was coded out of the
+  // same run ("#ChrisTian" for a Chris Tian Doe: "Tian").
+  for (const x of subjects.filter((v) => v.minor)) {
+    for (const w of x.full.split(/[^\p{L}\p{M}]+/u).filter(Boolean)) {
+      const n = Array.from(w).length;
+      if (n >= 3 || (n === 2 && !U.EVERYDAY_2.has(w.toLowerCase()))) swap(w, x.by);
     }
   }
   return out.replace(/\u0001(\d+)\u0002/g, (_, k) => codes[Number(k)]);

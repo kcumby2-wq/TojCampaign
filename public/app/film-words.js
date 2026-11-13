@@ -281,6 +281,7 @@
       } else if (p && p.ok) {
         var labelled = p.labelled;
         body += '<p class="sub" style="margin:0">' + h(p.cues.length + " lines read" + (p.frames ? " at " + p.fps + " fps" : "") + ".") + "</p>";
+        if (p.notes && p.notes.length) body += '<p class="sub" style="margin:0">' + h("Read as notes, not voices (the speaker's words go on past them): " + p.notes.map(function (n) { return "[" + n + "]"; }).join(", ") + ". If one is someone speaking, export the file again with that voice labelled.") + "</p>";
         if (labelled) {
           body += '<div class="field"><span class="label" id="whoLabel">Whose lines in the file are the speaker\'s?</span><div role="radiogroup" aria-labelledby="whoLabel" style="display:flex;flex-direction:column;gap:8px">' + p.speakers.map(function (x, i) {
             var first = p.cues.find(function (c) { return c.who === x.who; });

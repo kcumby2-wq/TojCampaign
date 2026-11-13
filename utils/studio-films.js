@@ -228,9 +228,13 @@ function heldByWord(tok, i, len, rd) {
 }
 // Whether an English word holds a name's letters at i in a run of letters
 // (for code that masks names: utils/studio-words.js maskNames).
+// The last run's reading is kept: a run with the name many times in it is
+// read once.
+let heldRead = { low: null, rd: null };
 function heldInRun(low, i, len) {
   if (low.length > RUN_READ) return false;
-  return heldByWord(low, i, len, wordReading(low));
+  if (heldRead.low !== low) heldRead = { low, rd: wordReading(low) };
+  return heldByWord(low, i, len, heldRead.rd);
 }
 let RUN_BESIDE = null;
 const runBeside = () => RUN_BESIDE || (RUN_BESIDE = new Set([...FILE_WORDS, ...TAG_TAILS, ...("go pray prayfor thanks thankyou happy happybirthday birthday bday " +
