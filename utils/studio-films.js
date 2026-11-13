@@ -271,19 +271,26 @@ const personKey = (name, minor) => nameParts(name).join(" ") + (minor ? "|m" : "
 // Names anyone on the cards has, for what's shared beyond one film (a kit,
 // the month's refresh, what's sent to a model for the kit): { sure, maybe,
 // minor } (minor: the sure ones that are a minor's).
-//   sure:  a whole name, or one run together as a word ("JamieRivers"); a
-//          word of a name that's no everyday word (three letters or more, a
-//          minor's from two), a reviewer's too; a minor's name word (four
-//          letters or more) run into a tag, a handle, a link or a file name
-//          ("#jordanstrong", "jordan_final_v2"), or where camelCase starts or
-//          ends it ("JordanStrong"); and, for the minors on the film it's
-//          written about ({ film }), an everyday word that's their name with
-//          a capital mid-sentence ("talked to Will after").
-//   maybe: an everyday word that's a name with a capital (anyone else's
-//          mid-sentence, "Mark IV"; anyone's at a sentence's start, "Hope
-//          never quits"; a month's or a day's name); a minor's everyday-word
-//          name run into a tag ("#hopestrong"), or any minor's name inside a
-//          tag's word ("#ourjordanfam"); an adult's name word run into a tag.
+//   sure:  a whole name, or one run together as a word ("JamieRivers"), and
+//          a first and last name without the middle one ("Grace Long" for a
+//          Grace Ann Long); a word of a name that's no everyday word (three
+//          letters or more, a minor's from two), a reviewer's too, and its
+//          plain plural or possessive ("Jordans", "Kaylees"); a whole name
+//          run into a tag, a handle, a link or a file name
+//          ("#teamjordanreyes"); a minor's name word (four letters or more)
+//          run into one beside a tag's own word ("#jordanstrong",
+//          "#teamjordan"), another word of their name, or initials
+//          ("kayleeb_hoops"), or where camelCase starts or ends it
+//          ("JordanStrong"); a minor's everyday-word name beside a tag's own
+//          word ("#hopestrong", "#teamhope": a first name); and an everyday
+//          word that's a minor's name with a capital mid-sentence ("Ask Hope
+//          before the drill").
+//   maybe: an everyday word that's a name with a capital at a sentence's
+//          start ("Hope never quits"), anyone's; an adult's mid-sentence
+//          ("Mark IV"); a month's or a day's name; a minor's everyday-word
+//          surname beside a tag's word ("#gogreen", "#teamgreen") or in an
+//          everyday word ("#lifelong"); any other minor's name inside a tag's
+//          word ("#ourjordanfam"); an adult's name word run into a tag.
 // A name run into an ordinary word isn't read at all ("Milanote", "state").
 //
 // The words a tag or a file name runs a name into ("#jordanstrong",
@@ -296,32 +303,53 @@ const KIT_TAG_WORDS = new Set(("strong nation fam family gang forever crew squad
   "final finals cut cuts edit edits quote quotes card cards promo promos reel reels clip clips hero teaser trailer draft drafts export exports " +
   "master mix select selects graphic graphics gfx thumb thumbnail poster still stills photo photos interview sitdown broll bts intro outro recap " +
   "highlight feature profile story stories film films").split(" "));
+// Everyday words made of a tag's word and an everyday word that's a name too
+// ("#lifelong" for a Long, "#willpower" for a Will): the word, as written.
+const KIT_COMPOUNDS = new Set(("lifelong daylong weeklong nightlong yearlong seasonlong powerhouse clubhouse showcase lovebird lovebirds " +
+  "freewill willpower truelove bigdeal").split(" "));
+// A word's plain plural or possessive, without the apostrophe: "Jordans",
+// "Kaylees", "Joneses" (the name, three letters or more).
+const plainStems = (w) => {
+  const out = [];
+  if (w.length >= 4 && w.endsWith("s") && !w.endsWith("ss")) out.push(w.slice(0, -1));
+  if (w.length >= 5 && w.endsWith("es")) out.push(w.slice(0, -2));
+  return out;
+};
 // The cards are indexed once per list (thousands of them, read for each of a
-// month's wrap-ups): by each word of a name, and by the name run together.
+// month's wrap-ups): by each word of a name, by the name run together, and,
+// for a name of three words or more, by its first and last.
 const KIT_INDEX = new WeakMap();
 function kitIndex(people) {
   const list = Array.isArray(people) ? people : [];
   const had = KIT_INDEX.get(list);
   if (had) return had;
-  const ix = { byWord: new Map(), byJoined: new Map(), runWords: new Map() };
+  const ix = { byWord: new Map(), byJoined: new Map(), runWords: new Map(), runJoined: new Map() };
   const add = (map, k, e) => {
     if (!map.has(k)) map.set(k, []);
     map.get(k).push(e);
   };
   const seen = new Set();
-  const entry = (full, isMinor) => {
-    const parts = nameParts(full);
-    if (!parts.length) return;
-    const e = { parts, isMinor, key: personKey(full, isMinor) };
-    if (seen.has(e.key)) return;
-    seen.add(e.key);
+  const one = (parts, isMinor, key) => {
+    if (seen.has(key)) return;
+    seen.add(key);
+    const e = { parts, isMinor, key };
     for (const w of new Set(parts)) {
       const n = Array.from(w).length;
       if (n >= (isMinor ? 2 : 3)) add(ix.byWord, w, e);
       if (n >= 4) add(ix.runWords, w, e);
     }
     const joined = parts.join("");
-    if (parts.length > 1 && Array.from(joined).length >= (isMinor ? 4 : 5)) add(ix.byJoined, joined, e);
+    if (parts.length > 1 && Array.from(joined).length >= (isMinor ? 4 : 5)) {
+      add(ix.byJoined, joined, e);
+      add(ix.runJoined, joined, e);
+    }
+  };
+  const entry = (full, isMinor) => {
+    const parts = nameParts(full);
+    if (!parts.length) return;
+    const key = personKey(full, isMinor);
+    one(parts, isMinor, key);
+    if (parts.length >= 3) one([parts[0], parts[parts.length - 1]], isMinor, key + "|fl");
   };
   for (const p of list) {
     if (!p) continue;
@@ -343,7 +371,6 @@ function kitNames(textValue, people, { film = [] } = {}) {
   // Where a name can be run into other letters: tags, and camelCase words.
   const special = words.filter((w) => w.tag || w.inner.length);
   const ordinary = (w) => everyday(w) || DATE_WORDS.has(w);
-  const here = new Set((film || []).filter((p) => p && p.name).map((p) => personKey(p.name, !!p.is_minor)));
   const sure = new Set();
   const maybe = new Set();
   const minor = new Set();
@@ -352,6 +379,8 @@ function kitNames(textValue, people, { film = [] } = {}) {
     sure.add(w);
     if (isMinor) minor.add(w);
   };
+  // Another word of the same name right beside it ("#jordanreyesfam").
+  const besideOwn = (e, w, head, tail) => e.parts.some((p) => p !== w && p.length >= 2 && (head.endsWith(p) || tail.startsWith(p)));
   const read = (ix) => {
     for (const [low, hits] of byLow) {
       // The name run together as one word.
@@ -367,16 +396,36 @@ function kitNames(textValue, people, { film = [] } = {}) {
           // starts sentences all the time).
           else if (h.start) {
             if (!EVERYDAY_2.has(low)) put(low, false);
-          } else put(low, e.isMinor && here.has(e.key) && !DATE_WORDS.has(low), e.isMinor);
+          } else put(low, e.isMinor && !DATE_WORDS.has(low), e.isMinor);
         }
+      }
+      // A plain plural or possessive of a name that's no everyday word
+      // ("Jordans mom called", "KAYLEES DRILL").
+      for (const st of plainStems(low)) {
+        for (const e of ix.byJoined.get(st) || []) put(st, true, e.isMinor);
+        for (const e of ix.byWord.get(st) || []) if (!ordinary(st) && Array.from(st).length >= 3) put(st, true, e.isMinor);
       }
     }
     // In a tag, a handle, a link or a file name, and in camelCase: any name
     // word run in. Certain only where its letters start or end a word for
-    // sure (camelCase, or a tag's own word beside it: "#jordanstrong",
-    // "#teamjordan", "jordanfinal"); asked otherwise ("#teamstate" holds a
-    // Tate, or "team state").
+    // sure (camelCase, or a tag's own word or another word of the name
+    // beside it: "#jordanstrong", "#teamjordan", "jordanfinal"), and for a
+    // minor's name that's no everyday word with initials after it
+    // ("kayleeb_hoops"); asked otherwise ("#teamstate" holds a Tate, or
+    // "team state"; "#dallascowboys" a Dallas, or the team).
     for (const t of special) {
+      for (const [j, list] of ix.runJoined) {
+        if (t.low === j || t.low.length <= j.length) continue;
+        for (let i = t.low.indexOf(j); i >= 0; i = t.low.indexOf(j, i + 1)) {
+          const camel = t.inner.includes(i) || t.inner.includes(i + j.length);
+          if (!t.tag && !camel) continue;
+          const head = t.low.slice(0, i);
+          const tail = t.low.slice(i + j.length);
+          // A whole name run into a tag ("#teamjordanreyes").
+          const clear = camel || Array.from(j).length >= 6 || (!head && (!tail || KIT_TAG_WORDS.has(tail))) || (!tail && KIT_TAG_WORDS.has(head));
+          for (const e of list) put(j, clear, e.isMinor);
+        }
+      }
       for (const [w, list] of ix.runWords) {
         if (t.low === w || t.low.length <= w.length) continue;
         for (let i = t.low.indexOf(w); i >= 0; i = t.low.indexOf(w, i + 1)) {
@@ -384,10 +433,20 @@ function kitNames(textValue, people, { film = [] } = {}) {
           if (!t.tag && !camel) continue;
           const head = t.low.slice(0, i);
           const tail = t.low.slice(i + w.length);
-          const clear = camel || (!head && KIT_TAG_WORDS.has(tail)) || (!tail && KIT_TAG_WORDS.has(head));
+          const byTagWord = (!head && KIT_TAG_WORDS.has(tail)) || (!tail && KIT_TAG_WORDS.has(head));
           for (const e of list) {
-            if (e.isMinor) put(w, clear && !ordinary(w), true);
-            else if ((clear || !head || !tail) && !ordinary(w)) put(w, false);
+            const own = besideOwn(e, w, head, tail);
+            if (e.isMinor) {
+              // A handle's initials after it: "kayleeb_hoops", "@jordanrb".
+              if (!ordinary(w)) put(w, camel || byTagWord || own || (t.tag && !head && tail.length <= 2), true);
+              else {
+                // "#hopestrong", "#teamhope": the name. A surname that's an
+                // everyday word is asked ("#gogreen", "#teamgreen" for a
+                // Green), and so is an everyday word ("#lifelong").
+                const first = e.parts.indexOf(w) === 0 && !KIT_COMPOUNDS.has(t.low);
+                put(w, (byTagWord && first) || own, true);
+              }
+            } else if ((camel || byTagWord || !head || !tail) && !ordinary(w)) put(w, own, false);
           }
         }
       }
@@ -400,6 +459,7 @@ function kitNames(textValue, people, { film = [] } = {}) {
         if (low.length < tw.length + 4) continue;
         for (const w of [low.endsWith(tw) ? low.slice(0, low.length - tw.length) : null, low.startsWith(tw) ? low.slice(tw.length) : null]) {
           if (!w) continue;
+          for (const e of ix.runJoined.get(w) || []) put(w, true, e.isMinor);
           for (const e of ix.runWords.get(w) || []) {
             if (e.isMinor) put(w, !ordinary(w), true);
             else if (!ordinary(w)) put(w, false);
@@ -433,12 +493,13 @@ async function everyCardRows(sb, cols = "id,name,reviewer_name,is_minor") {
 }
 // A text with what the app wrote into it taken out (a kit's title, its
 // columns' and cards' titles, a format's name; dates), to check only what a
-// person wrote. Exact, longest first; each one leaves a space.
+// person wrote. Exact and whole, longest first; each one leaves a space.
 const DATE_RE = /\b(?:(?:January|February|March|April|May|June|July|August|September|October|November|December) \d{4}|(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec)\.? \d{1,2}, \d{4})\b/g;
 function withoutKnown(textValue, known) {
   let out = String(textValue || "").normalize("NFC");
   const list = [...new Set((known || []).map((k) => String(k || "").normalize("NFC").trim()).filter((k) => k.length >= 2))].sort((a, b) => b.length - a.length);
-  for (const k of list) out = out.split(k).join(" ");
+  // Whole words only: "Gear" leaves "Geary" as written.
+  for (const k of list) out = out.replace(new RegExp("(?<![\\p{L}\\p{N}\\p{M}])" + k.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "(?![\\p{L}\\p{N}\\p{M}])", "gu"), " ");
   return out.replace(DATE_RE, " ");
 }
 // The words of a card's name a sentence may hold, to ask about: an everyday
