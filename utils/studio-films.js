@@ -191,7 +191,7 @@ const OWN_WORDS = ["milanote", "sportsclippers", "subjectmedias", "groundfloorsp
 // ends[b] when its first b letters are words end to end, starts[a] when its
 // letters from a on are. A run longer than RUN_READ isn't read as words
 // (the name in it is asked about): the work stays small whatever's typed.
-const RUN_READ = 64;
+const RUN_READ = 140;
 function wordReading(tok) {
   const W = englishWords();
   const n = tok.length;
