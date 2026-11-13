@@ -12,8 +12,8 @@
 --     accepted, and signing out stops it.
 --   * Taking consent back from the page is the same pull as staff make
 --     (039's studio_pull_consent), with source 'speaker', and only for a
---     person whose cleared card names that email, when no other person
---     approves for any of their films.
+--     person whose cleared card names that email (not, for a parent, where
+--     the athlete now approves for themself).
 
 create table if not exists public.studio_speaker_links (
   id uuid primary key default gen_random_uuid(),
@@ -110,9 +110,10 @@ end $$;
 
 -- Take consent back from the page: the link has to be live, and a cleared
 -- card for that person has to name the link's email as the one who
--- approves. If another person approves for some of their films (the
--- athlete, now an adult, for themself; another parent), the page doesn't
--- take those back: the team does, after talking to both. Then
+-- approves. If a parent or guardian asks where the athlete now approves for
+-- themself on a live card (an adult now), the page doesn't take those back:
+-- the team does, after talking to both. Either parent of a minor takes it
+-- back for every film. Then
 -- it's 039's pull, with source 'speaker', written as who they are to the
 -- person (never their email or name).
 create or replace function public.studio_speaker_pull(p_proof text, p_person_code text, p_note text)
@@ -144,9 +145,12 @@ begin
   if not exists (select 1 from public.studio_film_people p where p.person_code = code and p.consent_pulled_at is null) then
     raise exception 'consent is already taken back';
   end if;
-  if exists (select 1 from public.studio_film_people p
+  -- A parent or guardian, where the athlete approves for themself on a live
+  -- card (an adult now): those films are theirs to decide, so the team
+  -- talks to both. Either parent of a minor takes it back for all.
+  if rel <> 'self' and exists (select 1 from public.studio_film_people p
               where p.person_code = code and p.consent_pulled_at is null
-                and p.reviewer_email is not null and lower(p.reviewer_email) <> e) then
+                and p.reviewer_relation = 'self' and lower(coalesce(p.reviewer_email, '')) <> e) then
     raise exception 'another person approves for some of these films';
   end if;
   update public.studio_speaker_links l set last_used_at = now()

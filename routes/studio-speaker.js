@@ -123,15 +123,15 @@ router.post("/pull", safe(async (req, res) => {
     if (/not active/.test(msg)) return res.status(404).json({ error: "link_not_active" });
     if (/not on a card/.test(msg)) return res.status(403).json({ error: "not_yours" });
     if (/already taken back/.test(msg)) return res.status(409).json({ error: "already_taken_back" });
-    // Someone else approves for some of their films (the athlete for
-    // themself, now an adult, say): the team takes it from here.
+    // A parent, where the athlete now approves for themself on a live card:
+    // the team takes it from here.
     if (/another person approves/.test(msg)) {
       res.status(409).json({ error: "ask_the_team" });
-      push.notifySoon(push.teamEmails("approver"), { title: "Asked to take consent back", body: `Someone who approves for ${code} asked on their page to take consent back. Another person approves for some of the films: call them both.`, url: "/app/#films", tag: `pull-ask-${code}` });
+      push.notifySoon(push.teamEmails("approver"), { title: "Asked to take consent back", body: `A parent or guardian of ${code} asked on their page to take consent back. ${code} approves for themself on some films now: call them both.`, url: "/app/#films", tag: `pull-ask-${code}` });
       mailer.sendMail({
         to: [...staffEmails()],
         subject: `Asked to take consent back: ${code}`,
-        text: `Someone a card names as the one who approves for ${code} asked on their own Same Work page to take consent back. Another person approves for some of ${code}'s films (the athlete themself, now an adult, or another parent), so nothing was taken back yet.\n\nCall them both today, then take it back from the card if that's what they want.${note ? `\n\nTheir note: ${note}` : ""}\n`,
+        text: `Someone a card names as the one who approves for ${code} asked on their own Same Work page to take consent back. ${code} now approves for themself on some films (an adult now), so nothing was taken back yet.\n\nCall them both today, then take it back from the card if that's what they want.${note ? `\n\nTheir note: ${note}` : ""}\n`,
         critical: true,
         pool: "studio_review",
       }).catch(() => {});

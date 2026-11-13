@@ -447,7 +447,18 @@ test("after a new consent, the page offers to take it back again, and the old ta
   void film;
 });
 
-test("a page pull another person's approval shares goes to the team, and nothing is taken back", async () => {
+test("either parent takes a minor's consent back from their page", async () => {
+  const { people } = await aFilm((code) => [{ person_code: code, name: "Jo Quill", role: "athlete", is_minor: true, speaker: true, release_on_file: true, covers: { voice: true, formats: ["hero"] }, reviewer_relation: "parent", reviewer_name: "Pat Quill", reviewer_email: "patq@family.test" }]);
+  const code = people[0].person_code;
+  const film2 = ok(await films("POST", "/films", { kit_slug: "same-work", title: `${code} two`, lane: "youth", athlete_id: code, format: "hero" }, "lead"), "start").film;
+  const p2 = ok(await films("POST", `/films/${film2.id}/people`, { person_code: code, name: "Jo Quill", role: "athlete", is_minor: true, speaker: true, release_on_file: true, covers: { voice: true, formats: ["hero"] }, reviewer_relation: "parent", reviewer_name: "Robin Marsh", reviewer_email: "robin@family.test" }, "lead"), "card").person;
+  ok(await films("POST", `/films/${film2.id}/people/${p2.id}/clear`, { seen: p2.updated_at }, "lead"), "clear");
+  const token = await linkFor("patq@family.test");
+  ok(await page("/pull", { token, person_code: code, confirm: true }), "pull");
+  assert.equal((await pool.query("select count(*)::int as n from studio_film_people where person_code = $1 and consent_pulled_at is null", [code])).rows[0].n, 0);
+});
+
+test("a parent's page pull, where the athlete now approves for themself, goes to the team, and nothing is taken back", async () => {
   // A parent's card from when the athlete was a minor; now the athlete approves for themself.
   const { film, people } = await aFilm((code) => [{ person_code: code, name: "Cy Dove", role: "athlete", is_minor: true, speaker: true, release_on_file: true, covers: { voice: true, formats: ["hero"] }, reviewer_relation: "parent", reviewer_name: "Pat Dove", reviewer_email: "pat@x.test" }]);
   const code = people[0].person_code;
@@ -475,9 +486,16 @@ test("an uncleared card's email gets no page; a new approver doesn't see the old
   assert.equal(mails.filter((m) => m.to.includes("di@x.test")).length, 0);
   assert.equal((await films("POST", `/films/${film.id}/people/${p.id}/page-link`, {}, "lead")).data.error, "card_not_cleared");
   // The previous approver's decision isn't shown as the new one's.
-  const { film: f2, people } = await aFilm(() => [self("C7101", "Eve Moss", "eve@x.test")]);
-  await pool.query("insert into studio_reviews (film_id, cut_id, person_id, reviewer_email, reviewer_relation, asked_fingerprint, asked_by, decision, decided_at, decided_name) select $1, c.id, $2, 'old@x.test', 'self', repeat('a', 64), 'lead@toj.test', 'approved', now(), 'Old Name' from studio_film_cuts c where c.film_id = $1 limit 1", [f2.id, people[0].id]).catch(() => {});
-  const token = await linkFor("eve@x.test");
+  const { film: f2, people } = await aFilm((c) => [{ person_code: c, name: "Ari Fenn", role: "athlete", is_minor: true, speaker: true, release_on_file: true, covers: { voice: true, formats: ["hero"] }, reviewer_relation: "parent", reviewer_name: "Sol Fenn", reviewer_email: "sol@family.test" }]);
+  for (const [k, w] of [["brief", "lead"], ["board", "dir"], ["clearance", "lead"], ["shoot", "dir"], ["selects", "dir"], ["rough_cut", "ed"]]) await step(f2.id, k, w);
+  const cut = await uploadCut(f2, { people: [people[0].id], version: 3 });
+  await approve(f2, cut, people[0], "Sol Fenn");
+  const before = (await films("GET", `/films/${f2.id}`, undefined, "lead")).data.people.find((x) => x.id === people[0].id);
+  const changed = ok(await films("PATCH", `/films/${f2.id}/people/${people[0].id}`, { seen: before.updated_at, reviewer_name: "Max Fenn", reviewer_email: "max@family.test" }, "lead"), "the other parent approves now").person;
+  ok(await films("POST", `/films/${f2.id}/people/${people[0].id}/clear`, { seen: changed.updated_at }, "lead"), "cleared again");
+  const sol = await linkFor("sol@family.test").catch(() => null);
+  assert.equal(sol, null, "the old approver's email is on no cleared card now");
+  const token = await linkFor("max@family.test");
   const v = ok(await page("/view", { token }), "view");
-  assert.equal(v.people[0].films[0].approvals.length, 0);
+  assert.deepEqual(v.people[0].films[0].approvals, []);
 });
