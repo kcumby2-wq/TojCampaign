@@ -1,0 +1,154 @@
+{
+  "schema": "toj.studio.kit/v1",
+  "slug": "pylon-packages",
+  "version": 1,
+  "as_of": "2026-11-12",
+  "title": "Pylon Coverage Packages Kit",
+  "eyebrow": "Pylon Media · team and player packages · delivery",
+  "lead_html": "<p>What each Pylon team and player package delivers, how a crew shoots and cuts it, and the checks before anything goes to a family or a coach. Copy a card here and paste it onto the job's board.</p>",
+  "board_name": "Pylon Packages: Delivery Playbook",
+  "stats_label": "Proposed Nov 12, 2026",
+  "footer_html": "<p>Built from the Pylon team and player package pages on tojcampaign.com and the app's Pylon pages guide (Nov 12, 2026). Proposed: it's a draft until an approver approves it. The pages' own words win where they differ.</p>",
+  "assets": null,
+  "source": {
+    "title": "Pylon team and player package pages; TOJ app guide: the Pylon pages",
+    "date": "2026-11-12"
+  },
+  "columns": [
+    {
+      "name": "Start here",
+      "color": "Blue",
+      "lead": "What a package is, and the rules nobody breaks.",
+      "cards": [
+        {
+          "type": "note",
+          "title": "What a package is",
+          "body": "<p>A coach books coverage for a team, or a family books it for one athlete, at a Pylon event. The crew shoots it, the editor cuts it to the package, and it's delivered within 48 hours, full resolution, no watermarks, the buyer's to keep.</p><p>Each job gets its own board from this kit.</p>"
+        },
+        {
+          "type": "note",
+          "title": "The rules nobody breaks",
+          "body": "<ol><li><b>Check who they are first.</b> Before anything is filmed or delivered for an athlete, staff call or meet the contact, check they're the parent or legal guardian (or the athlete at 18 or older) and that the email is theirs, and tap <i>I checked: it's them</i>.</li><li><b>A package is for the family or the team.</b> Pylon's channels post an athlete only with a separate yes from a parent or guardian, recorded at the event.</li><li><b>No promises.</b> Nothing says or suggests coverage leads to an offer, a roster spot or a scholarship.</li><li><b>A team booking names no athlete.</b></li><li><b>Never alone with a minor.</b></li></ol>",
+          "locked": true
+        },
+        {
+          "type": "note",
+          "title": "Who does what",
+          "body": "<ul><li><b>Staff:</b> the request in the app (Tools → Pylon), checking the contact, payment, status: New, Contacted, Confirmed, Done.</li><li><b>Crew:</b> the shoot, to the package's list.</li><li><b>Editor:</b> the cut, to the deliverable spec.</li><li><b>Approver:</b> anything that goes on Pylon's channels.</li></ul>"
+        }
+      ]
+    },
+    {
+      "name": "Team packages",
+      "color": "Purple",
+      "lead": "Recap, Season Pack and Combine Book: what each one owes a team.",
+      "cards": [
+        {
+          "type": "note",
+          "title": "Team Recap ($299, per team, per event)",
+          "body": "<ul><li>1 Recap Reel, Instagram-ready, sponsor-tagged when there's an active content sponsor.</li><li>An Action Photos Carousel: 10 slides, with the full-resolution photo pack.</li><li>3 support pieces: a team highlight, single shots, individual focus.</li><li>48-hour delivery, no watermarks.</li></ul>"
+        },
+        {
+          "type": "note",
+          "title": "Team Season Pack ($1,499, per team, per season)",
+          "body": "<ul><li>The Recap Reel and the Action Carousel at every event.</li><li>Support content at every event, team and individual.</li><li>A season-end Athlete Transcript for each rostered player whose family opts in.</li><li>Live Event Posting bundled.</li></ul>"
+        },
+        {
+          "type": "note",
+          "title": "Combine Book ($2,999, per team, per season)",
+          "body": "<ul><li>Everything in the Season Pack.</li><li>Every rostered athlete graded on Optimum.</li><li>A printed Combine Book delivered to the head coach.</li><li>Coaches Directory outreach for athletes whose families opt in.</li><li>Contract crew coverage.</li></ul>"
+        },
+        {
+          "type": "note",
+          "title": "The six-piece minimum",
+          "body": "<p>Every event, every team, at least: 1 POV Reel, 1 Action Photos Carousel, 3 support pieces, and 1 team highlight when it's bundled. It's in the contract: count them before delivery.</p>",
+          "locked": true
+        }
+      ]
+    },
+    {
+      "name": "Player packages",
+      "color": "Teal",
+      "lead": "Snapshot, Story and Feature: one athlete at one event.",
+      "cards": [
+        {
+          "type": "note",
+          "title": "Player Snapshot ($69)",
+          "body": "<ul><li>10 to 15 photos from one Pylon event, focused on the athlete.</li><li>Full resolution, no watermarks, 48-hour delivery.</li></ul>"
+        },
+        {
+          "type": "note",
+          "title": "Player Story ($99)",
+          "body": "<ul><li>Everything in Snapshot.</li><li>A short reel, 15 to 30 seconds, featuring the athlete.</li><li>Social-ready cuts: an Instagram Reel and a TikTok cut.</li></ul>"
+        },
+        {
+          "type": "note",
+          "title": "Player Feature ($199)",
+          "body": "<ul><li>Everything in Story.</li><li>A full POV Reel to the Content 1 spec.</li><li>An Action Photos Carousel made for the athlete.</li><li>Support pieces: single shots and individual focus.</li></ul>"
+        },
+        {
+          "type": "note",
+          "title": "Before you film a player",
+          "body": "<p>The request shows <i>Not checked yet</i> until staff have checked the contact. Don't film a player package before it says checked. The crew gets the athlete by team and jersey number, never a contact.</p>",
+          "locked": true
+        }
+      ]
+    },
+    {
+      "name": "Shoot and cut",
+      "color": "Red",
+      "lead": "The look the pages promise, and how a crew gets it.",
+      "cards": [
+        {
+          "type": "note",
+          "title": "The visual direction",
+          "body": "<p>The pages promise one look, checked before delivery: cinematic realism, shallow depth of field, high contrast, candid emotion, bodies in motion. Shoot for it; don't fake it in the grade.</p>"
+        },
+        {
+          "type": "note",
+          "title": "Covering one athlete",
+          "body": "<ul><li>Know their team and jersey before the first game.</li><li>Every snap they're on the field: one camera on them, one wide.</li><li>Between plays: the sideline, the bench, the walk back. Candid, never staged.</li><li>A minor is never filmed alone, in a locker room or one to one without a parent there.</li></ul>"
+        },
+        {
+          "type": "note",
+          "title": "Delivery",
+          "body": "<p>48 hours from the event for the family or the coach: full resolution, no watermarks, no expiry. Count the pieces against the package before it goes, then mark the request Done.</p>"
+        }
+      ]
+    },
+    {
+      "name": "Checklists",
+      "color": "Grey",
+      "lead": "Tick-lists for the job, and where every line came from.",
+      "cards": [
+        {
+          "type": "todo",
+          "title": "Before the event: staff",
+          "items": [
+            "Request read in Tools → Pylon",
+            "Contact called or met, and checked: it's them",
+            "Payment in, or paid another way recorded",
+            "Crew told the team and jersey only",
+            "Status: Confirmed"
+          ]
+        },
+        {
+          "type": "todo",
+          "title": "Delivery: editor",
+          "items": [
+            "Every piece the package lists, counted",
+            "The visual direction met",
+            "Full resolution, no watermarks",
+            "Nothing posted anywhere public",
+            "Delivered within 48 hours, status Done"
+          ]
+        },
+        {
+          "type": "note",
+          "title": "Sources",
+          "body": "<p>The Pylon team and player package pages on tojcampaign.com (pylon-team-packages.html, pylon-player-packages.html), and the TOJ app's guide <i>The Pylon pages</i>, both checked Nov 12, 2026.</p>"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,120 @@
+{
+  "schema": "toj.studio.kit/v1",
+  "slug": "sm-sessions",
+  "version": 1,
+  "as_of": "2026-11-12",
+  "title": "Subject Medias Session Kit",
+  "eyebrow": "Subject Medias · booked sessions · from request to delivery",
+  "lead_html": "<p>How a Subject Medias booking runs, from the request on subjectmedias.com to a delivered session, as Milanote cards. Copy a card here and paste it onto the booking's board.</p>",
+  "board_name": "Subject Medias: Session Playbook",
+  "stats_label": "Proposed Nov 12, 2026",
+  "footer_html": "<p>Built from the TOJ app's Subject Medias bookings guide (Nov 12, 2026). The shoot-day cards are proposed standards: Kyron confirms them by approving the kit.</p>",
+  "assets": null,
+  "source": {
+    "title": "TOJ app guide: Subject Medias bookings",
+    "date": "2026-11-12"
+  },
+  "columns": [
+    {
+      "name": "Start here",
+      "color": "Blue",
+      "lead": "What a session is, and the rules nobody breaks.",
+      "cards": [
+        {
+          "type": "note",
+          "title": "What a session is",
+          "body": "<p>A family, a team or an event books Subject Medias on subjectmedias.com: a package, a sport, an event, a date and a place. We reply within 24 hours, and nothing is charged until then, unless they paid on the spot with a package's Buy button.</p>"
+        },
+        {
+          "type": "note",
+          "title": "The rules nobody breaks",
+          "body": "<ol><li><b>An athlete is a team and a jersey number.</b> The form never asks for a name; nobody adds one.</li><li><b>Only a screened adult works a booking:</b> a contract, a background check and safety training within the year on the game's date. A youth creator never does, since a booking has no screened adult beside them.</li><li><b>The session is the family's.</b> Nothing from it posts anywhere public without a parent or guardian's written yes.</li><li><b>No promises</b> of exposure, followers or an offer.</li><li><b>Never alone with a minor.</b></li></ol>",
+          "locked": true
+        }
+      ]
+    },
+    {
+      "name": "The request",
+      "color": "Purple",
+      "lead": "From the form to a staffed booking.",
+      "cards": [
+        {
+          "type": "note",
+          "title": "When it lands",
+          "body": "<p>Kyron gets a push and an email. The push carries fixed words only: the package, the sport, the state, the date. The email adds the city, the booker's contact, and the creators who work that region (same city first, then screened, then adults).</p>"
+        },
+        {
+          "type": "note",
+          "title": "The 10% first-package offer",
+          "body": "<p>If the booker claimed it on the homepage, the request says so. Take the 10% off when you confirm.</p>"
+        },
+        {
+          "type": "note",
+          "title": "Paid on the spot",
+          "body": "<p>A Buy button saves the request as pay-now and opens that package's Stripe payment link. After paying, the site asks about the game (date, place, sport, team and jersey). If no payment arrives in an hour, the app sends one reminder, after asking Stripe itself.</p>"
+        },
+        {
+          "type": "note",
+          "title": "Staffing",
+          "body": "<p>Today → Bookings. Call or email the booker, tap <b>Staff</b> next to a creator, then mark it delivered when it is. The app only lets you staff an adult whose screening is current on the game's date.</p>",
+          "locked": true
+        }
+      ]
+    },
+    {
+      "name": "Shoot day",
+      "color": "Red",
+      "lead": "Proposed standards for the session itself: confirm by approving the kit.",
+      "cards": [
+        {
+          "type": "note",
+          "title": "Before you go",
+          "body": "<ul><li>The team and jersey, the field, the kick-off time, from the booking.</li><li>Batteries, two cards, a backup body for anything over one game.</li><li>The booker's number, in case the field changes.</li></ul>"
+        },
+        {
+          "type": "note",
+          "title": "On the field",
+          "body": "<ul><li>Find the athlete by jersey in warm-ups. Confirm with the booker if they're there.</li><li>Every play they're in, plus the moments between: the huddle, the sideline, the walk off.</li><li>Wide enough to see the play, tight enough to see them.</li><li>Never alone with a minor, never in a locker room.</li></ul>"
+        },
+        {
+          "type": "note",
+          "title": "Delivery",
+          "body": "<p>Deliver what the package says, at full resolution, to the booker's email. Mark the booking delivered in the app. Ask for a family rating, never a post or a tag.</p>"
+        }
+      ]
+    },
+    {
+      "name": "Checklists",
+      "color": "Grey",
+      "lead": "Tick-lists for each booking, and the sources.",
+      "cards": [
+        {
+          "type": "todo",
+          "title": "Within 24 hours of the request",
+          "items": [
+            "Booker called or emailed",
+            "10% offer applied if claimed",
+            "Payment confirmed, or the checkout link sent",
+            "A screened adult staffed",
+            "Game details confirmed: team, jersey, field, time"
+          ]
+        },
+        {
+          "type": "todo",
+          "title": "After the session",
+          "items": [
+            "Files backed up twice",
+            "The package delivered in full",
+            "Booking marked delivered",
+            "Nothing posted anywhere public"
+          ]
+        },
+        {
+          "type": "note",
+          "title": "Sources",
+          "body": "<p>The TOJ app's guide <i>Subject Medias bookings</i>, checked Nov 12, 2026. The shoot-day cards are TOJ's proposed standards, not from a source.</p>"
+        }
+      ]
+    }
+  ]
+}

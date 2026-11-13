@@ -1,0 +1,293 @@
+{
+  "schema": "toj.studio.kit/v1",
+  "slug": "pylon-stop",
+  "version": 1,
+  "as_of": "2026-11-12",
+  "title": "Pylon Stop Coverage Kit",
+  "eyebrow": "Ground Floor Sports · Pylon Legacy Tour · stop coverage",
+  "lead_html": "<p>How a crew covers a Pylon stop, from staffing at T-45 to the stop review at T+14, as Milanote cards. Copy a card here and paste it onto the stop's board.</p>",
+  "board_name": "Pylon Stop: Coverage Playbook",
+  "stats_label": "Proposed Nov 12, 2026",
+  "footer_html": "<p>Built from the Pylon Event Workflow SOP v1 and the TOJ app's Pylon events guide (Nov 12, 2026). Proposed: it's a draft until an approver approves it, and the SOP still wins where they differ.</p>",
+  "assets": null,
+  "source": {
+    "title": "Pylon Event Workflow SOP v1; TOJ app guides: Pylon events, the run sheet",
+    "date": "2026-11-12"
+  },
+  "columns": [
+    {
+      "name": "Start here",
+      "color": "Blue",
+      "lead": "What a stop makes, who owns each part, and the rules nobody breaks.",
+      "cards": [
+        {
+          "type": "note",
+          "title": "What a stop makes",
+          "body": "<p>Every game filmed from two wide angles. Clips tagged by jersey number against the Sports Thread roster. Clips out to families and SportsClippers within 48 hours of the wrap. The Schedule C pieces Pylon's channels are owed. A stop review two weeks on.</p><p>Each stop gets its own board from this kit. The app's run sheet holds the dates; this board holds the how.</p>"
+        },
+        {
+          "type": "note",
+          "title": "Who owns what",
+          "body": "<ul><li><b>Regional Director:</b> staffing, the crew, the roster, the crew brief, tag review, the family-links file.</li><li><b>Crew lead:</b> capture on the day, and the midday upload check.</li><li><b>Approver:</b> the QR codes and storefront (with the director), clearing what posts on Pylon's channels, approving clips, the SportsClippers file.</li><li><b>Kyron:</b> creator screening, and the stop review.</li></ul>"
+        },
+        {
+          "type": "note",
+          "title": "The rules nobody breaks",
+          "body": "<ol><li><b>No screening, no crew.</b> A contract, a background check and minor-safety training, each less than a year old at the event.</li><li><b>A youth creator (16 or 17) shoots or shadows,</b> never leads or edits, and works only beside a confirmed, screened adult on site.</li><li><b>The roster decides.</b> An athlete on hold, kept out, or without capture or marketing consent never appears on Pylon's channels.</li><li><b>A takedown follows the athlete</b> to every event, and their clips come off every surface.</li><li><b>Nothing posts on Pylon's channels</b> until an approver has read the keep-out list and cleared it.</li><li><b>No names in a brief, a sign or a crew message:</b> team and jersey only, and never why someone is held.</li><li><b>Never alone with a minor.</b> No locker rooms, no one-to-one filming without a parent there.</li></ol>",
+          "locked": true
+        },
+        {
+          "type": "note",
+          "title": "The twelve stages",
+          "body": "<ol><li>Staff the stop: T-45 days, director.</li><li>Screening complete: T-21 days, Kyron.</li><li>Crew confirmed: T-14 days, director.</li><li>QR codes and storefront: T-7 days, director and approver.</li><li>Roster and consent: T-72 hours, director.</li><li>Crew brief sent: T-48 hours, director.</li><li>Capture: the wrap, crew lead.</li><li>Footage uploaded: T+12 hours, crew and director.</li><li>Tag review done: T+24 hours, director.</li><li>On sale and sent: T+48 hours, approver and director.</li><li>Pylon deliverables: the Schedule C dates, approver.</li><li>Stop review: T+14 days, Kyron.</li></ol><p>Every deadline is in the stop's own time zone, counted from midnight before the first day or from the wrap on the last.</p>"
+        }
+      ]
+    },
+    {
+      "name": "Before the stop",
+      "color": "Purple",
+      "lead": "T-45 to T-48 hours: the six stages that have to be done before anyone films.",
+      "cards": [
+        {
+          "type": "note",
+          "title": "1. Staff the stop (T-45)",
+          "body": "<p>Invite or confirm on-site crew at the stop's target, with a lead: three on site for the biggest size, two for a one-day tournament, one for a clinic.</p><p>Assign from the region's pool on the event plan. Suggested creators are the region's, screened first.</p>"
+        },
+        {
+          "type": "note",
+          "title": "2. Screening complete (T-21)",
+          "body": "<p>Kyron's stage. Everyone on the crew has a contract, a background check and minor-safety training on file, each less than a year old on the event's date. A creator whose screening lapses after they're crewed stops counting toward the crew until it's updated.</p>"
+        },
+        {
+          "type": "note",
+          "title": "3. Crew confirmed (T-14)",
+          "body": "<p>The plan's crew check passes: confirmed and screened on site at the target, a lead, and no youth creator without a confirmed, screened adult beside them.</p><p>The app won't let anyone remove or move that adult while it would leave a youth creator alone.</p>"
+        },
+        {
+          "type": "note",
+          "title": "4. QR codes and storefront (T-7)",
+          "body": "<p>The stop's codes printed and its page's links set, on the QR codes screen. Mark it ready there. The stop page links families to SportsClippers only.</p>"
+        },
+        {
+          "type": "note",
+          "title": "5. Roster and consent (T-72 hours)",
+          "body": "<p>Load the Sports Thread roster CSV. Its consent flags decide who can be clipped, sold, shown publicly or posted on Pylon's channels. A takedown from another stop already holds the athlete here.</p>"
+        },
+        {
+          "type": "note",
+          "title": "6. Crew brief sent (T-48 hours)",
+          "body": "<p>Open the brief screen. The app builds it from the stop: when and where, the crew, the teams by roster name, the pre-sold athletes to cover first, the athletes no clip may feature (team and jersey only), the capture, naming and upload standards, and where families and help requests go.</p><p>Copy it or open your own email with the crew in BCC, then mark it sent. The app emails nobody.</p>"
+        }
+      ]
+    },
+    {
+      "name": "The crew",
+      "color": "Teal",
+      "lead": "Who can work a stop, in which seat, and what the app holds you to.",
+      "cards": [
+        {
+          "type": "note",
+          "title": "The seats",
+          "body": "<ul><li><b>Lead:</b> runs the crew on site. An adult.</li><li><b>Shooter:</b> a wide angle or the game's coverage.</li><li><b>Photographer:</b> stills.</li><li><b>Story camera:</b> the B-1A story angle, never in place of the two wide ones.</li><li><b>Shadow:</b> learning on site, beside an adult.</li><li><b>Editor:</b> after the stop. An adult.</li></ul>"
+        },
+        {
+          "type": "note",
+          "title": "Youth creators (16 or 17)",
+          "body": "<p>A youth creator works as a shooter, a photographer or a shadow. Never the lead, never the editor.</p><p>They're confirmed only alongside a confirmed, screened adult on site, they're never alone with a minor, and they never sell to or message a family. They get no QR code and never appear on the stop page.</p>",
+          "locked": true
+        },
+        {
+          "type": "note",
+          "title": "What changes a crew",
+          "body": "<ul><li>A creator's tier can't change while they're on an upcoming crew.</li><li>A paused creator stops counting toward the crew.</li><li>A family rating can go in after the event, even if the creator has been paused since.</li><li>Only Kyron changes a screened creator's name or email, or puts a paused creator back to work.</li></ul>"
+        }
+      ]
+    },
+    {
+      "name": "Capture",
+      "color": "Red",
+      "lead": "On the day: two wide angles every game, named the Schedule B way, uploaded by the rule.",
+      "cards": [
+        {
+          "type": "note",
+          "title": "Two angles every game",
+          "body": "<p>Sideline and End Zone, plus Eagle Eye where the venue allows. Full games at 1080p60. One angle and the game isn't covered: the run sheet measures it from the upload log.</p>",
+          "locked": true
+        },
+        {
+          "type": "note",
+          "title": "Cover first, and never clip",
+          "body": "<p>The brief lists the pre-sold athletes to cover first, by team and jersey: get them clips in every game they play.</p><p>It also lists athletes no clip may feature. Film the game as usual, but cut no clip that features them. You'll never see why.</p>"
+        },
+        {
+          "type": "note",
+          "title": "Naming (Schedule B)",
+          "body": "<ul><li>Game folder: <code>TEAM-A_vs_TEAM-B_YYYYMMDD</code>, with the roster's team names exactly.</li><li>A team folder above each jersey folder. Clips are <code>Jersey#-Angle-Clip#</code>, for example <code>11-EndZone-042</code>.</li><li>Can't place a clip? Put it in <code>00-unassigned</code>.</li></ul>"
+        },
+        {
+          "type": "note",
+          "title": "Uploads",
+          "body": "<ul><li>At midday, upload the morning's games and check that both angles arrived.</li><li>Upload every file within 12 hours of its game's final whistle, and note each final whistle.</li></ul>"
+        },
+        {
+          "type": "note",
+          "title": "On site with families",
+          "body": "<p>Questions, help and takedown requests go to the address on the brief (and the on-site number if there is one). Don't promise a family anything on site: not a clip, not a time, not a post.</p>"
+        }
+      ]
+    },
+    {
+      "name": "After the stop",
+      "color": "Orange",
+      "lead": "T+12 to T+48 hours: uploads, tags, and clips out to families.",
+      "cards": [
+        {
+          "type": "note",
+          "title": "7. Footage uploaded (T+12 hours)",
+          "body": "<p>Load the upload log (the storage export). Every load returns the stop's check: games logged, games missing a wide angle, files uploaded more than 12 hours after their final whistle, games with no final whistle, and files marked unusable.</p>"
+        },
+        {
+          "type": "note",
+          "title": "8. Tag review done (T+24 hours)",
+          "body": "<p>Fix what didn't match, or mark it <i>not a player</i>. Then approve the game's tags: matched clips that aren't held move to the edit.</p><p>A clip a director tags, untags or marks <i>not a player</i> stays that way. Re-matching never overrides a person's call.</p>"
+        },
+        {
+          "type": "note",
+          "title": "9. On sale and sent (T+48 hours)",
+          "body": "<p>Clips edited, then approved by an approver. Make the family-links file (directors) or the SportsClippers file (approvers), hand it over, then mark what went out.</p><ul><li>An athlete under 13, or without public display, goes up family-only by private link.</li><li>A clip tagged again goes out only in a new file.</li><li>Every approved clip goes out unless it's held or taken down.</li></ul>"
+        },
+        {
+          "type": "note",
+          "title": "A hold on a clip that's out",
+          "body": "<p>A takedown, a do-not-publish, withdrawn capture consent, or a roster change while it was out: take it off SportsClippers and the family links, then mark it removed. Sale consent coming off means it comes down; public display coming off means it goes family-only.</p>",
+          "locked": true
+        }
+      ]
+    },
+    {
+      "name": "Pylon's channels",
+      "color": "Green",
+      "lead": "What Schedule C owes, and how a piece clears for Pylon's channels.",
+      "cards": [
+        {
+          "type": "note",
+          "title": "10. Pylon deliverables",
+          "body": "<p>Log the counts for each Schedule C piece and send what posts on Pylon's channels to approval. An approver clears it or sends it back with a note. The stage is done when every piece is cleared by its Schedule C date.</p>"
+        },
+        {
+          "type": "note",
+          "title": "The keep-out list",
+          "body": "<p>Before an approver clears anything, the app shows the event's keep-out list: every athlete who can't appear on Pylon's channels, by team and jersey (a takedown, do-not-publish, no capture consent, no marketing consent).</p><p>The approver confirms nobody on it is in the pieces. Nothing clears without that, and the app records who confirmed it and when.</p>",
+          "locked": true
+        },
+        {
+          "type": "note",
+          "title": "Pieces that name athletes",
+          "body": "<p>A \"Who Is ___?\" feature, an interview or a tracked Top Performer names its athletes, and each is checked for capture and marketing consent. A cleared piece is checked again whenever its names change.</p>"
+        }
+      ]
+    },
+    {
+      "name": "Takedowns",
+      "color": "Grey",
+      "lead": "A takedown follows the athlete: the clock, every region, and when it's done.",
+      "cards": [
+        {
+          "type": "note",
+          "title": "Logging one",
+          "body": "<p>Log the takedown from the event. The clock starts, and the athlete goes do-not-publish at every event at once, by their Sports Thread roster ID, including stops whose roster loads later. A later roster file can't clear it.</p>"
+        },
+        {
+          "type": "note",
+          "title": "Off every surface",
+          "body": "<p>Each director takes down their own region's clips. Marking the step in one region removes that region's family links and listings, and the app tells the other regions' directors what's still out. The step closes when the last region is clear.</p>"
+        }
+      ]
+    },
+    {
+      "name": "QR codes and the stop page",
+      "color": "Yellow",
+      "lead": "The codes for signs, wristbands and lanyards, and what the page a family opens shows.",
+      "cards": [
+        {
+          "type": "note",
+          "title": "The codes",
+          "body": "<ul><li><b>The stop:</b> signs and the announcement graphic Pylon posts.</li><li><b>Placements:</b> the booth, wristbands, team packets, and any you add (\"Field 3 sign\"), up to 20.</li><li><b>Creators:</b> one per adult creator on the crew with a SportsClippers page, for their lanyard.</li></ul><p>Each comes as a PNG for posts, an SVG for print shops, a letter-size sign or a 4x6 lanyard card.</p>"
+        },
+        {
+          "type": "note",
+          "title": "What the stop page shows",
+          "body": "<p>The stop's name, dates and place; <i>Find your footage</i> to the stop's SportsClippers page; how clips reach families; help by email or the on-site number. It never shows anything about an athlete, reads no roster, links out only to SportsClippers, and names creators by first name only.</p>"
+        }
+      ]
+    },
+    {
+      "name": "Checklists",
+      "color": "Grey",
+      "lead": "Tick-lists for the days that matter, and where every rule came from.",
+      "cards": [
+        {
+          "type": "todo",
+          "title": "Storefront ready (T-7)",
+          "items": [
+            "Stop code and placements printed",
+            "Creators' lanyard codes for confirmed adults only",
+            "SportsClippers link saved on the stop page",
+            "Help email and on-site number on the page",
+            "Marked ready on the QR codes screen"
+          ]
+        },
+        {
+          "type": "todo",
+          "title": "Crew brief (T-48 hours)",
+          "items": [
+            "Roster loaded, consent flags in",
+            "Crew at target, a lead, no youth creator alone",
+            "Brief built from the stop, read once for anything wrong",
+            "Sent from your own email with the crew in BCC",
+            "Marked sent on the brief screen"
+          ]
+        },
+        {
+          "type": "todo",
+          "title": "Shoot day: crew lead",
+          "items": [
+            "Both wide angles set for every game",
+            "Eagle Eye where the venue allows",
+            "Folders named the Schedule B way",
+            "Midday upload, both angles checked",
+            "Every final whistle noted",
+            "No clip of a held athlete",
+            "Youth creators beside an adult all day"
+          ]
+        },
+        {
+          "type": "todo",
+          "title": "After the stop: director",
+          "items": [
+            "Upload log loaded within 12 hours",
+            "The upload check read and fixed",
+            "Tags approved within 24 hours",
+            "Clips edited and sent to approval",
+            "Family-links file made and marked sent",
+            "Schedule C pieces logged"
+          ]
+        },
+        {
+          "type": "todo",
+          "title": "Stop review (T+14): Kyron",
+          "items": [
+            "The run sheet read stage by stage",
+            "One line on any change to the SOP",
+            "Marked reviewed"
+          ]
+        },
+        {
+          "type": "note",
+          "title": "Sources",
+          "body": "<p>Pylon Event Workflow SOP v1 (checked Nov 12, 2026). The TOJ app's guides, checked the same day: <i>Pylon events: the run sheet in the app</i> and <i>Pylon events in the TOJ app</i>. The Pylon agreement's Schedules B (capture and naming) and C (deliverables and crew), as the app applies them.</p>"
+        }
+      ]
+    }
+  ]
+}
