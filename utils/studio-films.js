@@ -144,24 +144,36 @@ function capitalizedAtStart(raw, w) {
 }
 // One word of a minor's name (four letters or more) run into other letters
 // ("#jordanstrong", "#teamjordan", "kiddquote", "Kiddstrong season"):
-// { sure, maybe, edge, loose }. The name for certain where the letters beside
-// it are a word a tag or a file name runs a name into ("strong", "team",
-// "quote", "prayfor"), another word of the name, initials after it in a tag
-// or a handle ("kayleeb_hoops"), or where camelCase starts or ends it
-// ("JordanStrong"). An everyday word ("hope") only as a first name beside
-// such a word ("#hopestrong", "#teamhope"): a surname that's an everyday word
-// there ("#teamgreen" for an Ava Green), and an everyday word made that way
-// ("#lifelong"), are asked. Anywhere else asked: an ordinary word that starts
-// or ends with a name ("island" for an Isla, "umbrella" for an Ella,
-// "William" for a Liam), a tag's ("#dallascowboys"), one inside a word
-// ("#ourjordanfam"). The word alone is read by the other screens.
+// { sure, maybe, edge, loose }. A name that's no everyday word is the name
+// for certain where it starts or ends the word and the rest is a word a tag
+// or a file name runs a name into ("strong", "team", "quote", "prayfor") or
+// four letters or more ("#jordanfootball", "#welovejordan", "#jordansarmy",
+// "Jordanfootball season"); beside another word of the name; with initials
+// after it in a tag or a handle ("kayleeb_hoops"); or where camelCase starts
+// or ends it ("JordanStrong"). An ordinary word that starts or ends with one
+// is asked: a short ending or start ("island" for an Isla, "William" for a
+// Liam, "theory" for a Theo, "Jordanian"), or a word on ORDINARY_RUNS
+// ("umbrella" for an Ella, "#islandlife"). An everyday word ("hope") is the
+// name only as a first name beside a word that says so ("#hopestrong",
+// "#teamhope", "#gohope"); beside a word that's as often a phrase
+// ("#summertime", "#faithlife", "#starpower"), as a surname ("#teamgreen" for
+// an Ava Green), or in an everyday word made that way ("#lifelong"), asked.
+// Inside a word, asked ("#ourjordanfam"). The word alone is read by the
+// other screens.
 // edge: every word found where a word of the run starts or ends, everyday
 // or not; loose: those that are no everyday word (a file name, with no one
 // to ask, reads "jordanxyz_v2" as Jordan's).
 let RUN_BESIDE = null;
-const runBeside = () => RUN_BESIDE || (RUN_BESIDE = new Set([...FILE_WORDS, ...TAG_TAILS, ...("go pray prayfor for thanks thankyou happy happybirthday birthday bday " +
+const runBeside = () => RUN_BESIDE || (RUN_BESIDE = new Set([...FILE_WORDS, ...TAG_TAILS, ...("go pray prayfor thanks thankyou happy happybirthday birthday bday " +
   "congrats congratulations proudof proudofyou coach dear hey shoutout welcome free justice lil big our my iloveyou loveyou missyou ilove rip " +
   "day week night watch highlights game games show hoops ball bball mvp").split(" ")]));
+// Beside an everyday first name, the words that say it's the name.
+const RUN_CLEAR = new Set(("strong nation fam gang squad crew army fans stan team go hey pray prayfor thanks thankyou happybirthday birthday bday " +
+  "congrats congratulations proudof proudofyou dear welove iloveyou loveyou missyou shoutout").split(" "));
+// Ordinary words that start or end with a name, with four letters or more
+// beside it: the word, where it holds the name's letters.
+const ORDINARY_RUNS = ("island islands islander islanders umbrella umbrellas cinderella mozzarella salmonella coleslaw milanote nicotine " +
+  "tarantula tarantulas williams williamsburg generic america american americans theory theories jordanian jordanians").split(" ");
 const RUN_COMPOUNDS = new Set(("lifelong daylong weeklong nightlong yearlong seasonlong powerhouse clubhouse showcase lovebird lovebirds " +
   "freewill willpower truelove bigdeal").split(" "));
 // A run of text with no space that's a tag, a handle, a link or a file name:
@@ -204,15 +216,21 @@ function minorRunIns(textValue, people) {
           const tail = r.low.slice(i + w.length);
           const camel = r.inner.has(i) || r.inner.has(i + w.length);
           const byWord = (!head && beside.has(tail)) || (!tail && beside.has(head));
+          const clear = (!head && RUN_CLEAR.has(tail)) || (!tail && RUN_CLEAR.has(head));
           const own = parts.some((x) => x !== w && Array.from(x).length >= 2 && (head.endsWith(x) || tail.startsWith(x)));
-          if (!head || !tail || camel) {
+          const atEdge = !head || !tail;
+          // The rest a word in its own right ("football", "welove"), unless
+          // the letters are an ordinary word's ("umbrella", "#islandlife").
+          const rest = atEdge && Array.from(head || tail).length >= 4 &&
+            !ORDINARY_RUNS.some((o) => { const j = o.indexOf(w); return j >= 0 && r.low.startsWith(o, i - j); });
+          if (atEdge || camel) {
             edge.add(w);
             if (!everyday(w)) loose.add(w);
           }
           if (!everyday(w)) {
-            if (camel || byWord || own || (r.tag && !head && Array.from(tail).length <= 2)) sure.add(w);
+            if (camel || byWord || own || rest || (r.tag && !head && Array.from(tail).length <= 2)) sure.add(w);
             else maybe.add(w);
-          } else if ((byWord && !surname && !RUN_COMPOUNDS.has(r.low) && !FILE_COMPOUNDS.has(r.low)) || own) sure.add(w);
+          } else if ((clear && !surname && !RUN_COMPOUNDS.has(r.low) && !FILE_COMPOUNDS.has(r.low)) || own) sure.add(w);
           else maybe.add(w);
         }
       }
@@ -397,8 +415,10 @@ function titleNames(textValue, people) {
     look(p.name, !!p.is_minor);
     if (p.reviewer_name) look(p.reviewer_name, false);
   }
+  // An everyday word run in ("Hopestrong") is asked in a title: it's words
+  // someone chose ("Summertime grind").
   const runIn = minorRunIns(raw, people);
-  for (const w of runIn.sure) sure.add(w);
+  for (const w of runIn.sure) (EVERYDAY_NAMES.has(w) ? maybe : sure).add(w);
   for (const w of runIn.maybe) maybe.add(w);
   // A minor's three-letter name beside a word a file name uses ("Teamsam",
   // "Samquote"): asked.

@@ -549,7 +549,12 @@ test("a tag or a Title Case line reads each word as a sentence start; a whole na
   assert.equal(judge("#gofield", whole), "asked field");
   // An ordinary word that starts or ends with a minor's name is asked about, never refused.
   const ordinary = [{ person_code: "IM1", name: "Isla Moss", is_minor: true }, { person_code: "LC1", name: "Liam Cruz", is_minor: true }, { person_code: "EL2", name: "Ella Ruiz", is_minor: true }];
-  for (const [t, want] of [["We grew up on the island", "asked isla"], ["William coached me", "asked liam"], ["Grab an umbrella", "asked ella"]]) assert.equal(judge(t, ordinary), want, t);
+  for (const [t, want] of [["We grew up on the island", "asked isla"], ["William coached me", "asked liam"], ["Grab an umbrella", "asked ella"], ["#islandlife", "asked isla"]]) assert.equal(judge(t, ordinary), want, t);
+  // A name at a word's start or end with a word's worth of letters beside it is the name.
+  for (const t of ["#jordanfootball", "#welovejordan", "#jordansarmy", "#jordanthegoat", "#kiddfootball"]) assert.equal(judge(t, whole), "refused", t);
+  // An everyday first name is the name only beside a word that says so; beside a phrase's word, asked.
+  const phrase = [{ person_code: "SR1", name: "Summer Ray", is_minor: true }, { person_code: "FD1", name: "Faith Diaz", is_minor: true }, { person_code: "SC1", name: "Star Cole", is_minor: true }];
+  for (const [t, want] of [["#summertime", "asked summer"], ["#faithlife", "asked faith"], ["#starpower", "asked star"]]) assert.equal(judge(t, phrase), want, t);
   assert.equal(judge("#SpeedLimit", whole), "asked #speedlimit");
   assert.equal(judge("#WalkOff", whole), "asked #walkoff");
   assert.equal(judge("#WalkOff", whole, new Set(["#walkoff"])), "passes");
