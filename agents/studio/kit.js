@@ -49,6 +49,9 @@ const BANNED_RE =
 const BANNED_PHRASES_RE = /\bguaranteed\s+(exposure|placement)\b/gi;
 
 const KITS_DIR = path.join(__dirname, "kits");
+// Kits proposed in the repo for TOJ's other lines of work: not in use until
+// an approver makes one a draft and approves it (routes/studio-agents.js).
+const PROPOSALS_DIR = path.join(__dirname, "proposals");
 const ASSETS_DIR = path.join(__dirname, "assets");
 
 function clone(x) {
@@ -94,6 +97,39 @@ function builtinKits() {
     out.push({ id: builtinId(kit), slug: kit.slug, version: kit.version, status: "approved", builtin: true, title: kit.title, kit });
   }
   builtinCache = out;
+  return out;
+}
+
+// ── Proposed kits (in the repo, not approved) ────────────────────────────
+let proposalCache = null;
+function proposedKits() {
+  if (proposalCache) return proposalCache;
+  const out = [];
+  let files = [];
+  try {
+    files = fs.readdirSync(PROPOSALS_DIR).filter((f) => f.endsWith(".json")).sort();
+  } catch {
+    files = [];
+  }
+  for (const f of files) {
+    let kit;
+    try {
+      kit = JSON.parse(fs.readFileSync(path.join(PROPOSALS_DIR, f), "utf8"));
+    } catch (e) {
+      console.warn(`[studio] proposed kit ${f} doesn't read: ${e.message}`);
+      continue;
+    }
+    if (!kit || typeof kit.slug !== "string" || !/^[a-z0-9][a-z0-9-]{1,62}$/.test(kit.slug)) {
+      console.warn(`[studio] proposed kit ${f} has no usable slug`);
+      continue;
+    }
+    if (out.some((p) => p.slug === kit.slug)) {
+      console.warn(`[studio] proposed kit ${f} repeats the slug ${kit.slug}`);
+      continue;
+    }
+    out.push({ slug: kit.slug, title: kit.title, file: f, kit });
+  }
+  proposalCache = out;
   return out;
 }
 
@@ -419,6 +455,7 @@ module.exports = {
   templatesFor,
   assetSets,
   builtinKits,
+  proposedKits,
   builtinId,
   checkCard,
   checkMeta,

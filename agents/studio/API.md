@@ -31,6 +31,8 @@ All under `/api/studio-agents`. Auth is by team role (utils/team.js, the TOJ app
 | GET | `/kits/:id/page` | team or key | The Milanote kit page, with a status bar (Approved / Draft / Superseded) |
 | POST | `/kits/:id/approve` | **approver or owner** | Approve a draft (refused while it has blockers, or if a newer version was approved since) |
 | POST | `/kits/:id/discard` | **approver or owner** | Discard a draft |
+| GET | `/proposals` | team or key | The kits proposed in the repo (`proposals/`), each with its counts, its blockers, and its open draft and approved version (or `null`) |
+| POST | `/proposals/:slug/draft` | **approver or owner**, JSON from the app's own pages | Make a proposed kit a draft: v*n* of its slug, `role: "proposal"`, checks not run. Refused while a draft or an approved version of the slug is open (`409 drafted_already`, with that version) or while the file has blockers |
 | GET | `/assets/:set/:file` | signed URL or team | A template image |
 | POST | `/run` | member or key | Start a run → `{ run_id }` |
 | POST | `/brief` | member or key | Start the Brief Writer → `{ run_id, references }` |
@@ -109,11 +111,12 @@ The month's refresh and the gear re-check are a person's to start, in the app (T
 | `skills/` | `milanote-kit.md` (the method), `production-guardrails.md` (the lines), `reference-library.md` (Same Work's approved references, gear and sources) |
 | `evals/studio-principles.js` | The judge |
 | `kits/same-work.v1.json` | The approved Same Work kit, Oct 19, 2026 |
+| `proposals/` | Kits proposed for TOJ's other lines of work (a Pylon stop, Pylon packages, Subject Medias sessions and marketplace events, the fellowship). None is in use until an approver makes it a draft in the app (Studio → Proposed kits), reads it card by card and approves it |
 | `assets/same-work/` | The eight template images and `templates.json` |
 
 ## Setup
 
-1. Apply `db/migrations/018_studio_kits.sql` and `019_team.sql` to Supabase (both applied Oct 19, 2026).
+1. Apply `db/migrations/018_studio_kits.sql` and `019_team.sql` to Supabase (both applied Oct 19, 2026). Proposed kits also need `044_studio_proposals.sql` (one open draft per proposal), after 039–043.
 2. The server needs `ANTHROPIC_API_KEY`, `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `ADMIN_EMAILS` and `SESSION_SECRET` (already used by the other packs). Optional: `STUDIO_API_KEY` for kit runs started by a script (not the month's refresh or the gear re-check); `STUDIO_ASSET_SECRET` to sign image URLs with their own secret.
 3. Web search and web fetch must be enabled for the Anthropic organization behind `ANTHROPIC_API_KEY` (an organization admin setting in the Claude Console). If they're off, runs still work from the approved kit and the reference library, but nothing gets re-checked.
 

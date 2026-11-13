@@ -2,7 +2,10 @@
  * is routes/studio-films.js (migration 039). Registers screens for app.js:
  *
  *   #films                     the films (#films/archived for archived ones)
- *   #film-new                  start a film from a kit
+ *   #film-new                  start a film from a kit (#film-new/<stop id>:
+ *                              planned against that tour stop)
+ *   #film-slate                the season slate: the tour's stops and the
+ *                              films planned against each
  *   #film/<id>                 the room: the kit's ten steps, clearance cards,
  *                              cuts and their review links, posts, history
  *   #film-edit/<id>            details and the board's structured parts
@@ -37,6 +40,7 @@
     file_name_has_name: "File names never carry a name. Use the athlete ID, the kit's way.",
     too_big: "That file is over the size limit for review copies. Export the review copy at 720p.",
     changed_meanwhile: "It changed while you were looking. Open it again.",
+    gfs_event_id: "That tour stop isn't on the calendar any more. Open the slate again.",
     already_done: "That's already done.",
     no_approved_kit: "That kit has no approved version yet.",
     email_failed: "The email didn't go, so no link was made. Try again in a minute.",
@@ -44,6 +48,7 @@
     email_not_set_up: "The app can't send email yet (Render's email settings), so no link was made.",
     too_many_links_today: "That address has had 20 links today. Try tomorrow, or call them.",
     no_reviewer: "That card doesn't say who approves the cut.",
+    card_not_cleared: "Clear the card first: its email hasn't been checked yet.",
     exists: "There's already a live link for that cut and reviewer.",
     version_taken: "That version number was just used: open the film again and send it as the next version.",
     id_taken: "That upload's id is already in use: start the upload again.",
@@ -149,6 +154,7 @@
       (live.length ? '<div class="list">' + live.map(row).join("") + "</div>" : '<p class="empty">' + (arg === "archived" ? "No archived films." : "No films yet. Start one from the Same Work kit.") + "</p>") +
       (pulled.length ? '<section class="sec"><h2 class="sec-h">Consent pulled</h2><div class="list">' + pulled.map(row).join("") + "</div></section>" : "") +
       '<div class="list">' +
+      (arg === "archived" ? "" : '<a class="li" href="#film-slate"><div class="grow"><div class="name" style="font-size:15px">Season slate</div><div class="sub">The tour\'s stops and the films planned for each</div></div>' + t.I.chev + "</a>") +
       (meta.can.producer ? '<a class="li" href="#film-takedowns"><div class="grow"><div class="name" style="font-size:15px">Takedowns</div><div class="sub">The 72-hour clock when consent is pulled</div></div>' + t.I.chev + "</a>" : "") +
       '<a class="li" href="#film-tools"><div class="grow"><div class="name" style="font-size:15px">Tool approvals</div><div class="sub">' + tools + " of " + (meta.tools || []).length + " on · tools that touch footage start off</div></div>" + t.I.chev + "</a>" +
       (arg === "archived" ? '<a class="li" href="#films"><div class="grow name" style="font-size:15px">Films in progress</div>' + t.I.chev + "</a>" : '<a class="li" href="#films/archived"><div class="grow name" style="font-size:15px">Archived films</div>' + t.I.chev + "</a>") +
@@ -156,17 +162,22 @@
   }
 
   // ── Start a film ─────────────────────────────────────────────────────
-  async function filmNew() {
+  async function filmNew(stopId) {
     if (!guard()) return;
-    var t = T(), back = t.backBtn("#films", "Films");
+    var t = T(), back = t.backBtn(stopId ? "#film-slate" : "#films", stopId ? "Season slate" : "Films");
     loading(back);
-    try { await getMeta(); } catch (e) { if (e.stale) throw e; return failed(back, e); }
+    var stop = null;
+    try {
+      await getMeta();
+      if (stopId) stop = ((await t.api("/api/studio-films/slate")).events || []).find(function (e) { return e.id === stopId; }) || null;
+    } catch (e) { if (e.stale) throw e; return failed(back, e); }
     var tp = tpl("same-work");
     var lanes = Object.keys(tp.lanes), formats = Object.keys(tp.formats);
     var s = { lane: "youth", format: "hero" };
     function draw() {
       t.show(null,
         '<div class="screen">' + back + '<h1 class="title sm">Start a film</h1><p class="lede">From the ' + h(tp.name) + ' kit. The title is a working title: never a person\'s name. Use the athlete ID.</p>' +
+        (stop ? '<div class="card tight"><div class="sub">Planned for</div><div class="name" style="font-size:15px">' + h(stop.name) + '</div><div class="sub">' + h(stopDates(stop) + " · " + stop.city + ", " + stop.state) + "</div></div>" : "") +
         '<div class="field"><label class="label" for="fTitle">Working title</label><input class="input" id="fTitle" maxlength="120" placeholder="A0142 hero"></div>' +
         '<div class="field"><span class="label">Lane</span><div class="seg" role="group" aria-label="Lane">' + lanes.map(function (l) { return '<button type="button" data-lane="' + l + '" aria-pressed="' + (s.lane === l) + '">' + h(tp.lanes[l].label) + "</button>"; }).join("") + "</div></div>" +
         '<div class="field"><label class="label" for="fFormat">Format</label><select class="input" id="fFormat">' + formats.map(function (f) { return '<option value="' + f + '"' + (s.format === f ? " selected" : "") + ">" + h(tp.formats[f].label + " · " + tp.formats[f].spec) + "</option>"; }).join("") + "</select></div>" +
@@ -188,10 +199,91 @@
       btn.disabled = true;
       try {
         var body = { kit_slug: "same-work", title: kept.fTitle, lane: s.lane, format: kept.fFormat, athlete_id: kept.fAthlete, one_sentence: kept.fStory || null, post_date: kept.fPost || null };
+        if (stop) body.gfs_event_id = stop.id;
         if (meta.can.producer) { body.director_email = kept.fDir || null; body.editor_email = kept.fEd || null; }
         var d = await t.post("/api/studio-films/films", body);
         T().go("#film/" + d.film.id);
       } catch (e) { btn.disabled = false; say("newMsg", why(e), true); }
+    }
+    draw();
+  }
+
+  // A stop's dates, short: "Nov 21" or "Nov 21–22".
+  function stopDates(e) {
+    var o = { month: "short", day: "numeric" };
+    var a = new Date(e.starts_on + "T12:00:00").toLocaleDateString(undefined, o);
+    return e.ends_on && e.ends_on !== e.starts_on ? a + "–" + new Date(e.ends_on + "T12:00:00").toLocaleDateString(undefined, o) : a;
+  }
+
+  // ── The season slate ─────────────────────────────────────────────────
+  // The tour's stops from a week back to six months on, each with the films
+  // planned against it: plan one there, link a film in progress, or unlink.
+  async function filmSlate() {
+    if (!guard()) return;
+    var t = T(), back = t.backBtn("#films", "Films");
+    loading(back);
+    var d;
+    try { await getMeta(); d = await t.api("/api/studio-films/slate"); } catch (e) { if (e.stale) throw e; return failed(back, e); }
+    var linking = null;
+    var today = new Date().toISOString().slice(0, 10);
+    function filmRow(f) {
+      var w = f.where || {};
+      // A pulled film stays where it was planned, marked, and can't be moved.
+      var b = f.pulled ? badge("Consent pulled", "bad") : w.state === "published" ? badge("Published", "ok") : w.state === "active" ? badge(w.label, "gold") : "";
+      return '<div class="li"><a class="grow" href="#film/' + h(f.id) + '" style="text-decoration:none;color:inherit"><div class="name" style="font-size:15px">' + h(f.title) + '</div><div class="sub">' + h([fmtLabel(f.kit_slug, f.format), f.athlete_id].join(" · ")) + "</div></a>" + b +
+        (f.pulled ? "" : '<button type="button" class="btn ghost small" data-unlink="' + h(f.id) + '" style="flex:0 0 auto">Unlink</button>') + "</div>";
+    }
+    function stopCard(e) {
+      var films = e.films || [];
+      return '<div class="card" style="gap:10px"><div class="row" style="align-items:flex-start"><div class="grow"><div class="name" style="font-size:16px">' + h(e.name) + '</div><div class="sub">' + h(stopDates(e) + " · " + e.city + ", " + e.state + (e.series ? " · " + e.series : "")) + "</div></div>" +
+        badge(films.length ? films.length + (films.length === 1 ? " film" : " films") : "Nothing planned", films.length ? "ok" : "") + "</div>" +
+        (films.length ? '<div class="list">' + films.map(filmRow).join("") + "</div>" : "") +
+        (linking === e.id
+          ? (d.unplaced.length
+            ? '<div class="row" style="gap:8px"><label class="sr" for="linkPick">A film in progress</label><select class="input grow" id="linkPick">' + d.unplaced.map(function (f) { return '<option value="' + h(f.id) + '">' + h(f.title + " · " + f.athlete_id) + "</option>"; }).join("") + '</select><button type="button" class="btn small" data-link-go="' + h(e.id) + '">Link</button><button type="button" class="btn ghost small" id="linkCancel">Not now</button></div>'
+            : '<p class="sub">Every film in progress is planned for a stop already.</p>')
+          : '<div class="btn-row"><a class="btn soft small" href="#film-new/' + h(e.id) + '">Plan a film here</a><button type="button" class="btn ghost small" data-link="' + h(e.id) + '">Link a film…</button></div>') +
+        "</div>";
+    }
+    function draw() {
+      var ahead = d.events.filter(function (e) { return (e.ends_on || e.starts_on) >= today; });
+      var past = d.events.filter(function (e) { return (e.ends_on || e.starts_on) < today; });
+      var planned = ahead.filter(function (e) { return (e.films || []).length; }).length;
+      t.show("studio",
+        '<div class="screen">' + back + '<div class="head"><div><p class="kicker">Studio</p><h1 class="title">Season slate</h1></div></div>' +
+        '<p class="lede">The tour\'s stops for the next six months and the films planned for each. ' + h(planned + " of " + ahead.length + (ahead.length === 1 ? " stop has" : " stops have") + " a film planned.") + "</p>" +
+        msgBox("slMsg") +
+        (ahead.length ? ahead.map(stopCard).join("") : '<p class="empty">No stops on the calendar in the next six months.</p>') +
+        (past.length ? '<section class="sec"><h2 class="sec-h">Last week</h2>' + past.map(stopCard).join("") + "</section>" : "") +
+        ((d.elsewhere || []).length ? '<section class="sec"><h2 class="sec-h">Planned for a stop not shown here</h2><p class="sub" style="margin:0">' + h("Its stop is further out, in another region, or was cancelled. Open the film to plan it again.") + '</p><div class="list">' + d.elsewhere.map(filmRow).join("") + "</div></section>" : "") +
+        "</div>");
+      document.querySelectorAll("[data-link]").forEach(function (b) { b.addEventListener("click", function () { linking = b.dataset.link; draw(); }); });
+      var c = document.getElementById("linkCancel");
+      if (c) c.addEventListener("click", function () { linking = null; draw(); });
+      document.querySelectorAll("[data-link-go]").forEach(function (b) {
+        b.addEventListener("click", function () {
+          var f = d.unplaced.find(function (x) { return x.id === document.getElementById("linkPick").value; });
+          if (f) setStop(f, b.dataset.linkGo, b);
+        });
+      });
+      document.querySelectorAll("[data-unlink]").forEach(function (b) {
+        b.addEventListener("click", function () {
+          var f = null;
+          d.events.forEach(function (e) { (e.films || []).forEach(function (x) { if (x.id === b.dataset.unlink) f = x; }); });
+          (d.elsewhere || []).forEach(function (x) { if (x.id === b.dataset.unlink) f = x; });
+          if (f) setStop(f, null, b);
+        });
+      });
+    }
+    async function setStop(f, stopId, btn) {
+      btn.disabled = true;
+      try {
+        await t.post("/api/studio-films/films/" + encodeURIComponent(f.id), { seen: f.updated_at, gfs_event_id: stopId }, "PATCH");
+        t.toast(stopId ? "Linked to the stop." : "Unlinked.");
+        linking = null;
+        d = await t.api("/api/studio-films/slate");
+        draw();
+      } catch (e) { btn.disabled = false; say("slMsg", why(e), true); }
     }
     draw();
   }
@@ -237,7 +329,8 @@
     var head = '<div><p class="kicker">' + h([d.template ? d.template.name : f.kit_slug, fmtLabel(f.kit_slug, f.format), laneLabel(f.kit_slug, f.lane), f.athlete_id].join(" · ")) + '</p><h1 class="title sm">' + h(f.title) + "</h1>" +
       (f.one_sentence ? '<p class="lede" style="font-size:15px">' + h(f.one_sentence) + "</p>" : "") + "</div>" +
       '<div class="btn-row" style="gap:8px">' + (w.state === "active" ? badge("Next: " + w.label + " · " + w.waiting_on, "gold") : w.state === "pulled" ? badge("Consent pulled", "bad") : w.state === "published" ? badge("Published", "ok") : badge("Archived")) +
-      (f.post_date ? badge("Posts " + new Date(f.post_date + "T12:00:00").toLocaleDateString(undefined, { month: "short", day: "numeric" })) : "") + "</div>" +
+      (f.post_date ? badge("Posts " + new Date(f.post_date + "T12:00:00").toLocaleDateString(undefined, { month: "short", day: "numeric" })) : "") +
+      (d.stop ? '<a class="badge" href="#film-slate">' + h("For " + d.stop.name + " · " + stopDates(d.stop)) + "</a>" : "") + "</div>" +
       (closed ? "" : '<div class="btn-row"><a class="btn soft small" href="#film-edit/' + h(f.id) + '">Details and board</a><a class="btn soft small" href="#film-shoot/' + h(f.id) + '">Shoot mode</a><a class="btn soft small" href="#film-check/' + h(f.id) + '">Delivery check</a><a class="btn soft small" href="#film-graphics/' + h(f.id) + '">Graphics</a><a class="btn soft small" href="#film-words/' + h(f.id) + '">Real words</a><a class="btn soft small" href="#film-wraps/' + h(f.id) + '">Wrap-ups</a></div>');
     var pulledBox = f.pulled_at ? '<article class="card" style="border-color:#5A3A33"><div class="name">Consent was pulled</div><p class="body">Nothing more goes out. Every post of this film is on the takedown list, with the 72-hour clock.' + (d.can.producer ? "" : " The producer is on it.") + "</p>" + (d.can.producer ? '<div class="btn-row"><a class="btn small" href="#film-takedowns">Open takedowns</a></div>' : "") + "</article>" : "";
 
@@ -279,10 +372,12 @@
       var cov = p.covers || {};
       var covers = "Release covers: " + (["face", "name", "jersey", "voice"].filter(function (k) { return cov[k]; }).join(", ") || "nothing identifying") + ((cov.formats || []).length ? " · " + cov.formats.map(function (x) { return fmtLabel(f.kit_slug, x); }).join(", ") : "");
       var who = p.reviewer_email ? (p.reviewer_relation === "self" ? "Approves their own cut" : "Approved by " + (p.reviewer_relation === "guardian" ? "legal guardian" : "parent") + " " + p.reviewer_name) + " · " + p.reviewer_email : "";
+      // Their own page (every film with them, and taking consent back), by email.
+      var pageBtn = d.can.producer && p.reviewer_email && p.cleared_at ? '<button type="button" class="btn ghost small" data-pagelink="' + h(p.id) + '">Send their page</button>' : "";
       return '<article class="card tight"><div class="row"><div class="grow"><div class="name" style="font-size:15px">' + h(p.name) + ' <span class="sub">' + h(p.person_code) + '</span></div><div class="sub">' + h(tags) + "</div></div>" + state + "</div>" +
         '<p class="body" style="font-size:13.5px">' + h(covers) + (who ? "<br>" + h(who) : "") + (p.cleared_at ? "<br>Cleared by " + h(p.cleared_by) + " · " + h(t.ago(p.cleared_at)) : "") + (p.gaps && p.gaps.length && !p.cleared_at ? '<br><span class="warnc">Still needed: ' + h(p.gaps.join("; ")) + "</span>" : "") + "</p>" +
-        (closed || p.consent_pulled_at ? "" : '<div class="btn-row"><a class="btn ghost small" href="#film-person/' + h(f.id) + "/" + h(p.id) + '">Edit card</a>' +
-          (d.can.producer && !p.cleared_at && !(p.gaps || []).length ? '<button type="button" class="btn small" data-clear="' + h(p.id) + '" data-seen="' + h(p.updated_at) + '">Clear it</button>' : "") + "</div>") +
+        (closed || p.consent_pulled_at ? (pageBtn ? '<div class="btn-row">' + pageBtn + "</div>" : "") : '<div class="btn-row"><a class="btn ghost small" href="#film-person/' + h(f.id) + "/" + h(p.id) + '">Edit card</a>' +
+          (d.can.producer && !p.cleared_at && !(p.gaps || []).length ? '<button type="button" class="btn small" data-clear="' + h(p.id) + '" data-seen="' + h(p.updated_at) + '">Clear it</button>' : "") + pageBtn + "</div>") +
         (d.can.producer && !p.consent_pulled_at ? '<details><summary class="sub" style="cursor:pointer;min-height:32px;display:flex;align-items:center">Consent pulled?</summary><div class="field" style="margin-top:6px"><p class="body" style="font-size:13.5px">Every film ' + h(p.person_code) + ' is in stops, every live post goes on the takedown list, and the 72-hour clock starts. It can\'t be undone.</p><input class="input" data-pullnote="' + h(p.person_code) + '" maxlength="500" placeholder="How it came in (phone call, email)"><button type="button" class="btn danger small" data-pull="' + h(p.person_code) + '">Consent pulled: start the takedown</button></div></details>' : "") +
         "</article>";
     }).join("");
@@ -429,6 +524,9 @@
     });
     document.querySelectorAll("[data-clear]").forEach(function (b) {
       b.addEventListener("click", async function () { b.disabled = true; try { await t.post("/api/studio-films/films/" + f.id + "/people/" + b.dataset.clear + "/clear", { seen: b.dataset.seen }); t.toast("Cleared."); reload(); } catch (e) { b.disabled = false; T().toast(why(e)); } });
+    });
+    document.querySelectorAll("[data-pagelink]").forEach(function (b) {
+      b.addEventListener("click", async function () { b.disabled = true; b.textContent = "Sending…"; try { await t.post("/api/studio-films/films/" + f.id + "/people/" + b.dataset.pagelink + "/page-link", {}); t.toast("Their page link is on its way (it works for 7 days)."); b.textContent = "Sent"; } catch (e) { b.disabled = false; b.textContent = "Send their page"; T().toast(why(e)); } });
     });
     document.querySelectorAll("[data-pull]").forEach(function (b) {
       armed(b, "Tap again: it can't be undone", async function () {
@@ -791,6 +889,6 @@
     busy: function (n) { busy += n; },
   };
   window.TOJScreens = Object.assign(window.TOJScreens || {}, {
-    films: films, "film-new": filmNew, film: film, "film-edit": filmEdit, "film-person": filmPerson, "film-cut": filmCut, "film-takedowns": filmTakedowns, "film-tools": filmTools,
+    films: films, "film-new": filmNew, "film-slate": filmSlate, film: film, "film-edit": filmEdit, "film-person": filmPerson, "film-cut": filmCut, "film-takedowns": filmTakedowns, "film-tools": filmTools,
   });
 })();

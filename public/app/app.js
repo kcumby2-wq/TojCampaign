@@ -79,6 +79,8 @@
     too_many_tries: "Too many tries. Wait a few minutes.",
     regions_required: "Pick at least one region for a Regional Director.",
     gfs_not_set_up: "Pylon events aren't set up on the server yet.",
+    in_use_already: "That kit is already in use.",
+    drafted_already: "It's a draft already.",
   };
   function friendly(code) { return code ? FRIENDLY[code] || String(code).replace(/_/g, " ") : ""; }
 
@@ -362,7 +364,7 @@
     if (running.length) later(today, 15000);
   }
 
-  function roleLabel(r) { return { "kit-refresher": "Kit Refresher", "kit-builder": "Kit Builder", "brief-writer": "Brief Writer" }[r] || r || ""; }
+  function roleLabel(r) { return { "kit-refresher": "Kit Refresher", "kit-builder": "Kit Builder", "brief-writer": "Brief Writer", proposal: "Proposed in the repo" }[r] || r || ""; }
   function evalLabel(e) { return { passed: "passed its checks", passed_after_retry: "passed its checks on a retry", failed_after_retries: "failed its checks, look closely", not_run: "checks not run" }[e] || "checks pending"; }
 
   function installHint() {
@@ -377,6 +379,9 @@
   async function studio() {
     show("studio", '<div class="screen"><h1 class="title">Studio</h1><div class="spin"></div></div>');
     var d = await api("/api/studio-agents/kits");
+    // Kits proposed in the repo: the screen still works if this can't load.
+    var proposals = [];
+    try { proposals = (await api("/api/studio-agents/proposals")).proposals || []; } catch (e) { if (e.stale) throw e; }
     state.kits = d.kits || [];
     var bySlug = {};
     state.kits.forEach(function (k) { (bySlug[k.slug] = bySlug[k.slug] || []).push(k); });
@@ -391,13 +396,54 @@
         (older.length ? '<details><summary class="sub" style="cursor:pointer;min-height:32px;display:flex;align-items:center">Older versions (' + older.length + ')</summary><div class="list" style="margin-top:8px">' + older.map(function (r) { return '<a class="li" href="#kit/' + h(r.id) + '"><span class="badge">' + h(r.status) + " v" + r.version + '</span><div class="grow sub">' + h(ago(r.created_at)) + "</div>" + I.chev + "</a>"; }).join("") + "</div></details>" : "") +
         "</article>";
     }).join("");
+    // In use once approved: an approved one is a kit above, not a proposal.
+    var open = proposals.filter(function (p) { return !p.builtin && !p.approved; });
+    function n(k, word) { k = k || 0; return k + " " + word + (k === 1 ? "" : "s"); }
+    var proposed = open.map(function (p) {
+      var c = p.counts || {};
+      var lead = String(p.lead || "");
+      if (lead.length > 220) lead = lead.slice(0, 220).replace(/\s+\S*$/, "") + "…";
+      var act = p.draft
+        ? '<a class="btn soft" href="#review/' + h(p.draft.id) + '">Read draft v' + p.draft.version + "</a>"
+        : p.blockers
+          ? '<span class="sub">' + p.blockers + " problem" + (p.blockers > 1 ? "s" : "") + " to fix in the repo first</span>"
+          : atLeast("approver")
+            ? '<button type="button" class="btn soft" data-propose="' + h(p.slug) + '">Make it a draft</button>'
+            : '<span class="sub">An approver or Kyron can make it a draft.</span>';
+      return '<article class="card"><div class="row"><div class="grow"><div class="name" style="font-size:17px">' + h(p.title) + '</div><div class="sub">' +
+        (p.eyebrow ? h(p.eyebrow) + " · " : "") + n(c.cards, "card") + " in " + n(c.columns, "column") + " · " + n(c.locked, "rule card") + "</div></div>" +
+        (p.draft ? '<span class="badge warn">Draft v' + p.draft.version + "</span>" : '<span class="badge">Proposed</span>') + "</div>" +
+        (lead ? '<p class="body" style="font-size:14px;margin:0">' + h(lead) + "</p>" : "") +
+        '<div class="btn-row">' + act + "</div></article>";
+    }).join("");
+    var proposedSec = open.length
+      ? '<section class="sec"><h2 class="sec-h">Proposed kits</h2><p class="sub" style="margin:0 0 4px">Written for TOJ\'s other lines of work. None is in use until an approver makes it a draft, reads it card by card and approves it.</p>' + proposed + "</section>"
+      : "";
     show("studio",
       '<div class="screen"><div class="head"><h1 class="title">Studio</h1>' + (atLeast("member") ? '<a class="btn small soft" href="#new">' + I.plus.replace("<svg", '<svg width="16" height="16"') + "New idea</a>" : "") + "</div>" +
       (atLeast("member") ? '<a class="li list" href="#films" style="border-radius:16px"><div class="ico">' + I.camera + '</div><div class="grow"><div class="name" style="font-size:15px">Films</div><div class="sub">A room for every film: the kit\'s ten steps, cleared cards, speakers\' review links</div></div>' + I.chev + "</a>" : "") +
       (atLeast("member") ? '<a class="li list" href="#taste" style="border-radius:16px"><div class="ico">' + I.layers + '</div><div class="grow"><div class="name" style="font-size:15px">Taste library</div><div class="sub">Work worth learning from: a link, what to take and leave. Briefs cite it.</div></div>' + I.chev + "</a>" : "") +
       (blocks || '<p class="empty">No kits yet.</p>') +
+      proposedSec +
       '<a class="li list" href="#tool/studio-console" style="border-radius:16px">' + '<div class="grow"><div class="name" style="font-size:15px">Full Studio console</div><div class="sub">Build a new kit from a playbook, every option</div></div>' + I.chev + "</a>" +
       "</div>");
+    Array.prototype.forEach.call(document.querySelectorAll("[data-propose]"), function (b) {
+      b.addEventListener("click", async function () {
+        if (b.disabled) return;
+        b.disabled = true;
+        try {
+          var r = await post("/api/studio-agents/proposals/" + encodeURIComponent(b.dataset.propose) + "/draft");
+          toast("Draft v" + r.version + " made. Read it card by card before approving.");
+          go("#review/" + r.id);
+        } catch (e) {
+          if (e.stale) return;
+          var k = e.data && e.data.error === "drafted_already" && e.data.kit;
+          if (k) { go((k.status === "approved" ? "#kit/" : "#review/") + k.id); return; }
+          b.disabled = false;
+          toast(e.message);
+        }
+      });
+    });
   }
 
   // ── A kit ────────────────────────────────────────────────────────────
@@ -895,7 +941,11 @@
     var row = await api("/api/studio-agents/kits/" + encodeURIComponent(id));
     var base = null;
     if (row.base_kit_id) { try { base = await api("/api/studio-agents/kits/" + encodeURIComponent(row.base_kit_id)); } catch (e) {} }
-    var diff = row.diff || { totals: { changed: 0, added: 0, removed: 0, same: 0 }, columns: [] };
+    // A draft with nothing before it (a new kit, a proposed one): every card is new.
+    var diff = row.diff || (!row.base_kit_id && row.kit && row.kit.columns
+      ? { totals: { changed: 0, added: row.kit.columns.reduce(function (n, c) { return n + c.cards.length; }, 0), removed: 0, same: 0 },
+          columns: row.kit.columns.map(function (c) { return { name: c.name, status: "added", changed: [], added: c.cards.map(function (k) { return k.title; }), removed: [] }; }) }
+      : { totals: { changed: 0, added: 0, removed: 0, same: 0 }, columns: [] });
     var why = {};
     (row.changes || []).forEach(function (o) { if (o.title) why[o.column + "|" + o.title] = o.reason; });
     var blocks = "";
@@ -922,12 +972,12 @@
       '<div class="screen">' + backBtn("#today", "Today") +
       '<div><p class="kicker">' + h(row.title) + " · " + h(roleLabel(row.role)) + '</p><h1 class="title">' + h((row.status === "draft" ? "Draft v" : row.status + " v") + row.version) + "</h1></div>" +
       '<div class="btn-row" style="gap:8px;flex-wrap:wrap">' +
-      '<span class="badge ' + (row.eval_status === "failed_after_retries" ? "bad" : "ok") + '">' + h(evalLabel(row.eval_status)) + "</span>" +
+      '<span class="badge ' + (row.eval_status === "failed_after_retries" ? "bad" : row.eval_status === "not_run" ? "warn" : "ok") + '">' + h(evalLabel(row.eval_status)) + "</span>" +
       '<span class="badge">' + t.changed + " changed · " + t.added + " added · " + t.removed + " removed · " + t.same + " untouched</span>" +
       (base ? '<span class="badge ' + (lockedChanged ? "bad" : "") + '">' + (lockedChanged ? "Rule cards changed" : "Rule cards untouched") + "</span>" : "") +
       (row.check && !row.check.ok ? '<span class="badge bad">' + row.check.blockers.length + " problem(s) to fix</span>" : "") + "</div>" +
       (blocks || '<p class="empty">No card-level changes.</p>') +
-      (row.summary ? '<details class="card tight"><summary class="name" style="font-size:15px;cursor:pointer">The agent\'s summary</summary><p class="body" style="white-space:pre-wrap;font-size:13.5px">' + h(row.summary) + "</p></details>" : "") +
+      (row.summary ? '<details class="card tight"' + (row.role === "proposal" ? " open" : "") + '><summary class="name" style="font-size:15px;cursor:pointer">' + (row.role === "proposal" ? "Where it came from" : "The agent's summary") + '</summary><p class="body" style="white-space:pre-wrap;font-size:13.5px">' + h(row.summary) + "</p></details>" : "") +
       '<a class="li list" href="#kit/' + h(row.id) + '" style="border-radius:16px"><div class="grow name" style="font-size:15px">Open the whole draft</div>' + I.chev + "</a>" +
       '<p id="revMsg" class="body" role="status"></p></div>' +
       (row.status === "draft" ? '<div class="dock"><div class="dock-inner">' +

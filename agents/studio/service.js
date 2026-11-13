@@ -196,6 +196,79 @@ async function saveDraft(sb, { stage, runId, role, result, slug, requestedBy }) 
   throw new Error("could not pick a version number");
 }
 
+// ── Proposed kits ────────────────────────────────────────────────────────
+// What's proposed in the repo, each with its checks and where it stands: its
+// newest open draft and its approved version, if either exists.
+async function listProposals(sb) {
+  const out = [];
+  const rows = [];
+  if (sb) {
+    const slugs = K.proposedKits().map((p) => p.slug);
+    if (slugs.length) {
+      const { data, error } = await sb.from("studio_kits").select("id,slug,version,status,created_at").in("slug", slugs).order("version", { ascending: false });
+      if (error) throw new Error(error.message);
+      rows.push(...(data || []));
+    }
+  }
+  for (const p of K.proposedKits()) {
+    const check = K.checkKit({ ...p.kit, version: 1 });
+    const mine = rows.filter((r) => r.slug === p.slug);
+    const pick = (status) => {
+      const r = mine.find((x) => x.status === status);
+      return r ? { id: r.id, version: r.version } : null;
+    };
+    const lead = String(p.kit.lead_html || "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+    out.push({
+      slug: p.slug,
+      title: p.title,
+      eyebrow: p.kit.eyebrow,
+      lead,
+      counts: check.counts,
+      blockers: check.blockers.length,
+      builtin: K.builtinKits().some((b) => b.slug === p.slug),
+      draft: pick("draft"),
+      approved: pick("approved"),
+    });
+  }
+  return out;
+}
+
+// A proposed kit made a draft, for an approver to read and approve like any
+// other: a new version of its slug, with no run behind it.
+async function draftProposal(sb, slug, by) {
+  const p = K.proposedKits().find((x) => x.slug === slug);
+  if (!p) return { error: "not_found" };
+  if (K.builtinKits().some((b) => b.slug === slug)) return { error: "in_use_already" };
+  const check = K.checkKit({ ...p.kit, version: 1 });
+  if (!check.ok) return { error: "fix_blockers_first", blockers: check.blockers };
+  for (let attempt = 0; attempt < 3; attempt++) {
+    // Read on every try: two approvers at once both pick the same version,
+    // one insert wins, and the other finds that draft here and stops.
+    const { data: open, error: e1 } = await sb.from("studio_kits").select("id,version,status").eq("slug", slug).in("status", ["draft", "approved"]).order("version", { ascending: false }).limit(1);
+    if (e1) throw new Error(e1.message);
+    if (open && open[0]) return { error: "drafted_already", kit: open[0] };
+    const version = await nextVersion(sb, slug);
+    const kit = { ...K.clone(p.kit), slug, version, as_of: today() };
+    const row = {
+      slug,
+      version,
+      status: "draft",
+      title: kit.title || slug,
+      kit,
+      role: "proposal",
+      eval_status: "not_run",
+      check_blockers: 0,
+      summary: `Proposed in the repo (agents/studio/proposals/${p.file}). Read it card by card before approving: nothing in it has been checked by a run.`,
+      changes: null,
+      created_by: by || null,
+    };
+    const { data, error } = await sb.from("studio_kits").insert(row).select("id,version").single();
+    if (!error) return { saved: true, id: data.id, version: data.version };
+    if (error.code !== "23505") throw new Error(error.message);
+  }
+  throw new Error("could not pick a version number");
+}
+
 function bannerFor(row) {
   const v = `v${row.version}`;
   if (row.builtin && row.status === "approved") return `Approved ${v} · the kit as built and approved on Oct 19, 2026`;
@@ -224,5 +297,7 @@ module.exports = {
   nextVersion,
   slugExists,
   saveDraft,
+  listProposals,
+  draftProposal,
   bannerFor,
 };

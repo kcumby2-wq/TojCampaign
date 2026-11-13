@@ -287,6 +287,36 @@ router.post("/kits/:id/approve", approver, async (req, res) => {
   }
 });
 
+// ── Proposed kits ────────────────────────────────────────────────────────
+// Kits proposed in the repo for TOJ's other lines of work. An approver makes
+// one a draft; it's then read and approved like any draft. Nothing is in use
+// before that.
+router.get("/proposals", viewer, async (_req, res) => {
+  try {
+    const sb = getSupabase();
+    res.json({ proposals: await S.listProposals(sb || null), storage: sb ? "ok" : "unavailable" });
+  } catch (e) {
+    fail(res, e, "list_proposals");
+  }
+});
+
+router.post("/proposals/:slug/draft", approver, async (req, res) => {
+  if (!sameSiteJson(req, res)) return;
+  const sb = getSupabase();
+  if (!sb) return res.status(503).json({ error: "supabase_unavailable" });
+  if (!/^[a-z0-9][a-z0-9-]{1,62}$/.test(req.params.slug)) return res.status(404).json({ error: "not_found" });
+  try {
+    const r = await S.draftProposal(sb, req.params.slug, who(req));
+    if (r.error === "not_found") return res.status(404).json({ error: "not_found" });
+    if (r.error) return res.status(409).json(r);
+    console.log(`[studio] proposed kit ${req.params.slug} made draft v${r.version}`);
+    await T.logActivity(who(req), "drafted_proposed_kit", `${req.params.slug} v${r.version}`, { kit_id: r.id });
+    res.json({ ok: true, id: r.id, version: r.version });
+  } catch (e) {
+    fail(res, e, "draft_proposal");
+  }
+});
+
 router.post("/kits/:id/discard", approver, async (req, res) => {
   const sb = getSupabase();
   if (!sb) return res.status(503).json({ error: "supabase_unavailable" });

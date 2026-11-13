@@ -15,6 +15,7 @@
 //   PATCH  /api/studio-films/films/:id/people/:pid        edit a card (a cleared card is cleared again)
 //   DELETE /api/studio-films/films/:id/people/:pid        a card never cleared or used
 //   POST   /api/studio-films/films/:id/people/:pid/clear  the producer clears it
+//   POST   /api/studio-films/films/:id/people/:pid/page-link  email the person their own page (migration 043)
 //   POST   /api/studio-films/people/pull                  { person_code, note }: consent pulled, the 72-hour clock starts
 //   POST   /api/studio-films/films/:id/steps/:step/done   { note, cut_id }
 //   POST   /api/studio-films/films/:id/second-yes         { note }: the second sign-off (Coach Hooks), recorded
@@ -58,6 +59,8 @@ const F = require("../agents/studio/films");
 const S = require("../agents/studio/service");
 const K = require("../agents/studio/kit");
 const worker = require("../utils/studio-review-worker");
+const SP = require("../utils/studio-speaker");
+const G = require("../utils/gfs");
 
 const router = express.Router();
 const safe = H.safe("studio-films");
@@ -163,6 +166,12 @@ function noteNames(text, people, body) {
   return null;
 }
 
+// A film is planned against a tour stop (gfs_events): it has to be one.
+async function eventMissing(sb, value) {
+  if (!value.gfs_event_id) return false;
+  const ev = await run(sb.from("gfs_events").select("id,status").eq("id", value.gfs_event_id).maybeSingle());
+  return !ev || ev.status === "cancelled";
+}
 async function filmById(sb, id) {
   if (!idOk(id)) return null;
   return (await run(sb.from("studio_films").select("*").eq("id", id).maybeSingle())) || null;
@@ -264,6 +273,47 @@ router.get("/films", member, withDb(async (req, res, sb) => {
   });
 }));
 
+// ── The season slate ─────────────────────────────────────────────────────
+// The tour's stops (gfs_events) from a week back to six months on, each with
+// the films planned against it, and the films in progress planned against
+// none (to link one). Only what a stop's public page shows (name, series,
+// city, dates), and only the stops in the Pylon regions the person sees
+// (approvers and Kyron: all of them), as the Pylon tool scopes them.
+const SLATE_BACK_DAYS = 7;
+const SLATE_AHEAD_DAYS = 183;
+const dayIso = (d) => d.toISOString().slice(0, 10);
+router.get("/slate", member, withDb(async (req, res, sb) => {
+  const isDay = (v) => typeof v === "string" && /^\d{4}-\d{2}-\d{2}$/.test(v) && !Number.isNaN(Date.parse(v + "T00:00:00Z"));
+  const from = isDay(req.query.from) ? req.query.from : dayIso(new Date(Date.now() - SLATE_BACK_DAYS * 86400000));
+  const to = isDay(req.query.to) ? req.query.to : dayIso(new Date(Date.now() + SLATE_AHEAD_DAYS * 86400000));
+  const regions = G.regionsOf(req.team);
+  let events = [];
+  if (regions.length) {
+    let qe = sb.from("gfs_events").select("id,name,series,city,state,starts_on,ends_on").gte("ends_on", from).lte("starts_on", to).neq("status", "cancelled").in("region", regions);
+    if (req.query.series) qe = qe.eq("series", U.clean(req.query.series, 60));
+    events = (await run(qe.order("starts_on", { ascending: true }).limit(200))) || [];
+  }
+  const open = (await run(sb.from("studio_films").select("id,title,kit_slug,lane,format,athlete_id,post_date,gfs_event_id,pulled_at,updated_at").is("archived_at", null).order("created_at", { ascending: false }).limit(500))) || [];
+  const ids = events.map((e) => e.id);
+  const linked = open.filter((f) => f.gfs_event_id && ids.includes(f.gfs_event_id));
+  const steps = linked.length ? (await run(sb.from("studio_film_steps").select("film_id,step,position,status").in("film_id", linked.map((f) => f.id)))) || [] : [];
+  const view = (f) => {
+    const mine = steps.filter((s) => s.film_id === f.id);
+    return { id: f.id, title: f.title, kit_slug: f.kit_slug, lane: f.lane, format: f.format, athlete_id: f.athlete_id, post_date: f.post_date, updated_at: f.updated_at, pulled: !!f.pulled_at, where: mine.length ? where(f, mine) : null };
+  };
+  res.json({
+    from,
+    to,
+    events: events.map((e) => ({ ...e, films: linked.filter((f) => f.gfs_event_id === e.id).map(view) })),
+    // Films in progress planned against no stop, to link one.
+    unplaced: open.filter((f) => !f.pulled_at && !f.gfs_event_id).map((f) => ({ id: f.id, title: f.title, format: f.format, athlete_id: f.athlete_id, updated_at: f.updated_at })),
+    // Films planned for a stop that isn't on this slate (outside the window,
+    // in a region the person doesn't see, or since cancelled): listed, so no
+    // planned film goes missing.
+    elsewhere: open.filter((f) => f.gfs_event_id && !ids.includes(f.gfs_event_id)).map((f) => ({ id: f.id, title: f.title, kit_slug: f.kit_slug, format: f.format, athlete_id: f.athlete_id, updated_at: f.updated_at, pulled: !!f.pulled_at })),
+  });
+}));
+
 router.post("/films", member, withDb(async (req, res, sb) => {
   const body = bodyOf(req);
   const slug = U.clean(body.kit_slug || "same-work", 60);
@@ -278,6 +328,7 @@ router.post("/films", member, withDb(async (req, res, sb) => {
     delete value.director_email;
     delete value.editor_email;
   }
+  if (await eventMissing(sb, value)) return res.status(400).json({ error: "invalid", fields: ["gfs_event_id"] });
   const row = { ...value, kit_slug: slug, kit_id: String(kit.id), kit_version: kit.version, second_yes_label: t.second_yes_label || null, created_by: me(req) };
   try {
     const film = await run(sb.from("studio_films").insert(row).select().single());
@@ -325,8 +376,11 @@ router.get("/films/:id", member, withDb(async (req, res, sb) => {
   const codes = new Set(people.map((p) => p.person_code));
   const takedowns = codes.size ? (await run(sb.from("studio_takedowns").select("*").in("person_code", [...codes]).order("requested_at", { ascending: false }).limit(20))) || [] : [];
   const items = takedowns.length ? (await run(sb.from("studio_takedown_items").select("*").in("takedown_id", takedowns.map((x) => x.id)))) || [] : [];
+  // The tour stop it's planned against (the season slate).
+  const stop = film.gfs_event_id ? await run(sb.from("gfs_events").select("id,name,city,state,starts_on,ends_on").eq("id", film.gfs_event_id).maybeSingle()).catch(() => null) : null;
   res.json({
     film,
+    stop: stop || null,
     where: where(film, steps || []),
     template: t ? { name: t.name, lanes: t.lanes, formats: t.formats, second_yes_label: t.second_yes_label, takedown: t.takedown } : null,
     kit: kit ? { id: kit.id, version: kit.version, title: kit.title } : null,
@@ -362,6 +416,7 @@ router.patch("/films/:id", member, withDb(async (req, res, sb) => {
   if (errors.length) return res.status(400).json({ error: "invalid", fields: errors, ...(asks.length ? { words: asks } : {}) });
   if (!isProducer(req) && ("director_email" in value || "editor_email" in value)) return res.status(403).json({ error: "producer_only" });
   if (!Object.keys(value).length) return res.json({ film });
+  if (await eventMissing(sb, value)) return res.status(400).json({ error: "invalid", fields: ["gfs_event_id"] });
   try {
     const rows = await run(sb.from("studio_films").update({ ...value, changed_by: me(req), updated_at: nowIso() }).eq("id", film.id).eq("updated_at", body.seen).select());
     if (!rows || !rows.length) return res.status(409).json({ error: "changed_meanwhile" });
@@ -544,6 +599,33 @@ router.post("/films/:id/people/:pid/clear", member, withDb(async (req, res, sb) 
   } catch (e) {
     refused(res, e);
   }
+}));
+
+// The person's own page (migration 043, public/my-films.html): a link by
+// email to whoever approves for this card, for 7 days. It shows every film
+// with them (or their child), and lets them take consent back themselves.
+router.post("/films/:id/people/:pid/page-link", member, withDb(async (req, res, sb) => {
+  if (!isProducer(req)) return res.status(403).json({ error: "producer_only" });
+  const film = await filmById(sb, req.params.id);
+  if (!film || !idOk(req.params.pid)) return res.status(404).json({ error: "not_found" });
+  const person = await run(sb.from("studio_film_people").select("id,person_code,reviewer_email,reviewer_relation,cleared_at").eq("id", req.params.pid).eq("film_id", film.id).maybeSingle());
+  if (!person) return res.status(404).json({ error: "not_found" });
+  // Only a cleared card: its email has been checked to be theirs.
+  if (!person.cleared_at) return res.status(409).json({ error: "card_not_cleared" });
+  const email = U.email(person.reviewer_email);
+  if (!email) return res.status(409).json({ error: "no_reviewer" });
+  if (!linkAllowed(email)) return res.status(429).json({ error: "too_many_links_today" });
+  // Who they approve for, across every card with that email: the email says
+  // "you", "your child" or both.
+  const cards = (await run(sb.from("studio_film_people").select("reviewer_relation").eq("reviewer_email", email).not("cleared_at", "is", null).limit(50))) || [];
+  const relations = [...new Set(cards.map((c) => c.reviewer_relation).concat(person.reviewer_relation))];
+  const out = await SP.issueLink(sb, mailer, { email, sentBy: me(req), relations });
+  if (!out.sent) {
+    giveBackLink(email);
+    return res.status(502).json({ error: out.why === "email_not_set_up" ? "email_not_set_up" : out.why === "storage" ? "storage_unavailable" : "email_failed" });
+  }
+  await T.logActivity(me(req), "sent_page_link", person.person_code, { film_id: film.id });
+  res.json({ ok: true });
 }));
 
 // A pulled consent: every film the person is in is pulled, its live posts go

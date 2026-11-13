@@ -1,0 +1,154 @@
+{
+  "schema": "toj.studio.kit/v1",
+  "slug": "sm-market-event",
+  "version": 1,
+  "as_of": "2026-11-12",
+  "title": "Marketplace Event Kit",
+  "eyebrow": "Subject Medias · marketplace events · phase 1",
+  "lead_html": "<p>How a Subject Medias marketplace event runs: families' choices at check-in, uploads, tagging, approval and sales, as Milanote cards. Copy a card here and paste it onto the event's board.</p>",
+  "board_name": "Marketplace Event: Run Playbook",
+  "stats_label": "Proposed Nov 12, 2026",
+  "footer_html": "<p>Built from the TOJ app's Subject Medias marketplace guide, phase 1 (Nov 12, 2026). Proposed: it's a draft until an approver approves it.</p>",
+  "assets": null,
+  "source": {
+    "title": "TOJ app guide: the Subject Medias marketplace (phase 1)",
+    "date": "2026-11-12"
+  },
+  "columns": [
+    {
+      "name": "Start here",
+      "color": "Blue",
+      "lead": "What an event sells, and the rules nobody breaks.",
+      "cards": [
+        {
+          "type": "note",
+          "title": "What an event sells",
+          "body": "<p>Our crews shoot a Subject Medias event; families, teams and hosts buy. Phase 1: single clips ($12) and photos ($8), paid on Stripe, downloaded from the order page at full quality without the watermark.</p>"
+        },
+        {
+          "type": "note",
+          "title": "The rules nobody breaks",
+          "body": "<ol><li><b>Real moments only.</b> No AI-made athletes, no synthetic edits of a real one, and no words put in anyone's mouth.</li><li><b>No release, no camera.</b> Consent is confirmed before anyone is filmed. Close or identifying shots of a minor (a face, a readable number) are for their family only, never public. Anything public shows a minor only wide and non-identifying (no face, name or jersey number), and only with the family's “OK to show publicly”. Texas youth: Kyron and counsel decide before the first Texas event. 12 or younger is family only: never on the clips page, never public.</li><li><b>No promises.</b> Nothing says or suggests an offer, a scholarship, a roster spot, exposure, followers or paid work.</li><li><b>No marks you don't own.</b> No NFL marks, broadcast footage or team logos you don't have the right to use, and no school logos on minors.</li><li><b>Never alone with a minor.</b> No locker rooms, training rooms or changing areas, and no one-to-one filming without a parent there.</li><li><b>A pulled consent means pulled footage.</b> When a family takes consent back, it comes down everywhere within 72 hours, at every event.</li><li><b>Nothing publishes without the approver.</b> Nothing is approved for sale, or shown publicly, until an approver has ticked that everyone who stands out is tagged.</li><li><b>Every athlete is a team and a jersey number</b> at one event: never a name, a school or a contact.</li><li><b>The most careful answer counts,</b> and a staff keep-out beats everything. Nothing with a kept-out athlete in it is approved, and nothing with no confirmed number is shown.</li><li><b>The access code never goes on a public poster.</b></li></ol>",
+          "locked": true
+        }
+      ]
+    },
+    {
+      "name": "Before the event",
+      "color": "Purple",
+      "lead": "Set up, the two QR codes, and what goes where.",
+      "cards": [
+        {
+          "type": "note",
+          "title": "Set it up",
+          "body": "<p>Today → Marketplace: the event's name, dates, teams, and the jersey numbers you know. It starts as a draft.</p>"
+        },
+        {
+          "type": "note",
+          "title": "Two QR codes, two places",
+          "body": "<ul><li><b>Their choice</b> (the consent QR): on the poster at check-in. It needs no code.</li><li><b>The clips QR</b> carries the event's access code: hand it out at check-in and share it with teams. Never on a public poster.</li></ul><p>A new code stops the old one at once: print the new clips QR.</p>",
+          "locked": true
+        }
+      ]
+    },
+    {
+      "name": "Families' choices",
+      "color": "Teal",
+      "lead": "What a family can choose, and when it counts.",
+      "cards": [
+        {
+          "type": "note",
+          "title": "The four choices",
+          "body": "<ul><li><b>Family only</b></li><li><b>OK to sell</b></li><li><b>OK to show publicly</b></li><li><b>Keep out</b></li></ul><p>With the athlete's age: 12 or younger, 13 to 15, 16 or 17, 18 or older. 12 or younger is family only or keep out.</p>"
+        },
+        {
+          "type": "note",
+          "title": "Who answers, and when it counts",
+          "body": "<p>A parent or legal guardian, 18 or older, or the athlete as a legal adult. A first choice counts once the guardian confirms it from their email; a keep-out counts the moment it's sent. Anything more careful counts at once; anything that loosens waits for the email.</p>"
+        },
+        {
+          "type": "note",
+          "title": "Recording a choice in person",
+          "body": "<p>Staff can record a choice given on paper; it counts at once and emails the family link. If it's less careful than what that email already said, the app shows what's saved and records it only when an approver taps <i>Record it anyway</i>.</p>"
+        }
+      ]
+    },
+    {
+      "name": "Shoot and upload",
+      "color": "Red",
+      "lead": "Getting the files in, and what the worker does with them.",
+      "cards": [
+        {
+          "type": "note",
+          "title": "Uploads",
+          "body": "<p>Crews upload from the app, straight to storage on a signed link: MP4, MOV, M4V, JPG or PNG, up to 2 GB each.</p>"
+        },
+        {
+          "type": "note",
+          "title": "What the worker does",
+          "body": "<p>It makes a watermarked preview and a poster, then asks the AI which roster numbers it can read in three frames. The AI sees team names and numbers only, and its guesses start switched off.</p>"
+        },
+        {
+          "type": "note",
+          "title": "Shooting for it",
+          "body": "<p>Proposed: shoot so a number can be read (it's how a family finds their athlete): the athlete's back or chest in frame for a beat in every clip. These clips go only to the families who buy them; anything public follows the rules card. A clip with two family-only athletes in it can't be sold to anyone, so at a 12U event, favour one athlete per clip.</p>"
+        }
+      ]
+    },
+    {
+      "name": "Review and sale",
+      "color": "Green",
+      "lead": "From a tagged clip to a family's download.",
+      "cards": [
+        {
+          "type": "note",
+          "title": "Review",
+          "body": "<p>Switch on the numbers really in it. An approver then ticks <i>Everyone who stands out in it is tagged</i> and approves it for sale. A change to who's in an approved item sends it back to review unless an approver ticks the box again.</p>",
+          "locked": true
+        },
+        {
+          "type": "note",
+          "title": "Where it shows",
+          "body": "<ul><li>The clips page (with the access code): everyone in it OK to sell or more.</li><li>A family's own link: their athlete family only or more; everyone else OK to sell or more.</li></ul>"
+        },
+        {
+          "type": "note",
+          "title": "After a sale",
+          "body": "<p>A keep-out after a sale closes that file's download, and the buyer is told to ask for a refund. A full refund in Stripe closes the order's downloads.</p>"
+        }
+      ]
+    },
+    {
+      "name": "Checklists",
+      "color": "Grey",
+      "lead": "Tick-lists for the day and after, and the sources.",
+      "cards": [
+        {
+          "type": "todo",
+          "title": "Check-in",
+          "items": [
+            "Their choice QR on the poster",
+            "Clips QR handed out, never posted",
+            "Paper choices recorded in the app",
+            "Numbers not on the roster added"
+          ]
+        },
+        {
+          "type": "todo",
+          "title": "After the event: approver",
+          "items": [
+            "Every item's numbers checked",
+            "Everyone who stands out tagged",
+            "No kept-out athlete in anything approved",
+            "12 or younger never on the clips page"
+          ]
+        },
+        {
+          "type": "note",
+          "title": "Sources",
+          "body": "<p>The TOJ app's guide <i>The Subject Medias marketplace (phase 1)</i>, with the decisions of Nov 5 and Nov 6, 2026, checked Nov 12, 2026. The shooting card is TOJ's proposed standard.</p>"
+        }
+      ]
+    }
+  ]
+}

@@ -91,6 +91,10 @@ Before a graphic is saved or sent, the server checks its words and its credit by
 - one word of a minor's name (four letters or more) run into a tag or a word is the name where the letters on each side are English words or nothing, beside a tag's or a file's own word, or where camelCase starts or ends it (`#jordanstrong`, `#teamjordan`, `#jordanfootball`, `#letsgojamie`, "jordanstrong forever", `#hopestrong` for a Hope); an everyday word beside a phrase's word or as a surname is asked about (`#summertime`, `#teamgreen`), and so is an English word that holds a name ("island" for an Isla, `#Philadelphia` for a Phil, `#merrychristmas` for a Chris) and anything else (`#jordanbae`), and so is a three-letter one run into a word of a tag (`#samstrong`, `#teamsam`, `#prayformia`: a "#samedrill" for a Sam costs one yes); in the speaker's words, a three-letter one is the name where camelCase starts and ends it ("#PrayForKai", "KaiStrong"), is asked about at the start or end of a tag's word, and is the word in an ordinary one ("same" for a Sam); Claude reads them as codes, and an ordinary word that holds one as written ("island" for an Isla: a person is asked about a line with it, Claude picks another);
 - a shout-out names someone: a word right after "Thanks", "Thank you", "Love you", "Proud of you", "Birthday", "Coach", "Mr" and the like, or after "Go" where it ends the shout-out or another "Go" follows, is the name for anyone the graphic can't name ("Thank You Coach Will", "Happy Birthday Grace", "Go Hope Go", "Way To Go Hope"; "Go Chase Your Dreams" and "You Will Never Walk Alone" are asked about). A tag reads the same way (`#HappyBirthdayGrace`, `#GoHopeGo`; `#NeverLoseHope` is asked about), a tag typed all in lower case too where a name ends it right after a shout-out's own letters (`#happybirthdaygrace`, `#gohope`, `#thankscoachrivers`). After "Go" or "Hey", a first name is the name (`#GoGrace`, `#heygrace`, a second first name too: Grace for a Mary Grace Long), but a surname that's an everyday word (the card's last word: cards are written first name first, as the card form says) is a team chant as often, so it's asked about (`#GoGreen`, `#gowest`, `#heyday`, "Go Green Go White" for an Ava Green); and a line in Title Case also by its last word ("Keep the Faith" for a Faith): write it in sentence case if it isn't one. The name of an adult the graphic can't name, run into a word of a tag, is the name where it ends that word or starts it before a tag's usual last word (`#teamrivers`, `#riversstrong`), and asked about where it starts another word (`#riverside`) or sits inside one (`#coachriversrocks`). An everyday word that's also such a name, at the start of a sentence ("Will never quit"), is asked about; the writer's "not a name here" counts for that exact text. Mid-sentence with a capital ("we ran it with Will"), it's a name. The credit names a speaker only if they're an adult, cleared, and their release covers their name and lists the format. A closed film makes no graphics. Drafts stay in this session only, for a day at most. Until Kyron and Coach Hooks turn on *The graphics system*, every graphic carries a **PROPOSED** band and nothing goes to review; the screen reads the switch afresh before saving or sending. The fonts are in `public/app/fonts` (SIL Open Font License, `OFL.txt`) and cached with the app.
 
+## The season slate
+
+**Studio → Films → Season slate** (`#film-slate`): the tour's stops (the Pylon calendar in `gfs_events`, a week back to six months on; cancelled ones left out), each with the films planned for it and where each one is in its ten steps. On a stop: *Plan a film here* starts a film already planned for it, *Link a film…* plans a film in progress for it, and *Unlink* takes a film off it. A film's room shows its stop. A film is planned only against a stop on the calendar (not a cancelled one); a pulled one changes no more, and shows as *Consent pulled*. The slate reads the stops' public details only (name, series, dates, city), and only the stops in the Pylon regions the person sees in the Pylon tool (approvers and Kyron see every region). A film planned for a stop the slate doesn't show (further out, another region, since cancelled) is listed under *Planned for a stop not shown here*.
+
 ## Posting and takedowns
 
 Only Kyron records posts, after the final sign-off, and only cuts every speaker in them approved, with everyone in them cleared.
@@ -100,6 +104,14 @@ Only Kyron records posts, after the final sign-off, and only cuts every speaker 
 The files of those films (uploads, review copies, posters) are listed for removal by the database in the same change, and removed at once; anything storage refuses is tried again on the worker's next pass (`studio_storage_removals`). A deleted cut's files go the same way, and so do any the worker made for a cut that didn't make it. For three hours after a pull, the worker also empties the pulled film's whole folder on every pass (every pulled film, newest pull first, a page at a time): an upload link made just before the pull (they last two hours) can still land a file no row lists. A file in that folder that storage won't remove goes on the removal list, so it's tried again after the three hours; a folder storage won't list is looked at again on the next pass. The same pass closes any takedown with nothing left on it, one at a time, leaving one that someone is changing right now for the next pass.
 
 A takedown's lines lock the takedown as they're marked down, so the last line always closes it; the worker closes any takedown with nothing left on it, as a safety net.
+
+## Their own page
+
+Everyone whose email a cleared card names as the one who approves (the speaker themself, or a minor's parent or guardian; clearing the card is when the producer has checked that email is theirs) has a page of their own at `/my-films.html`: every film they or their child are in, where each one is, whether a review copy is waiting on them, what their release covers, what they approved or asked to change (their own decisions, not a previous approver's), what's posted of the cuts they're in, and (adults only) the lines of theirs that were kept, as they said them, with where in the recording. It never shows a title, a name, a caption written around their words, anyone else on a film, or a post of a cut they aren't in.
+
+**The link.** They ask for it on the page with their email, or the producer sends it from the card (*Send their page*). It comes by email, works for 7 days, and once its email is accepted it stops the older ones: an ask that can't be emailed (or anyone asking for the address while mail is down) leaves the link they have working. Of two made at the same moment, the later one stays. The page answers "check your email" at once, whether or not a card names that address, so it never tells a stranger who's on a card. A link that couldn't be emailed is stopped at once. Signing out stops it; if the database can't be reached, the page says the link still works. As with review links, the token sits in the link's fragment, the server sends the database its hash, and the database keeps the hash of that (migration 043).
+
+**Taking consent back.** The page has *Take my consent back* (for a parent, *Take back consent for your child*): a tick, then two taps. It's the same pull the producer makes from a card, written as "the speaker, on their page" (or their parent or guardian), never a name or an email: every film with them stops, review copies leave storage, live posts go on the takedown list and the 72-hour clock starts. Staff hear at once by push and by email that's sent even when the day's email budget is spent. Only a live link can do it, only for a person whose cleared card names that link's email, and only once; the link and the person are checked before anything else is answered. Either parent or guardian of a minor takes it back for every film. If a parent or guardian asks where the athlete now approves for themself on a live card (an adult now), the page takes nothing back: it says the team will call, and staff get the request by push and email to settle with both. An optional note is kept with the takedown, with any name from that person's cards written as their code (nothing is refused for a name, so the page can't be used to check one). After the family gives new consent and the old takedown closes, the page shows the old takedown as history and offers *Take … back* again.
 
 ## Real words and three directions
 
@@ -183,6 +195,18 @@ Migration 042, API `routes/studio-learn.js`, screens in `public/app/learn.js` an
 
 **The gear re-check.** Today shows *Gear re-check due* a month after the last one that ran through (a draft, or nothing to change), or when there's never been one. *Re-check gear* goes through the Brief Writer as before, and the run it starts (on the Same Work kit only) is marked as the gear re-check.
 
+## Kits for every line of work
+
+Five more kits are written and in the repo (`agents/studio/proposals/`). Each carries the seven rules nobody breaks, worded for its line of work, on a locked card in its first column, as the production guardrails ask: close or identifying shots of a minor (a face, a readable number) go to their family only, never public; anything public shows a minor only wide and non-identifying (no face, name or jersey number), and only with verified consent; footage made for a family (a package, a session, a clip they buy) goes only to that family; and for Texas youth, Kyron decides with counsel before the first Texas event whether family-only copies may show them. The kits:
+
+- **A Pylon stop**: the crew, the two angles every game, youth creators, holds on a clip that's out, the keep-out list.
+- **Pylon packages**: the six-piece minimum, and the release before anyone films a player.
+- **Subject Medias sessions**: staffing, no promises, and never alone with a minor.
+- **Subject Medias marketplace events**: families' choices at check-in, the two QR codes, review before anything is for sale.
+- **The creator fellowship**: the first eight weeks' curriculum, and that it teaches the work without promising followers, exposure or paid work.
+
+None is in use. **Studio → Proposed kits** lists each with its counts. An approver taps *Make it a draft*, which saves v1 of that kit as a draft marked "Proposed in the repo", with no checks run. The review screen shows every card as new. The draft is then read card by card and approved or discarded like any other. While a draft or an approved version is open, the proposal points to it; changes to an approved one go through a refresh. A discarded one can be drafted again.
+
 ## Tool approvals
 
 The kit's rule: a tool touches footage only once the producer has checked its terms and added it, with a one-line reason. Three switches start **off**; only Kyron turns them on, and the reason is kept:
@@ -205,13 +229,13 @@ All under `/api/studio-films` (team members with Studio; writes are JSON from th
 
 | Method | Path | Who |
 |---|---|---|
-| GET | `/meta`, `/today`, `/films`, `/films/:id` | members |
-| POST | `/films` | members (the producer assigns director and editor) |
-| PATCH | `/films/:id` (with `seen`) | members |
+| GET | `/meta`, `/today`, `/films`, `/films/:id` (with its `stop`), `/slate?from=&to=` | members |
+| POST | `/films` (`gfs_event_id`: a stop on the calendar) | members (the producer assigns director and editor) |
+| PATCH | `/films/:id` (with `seen`; `gfs_event_id` links or unlinks a stop) | members |
 | POST | `/films/:id/archive`, `/films/:id/second-yes`, `/films/:id/steps/:step/reopen` | producer |
 | POST | `/films/:id/steps/:step/done` (Speaker review: `{ cut_ids }`) | the step's owner or the producer (Publish: Kyron) |
 | POST/PATCH/DELETE | `/films/:id/people[/:pid]` | members (who approves, and a new consent: the producer) |
-| POST | `/films/:id/people/:pid/clear`, `/people/pull` | producer |
+| POST | `/films/:id/people/:pid/clear`, `/films/:id/people/:pid/page-link`, `/people/pull` | producer |
 | POST | `/films/:id/cuts/upload`, `/films/:id/cuts`; PATCH/DELETE `/films/:id/cuts/:cid` | members |
 | POST | `/films/:id/cuts/:cid/reviews`, `/reviews/:rid/cancel-link`, `/reviews/:rid/withdraw` | producer |
 | POST | `/films/:id/posts` | Kyron |
@@ -252,13 +276,17 @@ The kit learns (`/api/studio-learn`):
 
 A kit run takes `{ purpose: "monthly", sources: { wraps, suggestions, labels }, again }` (approvers) or `{ purpose: "gear" }` (the Same Work kit), as JSON from the app's own pages, from a person (not the automation key). It answers 409 `refresh_refused` with the reason when it can't start (running already, run this month without `again`, or something picked was decided, folded or taken meanwhile), 400 `brief_has_name` with the `words` read as names, and 400 `brief_may_have_name` with the `words` to ask about (send them back as `names_ok` with the same brief). A name check that refuses answers `{ error: "invalid", fields: ["…_has_name"], words }`; one that asks, `fields: ["…_may_have_name"]`. Discarding a draft answers `given_back: true` when its refresh's items are open again.
 
+Proposed kits: GET `/api/studio-agents/proposals` (anyone on Studio, or the key); POST `/api/studio-agents/proposals/:slug/draft` (approvers, as JSON from the app's own pages), which answers `{ id, version }`, or 409 `drafted_already` with the open draft or approved version.
+
 The taste library (`/api/studio-taste`): GET `?q=&tag=&limit=`, GET `/tags`, GET `/:id`, POST (members); PATCH `/:id` with `seen`, POST `/:id/archive` (whoever added it, the producer). Briefs: GET `/api/studio-agents/briefs/unstarted`; POST `/api/studio-agents/briefs/:id/set-aside` `{ aside }`; a kit run started from a brief sends `{ from_brief, direction }`.
 
-The speakers' page: `POST /api/studio-review/view {token}` and `POST /api/studio-review/decide {token, decision, name, note, confirm}` (POST and JSON only, from the site's own pages, 30 tries per visitor per 10 minutes).
+The speakers' review page: `POST /api/studio-review/view {token}` and `POST /api/studio-review/decide {token, decision, name, note, confirm}` (POST and JSON only, from the site's own pages, 30 tries per visitor per 10 minutes).
+
+Their own page (`/api/studio-speaker`, the same rules): `POST /send-link {email}` (always `{ ok: true }`; 5 asks per visitor an hour, 3 per email a day), `POST /view {token}`, `POST /pull {token, person_code, confirm: true, note}`, `POST /sign-out {token}`.
 
 ## Setup
 
-1. Apply `db/migrations/039_studio_films.sql` (tables, rules, the bucket `studio-films`), then `040_studio_craft.sql` (notes, delivery checks, stills and slides), then `041_studio_words.sql` (transcripts, lines, directions, the taste library, brief marks), then `042_studio_learn.sql` (wrap-ups, suggested edits, rule decisions, refresh marks and what each was given). None has been applied anywhere yet: each goes on fresh, in order (040 isn't written to upgrade an earlier draft of itself).
+1. Apply `db/migrations/039_studio_films.sql` (tables, rules, the bucket `studio-films`), then `040_studio_craft.sql` (notes, delivery checks, stills and slides), then `041_studio_words.sql` (transcripts, lines, directions, the taste library, brief marks), then `042_studio_learn.sql` (wrap-ups, suggested edits, rule decisions, refresh marks and what each was given), then `043_studio_speaker.sql` (their own page's links), then `044_studio_proposals.sql` (one open draft of a proposed kit at a time). None has been applied anywhere yet: each goes on fresh, in order (040 isn't written to upgrade an earlier draft of itself).
 2. Optional settings on Render: `STUDIO_SITE_BASE` (default `https://www.tojcampaign.com`), `STUDIO_REVIEW_REPLY_TO`, `STUDIO_REVIEW_MAX_MB` (raise it after the Supabase Pro upgrade), `STUDIO_REVIEW_WORKER=off` to stop the worker on a server.
 3. Kyron turns on *Review copies in storage* (Studio → Films → Tool approvals) once he's checked Supabase's terms, and *Claude reads transcripts* once he's checked Anthropic's terms for interview transcripts.
 4. Email works as for the rest of the app (`EMAIL_USER`/`EMAIL_PASS` or `SMTP_*`); without it, review links aren't made.
@@ -268,7 +296,8 @@ The speakers' page: `POST /api/studio-review/view {token}` and `POST /api/studio
 - The kit names only some file codes (YTH, HERO in its example). The other lane and format codes (`NFL`, `COL`, `PAR`, `CUT`, …) are the app's until the kit names them; the file-name check only warns.
 - Coach Hooks's yes is recorded by the producer with how it came (a text, an email), not by Hooks in the app.
 - The worker reads a review copy into memory to upload it (a 10-minute copy at 720p is tens of megabytes).
-- The speakers' page limits tries per visitor by `X-Forwarded-For`, which a caller reaching Render directly can set. The per-connection limit and the 256-bit tokens still hold.
+- The speakers' pages limit tries per visitor by `X-Forwarded-For`, which a caller reaching Render directly can set. The per-connection limit and the 256-bit tokens still hold.
+- Someone who knows a person's email can use up that address's three page links for the day; the producer can still send one from the card.
 - If the phone closes the app with no signal, the app opens at sign-in until there's a signal again: open shoot mode before the signal goes.
 - The end card is a type stand-in until the Coached by Hooks mark file is added to the app.
 - The graphics read the speaker's line as typed: copy a kept line from Real words into the graphic.
