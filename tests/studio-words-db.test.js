@@ -626,15 +626,15 @@ test("a minor's card waits for a kept line with their name run into a tag; three
   // handle; an ordinary word that starts or ends with the name isn't.
   const f3 = await aFilm([{ person_code: "WI07", name: "Isla Moss", role: "athlete", is_minor: true, release_on_file: true, covers: {} }, { person_code: "WE07", name: "Ella Lund", role: "athlete", is_minor: true, release_on_file: true, covers: {} }]);
   const run3 = async (x) => (await pool.query("select studio_minor_run_in($1, $2) as x", [f3.film.id, x])).rows[0].x;
-  for (const x of ["#islastrong", "#teamisla", "islaquote_v2", "#letsgoisla", "IslaStrong"]) assert.equal(await run3(x), true, x);
+  for (const x of ["#islastrong", "#teamisla", "islaquote_v2", "#letsgoisla", "IslaStrong", "#bigislaenergy", "#islathegoat"]) assert.equal(await run3(x), true, x);
   for (const x of ["We grew up on the island", "Grab an umbrella", "#islandlife", "#island"]) assert.equal(await run3(x), false, x);
 });
 
 test("a minor's card waits for, and a correction takes, kept lines the app reads as their name run into a tag", async () => {
   const { film, people } = await aFilm();
-  const t = ok(await addTranscript(film, people[0], [{ s: 0, e: 3000, t: "We all wore #bigjamieenergy shirts." }, { s: 3000, e: 6000, t: "Then #jamiethegoat went up." }, { s: 6000, e: 9000, t: "We grew up on the island." }]), "transcript").transcript;
-  ok(await words("POST", `/films/${film.id}/lines`, { transcript_id: t.id, from_cue: 1, to_cue: 1, quote: "We all wore #bigjamieenergy shirts" }, "ed"), "kept before any card");
-  // A minor's card waits for it (the app reads it; the database's own screen doesn't).
+  const t = ok(await addTranscript(film, people[0], [{ s: 0, e: 3000, t: "We all wore #jamiefootball shirts." }, { s: 3000, e: 6000, t: "Then #jamiethegoat went up." }, { s: 6000, e: 9000, t: "We grew up on the island." }]), "transcript").transcript;
+  ok(await words("POST", `/films/${film.id}/lines`, { transcript_id: t.id, from_cue: 1, to_cue: 1, quote: "We all wore #jamiefootball shirts" }, "ed"), "kept before any card");
+  // A minor's card waits for it (the app reads it, with English words; the database's own screen doesn't).
   const add = await films("POST", `/films/${film.id}/people`, { person_code: "WJ09", name: "Jamie Ortiz", role: "athlete", is_minor: true, release_on_file: true, covers: {} }, "lead");
   assert.deepEqual([add.status, add.data.error], [409, "refused"]);
   // An adult's goes in; corrected to a minor, the line goes with the correction.
