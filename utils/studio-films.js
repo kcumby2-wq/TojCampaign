@@ -128,7 +128,8 @@ const EVERYDAY_NAMES = new Set(("ace april archer art ash august autumn baker be
   "meadow mercy miles misty moon noble north ocean page park pat patience peace pearl penny pepper pierce piper pope porter power price pride prince " +
   "queen rain ranger raven ray read rebel reed rice rich ridge river rob rock rocky rose royal ruby rush rusty sage saint sandy scout shade shadow " +
   "shepherd shore short silver sky small smith snow sonny south spring star steel sterling stone storm stormy strong sue summer sunday sunny sweet " +
-  "swift tad tank true trust tucker valor violet wade walker ward warren waters way wells west white will willow winter wise wolf wood woods worth wren young").split(" "));
+  "swift tad tank true trust tucker valor violet wade walker ward warren waters way wells west white will willow winter wise wolf wood woods worth wren young" +
+  " amber angel carol christian crystal daisy destiny genesis glen harmony iris jasmine journey lyric melody olive robin trinity").split(" "));
 const everyday = (w) => EVERYDAY_2.has(w) || EVERYDAY_NAMES.has(w);
 function capitalizedAtStart(raw, w) {
   const re = /[\p{L}\p{M}]+/gu;
@@ -175,7 +176,9 @@ function englishWords() {
     const fs = require("fs");
     const raw = zlib.gunzipSync(fs.readFileSync(require("path").join(__dirname, "data", "words-en.txt.gz"))).toString("utf8");
     ENGLISH = new Set(raw.split("\n").filter(Boolean));
-  } catch {
+  } catch (e) {
+    // Without it the run-in screen still works, more often asking: say so.
+    console.warn("[studio-films] the English word list didn't load (utils/data/words-en.txt.gz):", e && e.message);
     ENGLISH = new Set();
   }
   for (const w of OWN_WORDS) ENGLISH.add(w);
@@ -184,37 +187,44 @@ function englishWords() {
 const WORD_MAX = 24;
 // Words the app and its tools use that the list doesn't have.
 const OWN_WORDS = ["milanote", "sportsclippers", "subjectmedias", "groundfloorsports", "tojcampaign", "pylon", "hudl", "maxpreps", "davinci", "capcut"];
+// How a run of letters reads as English words, worked out once for it:
+// ends[b] when its first b letters are words end to end, starts[a] when its
+// letters from a on are. A run longer than RUN_READ isn't read as words
+// (the name in it is asked about): the work stays small whatever's typed.
+const RUN_READ = 64;
+function wordReading(tok) {
+  const W = englishWords();
+  const n = tok.length;
+  const ends = new Array(n + 1).fill(false);
+  const starts = new Array(n + 1).fill(false);
+  ends[0] = true;
+  starts[n] = true;
+  for (let b = 1; b <= n; b++) {
+    for (let a = Math.max(0, b - WORD_MAX); a < b; a++) if (ends[a] && W.has(tok.slice(a, b))) { ends[b] = true; break; }
+  }
+  for (let a = n - 1; a >= 0; a--) {
+    for (let b = a + 1; b <= Math.min(n, a + WORD_MAX); b++) if (starts[b] && W.has(tok.slice(a, b))) { starts[a] = true; break; }
+  }
+  return { ends, starts };
+}
 // A word longer than the name holds its letters there, in a reading of the
 // whole run as words ("island" in "islandlife" for an Isla, "christmas" in
-// "merrychristmas" for a Chris; not "hopes" in "hopestrong").
-function heldByWord(tok, i, len) {
+// "merrychristmas" for a Chris; not "hopes" in "hopestrong"). The name with
+// a plural's s isn't such a word ("angels" in "angelsquad": the name's own
+// reading, Angel's squad).
+function heldByWord(tok, i, len, rd) {
   const W = englishWords();
+  const name = tok.slice(i, i + len);
   for (let a = Math.max(0, i - WORD_MAX); a <= i; a++) {
+    if (!rd.ends[a]) continue;
     for (let b = i + len; b <= Math.min(tok.length, a + WORD_MAX); b++) {
-      if (b - a > len && W.has(tok.slice(a, b)) && allWords(tok.slice(0, a)) && allWords(tok.slice(b))) return true;
+      if (b - a <= len || !rd.starts[b]) continue;
+      const word = tok.slice(a, b);
+      if (a === i && (word === name + "s" || word === name + "es")) continue;
+      if (W.has(word)) return true;
     }
   }
   return false;
-}
-// Letters that are English words end to end ("letsgo", "thegoat").
-const WORDS_CACHE = new Map();
-function allWords(str) {
-  if (!str) return true;
-  if (WORDS_CACHE.has(str)) return WORDS_CACHE.get(str);
-  const W = englishWords();
-  const ok = [true];
-  for (let b = 1; b <= str.length; b++) {
-    ok[b] = false;
-    for (let a = Math.max(0, b - WORD_MAX); a < b; a++) {
-      if (ok[a] && W.has(str.slice(a, b))) {
-        ok[b] = true;
-        break;
-      }
-    }
-  }
-  if (WORDS_CACHE.size > 5000) WORDS_CACHE.clear();
-  WORDS_CACHE.set(str, ok[str.length]);
-  return ok[str.length];
 }
 let RUN_BESIDE = null;
 const runBeside = () => RUN_BESIDE || (RUN_BESIDE = new Set([...FILE_WORDS, ...TAG_TAILS, ...("go pray prayfor thanks thankyou happy happybirthday birthday bday " +
@@ -265,22 +275,28 @@ function minorRunIns(textValue, people) {
           const tail = r.low.slice(i + w.length);
           const camel = r.inner.has(i) || r.inner.has(i + w.length);
           const byWord = (!head && beside.has(tail)) || (!tail && beside.has(head));
-          const clear = (!head && RUN_CLEAR.has(tail)) || (!tail && RUN_CLEAR.has(head));
+          const clear = (!head && (RUN_CLEAR.has(tail) || (tail[0] === "s" && RUN_CLEAR.has(tail.slice(1))))) || (!tail && RUN_CLEAR.has(head));
           const own = parts.some((x) => x !== w && Array.from(x).length >= 2 && (head.endsWith(x) || tail.startsWith(x)));
           const atEdge = !head || !tail;
+          // How the run reads as English words (once per run; none past
+          // RUN_READ letters).
+          if (r.reading === undefined) r.reading = r.low.length <= RUN_READ ? wordReading(r.low) : null;
+          const rd = r.reading;
           // An English word holds the letters ("island", "transfer",
           // "#islandlife"): the word, asked, a file name's too.
-          const held = !camel && heldByWord(r.low, i, w.length);
+          const held = !camel && !!rd && heldByWord(r.low, i, w.length, rd);
           // English words (or nothing) on each side: "football", "letsgo",
           // a possessive s ("sarmy").
-          const side = (x) => allWords(x) || (x.startsWith("s") && x.length > 1 && allWords(x.slice(1)));
+          const j = i + w.length;
+          const headWords = !!rd && rd.ends[i];
+          const tailWords = !!rd && (rd.starts[j] || (r.low[j] === "s" && j + 1 < r.low.length && rd.starts[j + 1]));
           if ((atEdge || camel) && !held) {
             edge.add(w);
             if (!everyday(w)) loose.add(w);
           }
           if (!everyday(w)) {
             const initials = r.tag && atEdge && !head && Array.from(tail).length <= 2;
-            if (!held && (camel || byWord || own || initials || (side(head) && side(tail)))) sure.add(w);
+            if (!held && (camel || byWord || own || initials || (headWords && tailWords))) sure.add(w);
             else maybe.add(w);
           } else if (!held && ((clear && !surname && !RUN_COMPOUNDS.has(r.low) && !FILE_COMPOUNDS.has(r.low)) || own)) sure.add(w);
           else maybe.add(w);

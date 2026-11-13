@@ -267,6 +267,16 @@ test("a title or a file name is read harder than a sentence: run-together, camel
   for (const t of ["Transfer portal", "Merry Christmas", "#merrychristmas", "#Philadelphia", "Basically unstoppable"]) assert.deepEqual(U.minorRunIns(t, pool).sure, [], t);
   for (const t of ["#letsgojamie", "#bigjamieenergy", "#jamiethegoat", "#weloveyoujamie"]) assert.deepEqual(U.minorRunIns(t, pool).sure, ["jamie"], t);
   assert.deepEqual(U.idNames("transfer_portal_v1", pool), []);
+  // A name's own plural reading wins in a tag ("angels" in "#angelsquad", "nicks" in "#nicksworld").
+  for (const [t, n] of [["#nicksquad", "Nick Lee"], ["#nicksworld", "Nick Lee"], ["#mikesarmy", "Mike Ray"], ["#angelsquad", "Angel Diaz"], ["#angelsarmy", "Angel Diaz"]]) assert.ok(U.minorRunIns(t, [{ name: n, is_minor: true }]).sure.length, t);
+  // A long run isn't read as words: the work stays small, and the name in it is asked about.
+  const t0 = Date.now();
+  const runs = Array.from({ length: 10 }, (_, k) => ("theannateamannawins" + k).repeat(220).slice(0, 4000));
+  U.graphicsProblems(runs, [{ name: "Anna Moss", is_minor: true }], { format: "quote_card" });
+  U.graphicsAsks(runs, [{ name: "Anna Moss", is_minor: true }], { format: "quote_card" });
+  assert.ok(Date.now() - t0 < 2000, `${Date.now() - t0} ms`);
+  // Names that are plainly common words are everyday words ("Journey", "Crystal", "Angel").
+  for (const [t, n] of [["The journey continues", "Journey Cole"], ["Crystal clear focus", "Crystal Ray"]]) assert.deepEqual(U.strictNames(t.toLowerCase(), [{ name: n, is_minor: true }]), [], t);
   // "for" alone isn't a word a name runs into ("forward" for a Ward).
   assert.deepEqual(U.idNames("forward_pass_drill", [{ name: "Ward Bell", is_minor: true }]), []);
   // A file name has no one to ask: an everyday word run in at a word's start or end counts there.
