@@ -394,6 +394,12 @@ language sql stable set search_path = '' as $$
     select btrim(regexp_replace(lower(n.full_name), '[^[:alpha:]]+', ' ', 'g')) as spaced, n.minor
       from public.studio_film_people p, lateral (values (p.name, p.is_minor), (p.reviewer_name, false)) as n(full_name, minor)
      where p.film_id = p_film and n.full_name is not null
+  ), forms as (
+    -- The whole name as on the card, and, for three words or more, its first
+    -- and last ("grace long" for a Grace Ann Long; utils/studio-films.js nameForms).
+    select spaced, minor from names
+    union all
+    select split_part(spaced, ' ', 1) || ' ' || regexp_replace(spaced, '^.* ', ''), minor from names where spaced like '% % %'
   ), minor_words as (
     select w from names, lateral regexp_split_to_table(names.spaced, ' ') as w
      where names.minor and char_length(w) >= 2
@@ -420,14 +426,16 @@ language sql stable set search_path = '' as $$
          'snow', 'sonny', 'south', 'spring', 'star', 'steel', 'sterling', 'stone', 'storm', 'stormy', 'strong', 'sue',
          'summer', 'sunday', 'sunny', 'sweet', 'swift', 'tad', 'tank', 'true', 'trust', 'tucker', 'valor', 'violet',
          'wade', 'walker', 'ward', 'warren', 'waters', 'way', 'wells', 'west', 'white', 'will', 'willow', 'winter',
-         'wise', 'wolf', 'wood', 'woods', 'worth', 'wren', 'young']))
+         'wise', 'wolf', 'wood', 'woods', 'worth', 'wren', 'young',
+         'amber', 'angel', 'carol', 'christian', 'crystal', 'daisy', 'destiny', 'genesis', 'glen', 'harmony', 'iris', 'jasmine',
+         'journey', 'lyric', 'melody', 'olive', 'robin', 'trinity']))
   )
   select p_text is not null and p_film is not null and (exists (
-    select 1 from names, hay
-     where (names.spaced like '% %' and hay.words like '% ' || names.spaced || ' %')
+    select 1 from forms, hay
+     where (forms.spaced like '% %' and hay.words like '% ' || forms.spaced || ' %')
         -- Run together as one word ("JamieRivers"): the whole word only.
-        or (names.spaced like '% %' and char_length(replace(names.spaced, ' ', '')) >= 5
-            and hay.words like '% ' || replace(names.spaced, ' ', '') || ' %'))
+        or (forms.spaced like '% %' and char_length(replace(forms.spaced, ' ', '')) >= 5
+            and hay.words like '% ' || replace(forms.spaced, ' ', '') || ' %'))
     or exists (select 1 from minor_words, hay where hay.words like '% ' || minor_words.w || ' %'))
 $$;
 

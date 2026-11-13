@@ -413,6 +413,7 @@ module.exports = {
   SLUG_RE,
   LIMITS,
   BANNED_RE,
+  BANNED_PHRASES_RE,
   META_FIELDS,
   clone,
   templatesFor,
