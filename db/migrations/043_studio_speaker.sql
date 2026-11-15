@@ -84,13 +84,15 @@ begin
     end if;
     -- A pulled consent stays pulled: the code comes back only once its
     -- takedown is done, with the family's new consent recorded on the first
-    -- card after the pull. (043) A parent's or guardian's pull of the films
-    -- they approve, where the athlete approves for themself (pull_scope
-    -- 'not_self'), didn't touch the athlete's own consent: a new card the
-    -- athlete approves for themself isn't held by it.
+    -- card after the pull. (043) A parent's or guardian's pull of their
+    -- child's films, where the athlete is an adult now (pull_scope
+    -- 'not_self'), didn't touch the adult's own consent: a new card of the
+    -- adult's (not a minor's, and no parent or guardian approving) isn't
+    -- held by it.
     pulled_last := (select max(x.consent_pulled_at) from public.studio_film_people x
                      where x.person_code = new.person_code
-                       and not (x.pull_scope is not distinct from 'not_self' and new.reviewer_relation is not distinct from 'self'));
+                       and not (x.pull_scope is not distinct from 'not_self'
+                                and not coalesce(new.is_minor or new.reviewer_relation in ('parent', 'guardian'), false)));
     if pulled_last is not null and not exists (
          select 1 from public.studio_film_people x
           where x.person_code = new.person_code and x.reconsent_note is not null and x.consent_pulled_at is null and x.created_at > pulled_last) then
@@ -161,10 +163,11 @@ begin
   if card_changed and who is null then
     raise exception 'who changed the card for %', old.person_code;
   end if;
-  -- (043) A card the athlete approved for themself, where a parent or
-  -- guardian has since taken back the films they approve, doesn't become
-  -- one a parent or guardian approves without the family's new consent.
-  if new.reviewer_relation is distinct from old.reviewer_relation and old.reviewer_relation = 'self' then
+  -- (043) An adult's card, where a parent or guardian has since taken back
+  -- their child's films, doesn't become a minor's or one a parent or
+  -- guardian approves without the family's new consent.
+  if not coalesce(old.is_minor or old.reviewer_relation in ('parent', 'guardian'), false)
+     and coalesce(new.is_minor or new.reviewer_relation in ('parent', 'guardian'), false) then
     pulled_last := (select max(x.consent_pulled_at) from public.studio_film_people x
                      where x.person_code = old.person_code and x.pull_scope = 'not_self');
     if pulled_last is not null and not exists (
@@ -237,6 +240,19 @@ create or replace trigger studio_speaker_links_gate before insert or update or d
 create or replace trigger studio_speaker_links_keep before truncate on public.studio_speaker_links
   for each statement execute function public.studio_keep();
 
+-- A link never marked sent, made ten minutes or more ago, while another
+-- live link for the email was: its supersede never ran, and the newer
+-- email is the one that works. Never someone's only link.
+create or replace function public.studio_speaker_link_stale(p_id uuid)
+returns boolean
+language sql stable set search_path = '' as $$
+  select exists (select 1 from public.studio_speaker_links l
+                  where l.id = p_id and l.sent_at is null and l.created_at < now() - interval '10 minutes'
+                    and exists (select 1 from public.studio_speaker_links o
+                                 where o.email = l.email and o.id <> l.id and o.revoked_at is null
+                                   and o.expires_at > now() and o.sent_at is not null));
+$$;
+
 -- The email a live link is for (and the link marked used), or nothing.
 create or replace function public.studio_speaker_email(p_proof text)
 returns text
@@ -247,6 +263,7 @@ begin
   update public.studio_speaker_links l set last_used_at = now()
    where l.proof_hash = encode(sha256(convert_to(coalesce(p_proof, ''), 'UTF8')), 'hex')
      and l.revoked_at is null and l.expires_at > now()
+     and not public.studio_speaker_link_stale(l.id)
   returning l.email into e;
   return e;
 end $$;
@@ -266,13 +283,14 @@ end $$;
 -- link for that email whose own email went before it stops, under the
 -- email's lock. A link still waiting on its email is left alone: when that
 -- email goes, it stops this one. So the newest email in their inbox is the
--- one that works. p_accepted_at is when its email was accepted (the server
--- says, so a retry keeps it; clamped to the link's life so far): links are
--- ordered by it, and a call that comes late for a link whose email went
--- before another's stops its own link, not the newer one. A link never
--- marked sent (its own call never came: a restart) and made ten minutes or
--- more ago stops too.
-create or replace function public.studio_speaker_supersede(p_proof text, p_accepted_at timestamptz default null)
+-- one that works. p_after_ms is how long after the link was made its email
+-- was accepted, as the server timed it (so a retry keeps it, and one clock
+-- orders them: the database's created_at plus that): links are ordered by
+-- it, and a call that comes late for a link whose email went before
+-- another's stops its own link, not the newer one. A link never marked sent
+-- (its own call never came: a restart) and made ten minutes or more ago
+-- stops too.
+create or replace function public.studio_speaker_supersede(p_proof text, p_after_ms integer default null)
 returns integer
 language plpgsql volatile set search_path = '' as $$
 declare
@@ -287,7 +305,8 @@ begin
   end if;
   perform pg_advisory_xact_lock(hashtextextended('studio.page:' || me.email, 0));
   update public.studio_speaker_links l
-     set sent_at = least(clock_timestamp(), greatest(me.created_at, coalesce(p_accepted_at, clock_timestamp())))
+     set sent_at = case when p_after_ms is null then clock_timestamp()
+                        else least(clock_timestamp(), me.created_at + make_interval(secs => greatest(p_after_ms, 0) / 1000.0)) end
    where l.id = me.id and l.sent_at is null;
   select l.sent_at into mine from public.studio_speaker_links l
    where l.id = me.id and l.revoked_at is null and l.expires_at > now();
@@ -332,6 +351,7 @@ begin
   select l.email into e from public.studio_speaker_links l
    where l.proof_hash = encode(sha256(convert_to(coalesce(p_proof, ''), 'UTF8')), 'hex')
      and l.revoked_at is null and l.expires_at > now()
+     and not public.studio_speaker_link_stale(l.id)
    for update;
   if e is null then
     raise exception 'this page link is not active';
@@ -345,11 +365,13 @@ begin
   -- The code's lock (039's pull takes it too), so two taps at once are one
   -- pull: the second finds nothing left and says so.
   perform pg_advisory_xact_lock(hashtextextended('studio.code:' || code, 0));
+  -- Narrowed where the athlete is an adult now: a live, cleared card of
+  -- theirs (not a minor's, no parent or guardian approving), speaking or not.
   mine_only := rel <> 'self' and exists (select 1 from public.studio_film_people p
               where p.person_code = code and p.consent_pulled_at is null and p.cleared_at is not null
-                and p.reviewer_relation = 'self' and lower(coalesce(p.reviewer_email, '')) <> e);
+                and not coalesce(p.is_minor or p.reviewer_relation in ('parent', 'guardian'), false));
   if not exists (select 1 from public.studio_film_people p where p.person_code = code and p.consent_pulled_at is null
-                   and (not mine_only or p.reviewer_relation is distinct from 'self')) then
+                   and (not mine_only or coalesce(p.is_minor or p.reviewer_relation in ('parent', 'guardian'), false))) then
     raise exception 'consent is already taken back';
   end if;
   update public.studio_speaker_links l set last_used_at = now()
@@ -366,11 +388,11 @@ begin
   perform set_config('studio.pull_scope', 'not_self', true);
   perform 1 from public.studio_films f
    where f.id in (select x.film_id from public.studio_film_people x
-                   where x.person_code = code and x.consent_pulled_at is null and x.reviewer_relation is distinct from 'self')
+                   where x.person_code = code and x.consent_pulled_at is null and coalesce(x.is_minor or x.reviewer_relation in ('parent', 'guardian'), false))
    order by f.id for update;
   update public.studio_film_people
      set consent_pulled_at = now(), pulled_by = by_whom, pulled_note = nullif(btrim(coalesce(p_note, '')), ''), updated_at = now()
-   where person_code = code and consent_pulled_at is null and reviewer_relation is distinct from 'self';
+   where person_code = code and consent_pulled_at is null and coalesce(is_minor or reviewer_relation in ('parent', 'guardian'), false);
   perform set_config('studio.pull_scope', '', true);
   return query select t.id, true from public.studio_takedowns t where t.person_code = code and t.closed_at is null
                 order by t.requested_at desc limit 1;
@@ -382,7 +404,7 @@ declare
   fn text;
 begin
   foreach fn in array array['public.studio_speaker_links_gate()', 'public.studio_speaker_email(text)', 'public.studio_speaker_sign_out(text)',
-                            'public.studio_speaker_supersede(text, timestamptz)', 'public.studio_speaker_pull(text, text, text)'] loop
+                            'public.studio_speaker_supersede(text, integer)', 'public.studio_speaker_link_stale(uuid)', 'public.studio_speaker_pull(text, text, text)'] loop
     execute format('revoke all on function %s from public', fn);
     foreach r in array array['anon', 'authenticated'] loop
       if exists (select 1 from pg_roles where rolname = r) then
@@ -398,6 +420,6 @@ begin
   if exists (select 1 from pg_roles where rolname = 'service_role') then
     execute 'revoke truncate, trigger, references on public.studio_speaker_links from service_role';
     execute 'grant execute on function public.studio_speaker_email(text), public.studio_speaker_sign_out(text), '
-      'public.studio_speaker_supersede(text, timestamptz), public.studio_speaker_pull(text, text, text) to service_role';
+      'public.studio_speaker_supersede(text, integer), public.studio_speaker_link_stale(uuid), public.studio_speaker_pull(text, text, text) to service_role';
   end if;
 end $$;

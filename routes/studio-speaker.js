@@ -142,7 +142,7 @@ router.post("/pull", safe(async (req, res) => {
   worker.sweep({ sb }).catch(() => {});
   const staff = [...staffEmails()];
   const scope = onlyTheirs
-    ? `A parent or guardian of ${code} took consent back on their own page: every film a parent or guardian approves for ${code} is stopped. ${code} approves for themself on other films, which go on: talk to ${code} today.`
+    ? `A parent or guardian of ${code} took consent back on their own page: every film with ${code} as a minor, or that a parent or guardian approves, is stopped. ${code} is on other films as an adult, which go on: talk to ${code} today.`
     : `${code}'s consent was taken back on a Same Work page. Every film with them is stopped.`;
   const also = others ? ` Another parent or guardian approves for ${code} on cards that were stopped: tell them.` : "";
   push.notifySoon(push.teamEmails("approver"), { title: "Consent taken back", body: `${scope} The 72-hour takedown clock started.`.slice(0, 240), url: "/app/#film-takedowns", tag: `takedown-${id}` });

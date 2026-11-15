@@ -394,7 +394,7 @@ test("the database keeps every link as it was made, and only the server reaches 
   for (const role of ["anon", "authenticated"]) {
     const t = (await pool.query(`select has_table_privilege($1, '${SCHEMA}.studio_speaker_links', 'select') as s`, [role])).rows[0].s;
     assert.equal(t, false, role);
-    for (const fn of ["studio_speaker_email(text)", "studio_speaker_sign_out(text)", "studio_speaker_supersede(text, timestamptz)", "studio_speaker_pull(text, text, text)"]) {
+    for (const fn of ["studio_speaker_email(text)", "studio_speaker_sign_out(text)", "studio_speaker_supersede(text, integer)", "studio_speaker_link_stale(uuid)", "studio_speaker_pull(text, text, text)"]) {
       assert.equal((await pool.query(`select has_function_privilege($1, '${SCHEMA}.${fn}', 'execute') as x`, [role])).rows[0].x, false, `${role} ${fn}`);
     }
   }
@@ -476,8 +476,8 @@ test("a parent's page pull, where the athlete now approves for themself, takes b
   const rows = (await pool.query("select reviewer_email, consent_pulled_at is not null as pulled, pull_scope from studio_film_people where person_code = $1 order by reviewer_email", [code])).rows;
   assert.deepEqual(rows, [{ reviewer_email: "cy@x.test", pulled: false, pull_scope: null }, { reviewer_email: "pat@x.test", pulled: true, pull_scope: "not_self" }, { reviewer_email: "robin@x.test", pulled: true, pull_scope: "not_self" }]);
   const alert = await mailTo("kyron@toj.test", /Consent taken back/);
-  assert.match(alert.text, /every film a parent or guardian approves for .* is stopped/);
-  assert.match(alert.text, /approves for themself on other films, which go on/);
+  assert.match(alert.text, /every film with .* as a minor, or that a parent or guardian approves, is stopped/);
+  assert.match(alert.text, /is on other films as an adult, which go on/);
   assert.match(alert.text, /Another parent or guardian approves for .* on cards that were stopped/);
   assert.doesNotMatch(alert.text, /Cy|Dove|pat@|robin@/);
   // Asked again: there's nothing left for them to take back.
@@ -503,6 +503,47 @@ test("a parent's page pull, where the athlete now approves for themself, takes b
   // How far a pull went is the pull's to say.
   await assert.rejects(pool.query("update studio_film_people set pull_scope = null where person_code = $1 and reviewer_email = 'pat@x.test'", [code]), /closed|how far/);
   await assert.rejects(pool.query("update studio_film_people set pull_scope = 'not_self', changed_by = 'x' where id = $1", [p2.id]), /how far|pull_scope/);
+});
+
+test("an adult who appears but doesn't speak keeps their films when a parent takes their child's films back", async () => {
+  const { people } = await aFilm((code) => [{ person_code: code, name: "Rex Vale", role: "athlete", is_minor: true, speaker: true, release_on_file: true, covers: { voice: true, formats: ["hero"] }, reviewer_relation: "parent", reviewer_name: "Pam Vale", reviewer_email: "pam@x.test" }]);
+  const code = people[0].person_code;
+  // Now an adult, on a film where he only appears: no one approves a cut for him.
+  const film2 = ok(await films("POST", "/films", { kit_slug: "same-work", title: `${code} b-roll`, lane: "youth", athlete_id: code, format: "hero" }, "lead"), "start").film;
+  const p2 = ok(await films("POST", `/films/${film2.id}/people`, { person_code: code, name: "Rex Vale", role: "athlete", release_on_file: true, covers: { face: true, formats: ["hero"] } }, "lead"), "an adult's card, not speaking").person;
+  ok(await films("POST", `/films/${film2.id}/people/${p2.id}/clear`, { seen: p2.updated_at }, "lead"), "clear");
+  const token = await linkFor("pam@x.test");
+  ok(await page("/pull", { token, person_code: code, confirm: true }), "the parent takes it back");
+  const rows = (await pool.query("select is_minor, consent_pulled_at is not null as pulled, pull_scope from studio_film_people where person_code = $1 order by is_minor", [code])).rows;
+  assert.deepEqual(rows, [{ is_minor: false, pulled: false, pull_scope: null }, { is_minor: true, pulled: true, pull_scope: "not_self" }]);
+  // And he can go on a new film the same way, with no new consent.
+  const film3 = ok(await films("POST", "/films", { kit_slug: "same-work", title: `${code} next`, lane: "youth", athlete_id: code, format: "hero" }, "lead"), "start").film;
+  ok(await films("POST", `/films/${film3.id}/people`, { person_code: code, name: "Rex Vale", role: "athlete", release_on_file: true, covers: { face: true, formats: ["hero"] } }, "lead"), "a new card of the adult's");
+});
+
+test("a link never marked sent, ten minutes old, doesn't open once a newer link's email has gone", async () => {
+  const film = ok(await films("POST", "/films", { kit_slug: "same-work", title: "S7301 hero", lane: "youth", athlete_id: "S7301", format: "hero" }, "lead"), "start").film;
+  const p = ok(await films("POST", `/films/${film.id}/people`, self("C7301", "Uma Holt", "uma@x.test"), "lead"), "card").person;
+  ok(await films("POST", `/films/${film.id}/people/${p.id}/clear`, { seen: p.updated_at }, "lead"), "clear");
+  const settle = async () => { for (let i = 0; i < 40; i++) { if ((await pool.query("select count(*)::int as n from studio_speaker_links where email = 'uma@x.test' and sent_at is null")).rows[0].n === 0) return; await wait(25); } };
+  mails = [];
+  const only = await linkFor("uma@x.test");
+  await settle();
+  const raw = async (sql) => { const c = await pool.connect(); try { await c.query("begin"); await c.query("set local session_replication_role = replica"); await c.query(sql); await c.query("commit"); } finally { c.release(); } };
+  // Its own call never came, eleven minutes ago, and it's their only link: it still works.
+  await raw("update studio_speaker_links set sent_at = null, created_at = now() - interval '11 minutes' where email = 'uma@x.test'");
+  assert.equal((await page("/view", { token: only })).status, 200, "never someone's only link");
+  // A newer link whose email went (its own call kept from stopping others): the old one no longer opens.
+  mails = [];
+  const realRpc = sb.rpc.bind(sb);
+  sb.rpc = (fn, args) => (fn === "studio_speaker_supersede" ? Promise.resolve({ data: null, error: { code: "57014", message: "timeout" } }) : realRpc(fn, args));
+  const newer = await linkFor("uma@x.test");
+  await wait(1200);
+  sb.rpc = realRpc;
+  await raw("update studio_speaker_links set sent_at = now() where email = 'uma@x.test' and created_at > now() - interval '1 minute'");
+  assert.equal((await page("/view", { token: only })).status, 404, "the stale one is stopped on use");
+  assert.equal((await page("/pull", { token: only, person_code: "C7301", confirm: true })).status >= 400, true);
+  assert.equal((await page("/view", { token: newer })).status, 200);
 });
 
 test("a link whose own email was never marked sent stops when a later one's email goes, ten minutes on", async () => {
@@ -565,8 +606,8 @@ test("a supersede that fails is tried once more, and a late one for an older ema
     assert.equal((await page("/view", { token: b })).status, 200);
     // A late call for an older email (accepted before b's): it stops itself.
     await pool.query("begin; set local session_replication_role = replica; update studio_speaker_links set sent_at = null, revoked_at = null where proof_hash = encode(sha256(convert_to($$" + U.sha256(a) + "$$, 'UTF8')), 'hex'); commit;");
-    const before = (await pool.query("select min(sent_at) as t from studio_speaker_links where email = 'ola@x.test' and sent_at is not null")).rows[0].t;
-    await pool.query("select studio_speaker_supersede($1, $2)", [U.sha256(a), new Date(new Date(before).getTime() - 1000).toISOString()]);
+    // Accepted the moment a was made: before b's.
+    await pool.query("select studio_speaker_supersede($1, $2)", [U.sha256(a), 0]);
     assert.equal((await page("/view", { token: a })).status, 404, "the older one stopped itself");
     assert.equal((await page("/view", { token: b })).status, 200, "the newer one still works");
   } finally {
