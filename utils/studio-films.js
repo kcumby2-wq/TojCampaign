@@ -408,7 +408,22 @@ const FILE_OR_LINK = (s) => /\/|:\/\/|\.[\p{L}\p{N}]{2,4}$/u.test(s.replace(/[^\
 const SOCIAL_PATH = /(?:instagram|tiktok|twitter|x|facebook|fb|youtube|snapchat|threads|hudl|linkedin)\.(?:com|net)\/(?:@)?/giu;
 // Family and role words: a four-letter plural right before one at a
 // sentence's start is a possessive ("Johns dad", "Annas mom").
-const FAMILY_NEXT = new Set("mom mum mother mama dad father papa sister sis brother bro parents parent family grandma grandpa nana aunt uncle coach first".split(" "));
+const FAMILY_NEXT = new Set("mom mum mother mama dad father papa sister sis brother bro parents parent family grandma grandpa nana aunt uncle".split(" "));
+// "first" before one of these is theirs too ("NOVAS FIRST GAME"; "Cams
+// first, then the lights" isn't).
+const FIRST_OF = new Set("game games season practice day start goal touchdown win match meet race".split(" "));
+// A sport or a position after a handle's first word ("@hunter.football",
+// "@chase.qb1"): the athlete's own handle. "sports", "church", "media" aren't.
+const HANDLE_SPORT = new Set(("football soccer volleyball basketball baseball softball track swim swimming lax lacrosse wrestling cheer golf tennis " +
+  "hockey xc running athlete ath vb bb fb sb qb wr rb te lb db cb ol dl gk pg sg sf pf").split(" "));
+// In kit text, a shout-out names someone where the name ends it ("Thanks
+// Grace!", "Go Hope Go", "Thanks Grace For The Assist"), not where it starts
+// a place or a group ("Thanks Summer Camp Staff", "Shout Out To Grace
+// Church") or a verb follows ("Coach Will Explain The Drill").
+const SHOUT_ENDS = new Set("for and from go &".split(" "));
+// "miss" greets someone only at a line's start or after another greeting,
+// never after "not" ("Do Not Miss Summer Practice").
+const NOT_WORDS = new Set("not dont don't never cant can't wont won't didnt didn't no".split(" "));
 function wordsOf(raw) {
   const spans = tagSpans(raw);
   // A line of three words or more in Title Case or capitals: a capital there
@@ -428,7 +443,12 @@ function wordsOf(raw) {
         toks.push([at + t.index, t[0].toLowerCase()]);
       }
       const ws = toks.map((x) => x[1]);
-      ws.forEach((w, i) => { if (shoutLead(ws, i)) shout.set(toks[i][0], ws[i - 1] === "go" || ws[i - 1] === "hey" ? "go" : "lead"); });
+      ws.forEach((w, i) => {
+        if (!shoutLead(ws, i)) return;
+        if (ws[i - 1] === "miss" && !(i === 1 || (SHOUT_LEAD.has(ws[i - 2]) && !NOT_WORDS.has(ws[i - 2])))) return;
+        if (i >= 2 && NOT_WORDS.has(ws[i - 2])) return;
+        shout.set(toks[i][0], ws[i - 1] === "go" || ws[i - 1] === "hey" ? "go" : "lead");
+      });
     }
     at += line.length + 1;
   }
@@ -496,8 +516,10 @@ function wordsOf(raw) {
       inner,
     });
   }
-  // The word after it on the same line ("Johns dad").
+  // The word after it on the same line, spaces only between ("Johns dad"),
+  // and the one after that.
   out.forEach((w, i) => { const n = out[i + 1]; w.next = n && /^[^\S\n]+$/u.test(raw.slice(w.end, n.at)) ? n.low : null; });
+  out.forEach((w, i) => { w.next2 = w.next ? out[i + 1].next : null; });
   return out;
 }
 const personKey = (name, minor) => nameParts(name).join(" ") + (minor ? "|m" : "|a");
@@ -654,7 +676,11 @@ function kitNames(textValue, people, { film = [] } = {}) {
           //   where there's no rest ("@grace", "@grace.hoops", a profile
           //   link's path); asked where it's more ("@grace.church").
           else if (e.isMinor && h.tag && (h.more || h.handle) && !DATE_WORDS.has(low) && !(e.parts.length > 1 && e.parts.lastIndexOf(low) === e.parts.length - 1)) {
-            const ownRest = h.handle && h.rest.every((x) => KIT_TAG_WORDS.has(x) || RUN_CLEAR.has(x) || /^\p{N}+$/u.test(x) || x === "s" || e.parts.includes(x));
+            const ownRest = h.handle && h.rest.every((x) => {
+              // By its letters ("qb1" as "qb").
+              const l = x.replace(/^\p{N}+|\p{N}+$/gu, "");
+              return !l || KIT_TAG_WORDS.has(l) || RUN_CLEAR.has(l) || HANDLE_SPORT.has(l) || l === "s" || e.parts.includes(l);
+            });
             put(low, ownRest || h.number, true);
           }
           // An everyday word: in lower case, it's the word.
@@ -662,7 +688,8 @@ function kitNames(textValue, people, { film = [] } = {}) {
           // Right after a shout-out's words in a Title Case or capitals line
           // ("Go Hope Go", "THANKS GRACE FOR THE ASSIST"): a minor's name,
           // as graphics read it; after go or hey, a first name only.
-          else if (h.shout && e.isMinor && !DATE_WORDS.has(low) && !(h.shout === "go" && e.parts.length > 1 && e.parts.lastIndexOf(low) === e.parts.length - 1)) put(low, true, true);
+          else if (h.shout && e.isMinor && !DATE_WORDS.has(low) && !(h.shout === "go" && e.parts.length > 1 && e.parts.lastIndexOf(low) === e.parts.length - 1)
+            && (!h.next || SHOUT_ENDS.has(h.next) || e.parts.includes(h.next))) put(low, true, true);
           // "Hope never quits": asked ("He was great": a two-letter one
           // starts sentences all the time).
           else if (h.start) {
@@ -688,7 +715,7 @@ function kitNames(textValue, people, { film = [] } = {}) {
       const capAny = hits.some((h) => h.cap);
       // At a sentence's start, right before a family or role word ("Johns
       // dad held the reflector", "Annas mom asked"): a possessive.
-      const family = hits.some((h) => h.cap && h.start && h.next && FAMILY_NEXT.has(h.next));
+      const family = hits.some((h) => h.cap && h.start && h.next && (FAMILY_NEXT.has(h.next) || (h.next === "first" && FIRST_OF.has(h.next2))));
       for (const st of plainStems(low)) {
         const n = Array.from(st).length;
         if (n < 3) continue;
@@ -700,7 +727,7 @@ function kitNames(textValue, people, { film = [] } = {}) {
             if (DATE_WORDS.has(st) || !capAny) continue;
             put(st, capMid, true);
           } else if (!eng || capMid || (!capAny && n >= 5)) put(st, true, true);
-          else if (capAny) put(st, n >= 5 || family, true);
+          else if (capAny) put(st, n >= 5 || (family && n >= 4), true);
         }
       }
     }

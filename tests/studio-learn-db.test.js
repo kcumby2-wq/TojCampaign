@@ -526,6 +526,13 @@ test("what every film shares is read against every card for names, not for ordin
   for (const [t, n, w] of [["Go Hope Go", "Hope Field", "hope"], ["THANKS GRACE FOR THE ASSIST", "Grace Lin", "grace"], ["Shout Out To Hope And The Crew", "Hope Field", "hope"],
     ["Happy Birthday Faith From The Crew", "Faith Moss", "faith"], ["Thank You Coach Will For The Ride", "Will Ruiz", "will"]]) assert.deepEqual(U.kitNames(t, m(n)).minor, [w], t);
   assert.deepEqual(U.kitNames("Go Green Go White Tonight", m("Ava Green")).sure, [], "after go, a surname is a chant as often");
+  // Not where the word starts a place or a group, a verb follows, or "miss" isn't a greeting: asked.
+  for (const [t, n, w] of [["Do Not Miss Summer Practice", "Summer Day", "summer"], ["Never Miss Chase Cam Checks", "Chase Hale", "chase"], ["Miss Grace Period Deadlines", "Grace Lin", "grace"],
+    ["Coach Will Explain The Drill", "Will Ruiz", "will"], ["Thanks Summer Camp Staff", "Summer Day", "summer"], ["Shout Out To Grace Church", "Grace Lin", "grace"],
+    ["Thank You Hope Center Volunteers", "Hope Field", "hope"], ["Dear Summer Interns", "Summer Day", "summer"]]) assert.deepEqual(U.kitNames(t, m(n)), { sure: [], maybe: [w], minor: [] }, t);
+  // "first" and "coach" after a plural are the camera's, the lens's: asked.
+  for (const [t, n, w] of [["Lens first, then mount the cage", "Len Ruiz", "len"], ["Cams first, then the lights", "Cam Ruiz", "cam"], ["Jeans first, then boots", "Jean Ruiz", "jean"],
+    ["Levis first then boots", "Levi Ruiz", "levi"], ["Lens coach said to stop down", "Len Ruiz", "len"]]) assert.deepEqual(U.kitNames(t, m(n)), { sure: [], maybe: [w], minor: [] }, t);
   assert.deepEqual(U.kitNames("Go Chase Your Dreams Tonight", m("Chase Hale")), { sure: [], maybe: ["chase"], minor: [] });
   for (const [t, n] of [["three times a day", "Tim Ruiz"], ["the lens cap", "Len Ruiz"], ["Times are hard", "Tim Ruiz"], ["Pack jeans and boots", "Jean Ruiz"]]) assert.deepEqual(U.kitNames(t, m(n)).sure, [], t);
   // A minor's name of two or three letters in a tag, beside the tag's own word or marked off by capitals.
@@ -539,7 +546,8 @@ test("what every film shares is read against every card for names, not for ordin
   // A minor's everyday-word first name alone in a handle (with nothing after
   // it, a tag's word, a number or their own name), a profile link's path, or
   // a tag or run with a number that ends it or comes first; a class year too.
-  for (const t of ["Posted to @grace.hoops", "#grace23", "Tag @grace on the reel", "@grace_23", "@grace.lin.hoops", "instagram.com/grace.hoops", "tiktok.com/@grace.hoops", "#23grace", "#grace_23", "grace-23 highlights", "#grace2027"]) {
+  for (const t of ["Posted to @grace.hoops", "#grace23", "Tag @grace on the reel", "@grace_23", "@grace.lin.hoops", "instagram.com/grace.hoops", "tiktok.com/@grace.hoops", "#23grace", "#grace_23", "grace-23 highlights", "#grace2027",
+    "@grace.volleyball", "@grace.vb", "@grace.qb1", "@grace_wr", "instagram.com/grace_football"]) {
     assert.ok(U.kitNames(t, m("Grace Lin")).minor.includes("grace"), t);
   }
   // Elsewhere in a file name, a link, a tag with a year after a season or a
