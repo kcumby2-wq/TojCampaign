@@ -70,7 +70,8 @@
   // Words the transcript says are missing ("[inaudible]", "[crosstalk]"):
   // kept as a mark a line never reaches across.
   var MISSING = "\u27e8\u2026\u27e9";
-  var MISSING_RE = /\[\s*(?:inaudible|unintelligible|crosstalk|cross[- ]talk|overlapping|overtalk|indistinct|unclear|garbled|muffled|\?+)[^\]]{0,40}\]/gi;
+  // In brackets or parentheses ("[inaudible]", "(crosstalk)").
+  var MISSING_RE = /[\[(]\s*(?:inaudible|unintelligible|crosstalk|cross[- ]talk|overlapping|overtalk|indistinct|unclear|garbled|muffled|\?+)[^\[\]()]{0,40}[\])]/gi;
   // A pause this long between two of a speaker's cues: a line doesn't reach
   // across it (something may have been said in between and cut).
   var PAUSE_MS = 3000;
@@ -581,7 +582,12 @@
         : null;
       // A name with no words is still a label the file uses.
       if (marker && marker.name) counts["?" + marker.name] = (counts["?" + marker.name] || 0) + 1;
+      // Missing words with nothing else in their part ("[inaudible]" in a
+      // subtitle of its own): no cue, but the next cue starts with the mark,
+      // so no line reaches across it.
+      var missingIn = function (pt) { return cleanText(pt.text).indexOf(MISSING) >= 0; };
       if (!ps.length) {
+        if (every.some(missingIn)) split.push({ missing: true });
         if (marker) split.push(marker);
         return;
       }
@@ -594,11 +600,14 @@
       var n = ps.map(function (pt) { return Math.max(1, (cleanText(pt.text).match(/[\p{L}\p{N}]+/gu) || []).length); });
       var all = n.reduce(function (a, b) { return a + b; }, 0);
       var acc = 0;
-      ps.forEach(function (pt, k) {
+      var k = 0;
+      every.forEach(function (pt) {
+        if (ps.indexOf(pt) < 0) { if (missingIn(pt)) split.push({ missing: true }); return; }
         var a = c.s == null ? null : Math.round(c.s + ((c.e - c.s) * acc) / all);
         acc += n[k];
         var b = c.s == null ? null : k === ps.length - 1 ? c.e : Math.round(c.s + ((c.e - c.s) * acc) / all);
         split.push({ s: a, e: b, kind: pt.kind, who: pt.who, dash: pt.dash, chev: pt.chev, br: pt.br, odd: pt.odd, resume: pt.resume, text: pt.text, sub: ps.length > 1 });
+        k += 1;
       });
       if (marker) split.push(marker);
     });
@@ -620,9 +629,12 @@
     var mixed = 0;
     var late = 0;
     var pending = false;
+    // Missing words dropped before this cue: it starts with their mark.
+    var carry = false;
     for (i = 0; i < split.length; i++) {
       var p = split[i];
       var who;
+      if (p.missing) { carry = true; continue; }
       if (p.marker) {
         // In a file with labels, the name's (a name the file uses as a
         // label) or nobody's until the next label; without, the next
@@ -657,6 +669,7 @@
       if (!tx || !/[\p{L}\p{N}]/u.test(tx)) continue;
       if (p.s != null && p.e != null && p.e > MAX_MS) { late++; continue; }
       if (p.s == null || p.e == null || p.s < 0 || p.e < p.s) continue;
+      if (carry) { if (tx.indexOf(MISSING) !== 0) tx = MISSING + " " + tx; carry = false; }
       if (tx.length > MAX_CUE) return { ok: false, error: "cue_too_long", at: cues.length + 1 };
       total += tx.length;
       cues.push({ n: cues.length + 1, s: p.s, e: p.e, t: tx, who: who === undefined ? null : who });

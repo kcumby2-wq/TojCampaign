@@ -469,6 +469,13 @@ test("other voices are nobody's however a file marks them: >>, a name in bracket
   p = TP.parse(S("COACH: We were down by ten.", "[inaudible] COACH: the whole team showed up.", "INTERVIEWER: Why?"));
   assert.equal(TP.find(TP.only(p.cues, "COACH"), 1, 2, "down by ten. the whole team").why, "missing_words");
   assert.deepEqual(TP.parse(S("(2019) We won state.", "And that was it.")).cues.map((c) => c.t), ["(2019) We won state.", "And that was it."]);
+  // Missing words in a subtitle of their own: the next cue starts with the mark, labelled or not, in brackets or parentheses.
+  for (const mid of ["[inaudible]", "[crosstalk]", "[indistinct] [applause]", "(inaudible)"]) {
+    p = TP.parse(S("We were down by ten.", mid, "the whole team showed up."));
+    assert.equal(TP.find(TP.only(p.cues, null), 1, 2, "down by ten. the whole team").why, "missing_words", mid);
+    p = TP.parse(S("COACH: We were down by ten.", mid, "COACH: the whole team showed up.", "INTERVIEWER: Why?"));
+    assert.equal(TP.find(TP.only(p.cues, "COACH"), 1, 2, "down by ten. the whole team").why, "missing_words", mid);
+  }
   // Two brackets alone: read and listed the same way.
   p = TP.parse(S("COACH: I ran it.", "[man clears throat] [door closes]", "Same cones.", "COACH: Because."));
   assert.deepEqual(TP.only(p.cues, "COACH").map((c) => c.t), ["I ran it.", "Same cones.", "Because."]);
