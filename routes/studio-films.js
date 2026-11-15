@@ -173,7 +173,7 @@ async function peopleOf(sb, filmId) {
 // Every card on every film (names only), for what's shared by every film: a
 // note's label shows in every room.
 async function everyCard(sb) {
-  return (await run(sb.from("studio_film_people").select("name,reviewer_name,is_minor").limit(10000))) || [];
+  return U.everyCardRows(sb);
 }
 async function toolOn(sb, tool) {
   const row = await run(sb.from("studio_tool_approvals").select("is_on").eq("tool", tool).maybeSingle());
@@ -400,6 +400,35 @@ router.post("/films/:id/notes", member, withDb(async (req, res, sb) => {
 }));
 
 // ── Clearance cards ──────────────────────────────────────────────────────
+// What the film keeps in words (Real words) that the app reads as a
+// minor's name, past what the database's own screen reads (039's and 041's,
+// which leave everyday words and English-word run-ins to the app): their
+// name as a sentence carries it (utils/studio-films.js strictNames: "Every
+// morning, Hope runs it.") or run into another word (minorRunIns:
+// "#letsgojamie", "#jamiefootball"). Every page of the film's words, by id.
+const KEPT_COLS = "id,kind,quote,text,title,note";
+async function keptNaming(sb, filmId, name) {
+  const who = [{ name, is_minor: true }];
+  const out = [];
+  let after = null;
+  for (let page = 0; page < 200; page++) {
+    let q = sb.from("studio_words").select(KEPT_COLS).eq("film_id", filmId).order("id", { ascending: true }).limit(1000);
+    if (after) q = q.gt("id", after);
+    const { data, error } = await q;
+    // Before 041 there's nothing kept in words.
+    if (error && /42P01|PGRST205/.test(String(error.code || ""))) return [];
+    if (error) throw Object.assign(new Error(error.message), { db: error });
+    if (!data || !data.length) break;
+    for (const w of data) {
+      const t = [w.quote, w.text, w.title, w.note].filter(Boolean).join("\n");
+      if (U.minorRunIns(t, who).sure.length || U.strictNames(t, who).length) out.push(w);
+    }
+    after = data[data.length - 1].id;
+  }
+  return out;
+}
+const KEPT_REFUSAL = "a line, caption, title or note kept on this film names someone on this card: remove it (Real words) first";
+
 router.post("/films/:id/people", member, withDb(async (req, res, sb) => {
   const film = await filmById(sb, req.params.id);
   if (!film) return res.status(404).json({ error: "not_found" });
@@ -411,6 +440,7 @@ router.post("/films/:id/people", member, withDb(async (req, res, sb) => {
   const against = U.cardAgainstFilm(film, value, U.namesOkWords(bodyOf(req).names_ok));
   if (against) return res.status(against.fields ? 400 : 409).json(against);
   try {
+    if (value.is_minor && (await keptNaming(sb, film.id, value.name)).length) return res.status(409).json({ error: "refused", reason: KEPT_REFUSAL });
     const person = await run(sb.from("studio_film_people").insert({ ...value, film_id: film.id, created_by: me(req) }).select().single());
     res.json({ person: { ...person, gaps: U.clearanceGaps(person) } });
   } catch (e) {
@@ -433,15 +463,51 @@ router.patch("/films/:id/people/:pid", member, withDb(async (req, res, sb) => {
   const reviewerChanged = ["reviewer_relation", "reviewer_name", "reviewer_email"].some((k) => k in value && value[k] !== current[k]);
   if (reviewerChanged && !isProducer(req)) return res.status(403).json({ error: "producer_only" });
   const next = { ...current, ...value };
-  if (value.name || value.reviewer_name || "is_minor" in value) {
+  // A correction to a minor never waits on the title or the story: it's the
+  // safety step. The database swaps the words of their name there for the
+  // card's code (039); what's left (the parent set with it, an everyday word
+  // asked about before) is said after, to change by hand.
+  const correction = value.is_minor === true && !current.is_minor;
+  if ((value.name || value.reviewer_name || "is_minor" in value) && !correction) {
     const against = U.cardAgainstFilm(film, next, U.namesOkWords(body.names_ok));
     if (against) return res.status(against.fields ? 400 : 409).json(against);
   }
   if (!Object.keys(value).length) return res.json({ person: current });
   try {
+    if (!correction && next.is_minor && value.name && value.name !== current.name && (await keptNaming(sb, film.id, value.name)).length) {
+      return res.status(409).json({ error: "refused", reason: KEPT_REFUSAL });
+    }
     const rows = await rpcRows(sb, "studio_card_save", { p_person: current.id, p_seen: body.seen, p_patch: value, p_by: me(req) });
     if (!rows.length) return res.status(409).json({ error: "changed_meanwhile" });
-    res.json({ person: { ...rows[0], gaps: U.clearanceGaps(rows[0]) }, uncleared: !!current.cleared_at && !rows[0].cleared_at });
+    let coded = false;
+    let named = false;
+    let removed = 0;
+    let unfinished = false;
+    // What names a minor goes when their card is corrected to a minor, and
+    // on every save of a minor's card after (so a cleanup cut short is
+    // finished next time): the database's screen took its share, and what
+    // the app reads as their name goes now.
+    if (rows[0].is_minor) {
+      try {
+        for (const w of await keptNaming(sb, film.id, rows[0].name)) {
+          const gone = await rpcRows(sb, "studio_words_remove", { p_word: w.id });
+          removed += gone.length;
+        }
+      } catch (e) {
+        console.error("[studio-films] a minor's kept words weren't all removed:", e.message || e);
+        unfinished = true;
+      }
+    }
+    if (correction) {
+      const after = await filmById(sb, film.id);
+      coded = !!after && (after.title !== film.title || after.one_sentence !== film.one_sentence);
+      // What the swap couldn't change (the film's rules kept it, a form of
+      // the name it doesn't reach, the parent's name, an everyday word that
+      // was asked about while they were an adult): said, so it's changed by
+      // hand. Nothing said before counts now.
+      named = !!after && !!U.cardAgainstFilm(after, rows[0]);
+    }
+    res.json({ person: { ...rows[0], gaps: U.clearanceGaps(rows[0]) }, uncleared: !!current.cleared_at && !rows[0].cleared_at, ...(coded ? { story_coded: true } : {}), ...(named ? { story_named: true } : {}), ...(removed ? { words_removed: removed } : {}), ...(unfinished ? { words_unfinished: true } : {}) });
   } catch (e) {
     refused(res, e);
   }

@@ -230,6 +230,11 @@ app.use("/api/pylon-parent", require("./routes/pylon-parent"));
 // migration 039).
 app.use("/api/studio-films", require("./routes/studio-films"));
 app.use("/api/studio-review", require("./routes/studio-review"));
+// Real words from the speakers' transcripts, three directions for a film,
+// and the taste library (routes/studio-words.js, routes/studio-taste.js;
+// migration 041). Claude reads a transcript only while Kyron has it on.
+app.use("/api/studio-words", require("./routes/studio-words"));
+app.use("/api/studio-taste", require("./routes/studio-taste"));
 
 // Public health signal — powers the live status dot on the Command Center.
 // Reports which storage/AI backends are actually wired (no secrets leaked).

@@ -275,18 +275,19 @@
     show("today", '<div class="screen"><div class="head"><div><p class="kicker">' + h(date) + '</p><h1 class="title">Today</h1></div><a class="avatar" href="#team" aria-label="Your team">' + h(initials({ name: me.team.name, email: me.email })) + '</a></div><div class="spin" aria-label="Loading"></div></div>');
     var studioTool = hasTool("studio");
     var none = function (k) { var o = {}; o[k] = []; return Promise.resolve(o); };
-    var res = await settled([studioTool ? api("/api/studio-agents/kits") : none("kits"), studioTool ? api("/api/studio-agents/runs?limit=20") : none("runs"), api("/api/team/activity?limit=8"), hasTool("os") && atLeast("approver") ? api("/api/os") : Promise.resolve({ builds: [] }), hasTool("gfs") && window.TOJGfs ? window.TOJGfs.todayParts() : Promise.resolve(null), studioTool && atLeast("member") && window.TOJFilms ? window.TOJFilms.todayParts() : Promise.resolve(null)]);
+    var res = await settled([studioTool ? api("/api/studio-agents/kits") : none("kits"), studioTool ? api("/api/studio-agents/runs?limit=20") : none("runs"), api("/api/team/activity?limit=8"), hasTool("os") && atLeast("approver") ? api("/api/os") : Promise.resolve({ builds: [] }), hasTool("gfs") && window.TOJGfs ? window.TOJGfs.todayParts() : Promise.resolve(null), studioTool && atLeast("member") && window.TOJFilms ? window.TOJFilms.todayParts() : Promise.resolve(null), studioTool && atLeast("member") ? api("/api/studio-agents/briefs/unstarted") : none("briefs")]);
     var kits = res[0].status === "fulfilled" ? res[0].value.kits || [] : [];
     var runs = res[1].status === "fulfilled" ? res[1].value.runs || [] : [];
     var acts = res[2].status === "fulfilled" ? res[2].value.activity || [] : [];
     var osWaiting = res[3].status === "fulfilled" ? (res[3].value.builds || []).filter(function (b) { return b.waiting; }) : [];
     var gfsParts = res[4].status === "fulfilled" ? res[4].value : null;
     var filmParts = res[5] && res[5].status === "fulfilled" ? res[5].value : null;
+    // Briefs that came back and were neither started nor set aside (60 days).
+    var unstarted = res[6] && res[6].status === "fulfilled" ? res[6].value.briefs || [] : [];
     state.kits = kits;
 
     var drafts = kits.filter(function (k) { return k.status === "draft"; });
-    var recent = Date.now() - 3 * 86400000;
-    var briefs = runs.filter(function (r) { return r.role === "brief-writer" && r.by_you && r.status !== "running" && r.status !== "failed" && new Date(r.created_at).getTime() > recent; }).slice(0, 2);
+    var briefs = unstarted.slice(0, 3);
     var running = runs.filter(function (r) { return r.status === "running"; });
     var approved = kits.find(function (k) { return k.status === "approved"; });
     try {
@@ -295,7 +296,7 @@
     } catch (e) {}
 
     var needs = (gfsParts ? gfsParts.needs : "") + (filmParts ? filmParts.needs : "");
-    var needCount = drafts.length + briefs.length + osWaiting.length + (gfsParts ? gfsParts.count : 0) + (filmParts ? filmParts.count : 0);
+    var needCount = drafts.length + unstarted.length + osWaiting.length + (gfsParts ? gfsParts.count : 0) + (filmParts ? filmParts.count : 0);
     drafts.forEach(function (d) {
       var canApprove = atLeast("approver");
       needs += '<article class="card"><div class="row"><div class="ico">' + I.layers + '</div><div class="grow"><div class="name">' + h(d.title) + " · draft v" + d.version + '</div><div class="sub">' + h(roleLabel(d.role)) + " · " + h(evalLabel(d.eval_status)) + "</div></div>" +
@@ -307,8 +308,10 @@
       needs += '<article class="card"><div class="row"><div class="ico">' + I.grid + '</div><div class="grow"><div class="name">' + h(b.name) + '</div><div class="sub">' + (b.waiting === "scores" ? "Five-pillar scores to approve" : "Operational Transcript to approve") + '</div></div><span class="badge gold">Review</span></div><div class="btn-row"><a class="btn" href="#osb/' + h(b.id) + '">Open it</a></div></article>';
     });
     briefs.forEach(function (b) {
-      needs += '<article class="card"><div class="row" style="color:var(--gold);font:700 13px/1 var(--text)"><span style="width:18px;height:18px;display:inline-flex">' + I.question + '</span>Your brief is ready</div><p class="body" style="font-weight:600;color:var(--ink)">' + h(b.label) + '</p><div class="btn-row"><a class="btn soft" href="#brief/' + h(b.id) + '">Open the brief</a></div></article>';
+      var fresh = Date.now() - new Date(b.created_at).getTime() < 86400000;
+      needs += '<article class="card"><div class="row" style="color:var(--gold);font:700 13px/1 var(--text)"><span style="width:18px;height:18px;display:inline-flex">' + I.question + "</span>" + (fresh ? "Your brief is ready" : "A brief you haven't started · " + h(ago(b.created_at))) + '</div><p class="body" style="font-weight:600;color:var(--ink)">' + h(b.label) + '</p><div class="btn-row"><a class="btn soft" href="#brief/' + h(b.id) + '">' + (fresh ? "Open the brief" : "Start it or set it aside") + "</a></div></article>";
     });
+    if (unstarted.length > briefs.length) needs += '<p class="sub" style="margin:0">' + h("And " + (unstarted.length - briefs.length) + " more briefs not started.") + "</p>";
 
     var runRows = running.map(function (r) {
       var href = r.role === "brief-writer" ? "#brief/" + r.id : "#run/" + r.id;
@@ -377,6 +380,7 @@
     show("studio",
       '<div class="screen"><div class="head"><h1 class="title">Studio</h1>' + (atLeast("member") ? '<a class="btn small soft" href="#new">' + I.plus.replace("<svg", '<svg width="16" height="16"') + "New idea</a>" : "") + "</div>" +
       (atLeast("member") ? '<a class="li list" href="#films" style="border-radius:16px"><div class="ico">' + I.camera + '</div><div class="grow"><div class="name" style="font-size:15px">Films</div><div class="sub">A room for every film: the kit\'s ten steps, cleared cards, speakers\' review links</div></div>' + I.chev + "</a>" : "") +
+      (atLeast("member") ? '<a class="li list" href="#taste" style="border-radius:16px"><div class="ico">' + I.layers + '</div><div class="grow"><div class="name" style="font-size:15px">Taste library</div><div class="sub">Work worth learning from: a link, what to take and leave. Briefs cite it.</div></div>' + I.chev + "</a>" : "") +
       (blocks || '<p class="empty">No kits yet.</p>') +
       '<a class="li list" href="#tool/studio-console" style="border-radius:16px">' + '<div class="grow"><div class="name" style="font-size:15px">Full Studio console</div><div class="sub">Build a new kit from a playbook, every option</div></div>' + I.chev + "</a>" +
       "</div>");
@@ -710,30 +714,79 @@
     }
     var b = d.brief;
     var needsSource = b.mode === "build";
+    var mark = d.mark || null;
+    // Three directions, each a whole brief; an older brief has just the one.
+    var dirs = Array.isArray(b.directions) && b.directions.length ? b.directions : null;
+    var sel = dirs ? (mark && mark.direction) || b.recommended || 1 : 0;
+    var texts = dirs ? dirs.map(function (x) { return x.brief; }) : [b.brief];
     var refs = (b.references || []).map(function (r) {
       return '<div class="row" style="align-items:flex-start"><span class="badge" style="flex:none">' + h(r.ref) + '</span><p class="body" style="font-size:14px">' + (r.seen !== "fully" ? '<span class="warnc">' + h(r.seen === "partly" ? "Partly loaded. " : "Didn't load. ") + "</span>" : "") + h(r.what_it_shows) + " <i>Take:</i> " + h(r.take) + (r.leave ? " <i>Leave:</i> " + h(r.leave) : "") + "</p></div>";
     }).join("");
+    var taste = (b.taste || []).map(function (x) {
+      return '<div class="row" style="align-items:flex-start"><span class="badge gold mono" style="flex:none">' + h(x.ref) + '</span><p class="body" style="font-size:14px"><a href="' + h(x.url) + '" target="_blank" rel="noopener noreferrer">' + h(x.title) + "</a>" + (x.use ? " " + h(x.use) : "") + "</p></div>";
+    }).join("");
     var qs = (b.questions || []).map(function (q) { return "<li>" + h(q) + "</li>"; }).join("");
+    var started = mark && mark.started_at;
+    var aside = mark && mark.set_aside_at && !started;
+    var markHtml = started
+      ? '<div class="card tight"><p class="body" style="font-size:14px;margin:0">Started ' + h(ago(mark.started_at)) + (mark.direction ? " from direction " + mark.direction : "") + '.</p><div class="btn-row"><a class="btn soft small" href="#run/' + h(mark.started_run_id) + '">Open that run</a></div></div>'
+      : aside ? '<div class="card tight"><p class="body" style="font-size:14px;margin:0">Set aside ' + h(ago(mark.set_aside_at)) + ": it's off Today.</p></div>" : "";
+    var startLabel = function () { return (started ? "Start it again" : b.mode === "build" ? "Build the kit" : "Start the refresh") + (dirs ? " with direction " + sel : ""); };
     show(null,
       '<div class="screen">' + backBtn("#today", "Today") +
       "<div>" + (d.status === "waiting" ? '<span class="badge warn">Didn\'t pass its own check, read closely</span>' : '<span class="badge ok">' + I.check + "Brief ready</span>") +
       '<h1 class="title sm" style="margin-top:12px">' + h(b.title) + '</h1><p class="lede">' + (b.mode === "refresh" ? "Refresh · " : "New kit · ") + h(b.slug) + "</p></div>" +
-      '<div class="field"><label class="label" for="bwText">The brief <small>(edit anything)</small></label><textarea class="textarea mono" id="bwText">' + h(b.brief) + "</textarea></div>" +
+      '<div id="markBox">' + markHtml + "</div>" +
+      (dirs ? '<section class="sec"><h2 class="sec-h">Three directions</h2><p class="body" style="font-size:14px;margin:0">I\'d pick ' + b.recommended + (b.why_recommended ? ": " + h(b.why_recommended) : ".") + '</p><div role="radiogroup" aria-label="The three directions" style="display:flex;flex-direction:column;gap:8px">' + dirs.map(function (x, i) {
+        return '<button type="button" class="radio" role="radio" data-dir="' + (i + 1) + '" aria-checked="' + (sel === i + 1) + '"><span class="r"></span><div class="grow"><div class="name" style="font-size:15px">' + (i + 1) + ". " + h(x.name) + '</div><div class="sub">' + h(x.angle || "") + "</div></div>" + (b.recommended === i + 1 ? '<span class="badge gold">Recommended</span>' : "") + "</button>";
+      }).join("") + "</div></section>" : "") +
+      '<div class="field"><label class="label" for="bwText">' + (dirs ? "This direction's brief" : "The brief") + ' <small>(edit anything)</small></label><textarea class="textarea mono" id="bwText"></textarea></div>' +
       (refs ? '<section class="sec"><h2 class="sec-h">What it took from your references</h2>' + refs + "</section>" : "") +
+      (taste ? '<section class="sec"><h2 class="sec-h">From the taste library</h2>' + taste + "</section>" : "") +
       (qs ? '<section class="card" style="background:#182A3F"><div class="name" style="font-size:15px">Questions for you</div><ul class="body" style="margin:0;padding-left:20px">' + qs + '</ul><p class="sub" style="margin:0">Answer them in the brief above, or leave them; it works without.</p></section>' : "") +
       (needsSource ? '<div class="field"><label class="label" for="srcText">The playbook <small>(source material)</small></label><textarea class="textarea" id="srcText" placeholder="Paste the playbook text here.">' + h(state.lastFiles || "") + "</textarea></div>" : "") +
+      (started ? "" : '<div class="btn-row"><button type="button" class="btn ghost small" id="setAside">' + (aside ? "Bring it back to Today" : "Set it aside") + '</button></div><p class="sub" id="asideNote" style="margin:0">' + (aside ? "" : "Not going ahead with it? Setting it aside takes it off Today.") + "</p>") +
       '<p id="briefMsg" class="body" role="status"></p></div>' +
-      '<div class="dock"><div class="dock-inner"><button type="button" class="btn block" id="startRun">' + (b.mode === "build" ? "Build the kit" : "Start the refresh") + '</button><span class="note">Makes a draft. Nothing changes until it\'s approved.</span></div></div>');
-    document.getElementById("startRun").addEventListener("click", async function () {
+      '<div class="dock"><div class="dock-inner"><button type="button" class="btn block" id="startRun"></button><span class="note">Makes a draft. Nothing changes until it\'s approved.</span></div></div>');
+    var area = document.getElementById("bwText");
+    var startBtn = document.getElementById("startRun");
+    function paintDir() {
+      area.value = texts[dirs ? sel - 1 : 0];
+      startBtn.textContent = startLabel();
+      if (dirs) Array.prototype.forEach.call(document.querySelectorAll("[data-dir]"), function (x) { x.setAttribute("aria-checked", String(Number(x.dataset.dir) === sel)); });
+    }
+    area.addEventListener("input", function () { texts[dirs ? sel - 1 : 0] = area.value; });
+    Array.prototype.forEach.call(document.querySelectorAll("[data-dir]"), function (x) { x.addEventListener("click", function () { sel = Number(x.dataset.dir); paintDir(); }); });
+    paintDir();
+    radios();
+    var setAside = document.getElementById("setAside");
+    // Set aside or brought back in place: the brief as you've edited it stays.
+    if (setAside) setAside.addEventListener("click", async function () {
+      setAside.disabled = true;
+      try {
+        await post("/api/studio-agents/briefs/" + encodeURIComponent(runId) + "/set-aside", { aside: !aside });
+        aside = !aside;
+        toast(aside ? "Set aside: it's off Today." : "It's back on Today.");
+        setAside.textContent = aside ? "Bring it back to Today" : "Set it aside";
+        setAside.disabled = false;
+        document.getElementById("asideNote").textContent = aside ? "" : "Not going ahead with it? Setting it aside takes it off Today.";
+        document.getElementById("markBox").innerHTML = aside ? '<div class="card tight"><p class="body" style="font-size:14px;margin:0">Set aside just now: it\'s off Today.</p></div>' : "";
+      } catch (e) {
+        setAside.disabled = false;
+        document.getElementById("briefMsg").innerHTML = '<span class="err">' + h(e.data && e.data.error === "already_started" ? "That brief was started: it stays started." : e.message) + "</span>";
+      }
+    });
+    startBtn.addEventListener("click", async function () {
       var btn = this;
-      var body = { role: b.mode === "build" ? "kit-builder" : "kit-refresher", slug: b.slug, brief: document.getElementById("bwText").value.trim() };
+      var body = { role: b.mode === "build" ? "kit-builder" : "kit-refresher", slug: b.slug, brief: area.value.trim(), from_brief: runId };
+      if (dirs) body.direction = sel;
       if (needsSource) body.source_text = document.getElementById("srcText").value.trim();
       btn.disabled = true; btn.textContent = "Starting…";
       try {
         var r = await post("/api/studio-agents/run", body);
         go("#run/" + r.run_id);
       } catch (e) {
-        btn.disabled = false; btn.textContent = b.mode === "build" ? "Build the kit" : "Start the refresh";
+        btn.disabled = false; btn.textContent = startLabel();
         document.getElementById("briefMsg").innerHTML = '<span class="err">' + h(e.message) + (e.data && e.data.hint ? " " + h(e.data.hint) + "." : "") + "</span>";
       }
     });
@@ -1172,10 +1225,35 @@
     toast(dropped ? "Added what was shared. " + dropped + " item" + (dropped > 1 ? "s" : "") + " didn't fit in one brief." : "Added what you shared. Add your idea and write the brief.");
   }
 
+  // A radiogroup that works from the keyboard: one tab stop (the chosen
+  // one, or the first), the arrow keys move and choose. Call it after the
+  // group is drawn; a click on a radio still does what its own handler says.
+  function radios(root) {
+    Array.prototype.forEach.call((root || document).querySelectorAll('[role="radiogroup"]'), function (g) {
+      var items = Array.prototype.filter.call(g.querySelectorAll('[role="radio"]'), function (b) { return b.closest('[role="radiogroup"]') === g; });
+      if (!items.length) return;
+      var on = items.filter(function (b) { return b.getAttribute("aria-checked") === "true"; })[0] || items[0];
+      items.forEach(function (b) { b.tabIndex = b === on ? 0 : -1; });
+      if (g.dataset.keys) return;
+      g.dataset.keys = "1";
+      g.addEventListener("keydown", function (e) {
+        var list = Array.prototype.filter.call(g.querySelectorAll('[role="radio"]'), function (b) { return b.closest('[role="radiogroup"]') === g && b.getAttribute("aria-disabled") !== "true"; });
+        var i = list.indexOf(document.activeElement);
+        if (i < 0) return;
+        var step = e.key === "ArrowDown" || e.key === "ArrowRight" ? 1 : e.key === "ArrowUp" || e.key === "ArrowLeft" ? -1 : 0;
+        if (!step) return;
+        e.preventDefault();
+        var next = list[(i + step + list.length) % list.length];
+        next.focus();
+        next.click();
+      });
+    });
+  }
+
   // ── Start ────────────────────────────────────────────────────────────
   if ("serviceWorker" in navigator) {
     window.addEventListener("load", function () { navigator.serviceWorker.register("/app/sw.js", { scope: "/app/" }).catch(function () {}); });
   }
-  window.TOJ = { api: api, post: post, toast: toast, state: state, h: h, show: show, go: go, later: later, backBtn: backBtn, I: I, atLeast: atLeast, isOwner: isOwner, hasTool: hasTool, ago: ago, copy: copy, friendly: friendly };
+  window.TOJ = { api: api, post: post, toast: toast, state: state, h: h, show: show, go: go, later: later, backBtn: backBtn, I: I, atLeast: atLeast, isOwner: isOwner, hasTool: hasTool, ago: ago, copy: copy, friendly: friendly, radios: radios };
   render();
 })();

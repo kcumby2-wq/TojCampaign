@@ -51,6 +51,17 @@ async function makeSchema(url, schema, files = ALL) {
 function pgSupabase(pool, schema) {
   const qi = (c) => '"' + String(c).replace(/"/g, '""') + '"';
   const T = (name) => `${schema}.${qi(name)}`;
+  // A json or jsonb column takes the value as JSON, whatever it is (a list of
+  // strings too), as PostgREST does.
+  const jsonCols = new Map();
+  async function jsonColumns(client, name) {
+    if (!jsonCols.has(name)) {
+      const r = await client.query("select column_name from information_schema.columns where table_schema = $1 and table_name = $2 and data_type in ('json', 'jsonb')", [schema, name]);
+      jsonCols.set(name, new Set(r.rows.map((x) => x.column_name)));
+    }
+    return jsonCols.get(name);
+  }
+  const valueFor = (cols, k, v) => (cols.has(k) ? (v == null ? v : JSON.stringify(v)) : jsonArray(v));
   class Q {
     constructor(name) {
       this.name = name;
@@ -100,6 +111,7 @@ function pgSupabase(pool, schema) {
       try {
         if (this.op === "insert" || this.op === "upsert") {
           const out = [];
+          const cols = await jsonColumns(client, this.name);
           await client.query("begin");
           try {
             for (const r of this.rows) {
@@ -110,7 +122,7 @@ function pgSupabase(pool, schema) {
                 const set = keys.filter((k) => !cols.includes(k)).map((k) => `${qi(k)} = excluded.${qi(k)}`);
                 sql += ` on conflict (${cols.map(qi).join(",")}) do ${set.length ? "update set " + set.join(",") : "nothing"}`;
               }
-              const res = await client.query(sql + " returning *", keys.map((k) => jsonArray(r[k])));
+              const res = await client.query(sql + " returning *", keys.map((k) => valueFor(cols, k, r[k])));
               out.push(...res.rows);
             }
             await client.query("commit");
@@ -121,7 +133,8 @@ function pgSupabase(pool, schema) {
           return this.finish(out);
         }
         if (this.op === "update") {
-          const sets = Object.keys(this.patch).map((k) => `${qi(k)} = ${this.p(this.patch[k])}`);
+          const cols = await jsonColumns(client, this.name);
+          const sets = Object.keys(this.patch).map((k) => { this.params.push(valueFor(cols, k, this.patch[k])); return `${qi(k)} = $${this.params.length}`; });
           const res = await client.query(`update ${T(this.name)} set ${sets.join(",")}${this.whereSql()} returning *`, this.params);
           return this.returning || this.mode !== "many" ? this.finish(res.rows) : { data: null, error: null };
         }
@@ -158,7 +171,8 @@ function pgSupabase(pool, schema) {
     rpc: async (fn, args) => {
       try {
         const keys = Object.keys(args || {});
-        const res = await pool.query(`select * from ${schema}.${qi(fn)}(${keys.map((k, i) => `${qi(k)} => $${i + 1}`).join(",")})`, keys.map((k) => args[k]));
+        // A list of objects is JSON (a jsonb argument), as PostgREST takes it.
+        const res = await pool.query(`select * from ${schema}.${qi(fn)}(${keys.map((k, i) => `${qi(k)} => $${i + 1}`).join(",")})`, keys.map((k) => jsonArray(args[k])));
         return { data: JSON.parse(JSON.stringify(res.rows)), error: null };
       } catch (e) {
         return { data: null, error: { code: e.code, message: e.message } };

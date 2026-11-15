@@ -238,7 +238,7 @@
       (f.one_sentence ? '<p class="lede" style="font-size:15px">' + h(f.one_sentence) + "</p>" : "") + "</div>" +
       '<div class="btn-row" style="gap:8px">' + (w.state === "active" ? badge("Next: " + w.label + " · " + w.waiting_on, "gold") : w.state === "pulled" ? badge("Consent pulled", "bad") : w.state === "published" ? badge("Published", "ok") : badge("Archived")) +
       (f.post_date ? badge("Posts " + new Date(f.post_date + "T12:00:00").toLocaleDateString(undefined, { month: "short", day: "numeric" })) : "") + "</div>" +
-      (closed ? "" : '<div class="btn-row"><a class="btn soft small" href="#film-edit/' + h(f.id) + '">Details and board</a><a class="btn soft small" href="#film-shoot/' + h(f.id) + '">Shoot mode</a><a class="btn soft small" href="#film-check/' + h(f.id) + '">Delivery check</a><a class="btn soft small" href="#film-graphics/' + h(f.id) + '">Graphics</a></div>');
+      (closed ? "" : '<div class="btn-row"><a class="btn soft small" href="#film-edit/' + h(f.id) + '">Details and board</a><a class="btn soft small" href="#film-shoot/' + h(f.id) + '">Shoot mode</a><a class="btn soft small" href="#film-check/' + h(f.id) + '">Delivery check</a><a class="btn soft small" href="#film-graphics/' + h(f.id) + '">Graphics</a><a class="btn soft small" href="#film-words/' + h(f.id) + '">Real words</a></div>');
     var pulledBox = f.pulled_at ? '<article class="card" style="border-color:#5A3A33"><div class="name">Consent was pulled</div><p class="body">Nothing more goes out. Every post of this film is on the takedown list, with the 72-hour clock.' + (d.can.producer ? "" : " The producer is on it.") + "</p>" + (d.can.producer ? '<div class="btn-row"><a class="btn small" href="#film-takedowns">Open takedowns</a></div>' : "") + "</article>" : "";
 
     // The ten steps.
@@ -592,7 +592,7 @@
       body.names_ok = namesOk(btn, asked);
       btn.disabled = true;
       try {
-        if (p) { body.seen = p.updated_at; var r = await t.post("/api/studio-films/films/" + id + "/people/" + p.id, body, "PATCH"); t.toast(r.uncleared ? "Saved. It needs clearing again." : "Saved."); }
+        if (p) { body.seen = p.updated_at; var r = await t.post("/api/studio-films/films/" + id + "/people/" + p.id, body, "PATCH"); t.toast((r.uncleared ? "Saved. It needs clearing again." : "Saved.") + (r.words_removed ? " " + r.words_removed + " kept line" + (r.words_removed === 1 ? "" : "s") + " with their name in it went too." : "") + (r.words_unfinished ? " Some kept lines with their name in it are still there: save the card again." : "") + (r.story_named ? " The film's title or story still reads as naming someone on its cards: change it now." : r.story_coded ? " The film's title or story had their name: it has the code now." : "")); }
         else { body.person_code = s.person_code; await t.post("/api/studio-films/films/" + id + "/people", body); t.toast("Card added."); }
         T().go("#film/" + id);
       } catch (e) { if (nameAsk(btn, e, asked, ["title_may_have_name", "story_may_have_name"])) return; btn.disabled = false; say("pMsg", why(e), true); }
