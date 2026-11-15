@@ -225,6 +225,11 @@ app.use("/api/pylon", require("./routes/pylon"));
 // The family's side of a Recruiting Concierge message: approve or decline it
 // with the one-time link (routes/pylon-parent.js, migration 037).
 app.use("/api/pylon-parent", require("./routes/pylon-parent"));
+// Studio films: the room for every film made from a kit, and the speakers'
+// one-time review links (routes/studio-films.js, routes/studio-review.js,
+// migration 039).
+app.use("/api/studio-films", require("./routes/studio-films"));
+app.use("/api/studio-review", require("./routes/studio-review"));
 
 // Public health signal — powers the live status dot on the Command Center.
 // Reports which storage/AI backends are actually wired (no secrets leaked).
@@ -393,4 +398,6 @@ app.listen(PORT, () => {
   initializeSchedulers();
   // Marketplace previews and jersey suggestions (SM_MARKET_WORKER=off to skip).
   require("./utils/sm-market-worker").start();
+  // Studio review copies (STUDIO_REVIEW_WORKER=off to skip).
+  require("./utils/studio-review-worker").start();
 });

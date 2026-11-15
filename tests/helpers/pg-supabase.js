@@ -126,8 +126,9 @@ function pgSupabase(pool, schema) {
           return this.returning || this.mode !== "many" ? this.finish(res.rows) : { data: null, error: null };
         }
         if (this.op === "delete") {
-          await client.query(`delete from ${T(this.name)}${this.whereSql()}`, this.params);
-          return { data: null, error: null };
+          // With .select(), PostgREST returns the deleted rows.
+          const res = await client.query(`delete from ${T(this.name)}${this.whereSql()} returning *`, this.params);
+          return this.returning ? this.finish(res.rows) : { data: null, error: null };
         }
         let sql = `select ${this.colList(this.cols)} from ${T(this.name)}${this.whereSql()}`;
         if (this.ords.length) sql += " order by " + this.ords.join(",");

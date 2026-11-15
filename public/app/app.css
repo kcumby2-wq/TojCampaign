@@ -161,6 +161,7 @@ button, input, textarea, select { font: inherit; color: inherit; }
 .steps .s.done { background: var(--ok); border-color: var(--ok); }
 .steps b { display: block; font: 700 15px/1.3 var(--text); }
 .steps span { font-size: 13px; color: var(--muted); }
+.steps .stepbody > span { display: block; }
 
 /* Tab bar */
 .tabs { position: fixed; left: 0; right: 0; bottom: 0; z-index: 30; height: var(--tabs-h); padding-bottom: var(--bottom); background: rgba(14, 26, 42, .96); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); border-top: 1px solid #22314A; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); align-items: start; }

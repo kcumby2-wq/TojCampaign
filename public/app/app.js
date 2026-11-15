@@ -272,12 +272,13 @@
     show("today", '<div class="screen"><div class="head"><div><p class="kicker">' + h(date) + '</p><h1 class="title">Today</h1></div><a class="avatar" href="#team" aria-label="Your team">' + h(initials({ name: me.team.name, email: me.email })) + '</a></div><div class="spin" aria-label="Loading"></div></div>');
     var studioTool = hasTool("studio");
     var none = function (k) { var o = {}; o[k] = []; return Promise.resolve(o); };
-    var res = await settled([studioTool ? api("/api/studio-agents/kits") : none("kits"), studioTool ? api("/api/studio-agents/runs?limit=20") : none("runs"), api("/api/team/activity?limit=8"), hasTool("os") && atLeast("approver") ? api("/api/os") : Promise.resolve({ builds: [] }), hasTool("gfs") && window.TOJGfs ? window.TOJGfs.todayParts() : Promise.resolve(null)]);
+    var res = await settled([studioTool ? api("/api/studio-agents/kits") : none("kits"), studioTool ? api("/api/studio-agents/runs?limit=20") : none("runs"), api("/api/team/activity?limit=8"), hasTool("os") && atLeast("approver") ? api("/api/os") : Promise.resolve({ builds: [] }), hasTool("gfs") && window.TOJGfs ? window.TOJGfs.todayParts() : Promise.resolve(null), studioTool && atLeast("member") && window.TOJFilms ? window.TOJFilms.todayParts() : Promise.resolve(null)]);
     var kits = res[0].status === "fulfilled" ? res[0].value.kits || [] : [];
     var runs = res[1].status === "fulfilled" ? res[1].value.runs || [] : [];
     var acts = res[2].status === "fulfilled" ? res[2].value.activity || [] : [];
     var osWaiting = res[3].status === "fulfilled" ? (res[3].value.builds || []).filter(function (b) { return b.waiting; }) : [];
     var gfsParts = res[4].status === "fulfilled" ? res[4].value : null;
+    var filmParts = res[5] && res[5].status === "fulfilled" ? res[5].value : null;
     state.kits = kits;
 
     var drafts = kits.filter(function (k) { return k.status === "draft"; });
@@ -286,12 +287,12 @@
     var running = runs.filter(function (r) { return r.status === "running"; });
     var approved = kits.find(function (k) { return k.status === "approved"; });
     try {
-      var waiting = (atLeast("approver") ? drafts.length + osWaiting.length : 0) + (gfsParts ? gfsParts.count : 0);
+      var waiting = (atLeast("approver") ? drafts.length + osWaiting.length : 0) + (gfsParts ? gfsParts.count : 0) + (filmParts ? filmParts.count : 0);
       if (navigator.setAppBadge) { if (waiting) navigator.setAppBadge(waiting); else navigator.clearAppBadge(); }
     } catch (e) {}
 
-    var needs = gfsParts ? gfsParts.needs : "";
-    var needCount = drafts.length + briefs.length + osWaiting.length + (gfsParts ? gfsParts.count : 0);
+    var needs = (gfsParts ? gfsParts.needs : "") + (filmParts ? filmParts.needs : "");
+    var needCount = drafts.length + briefs.length + osWaiting.length + (gfsParts ? gfsParts.count : 0) + (filmParts ? filmParts.count : 0);
     drafts.forEach(function (d) {
       var canApprove = atLeast("approver");
       needs += '<article class="card"><div class="row"><div class="ico">' + I.layers + '</div><div class="grow"><div class="name">' + h(d.title) + " · draft v" + d.version + '</div><div class="sub">' + h(roleLabel(d.role)) + " · " + h(evalLabel(d.eval_status)) + "</div></div>" +
@@ -372,6 +373,7 @@
     }).join("");
     show("studio",
       '<div class="screen"><div class="head"><h1 class="title">Studio</h1>' + (atLeast("member") ? '<a class="btn small soft" href="#new">' + I.plus.replace("<svg", '<svg width="16" height="16"') + "New idea</a>" : "") + "</div>" +
+      (atLeast("member") ? '<a class="li list" href="#films" style="border-radius:16px"><div class="ico">' + I.camera + '</div><div class="grow"><div class="name" style="font-size:15px">Films</div><div class="sub">A room for every film: the kit\'s ten steps, cleared cards, speakers\' review links</div></div>' + I.chev + "</a>" : "") +
       (blocks || '<p class="empty">No kits yet.</p>') +
       '<a class="li list" href="#tool/studio-console" style="border-radius:16px">' + '<div class="grow"><div class="name" style="font-size:15px">Full Studio console</div><div class="sub">Build a new kit from a playbook, every option</div></div>' + I.chev + "</a>" +
       "</div>");

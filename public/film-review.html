@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+<meta name="robots" content="noindex, nofollow" />
+<meta name="referrer" content="no-referrer" />
+<title>Review copy — Same Work</title>
+<style>
+  :root{ --bg:#14110E; --card:#201B16; --line:rgba(239,227,200,.14); --cream:#EFE3C8; --ink:#F7F1E3;
+    --dim:rgba(239,227,200,.72); --accent:#D9B36C; --accent-b:#E7C688; --alert:#E58A6A; }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;background:var(--bg);color:var(--ink);line-height:1.6;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:640px;margin:0 auto;padding:40px max(16px,env(safe-area-inset-right)) 80px max(16px,env(safe-area-inset-left))}
+  .eyebrow{font-size:12px;letter-spacing:.18em;text-transform:uppercase;color:var(--accent);font-weight:700}
+  h1{font-family:Georgia,'Times New Roman',serif;font-size:clamp(26px,5vw,34px);line-height:1.15;margin:10px 0 8px;font-weight:600;text-wrap:balance}
+  .lede{color:var(--dim);font-size:15.5px;margin-bottom:6px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:18px;margin-top:20px}
+  .player{position:relative;border-radius:12px;overflow:hidden;background:#000;margin-top:18px}
+  .player video{display:block;width:100%;max-height:75vh;background:#000}
+  .tag{position:absolute;top:10px;left:10px;font-size:11px;letter-spacing:.16em;font-weight:800;color:#14110E;background:var(--cream);padding:4px 8px;border-radius:6px;pointer-events:none}
+  .slides{display:flex;flex-direction:column;gap:12px;margin-top:18px}
+  .slides img{width:100%;border-radius:10px;display:block}
+  .meta{display:flex;flex-wrap:wrap;gap:6px 14px;font-size:13.5px;color:var(--dim);margin-top:10px}
+  .story{font-family:Georgia,serif;font-size:17px;margin-top:12px;color:var(--cream)}
+  label.opt{display:block;font-size:13px;font-weight:600;margin-bottom:8px}
+  input[type=text],textarea{width:100%;background:#0E0C0A;border:1px solid var(--line);border-radius:9px;color:var(--ink);font:inherit;font-size:16px;padding:11px 13px;outline:none}
+  textarea{min-height:110px;resize:vertical}
+  input[type=text]:focus,textarea:focus{border-color:var(--accent)}
+  .checkline{display:flex;gap:10px;align-items:flex-start;font-size:14px;margin-top:14px}
+  .checkline input{margin-top:5px;width:18px;height:18px;flex:none}
+  .row{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:10px;margin-top:16px}
+  .btn{display:block;width:100%;border:none;border-radius:11px;font:inherit;font-weight:700;font-size:15.5px;padding:14px;cursor:pointer;min-height:48px}
+  .btn.yes{background:var(--accent);color:#1A140C}
+  .btn.yes:hover{background:var(--accent-b)}
+  .btn.no{background:transparent;color:var(--ink);border:1px solid var(--line)}
+  .btn:disabled{opacity:.5;cursor:not-allowed}
+  .btn:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+  .err{color:#F0B08F;font-size:14px;margin-top:10px;min-height:20px}
+  .note{color:var(--dim);font-size:13.5px;margin-top:14px}
+  .state{display:none}.state.on{display:block}
+  .center{text-align:center;padding:36px 10px}
+  .mark{font-size:36px}
+  #changeBox{margin-top:14px}
+  @media (max-width:420px){ .row{grid-template-columns:minmax(0,1fr)} }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="eyebrow">Same Work · Review copy</div>
+
+  <div id="loading" class="state on"><h1>Loading…</h1><p class="lede">Checking your review link.</p></div>
+
+  <div id="invalid" class="state center">
+    <div class="mark" aria-hidden="true">⚠</div>
+    <h1>This link isn't active</h1>
+    <p class="lede">It may have been used already, it may have expired, or the producer stopped it. Ask the producer for a new link.</p>
+  </div>
+
+  <div id="later" class="state center">
+    <div class="mark" aria-hidden="true">⏳</div>
+    <h1>Not just now</h1>
+    <p class="lede" id="laterText">We couldn't load the review copy. Your link still works: wait a minute, then try again.</p>
+    <button class="btn no" type="button" id="retry" style="max-width:240px;margin:18px auto 0">Try again</button>
+  </div>
+
+  <form id="form" class="state" novalidate>
+    <h1 id="headline">Your film, waiting for your OK.</h1>
+    <p class="lede" id="lede">Watch it all the way through, with the sound on. Nothing goes out until you say yes.</p>
+
+    <div class="player" id="player" hidden>
+      <video id="video" controls playsinline preload="metadata" controlsList="nodownload noremoteplayback" disablepictureinpicture></video>
+      <span class="tag">REVIEW COPY</span>
+    </div>
+    <div class="slides" id="slides" hidden></div>
+    <div class="meta" id="meta"></div>
+    <p class="story" id="story" hidden></p>
+
+    <div class="card">
+      <label class="opt" for="pname" id="pnameLabel">Your name</label>
+      <input type="text" id="pname" autocomplete="name" placeholder="Full name" maxlength="80" />
+      <label class="checkline">
+        <input type="checkbox" id="ok" />
+        <span id="okText">This is me, and my answer is about this review copy only.</span>
+      </label>
+      <div class="row">
+        <button class="btn yes" type="button" id="approve">Approve it</button>
+        <button class="btn no" type="button" id="change">Ask for a change</button>
+      </div>
+      <div id="changeBox" hidden>
+        <label class="opt" for="what">What should change?</label>
+        <textarea id="what" maxlength="1000" placeholder="A line you don't want used, a moment that isn't right, anything."></textarea>
+        <button class="btn no" type="button" id="sendChange" style="margin-top:10px">Send it to the editor</button>
+      </div>
+      <div class="err" id="err" role="alert"></div>
+      <p class="note">Approving covers this copy only. Any new cut comes back to you. We'll email you a receipt. You can take your yes back at any time, and if you pull consent, every version comes down within 72 hours. Nobody is promised views, followers, an offer or a scholarship.</p>
+    </div>
+  </form>
+
+  <div id="done" class="state center">
+    <div class="mark" aria-hidden="true">✓</div>
+    <h1 id="doneTitle">Thank you.</h1>
+    <p class="lede" id="doneText">Your answer is recorded.</p>
+  </div>
+</div>
+
+<script>
+(function () {
+  function $(id) { return document.getElementById(id); }
+  function show(id) { ["loading", "invalid", "later", "form", "done"].forEach(function (s) { $(s).classList.toggle("on", s === id); }); }
+  var KEY = "studio-review";
+  var relation = "self";
+  // The link carries the token after "#t=": a fragment never leaves the
+  // browser, so no server logs it. It's kept for this tab only (a reload
+  // still has it), then taken off the address bar.
+  var m = /^#t=([0-9a-f]{64})$/.exec(location.hash || "");
+  var token = m ? m[1] : "";
+  try {
+    if (token) sessionStorage.setItem(KEY, token);
+    else token = sessionStorage.getItem(KEY) || "";
+  } catch (e) {}
+  try { history.replaceState(null, "", location.pathname); } catch (e) {}
+  if (!/^[0-9a-f]{64}$/.test(token)) { show("invalid"); return; }
+  function forget() { try { sessionStorage.removeItem(KEY); } catch (e) {} }
+  function post(path, body) {
+    return fetch("/api/studio-review/" + path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) })
+      .then(function (r) { return r.json().catch(function () { return {}; }).then(function (d) { return { status: r.status, data: d || {} }; }); });
+  }
+  function later(status) {
+    $("laterText").textContent = status === 429
+      ? "Too many tries from here just now. Your link still works: wait a minute, then try again."
+      : "We couldn't reach the server. Your link still works: wait a minute, then try again.";
+    show("later");
+  }
+  function mins(ms) { var s = Math.round((ms || 0) / 1000); return Math.floor(s / 60) + ":" + String(s % 60).padStart(2, "0"); }
+
+  function load() {
+    show("loading");
+    post("view", { token: token }).then(function (r) {
+      var d = r.data;
+      if (r.status === 200 && d.ok) {
+        relation = d.relation;
+        if (relation !== "self") {
+          $("headline").textContent = "A film with your child, waiting for your OK.";
+          if (relation === "guardian") $("headline").textContent = "A film with the athlete in your care, waiting for your OK.";
+          $("lede").textContent = "Watch it all the way through, with the sound on. Nothing goes out until you say yes.";
+          $("pnameLabel").textContent = "Your name (parent or guardian)";
+          $("okText").textContent = relation === "guardian"
+            ? "I am this athlete's legal guardian, and my answer is about this review copy only."
+            : "I am this athlete's parent, and my answer is about this review copy only.";
+        }
+        if (d.reviewer_name) $("pname").value = d.reviewer_name;
+        var meta = [d.format, d.ratio ? d.ratio.replace("x", ":") : "", d.version ? "version " + d.version : "", d.duration_ms ? mins(d.duration_ms) : ""].filter(Boolean);
+        $("meta").textContent = meta.join(" · ");
+        if (d.story) { $("story").textContent = d.story; $("story").hidden = false; }
+        if (d.kind === "slides") {
+          var box = $("slides"); box.innerHTML = "";
+          (d.slides || []).forEach(function (u, i) { var img = document.createElement("img"); img.src = u; img.alt = "Slide " + (i + 1); box.appendChild(img); });
+          box.hidden = false;
+        } else {
+          var v = $("video");
+          if (d.poster_url) v.poster = d.poster_url;
+          v.src = d.video_url;
+          v.addEventListener("contextmenu", function (e) { e.preventDefault(); });
+          $("player").hidden = false;
+        }
+        show("form");
+      } else if (r.status === 400 || r.status === 404) {
+        forget();
+        show("invalid");
+      } else later(r.status);
+    }).catch(function () { later(0); });
+  }
+  $("retry").addEventListener("click", load);
+  load();
+
+  function decide(decision) {
+    var err = $("err"); err.textContent = "";
+    var name = $("pname").value.trim();
+    if ((name.match(/\p{L}/gu) || []).length < 2) { err.textContent = "Please enter your name."; return; }
+    if (!$("ok").checked) { err.textContent = relation === "self" ? "Please confirm it's you." : "Please confirm you're the parent or legal guardian."; return; }
+    var note = $("what").value.trim();
+    if (decision === "changes" && note.length < 3) { err.textContent = "Say what should change."; $("what").focus(); return; }
+    ["approve", "change", "sendChange"].forEach(function (b) { $(b).disabled = true; });
+    var again = function (text) { err.textContent = text; ["approve", "change", "sendChange"].forEach(function (b) { $(b).disabled = false; }); };
+    post("decide", { token: token, decision: decision, name: name, note: decision === "changes" ? note : "", confirm: true }).then(function (r) {
+      if (r.status === 200 && r.data.ok) {
+        forget();
+        $("doneTitle").textContent = decision === "approved" ? "Approved." : "Sent to the editor.";
+        $("doneText").textContent = decision === "approved"
+          ? "Thank you. It still waits for the producer's final sign-off before anything goes out. We've emailed you a receipt."
+          : "The editor gets your note, and you'll get a new review copy to look at. We've emailed you a receipt.";
+        try { $("video").pause(); } catch (e) {}
+        show("done");
+      } else if (r.status === 404) {
+        forget();
+        err.textContent = "This link isn't active anymore: it may have been used or stopped. Ask the producer for a new one.";
+      } else if (r.status === 400 && r.data.error === "name_required") {
+        again("Please enter your name as letters, without links or numbers.");
+      } else if (r.status === 429) {
+        again("Too many tries from here just now. Wait a minute, then try again. Your link still works.");
+      } else {
+        again("We couldn't record that just now. Wait a minute, then try again. Your link still works.");
+      }
+    }).catch(function () { again("Network error. Please try again. Your link still works."); });
+  }
+  $("approve").addEventListener("click", function () { decide("approved"); });
+  $("change").addEventListener("click", function () { $("changeBox").hidden = false; $("what").focus(); });
+  $("sendChange").addEventListener("click", function () { decide("changes"); });
+})();
+</script>
+</body>
+</html>
