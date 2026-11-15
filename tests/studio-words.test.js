@@ -406,6 +406,24 @@ test("other voices are nobody's however a file marks them: >>, a name in bracket
   p = TP.parse(S("COACH: I ran it.", "[scout] Why that year?", "COACH: Because.", "[boom] Then it fell."), { readAs: { scout: "note", boom: "voice" } });
   assert.deepEqual(TP.only(p.cues, "COACH").map((c) => c.t), ["I ran it.", "Why that year?", "Because."]);
   assert.deepEqual(p.brackets.map((b) => [b.key, b.read, b.set]), [["scout", "note", true], ["boom", "voice", true]]);
+  // A voice with no words in its own subtitle: the next subtitle's words are theirs.
+  p = TP.parse(S("COACH: I ran it.", "[man]", "Why that year?", "COACH: Because."));
+  assert.deepEqual(TP.only(p.cues, "COACH").map((c) => c.t), ["I ran it.", "Because."]);
+  p = TP.parse(S("I ran it.", "[man]", "Why that year?", "And then some."));
+  assert.deepEqual(TP.only(p.cues, null).map((c) => c.t), ["I ran it.", "And then some."]);
+  // People heard alone on a line, then unmarked words in the subtitle: theirs.
+  p = TP.parse(S("COACH: I ran it.", "[man laughing]\nGood one, coach.", "COACH: Because."));
+  assert.deepEqual(TP.only(p.cues, "COACH").map((c) => c.t), ["I ran it.", "Because."]);
+  p = TP.parse(S("COACH: I ran it.", "[kids laughing]\nCOACH: Same cones.", "COACH: Because."));
+  assert.deepEqual(TP.only(p.cues, "COACH").map((c) => c.t), ["I ran it.", "Same cones.", "Because."]);
+  // A voice right after a label.
+  p = TP.parse(S("COACH: I ran it.", "COACH: [man] Why that year?", "COACH: Because."));
+  assert.deepEqual(TP.only(p.cues, "COACH").map((c) => c.t), ["I ran it.", "Because."]);
+  // Every bracket is listed, however many; a note alone on its line is marked so.
+  p = TP.parse(S(...Array.from({ length: 24 }, (_, i) => `COACH: Line ${i} [sound ${i}a rings] goes on [sound ${i}b rings] and on [sound ${i}c rings] here.`), "[unseen figure] Why that year?", "COACH: Because."));
+  assert.equal(p.brackets.length, 73);
+  assert.ok(p.brackets.some((b) => b.key === "unseen figure"));
+  assert.equal(TP.parse(S("COACH: I ran it.", "[applause]", "COACH: Yes.")).brackets[0].alone, true);
   // A reading is for that parse only.
   assert.equal(TP.parse(S("COACH: I ran it.", "[scout] Why?", "COACH: Yes.")).brackets[0].read, "voice");
   // A word in italics for stress stays in its line; italics that end a sentence are their own.

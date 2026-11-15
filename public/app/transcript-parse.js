@@ -176,6 +176,20 @@
   var SAYING = /\b(?:say\w*|said|shout\w*|yell\w*|chant\w*|call\w*|holler\w*|ask\w*|answer\w*|speak\w*|talk(?:s|ing)?(?! indistinct)|whisper\w*|scream\w*|reply\w*|repl(?:y|ies)|respond\w*|cheer\w*|counting|instruct\w*|sing\w*)\b/i;
   // Somebody else heard from afar ("[distant shouting]", "[muffled talking]").
   var DISTANT_VOICE = /^(?:distant|faint|far-off|faraway|muffled|background|unseen|off-?screen|off-?camera)\s+(?:shout|yell|call|holler|chant|talk|speak|scream|whisper|conversation|question|reply|answer)\w*$/i;
+  // A line that starts with a mark of its own: whose words follow is said there.
+  function markedLine(t) {
+    var x = String(t || "").replace(/^\s*(?:<[^>]*>\s*)*/, "");
+    if (!x.trim()) return true;
+    if (/^(?:[-‐‑–—]\s*\S|>{2,}|(?:&gt;){2,}|>\s+>|»|[\[(]|<v[\s.])/.test(x) || SPEAKER_N.test(x)) return true;
+    var lab = LABEL.exec(x);
+    return !!lab && LABEL_LIKE.test(lab[1].trim()) && !NOT_LABEL.test(lab[1].trim()) && !SPEECH.test(lab[1].trim());
+  }
+  // People heard, alone on a line: a note when nothing follows in the
+  // subtitle or a marked line does ("[kids laughing]"), the voice of the
+  // next line when it's unmarked ("[man laughing]" then "Good one, coach.").
+  function heardAlone(next) {
+    return next == null || markedLine(next);
+  }
   // The editor's own reading of a bracket ("[scout]" is someone; "[boom]"
   // is a note), set for the parse in hand: parse(text, { readAs }).
   var READ_AS = null;
@@ -346,8 +360,9 @@
           var starts = first[idx] || !!dash || !!chev;
           var br = BRACKET.exec(body);
           var bw = br ? voiceOf(br[1]) : "";
-          // People heard, on a line of their own, are a note ("[kids laughing]").
-          if (bw === "person" && !br[2].trim() && HEARD.test(br[1]) && !(READ_AS && READ_AS[bracketKey(br[1])] === "voice")) bw = "";
+          // People heard, on a line of their own, are a note ("[kids laughing]"),
+          // unless the subtitle's next line is unmarked: that's what they said.
+          if (bw === "person" && !br[2].trim() && HEARD.test(br[1]) && !(READ_AS && READ_AS[bracketKey(br[1])] === "voice") && heardAlone(lines[idx + 1])) bw = "";
           if (bw) {
             // A name in brackets: a label (in a file with no labels, a voice
             // nobody names: nobody's). A person in lower case, or a name with
@@ -364,7 +379,15 @@
           var lab = LABEL.exec(body);
           var name = lab ? lab[1].trim() : "";
           var like = !!lab && LABEL_LIKE.test(name) && (starts || !NOT_LABEL.test(name));
-          if (lab && !SPEECH.test(name) && (starts || like)) { begin("label", name); cur.dash = !!dash; cur.chev = !!chev; cur.odd = !like; cur.start = starts; cur.text.push(lab[2]); return; }
+          if (lab && !SPEECH.test(name) && (starts || like)) {
+            begin("label", name); cur.dash = !!dash; cur.chev = !!chev; cur.odd = !like; cur.start = starts;
+            // A voice right after the label ("COACH: [man] Why that year?"):
+            // the label is counted, the words are that other voice's.
+            var after = BRACKET.exec(lab[2]);
+            if (after && voiceOf(after[1]) === "person") { begin("other", ""); cur.after = true; if (after[2].trim()) cur.text.push(after[2]); return; }
+            cur.text.push(lab[2]);
+            return;
+          }
           if (chev) { begin("chev", ""); if (body.trim()) cur.text.push(body); return; }
           if (dash) { begin("dash", ""); cur.text.push(body); return; }
         }
@@ -449,9 +472,16 @@
     var counts = {};
     var split = [];
     raw.forEach(function (c) {
-      var ps = partsOf(c.lines).map(function (pt) { return { kind: pt.kind, who: pt.who, dash: !!pt.dash, chev: !!pt.chev, br: !!pt.br, odd: !!pt.odd, resume: !!pt.resume, text: pt.text.join(" ") }; })
-        .filter(function (pt) { return /[\p{L}\p{N}]/u.test(cleanText(pt.text)); });
-      if (!ps.length) return;
+      var every = partsOf(c.lines).map(function (pt) { return { kind: pt.kind, who: pt.who, dash: !!pt.dash, chev: !!pt.chev, br: !!pt.br, odd: !!pt.odd, resume: !!pt.resume, sung: !!pt.sung, text: pt.text.join(" ") }; });
+      var ps = every.filter(function (pt) { return /[\p{L}\p{N}]/u.test(cleanText(pt.text)); });
+      // A voice with no words of its own here ("[man]" in a subtitle of its
+      // own, or last in one): the next unmarked words are theirs.
+      var tail = every[every.length - 1];
+      var marker = !!tail && tail.kind === "other" && !tail.sung && !/[\p{L}\p{N}]/u.test(cleanText(tail.text));
+      if (!ps.length) {
+        if (marker) split.push({ marker: true });
+        return;
+      }
       ps.forEach(function (pt) {
         if (pt.kind === "voice" || pt.kind === "speaker") counts[pt.who] = (counts[pt.who] || 0) + 1;
         // Only what looks like a label makes the file a labelled one.
@@ -467,6 +497,7 @@
         var b = c.s == null ? null : k === ps.length - 1 ? c.e : Math.round(c.s + ((c.e - c.s) * acc) / all);
         split.push({ s: a, e: b, kind: pt.kind, who: pt.who, dash: pt.dash, chev: pt.chev, br: pt.br, odd: pt.odd, resume: pt.resume, text: pt.text, sub: ps.length > 1 });
       });
+      if (marker) split.push({ marker: true });
     });
     // Once the file uses labels (a voice tag, "Speaker 1", or any typed label
     // used twice), every typed label counts: an interviewer asking once is
@@ -485,9 +516,17 @@
     var total = 0;
     var mixed = 0;
     var late = 0;
+    var pending = false;
     for (i = 0; i < split.length; i++) {
       var p = split[i];
       var who;
+      if (p.marker) {
+        // In a file with labels, nobody's until the next label; without, the
+        // next unmarked line.
+        if (labelled) last = TWO;
+        else pending = true;
+        continue;
+      }
       if (p.kind === "voice" || p.kind === "speaker") who = p.who;
       else if (p.kind === "label") {
         if (labelled && p.odd) { p.text = p.who + ": " + p.text; who = TWO; }
@@ -498,7 +537,8 @@
         else { p.text = p.who + ": " + p.text; who = p.dash || p.chev || (!p.odd && !NOT_LABEL.test(p.who) && !ONCE_WORDS.test(p.who.split(/\s+/)[0])) ? TWO : last; }
       } else if (p.kind === "dash" || p.kind === "chev" || p.kind === "other") who = TWO;
       else if (p.resume) who = before;
-      else who = last;
+      else who = pending ? TWO : last;
+      pending = false;
       if (!labelled && chevrons) who = TWO;
       // In a file with labels, what follows nobody's with no label is
       // nobody's too; in one without, the file's voice goes on.
@@ -538,7 +578,7 @@
     var brackets = [];
     var at = {};
     raw.forEach(function (c) {
-      c.lines.forEach(function (l) {
+      c.lines.forEach(function (l, li) {
         var m;
         var re = /[\[(]([^\[\]()]{1,60})[\])]/g;
         while ((m = re.exec(l))) {
@@ -546,13 +586,15 @@
           MISSING_RE.lastIndex = 0;
           if (!t || !/\p{L}/u.test(t) || MISSING_RE.test("[" + t + "]") || /^(?:o\.?\s?s\.?|v\.?\s?o\.?|cont['’]?d\.?)$/i.test(t)) continue;
           var k = bracketKey(t);
-          if (k in at) { brackets[at[k]].count++; continue; }
-          if (brackets.length >= 60) continue;
+          // Alone on its line: nothing but marks around it.
+          var alone = !l.replace(m[0], "").replace(/<[^>]*>/g, "").replace(/^\s*(?:[-‐‑–—]|>{2,}|»)\s*/, "").trim();
+          if (k in at) { brackets[at[k]].count++; if (!alone) brackets[at[k]].alone = false; continue; }
           var v = voiceOf(t);
-          // On a line of its own, people heard are a note.
-          if (v === "person" && !l.replace(m[0], "").replace(/<[^>]*>/g, "").trim() && HEARD.test(t) && !(READ_AS && READ_AS[k] === "voice")) v = "";
+          // On a line of its own, people heard are a note, unless the next
+          // line in the subtitle is unmarked.
+          if (v === "person" && alone && HEARD.test(t) && !(READ_AS && READ_AS[k] === "voice") && heardAlone(c.lines[li + 1])) v = "";
           at[k] = brackets.length;
-          brackets.push({ key: k, text: t, read: v === "label" ? "speaker" : v ? "voice" : "note", set: !!(READ_AS && READ_AS[k]), count: 1 });
+          brackets.push({ key: k, text: t, read: v === "label" ? "speaker" : v ? "voice" : "note", set: !!(READ_AS && READ_AS[k]), count: 1, alone: alone });
           if (!v && notes.length < 12) notes.push(k);
         }
       });

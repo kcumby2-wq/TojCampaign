@@ -285,7 +285,11 @@
         // file can't ("[scout]" is someone; "[boom]" is a sound).
         var bks = p.brackets || [];
         if (bks.length) {
-          body += '<details class="card tight"' + (s.openBk ? " open" : "") + ' id="bkBox"><summary class="name" style="font-size:15px;cursor:pointer;min-height:32px;display:flex;align-items:center">' + h("Brackets in this file (" + bks.length + "): check how each was read") + '</summary><p class="sub" style="margin:4px 0 8px">' + h("Someone speaking: their words stay on this phone. A note (a sound, how it's said): the speaker's words go on past it. Change any that's wrong and the file is read again.") + '</p><div style="display:flex;flex-direction:column;gap:10px">' + bks.map(function (b, i) {
+          // Every bracket, in two groups: the ones that decide whose words
+          // are whose (a voice, a name, or a note with words after it), then
+          // the notes that stand on lines of their own, folded.
+          var row = function (b) {
+            var i = bks.indexOf(b);
             var opts = b.read === "speaker" || (b.set && s.readAs[b.key] === "note" && /^\p{Lu}/u.test(b.text))
               ? [["speaker", "A name"], ["note", "A note"]]
               : [["voice", "Someone speaking"], ["note", "A note"]];
@@ -293,7 +297,12 @@
               var on = b.read === o[0];
               return '<button type="button" class="btn small ' + (on ? "" : "soft") + '" aria-pressed="' + on + '" data-bk="' + i + '" data-as="' + o[0] + '">' + h(o[1]) + "</button>";
             }).join("") + "</div></div>";
-          }).join("") + "</div></details>";
+          };
+          var decide = bks.filter(function (b) { return b.read !== "note" || !b.alone || b.set; });
+          var alone = bks.filter(function (b) { return decide.indexOf(b) < 0; });
+          body += '<details class="card tight"' + (s.openBk ? " open" : "") + ' id="bkBox"><summary class="name" style="font-size:15px;cursor:pointer;min-height:32px;display:flex;align-items:center">' + h("Brackets in this file (" + bks.length + "): check how each was read") + '</summary><p class="sub" style="margin:4px 0 8px">' + h("Someone speaking: their words stay on this phone. A note (a sound, how it's said): the speaker's words go on past it. Change any that's wrong and the file is read again.") + '</p><div style="display:flex;flex-direction:column;gap:10px">' + decide.map(row).join("") + "</div>" +
+            (alone.length ? '<details style="margin-top:12px"' + (s.openAlone ? " open" : "") + ' id="bkAlone"><summary class="sub" style="cursor:pointer;min-height:32px;display:flex;align-items:center">' + h(alone.length + " note" + (alone.length > 1 ? "s" : "") + " on lines of their own (nothing after them on the line)") + '</summary><div style="display:flex;flex-direction:column;gap:10px;margin-top:8px">' + alone.map(row).join("") + "</div></details>" : "") +
+            "</details>";
         }
         if (labelled) {
           body += '<div class="field"><span class="label" id="whoLabel">Whose lines in the file are the speaker\'s?</span><div role="radiogroup" aria-labelledby="whoLabel" style="display:flex;flex-direction:column;gap:8px">' + p.speakers.map(function (x, i) {
@@ -327,6 +336,11 @@
       if (T().radios) T().radios();
       // A choice made with the arrow keys repaints the screen: the focus goes
       // back to the choice, so the next arrow key works too.
+      if (s.focusBk) {
+        var backBk = document.querySelector('[data-bk="' + s.focusBk[0] + '"][data-as="' + s.focusBk[1] + '"]');
+        if (backBk) backBk.focus();
+        s.focusBk = null;
+      }
       if (s.focus) {
         var back2 = document.querySelector("[data-" + s.focus + '][aria-checked="true"]');
         if (back2) back2.focus();
@@ -351,11 +365,13 @@
         if (!file) return;
         if (file.size > 3 * 1024 * 1024) { s.parsed = { ok: false, error: "too_long" }; s.name = file.name; return paint(); }
         try { s.text = await file.text(); } catch (e) { s.parsed = { ok: false, error: "empty" }; return paint(); }
-        s.name = file.name; s.fps = null; s.only = false; s.readAs = {}; s.openBk = false;
+        s.name = file.name; s.fps = null; s.only = false; s.readAs = {}; s.openBk = false; s.openAlone = false;
         read();
       });
       var bkBox = document.getElementById("bkBox");
       if (bkBox) bkBox.addEventListener("toggle", function () { s.openBk = bkBox.open; });
+      var bkAlone = document.getElementById("bkAlone");
+      if (bkAlone) bkAlone.addEventListener("toggle", function () { s.openAlone = bkAlone.open; });
       Array.prototype.forEach.call(document.querySelectorAll("[data-bk]"), function (b) {
         b.addEventListener("click", function () {
           var bk = s.parsed && s.parsed.brackets && s.parsed.brackets[Number(b.dataset.bk)];
@@ -369,6 +385,8 @@
           var own = plain.ok && (plain.brackets || []).find(function (x) { return x.key === bk.key; });
           if (own && own.read === want) delete s.readAs[bk.key];
           s.openBk = true;
+          if (document.getElementById("bkAlone")) s.openAlone = document.getElementById("bkAlone").open;
+          s.focusBk = [b.dataset.bk, b.dataset.as];
           read(true);
         });
       });
