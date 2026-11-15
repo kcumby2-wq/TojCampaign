@@ -186,7 +186,7 @@ function englishWords() {
 }
 const WORD_MAX = 24;
 // Words the app and its tools use that the list doesn't have.
-const OWN_WORDS = ["milanote", "sportsclippers", "subjectmedias", "groundfloorsports", "tojcampaign", "pylon", "hudl", "maxpreps", "davinci", "capcut"];
+const OWN_WORDS = ["milanote", "sportsclippers", "subjectmedias", "groundfloorsports", "tojcampaign", "pylon", "hudl", "maxpreps", "davinci", "capcut", "lucasfilm"];
 // How a run of letters reads as English words, worked out once for it:
 // ends[b] when its first b letters are words end to end, starts[a] when its
 // letters from a on are. A run longer than RUN_READ isn't read as words
@@ -372,6 +372,521 @@ function strictNames(textValue, people) {
     if (p.reviewer_name) for (const w of nameHits(textValue, { name: p.reviewer_name }).sure) out.add(w);
   }
   return [...out];
+}
+// ── Names in what every film shares (a kit, the month's refresh) ─────────
+// Checked against every card on every film, so it has to tell a name from
+// an ordinary word that happens to hold one: thousands of cards hold most
+// first names there are.
+//
+// Month and day names are names too ("April", "May", "June"), and with a
+// capital they're dates nearly always: never certain.
+const DATE_WORDS = new Set("january february march april may june july august september october november december monday tuesday wednesday thursday friday saturday sunday".split(" "));
+// A tag, a handle, a link or a file name: a run of text with no space that
+// starts with # or @, has a digit or an underscore, or a dot or a slash
+// between letters ("#jordanstrong", "@jordan.hoops", "jordan_final_v2.mp4",
+// "instagram.com/jordanhoops"). There a name is run into other letters on
+// purpose; in an ordinary word it's the word ("Milanote" for a Mila, "state"
+// for a Tate, "label" for an Abel).
+function tagSpans(raw) {
+  const out = [];
+  for (const c of raw.matchAll(/\S+/gu)) {
+    const s = c[0];
+    if (/^[^\p{L}\p{N}]*[#@]/u.test(s) || (/[_\p{N}]/u.test(s) && /\p{L}/u.test(s)) || /[\p{L}\p{N}][./][\p{L}\p{N}]/u.test(s)) out.push([c.index, c.index + s.length]);
+  }
+  return out;
+}
+// A text's words, each with where it stands: lower case, with a capital or
+// not, at a sentence's start (or a line's, or after a colon or a dash), in a
+// tag, and where camelCase starts a word inside it ("JordanStrong").
+// A season or a month: two or four digits beside it are a year ("#summer24",
+// "#may2027").
+const SEASON_WORDS = new Set("spring summer fall autumn winter january february march april may june july august september october november december".split(" "));
+// A file name or a link: a number in it is a take, a version, a page.
+const FILE_OR_LINK = (s) => /\/|:\/\/|\.[\p{L}\p{N}]{2,4}$/u.test(s.replace(/[^\p{L}\p{N}]+$/u, "")) || /\.(?:com|net|org|io|tv|co|us|me|app|ly)(?![\p{L}])/iu.test(s);
+// A social profile in a link: the path's first word is a handle
+// ("instagram.com/grace.hoops", "tiktok.com/@grace.hoops").
+const SOCIAL_PATH = /(?:instagram|tiktok|twitter|x|facebook|fb|youtube|snapchat|threads|hudl|linkedin)\.(?:com|net)\/(?:@)?/giu;
+// Family and role words: a four-letter plural right before one at a
+// sentence's start is a possessive ("Johns dad", "Annas mom").
+const FAMILY_NEXT = new Set("mom mum mother mama dad father papa sister sis brother bro parents parent family grandma grandpa nana aunt uncle".split(" "));
+// "first" before one of these is theirs too ("NOVAS FIRST GAME"; "Cams
+// first, then the lights" isn't).
+const FIRST_OF = new Set("game games season practice day start goal touchdown win match meet race".split(" "));
+// A sport or a position after a handle's first word ("@hunter.football",
+// "@chase.qb1"): the athlete's own handle. "sports", "church", "media" aren't.
+const HANDLE_SPORT = new Set(("football soccer volleyball basketball baseball softball track swim swimming lax lacrosse wrestling cheer golf tennis " +
+  "hockey xc running athlete ath vb bb fb sb qb wr rb te lb db cb ol dl gk pg sg sf pf wbb mbb wvb wsoc msoc").split(" "));
+// In kit text, a shout-out names someone where the name ends it ("Thanks
+// Grace!", "Go Hope Go", "Thanks Grace For The Assist"), not where it starts
+// a place or a group ("Thanks Summer Camp Staff", "Shout Out To Grace
+// Church") or a verb follows ("Coach Will Explain The Drill").
+const SHOUT_ENDS = new Set("for and from go &".split(" "));
+// Before a verb as often as a name ("Coach Will Explain", "Miss Grace Period
+// Deadlines"): after these, the narrow rule above. After a greeting
+// ("Congrats Hope On Signing Day", "Thanks Grace Great Game"), the name
+// counts unless a place's or a group's word follows ("Thanks Summer Camp
+// Staff", "Shout Out To Grace Church").
+const SHOUT_TITLES = new Set("coach miss mr mrs ms".split(" "));
+// "Hey Will You Send The Files": a verb before a pronoun, not a name.
+const MODAL = new Set("will can shall might must".split(" "));
+const PRONOUN = new Set("you we i they he she it me us".split(" "));
+// Praise or a level between the name and a place's word is the shout-out's,
+// not the place's name ("Congrats Hope Great Practice", "Thanks Grace Best
+// Team Ever").
+const SHOUT_PRAISE = new Set("great best big huge amazing awesome nice good varsity jv all".split(" "));
+const SHOUT_PLACE = new Set(("camp camps church center centre staff interns volunteers school schools academy league club park ministry ministries " +
+  "period practice program clinic foundation hospital university college high middle elementary institute festival fest series classic cup " +
+  "tournament showcase team teams crew group chapel fellowship baptist lutheran methodist catholic christian community prep lodge house pantry " +
+  "ranch kitchen bank field bowl stadium arena gym hall session sessions creek").split(" "));
+// "miss" greets someone only at a line's start or after another greeting,
+// never after "not" ("Do Not Miss Summer Practice").
+const NOT_WORDS = new Set("not dont don't never cant can't wont won't didnt didn't no".split(" "));
+function wordsOf(raw) {
+  const spans = tagSpans(raw);
+  // A line of three words or more in Title Case or capitals: a capital there
+  // says nothing ("Add Two Cams For The Wides", "WHAT WORKED: TWO CAMS").
+  // A word right after a shout-out's own words is a name there, as graphics
+  // read it ("Go Hope Go", "THANKS GRACE FOR THE ASSIST", "Shout Out To
+  // Hope"): shout is "go" after go or hey, "lead" after the others.
+  const heads = [];
+  const shout = new Map();
+  const shoutBy = new Map();
+  let at = 0;
+  for (const line of raw.split("\n")) {
+    if (titleCase(line)) {
+      heads.push([at, at + line.length]);
+      const toks = [];
+      for (const t of line.matchAll(/[\p{L}\p{M}]+/gu)) {
+        if (t[0].toLowerCase() === "s" && /['’]$/u.test(line.slice(0, t.index))) continue;
+        toks.push([at + t.index, t[0].toLowerCase()]);
+      }
+      const ws = toks.map((x) => x[1]);
+      ws.forEach((w, i) => {
+        if (!shoutLead(ws, i)) return;
+        if (ws[i - 1] === "miss" && !(i === 1 || (SHOUT_LEAD.has(ws[i - 2]) && !NOT_WORDS.has(ws[i - 2])))) return;
+        if (i >= 2 && NOT_WORDS.has(ws[i - 2])) return;
+        shout.set(toks[i][0], ws[i - 1] === "go" || ws[i - 1] === "hey" ? "go" : SHOUT_TITLES.has(ws[i - 1]) ? "title" : "lead");
+        shoutBy.set(toks[i][0], ws[i - 1]);
+      });
+    }
+    at += line.length + 1;
+  }
+  const out = [];
+  for (const m of raw.matchAll(/[\p{L}\p{M}]+/gu)) {
+    const tok = m[0];
+    let j = m.index - 1;
+    let nl = false;
+    while (j >= 0 && /\s/u.test(raw[j])) {
+      if (raw[j] === "\n") nl = true;
+      j -= 1;
+    }
+    const inner = [];
+    for (let k = 1; k < tok.length; k++) if (/\p{Lu}/u.test(tok[k]) && /\p{Ll}/u.test(tok[k - 1])) inner.push(k);
+    const sp = spans.find(([a, b]) => m.index >= a && m.index < b);
+    const head = heads.some(([a, b]) => m.index >= a && m.index < b);
+    const run = sp ? raw.slice(sp[0], sp[1]) : "";
+    const end = m.index + tok.length;
+    // A jersey number or a class year right beside it, in a tag, a handle or
+    // a run of its own ("#hunter23", "#23hunter", "#hunter_23", "hunter-23",
+    // "#hunter2027"), where the digits end the run or come before the word
+    // ("#hope4life" is a phrase). Not in a file name or a link (a take, a
+    // version: "chase2.mp4"), nor a year after a season or a month
+    // ("#summer24", "#autumn2026").
+    const after = sp ? /^[_-]?(\d+)(?=[^\p{L}\p{N}]*$)/u.exec(raw.slice(end, sp[1])) : null;
+    const before = sp ? /(?:^|[^\p{N}])(\d+)[_-]?$/u.exec(raw.slice(sp[0], m.index)) : null;
+    const yearHere = (d) => SEASON_WORDS.has(tok.toLowerCase()) && (d.length === 2 || d.length === 4);
+    const number = !!sp && !FILE_OR_LINK(run) && ((!!after && !yearHere(after[1])) || (!!before && !yearHere(before[1])));
+    // A handle's first word, and the rest of the handle after it: "@grace"
+    // (nothing), "@grace.hoops" (["hoops"]); the same for a social link's
+    // path ("instagram.com/grace.hoops").
+    let handle = false;
+    let rest = [];
+    if (sp) {
+      const lead = /^[^\p{L}\p{N}@]*@/u.exec(run);
+      let from = lead ? sp[0] + lead[0].length : -1;
+      if (from !== m.index) {
+        SOCIAL_PATH.lastIndex = 0;
+        let sm;
+        while ((sm = SOCIAL_PATH.exec(run))) if (sp[0] + sm.index + sm[0].length === m.index) from = m.index;
+      }
+      if (from === m.index) {
+        handle = true;
+        const seg = raw.slice(end, sp[1]).split(/[/?#&\s]/u)[0];
+        rest = seg.split(/[^\p{L}\p{M}\p{N}]+/u).filter(Boolean).map((x) => x.toLowerCase());
+      }
+    }
+    out.push({
+      low: tok.toLowerCase(),
+      cap: /^\p{Lu}/u.test(tok),
+      caps: !head && tok.length > 1 && tok === tok.toUpperCase() && /\p{Lu}/u.test(tok),
+      head,
+      // The first word of a handle ("@grace", "@grace.hoops"), and the
+      // handle's words after it.
+      handle,
+      rest,
+      number,
+      shout: shout.get(m.index) || null,
+      shoutBy: shoutBy.get(m.index) || null,
+      at: m.index,
+      end,
+      // The run's letters are more than this word ("#hunter23", "@grace.hoops").
+      more: !!sp && raw.slice(sp[0], sp[1]).replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, "").length > tok.length,
+      start: head || j < 0 || nl || /[.!?:;"“(\[—–-]/u.test(raw[j]),
+      tag: !!sp,
+      inner,
+    });
+  }
+  // The word after it on the same line, spaces only between ("Johns dad"),
+  // and the one after that.
+  out.forEach((w, i) => { const n = out[i + 1]; w.next = n && /^[^\S\n]+$/u.test(raw.slice(w.end, n.at)) ? n.low : null; });
+  out.forEach((w, i) => { w.next2 = w.next ? out[i + 1].next : null; });
+  return out;
+}
+const personKey = (name, minor) => nameParts(name).join(" ") + (minor ? "|m" : "|a");
+// Names anyone on the cards has, for what's shared beyond one film (a kit,
+// the month's refresh, what's sent to a model for the kit): { sure, maybe,
+// minor } (minor: the sure ones that are a minor's).
+//   sure:  a whole name, or one run together as a word ("JamieRivers"), and
+//          a first and last name without the middle one ("Grace Long" for a
+//          Grace Ann Long); a word of a name that's no everyday word (three
+//          letters or more, a minor's from two), a reviewer's too, and its
+//          plain plural or possessive ("Jordans", "Kaylees") or with a
+//          letter held ("Kayleeee"); a whole name
+//          run into a tag, a handle, a link or a file name
+//          ("#teamjordanreyes"); a minor's name word (four letters or more)
+//          run into one beside a tag's own word ("#jordanstrong",
+//          "#teamjordan"), another word of their name, or initials
+//          ("kayleeb_hoops"), or where camelCase starts or ends it
+//          ("JordanStrong"); a minor's everyday-word name beside a tag's own
+//          word ("#hopestrong", "#teamhope": a first name); and an everyday
+//          word that's a minor's name with a capital mid-sentence ("Ask Hope
+//          before the drill").
+//   maybe: an everyday word that's a name with a capital at a sentence's
+//          start ("Hope never quits"), anyone's; an adult's mid-sentence
+//          ("Mark IV"); a month's or a day's name; a minor's everyday-word
+//          surname beside a tag's word ("#gogreen", "#teamgreen") or in an
+//          everyday word ("#lifelong"); any other minor's name inside a tag's
+//          word ("#ourjordanfam"); an adult's name word run into a tag.
+// A name run into an ordinary word isn't read at all ("Milanote", "state").
+//
+// The words a tag or a file name runs a name into ("#jordanstrong",
+// "#teamjordan", "#prayforjordan", "jordanfinal"): beside one, the name's
+// letters start or end a word for certain.
+const KIT_TAG_WORDS = new Set(("strong nation fam family gang forever crew squad army pride power time era way life season szn mode legacy love fans team " +
+  "club world vibes energy effect magic made proud hype goat goats hoops ball bball mvp day week night watch highlights game games show " +
+  "go pray prayfor for thanks thankyou happy happybirthday birthday bday congrats congratulations proudof proudofyou coach dear hey shoutout welcome " +
+  "free justice lil big our my its iloveyou loveyou missyou ilove rip " +
+  "final finals cut cuts edit edits quote quotes card cards promo promos reel reels clip clips hero teaser trailer draft drafts export exports " +
+  "master mix select selects graphic graphics gfx thumb thumbnail poster still stills photo photos interview sitdown broll bts intro outro recap " +
+  "highlight feature profile story stories film films").split(" "));
+// Everyday words made of a tag's word and an everyday word that's a name too
+// ("#lifelong" for a Long, "#willpower" for a Will): the word, as written.
+const KIT_COMPOUNDS = new Set(("lifelong daylong weeklong nightlong yearlong seasonlong powerhouse clubhouse showcase lovebird lovebirds " +
+  "freewill willpower truelove bigdeal").split(" "));
+// Other ways a word may write a name: its plain plural or possessive,
+// without the apostrophe ("Jordans", "Kaylees", "Joneses"), and a letter
+// held ("Kayleeee", "Jordannn"): the name, three letters or more.
+const plainStems = (w) => {
+  const out = new Set();
+  const held = [w, w.replace(/(\p{L})\1{2,}/gu, "$1"), w.replace(/(\p{L})\1{2,}/gu, "$1$1")];
+  for (const x of new Set(held)) {
+    if (x !== w) out.add(x);
+    if (x.length >= 4 && x.endsWith("s") && !x.endsWith("ss")) out.add(x.slice(0, -1));
+    // "es" only where English adds it: after s, x, z, ch or sh ("Joneses",
+    // "Maxes"; not "times", "lines").
+    if (x.length >= 5 && /(?:[sxz]|[cs]h)es$/.test(x)) out.add(x.slice(0, -2));
+  }
+  return [...out];
+};
+// The cards are indexed once per list (thousands of them, read for each of a
+// month's wrap-ups): by each word of a name, by the name run together, and,
+// for a name of three words or more, by its first and last.
+const KIT_INDEX = new WeakMap();
+function kitIndex(people) {
+  const list = Array.isArray(people) ? people : [];
+  const had = KIT_INDEX.get(list);
+  if (had) return had;
+  const ix = { byWord: new Map(), byJoined: new Map(), runWords: new Map(), runJoined: new Map(), runShort: new Map() };
+  const add = (map, k, e) => {
+    if (!map.has(k)) map.set(k, []);
+    map.get(k).push(e);
+  };
+  const seen = new Set();
+  const one = (parts, isMinor, key) => {
+    if (seen.has(key)) return;
+    seen.add(key);
+    const e = { parts, isMinor, key };
+    for (const w of new Set(parts)) {
+      const n = Array.from(w).length;
+      if (n >= (isMinor ? 2 : 3)) add(ix.byWord, w, e);
+      if (n >= 4) add(ix.runWords, w, e);
+      // A minor's name of two or three letters, for tags ("#avastrong").
+      else if (isMinor && n >= 2 && !EVERYDAY_2.has(w) && !DATE_WORDS.has(w) && !(everyday(w) && parts.length > 1 && parts.lastIndexOf(w) === parts.length - 1)) add(ix.runShort, w, e);
+    }
+    const joined = parts.join("");
+    if (parts.length > 1 && Array.from(joined).length >= (isMinor ? 4 : 5)) {
+      add(ix.byJoined, joined, e);
+      add(ix.runJoined, joined, e);
+    }
+  };
+  const entry = (full, isMinor) => {
+    const parts = nameParts(full);
+    if (!parts.length) return;
+    const key = personKey(full, isMinor);
+    one(parts, isMinor, key);
+    if (parts.length >= 3) one([parts[0], parts[parts.length - 1]], isMinor, key + "|fl");
+  };
+  for (const p of list) {
+    if (!p) continue;
+    if (p.name) entry(p.name, !!p.is_minor);
+    if (p.reviewer_name) entry(p.reviewer_name, false);
+  }
+  KIT_INDEX.set(list, ix);
+  return ix;
+}
+// How a run reads around a name's letters at i (minorRunIns' reading):
+// held, an English word holds them; words, English words (or nothing) on
+// each side.
+function runRead(low, i, len, camel) {
+  const rd = low.length <= RUN_READ ? wordReading(low) : null;
+  const j = i + len;
+  return {
+    held: !camel && !!rd && heldByWord(low, i, len, rd),
+    words: !!rd && rd.ends[i] && (rd.starts[j] || (low[j] === "s" && j + 1 < low.length && rd.starts[j + 1])),
+  };
+}
+function kitNames(textValue, people, { film = [] } = {}) {
+  const raw = String(textValue || "").normalize("NFC");
+  const words = wordsOf(raw);
+  const byLow = new Map();
+  for (const w of words) {
+    if (!byLow.has(w.low)) byLow.set(w.low, []);
+    byLow.get(w.low).push(w);
+  }
+  const hay = " " + words.map((w) => w.low).join(" ") + " ";
+  // Where a name can be run into other letters: tags, and camelCase words.
+  const special = words.filter((w) => w.tag || w.inner.length);
+  const ordinary = (w) => everyday(w) || DATE_WORDS.has(w);
+  const sure = new Set();
+  const maybe = new Set();
+  const minor = new Set();
+  const put = (w, certain, isMinor) => {
+    if (!certain) return maybe.add(w);
+    sure.add(w);
+    if (isMinor) minor.add(w);
+  };
+  // Another word of the same name right beside it ("#jordanreyesfam").
+  const besideOwn = (e, w, head, tail) => e.parts.some((p) => p !== w && p.length >= 2 && (head.endsWith(p) || tail.startsWith(p)));
+  const read = (ix) => {
+    for (const [low, hits] of byLow) {
+      // The name run together as one word.
+      for (const e of ix.byJoined.get(low) || []) put(low, true, e.isMinor);
+      for (const e of ix.byWord.get(low) || []) {
+        // The whole name.
+        if (e.parts.length > 1 && e.parts[0] === low && e.parts.every((x) => byLow.has(x)) && hay.includes(" " + e.parts.join(" ") + " ")) put(e.parts.join(" "), true, e.isMinor);
+        for (const h of hits) {
+          if (!ordinary(low)) put(low, true, e.isMinor);
+          // A minor's everyday-word first name on its own in a handle, a
+          // link, a file name or a tag with more in it: the name at a
+          // handle's start or beside a number that isn't a year ("@grace.hoops",
+          // "#hunter23"); asked otherwise ("grace_final_v2.mp4", "a chase
+          // cam", "#summer2027").
+          //   A handle's first word is the name where the rest of the handle
+          //   is a tag's word, a number or another word of their name, and
+          //   where there's no rest ("@grace", "@grace.hoops", a profile
+          //   link's path); asked where it's more ("@grace.church").
+          else if (e.isMinor && h.tag && (h.more || h.handle) && !DATE_WORDS.has(low) && !(e.parts.length > 1 && e.parts.lastIndexOf(low) === e.parts.length - 1)) {
+            const ownRest = h.handle && h.rest.every((x) => {
+              // By its letters ("qb1" as "qb").
+              const l = x.replace(/^\p{N}+|\p{N}+$/gu, "");
+              return !l || KIT_TAG_WORDS.has(l) || RUN_CLEAR.has(l) || HANDLE_SPORT.has(l) || l === "s" || e.parts.includes(l);
+            });
+            put(low, ownRest || h.number, true);
+          }
+          // An everyday word: in lower case, it's the word.
+          else if (!h.cap) continue;
+          // Right after a shout-out's words in a Title Case or capitals line
+          // ("Go Hope Go", "THANKS GRACE FOR THE ASSIST"): a minor's name,
+          // as graphics read it; after go or hey, a first name only.
+          else if (h.shout && e.isMinor && !DATE_WORDS.has(low) && !(h.shout === "go" && e.parts.length > 1 && e.parts.lastIndexOf(low) === e.parts.length - 1)
+            && (!h.next || SHOUT_ENDS.has(h.next) || e.parts.includes(h.next)
+              || (h.shout !== "title" && !SHOUT_PLACE.has(h.next) && !(SHOUT_PLACE.has(h.next2) && !SHOUT_PRAISE.has(h.next))
+                  && !(h.shoutBy === "hey" && MODAL.has(low) && PRONOUN.has(h.next))))) put(low, true, true);
+          // "Hope never quits": asked ("He was great": a two-letter one
+          // starts sentences all the time).
+          else if (h.start) {
+            if (!EVERYDAY_2.has(low)) put(low, false);
+          } else put(low, e.isMinor && !DATE_WORDS.has(low), e.isMinor);
+        }
+      }
+      // A plain plural or possessive, or a letter held ("Jordans mom
+      // called", "KAYLEES DRILL", "the Kayleeee energy").
+      //   An adult's name that's no everyday word: the name, unless it's an
+      //   English word ("Times are hard", "the lens"); three letters only
+      //   with a capital.
+      //   A minor's: the name where it isn't an English word ("mias mom");
+      //   where it is, with a capital mid-sentence or in capitals ("Johns
+      //   dad", "NOVAS GAME", "the Mavericks game"), in lower case from five
+      //   letters ("two lincolns", as the database reads it), and at a
+      //   sentence's start or in a Title Case or capitals line from five
+      //   ("Masons laid"), or before a family word at any length ("Cams
+      //   mom", "Annas mom"); "Jeans and boots", "TWO CAMS" are asked. An
+      //   everyday-word name ("Graces dad"): with a capital mid-sentence or
+      //   before a family word, the name; at a sentence's start otherwise,
+      //   asked.
+      const eng = englishWords().has(low);
+      const capMid = hits.some((h) => (h.cap && !h.start) || h.caps);
+      const capAny = hits.some((h) => h.cap);
+      // At a sentence's start, right before a family or role word ("Johns
+      // dad held the reflector", "Annas mom asked"): a possessive.
+      // Before a family word at any length ("Cams mom called"); before
+      // "first" and a game's word from four letters ("NOVAS FIRST GAME").
+      const family = hits.some((h) => h.cap && h.start && h.next && FAMILY_NEXT.has(h.next));
+      const firstOf = hits.some((h) => h.cap && h.start && h.next === "first" && FIRST_OF.has(h.next2));
+      for (const st of plainStems(low)) {
+        const n = Array.from(st).length;
+        if (n < 3) continue;
+        for (const e of ix.byJoined.get(st) || []) put(st, true, e.isMinor);
+        for (const e of ix.byWord.get(st) || []) {
+          if (!e.isMinor) {
+            if (!ordinary(st) && !eng && (n > 3 || capAny)) put(st, true, false);
+          } else if (ordinary(st)) {
+            if (DATE_WORDS.has(st) || !capAny) continue;
+            put(st, capMid || family || firstOf, true);
+          } else if (!eng || capMid || (!capAny && n >= 5)) put(st, true, true);
+          else if (capAny) put(st, n >= 5 || family || (firstOf && n >= 4), true);
+        }
+      }
+    }
+    // In a tag, a handle, a link or a file name, and in camelCase: any name
+    // word run in. Certain only where its letters start or end a word for
+    // sure (camelCase, or a tag's own word or another word of the name
+    // beside it: "#jordanstrong", "#teamjordan", "jordanfinal"), and for a
+    // minor's name that's no everyday word with initials after it
+    // ("kayleeb_hoops"); asked otherwise ("#teamstate" holds a Tate, or
+    // "team state"; "#dallascowboys" a Dallas, or the team).
+    for (const t of special) {
+      for (const [j, list] of ix.runJoined) {
+        if (t.low === j || t.low.length <= j.length) continue;
+        for (let i = t.low.indexOf(j); i >= 0; i = t.low.indexOf(j, i + 1)) {
+          const camel = t.inner.includes(i) || t.inner.includes(i + j.length);
+          if (!t.tag && !camel) continue;
+          const head = t.low.slice(0, i);
+          const tail = t.low.slice(i + j.length);
+          // A whole name run into a tag ("#teamjordanreyes").
+          const clear = camel || Array.from(j).length >= 6 || (!head && (!tail || KIT_TAG_WORDS.has(tail))) || (!tail && KIT_TAG_WORDS.has(head));
+          for (const e of list) put(j, clear, e.isMinor);
+        }
+      }
+      for (const [w, list] of ix.runWords) {
+        if (t.low === w || t.low.length <= w.length) continue;
+        for (let i = t.low.indexOf(w); i >= 0; i = t.low.indexOf(w, i + 1)) {
+          const camel = t.inner.includes(i) || t.inner.includes(i + w.length);
+          if (!t.tag && !camel) continue;
+          const head = t.low.slice(0, i);
+          const tail = t.low.slice(i + w.length);
+          const byTagWord = (!head && KIT_TAG_WORDS.has(tail)) || (!tail && KIT_TAG_WORDS.has(head));
+          const r = runRead(t.low, i, w.length, camel);
+          for (const e of list) {
+            const own = besideOwn(e, w, head, tail);
+            if (e.isMinor) {
+              // A handle's initials after it: "kayleeb_hoops", "@jordanrb";
+              // English words on each side: "#jordanfootball", "#letsgojamie"
+              // (utils/studio-films.js minorRunIns). An English word holding
+              // it is the word ("#islandlife", "#Philadelphia"): asked.
+              // Something that marks the name off (camelCase, the tag's own
+              // word, another word of their name) wins over an English word
+              // holding its letters ("#teamaiden", "#milanation").
+              if (!ordinary(w)) put(w, camel || byTagWord || own || (!r.held && ((t.tag && !head && tail.length <= 2) || r.words)), true);
+              else {
+                // "#hopestrong", "#teamhope": the name, beside a word that
+                // says so (RUN_CLEAR). A phrase's word ("#summertime"), a
+                // surname that's an everyday word ("#gogreen", "#teamgreen"
+                // for a Green) and an everyday word ("#lifelong") are asked.
+                // A surname: the card's last word (cards are written first
+                // name first; "Mary Grace Long" goes by Grace).
+                const surname = e.parts.length > 1 && e.parts.lastIndexOf(w) === e.parts.length - 1;
+                const clearBy = (!head && (RUN_CLEAR.has(tail) || (tail[0] === "s" && RUN_CLEAR.has(tail.slice(1))))) || (!tail && RUN_CLEAR.has(head));
+                put(w, (clearBy && !surname && !KIT_COMPOUNDS.has(t.low)) || own || (camel && !r.held), true);
+              }
+            } else if ((camel || byTagWord || !head || !tail) && !ordinary(w) && !r.held) put(w, own, false);
+          }
+        }
+      }
+    }
+    // A minor's name of two or three letters, at the start or the end of a
+    // tag: the name beside the tag's own word, a RUN_CLEAR word or another
+    // word of their name ("#avastrong", "#teamava", "#prayformia"), or
+    // where capitals mark it off ("#TeamAva", "AvaStrong"); asked otherwise,
+    // unless an English word holds it ("#avalanche", "#samedrill").
+    for (const t of special) {
+      for (const [w, list] of ix.runShort) {
+        if (t.low === w || t.low.length <= w.length) continue;
+        // A tag that's itself an English word ("#edits", "#limits") is the word.
+        const word = englishWords().has(t.low);
+        for (let i = t.low.indexOf(w); i >= 0; i = t.low.indexOf(w, i + 1)) {
+          const j = i + w.length;
+          const from = i === 0 || t.inner.includes(i);
+          const to = j === t.low.length || t.inner.includes(j);
+          const marked = from && to && (t.inner.includes(i) || t.inner.includes(j));
+          const head = t.low.slice(0, i);
+          const tail = t.low.slice(j);
+          if (!marked && (!t.tag || (head && tail))) continue;
+          if (word && !marked) continue;
+          const rest = head || tail;
+          const by = (x) => RUN_CLEAR.has(x) || (!everyday(w) && KIT_TAG_WORDS.has(x));
+          const clear = !!rest && (by(rest) || (!head && tail[0] === "s" && by(tail.slice(1))));
+          // Outside a tag, capitals mark it off only beside a word that says
+          // so ("AvaStrong", "TeamAva"; not "MacBook", "LeBron", "BenQ").
+          if (!t.tag && !(marked && (head === "" || tail === "") && clear)) continue;
+          const r = runRead(t.low, i, w.length, marked);
+          for (const e of list) {
+            if ((marked && !everyday(w)) || clear || besideOwn(e, w, head, tail)) put(w, true, true);
+            else if (!r.held) put(w, false);
+          }
+        }
+      }
+    }
+    // In an ordinary word, only where it starts or ends it with a tag's own
+    // word or English words beside it ("Jordanstrong", "teamjordan",
+    // "Jordanfootball season"); an English word holding it is the word
+    // ("Milanote", "state", "label", "island", "transfer").
+    for (const low of byLow.keys()) {
+      if (low.length < 6 || englishWords().has(low)) continue;
+      for (let k = 4; k <= low.length - 2; k++) {
+        for (const [w, i] of [[low.slice(0, k), 0], [low.slice(low.length - k), low.length - k]]) {
+          const joined = ix.runJoined.get(w) || [];
+          const single = ix.runWords.get(w) || [];
+          if (!joined.length && !single.length) continue;
+          const rest = i ? low.slice(0, i) : low.slice(k);
+          const byTagWord = KIT_TAG_WORDS.has(rest);
+          const r = runRead(low, i, k, false);
+          if (r.held) continue;
+          for (const e of joined) put(w, byTagWord || r.words, e.isMinor);
+          for (const e of single) {
+            if (!byTagWord && !r.words) continue;
+            if (e.isMinor) put(w, !ordinary(w) || false, true);
+            else if (!ordinary(w)) put(w, false);
+          }
+        }
+      }
+    }
+  };
+  read(kitIndex(people));
+  if (film && film.length) read(kitIndex(film));
+  for (const w of sure) maybe.delete(w);
+  return { sure: [...sure], maybe: [...maybe], minor: [...minor] };
+}
+// A text with what the app wrote into it taken out (a kit's title, its
+// columns' and cards' titles, a format's name; dates), to check only what a
+// person wrote. Exact and whole, longest first; each one leaves a space.
+const DATE_RE = /\b(?:(?:January|February|March|April|May|June|July|August|September|October|November|December) \d{4}|(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec)\.? \d{1,2}, \d{4})\b/g;
+function withoutKnown(textValue, known) {
+  let out = String(textValue || "").normalize("NFC");
+  const list = [...new Set((known || []).map((k) => String(k || "").normalize("NFC").trim()).filter((k) => k.length >= 2))].sort((a, b) => b.length - a.length);
+  // Whole words only: "Gear" leaves "Geary" as written.
+  for (const k of list) out = out.replace(new RegExp("(?<![\\p{L}\\p{N}\\p{M}])" + k.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "(?![\\p{L}\\p{N}\\p{M}])", "gu"), " ");
+  return out.replace(DATE_RE, " ");
 }
 // The words of a card's name a sentence may hold, to ask about: an everyday
 // word that's also a name, with a capital at the start of a sentence ("Hope
@@ -728,7 +1243,7 @@ const titleCaseLine = (line) => titleCase(line);
 // Hope"). In a hashtag, its words read the same way, all but the last-word
 // rule ("#HappyBirthdayGrace", "#GoHopeGo"; "#NeverLoseHope" is asked about).
 const SHOUT_LEAD = new Set("thanks congrats congratulations birthday dear hey coach mr mrs ms miss".split(" "));
-const SHOUT_LEAD_2 = ["thank you", "love you", "miss you", "proud of you"].map((x) => x.split(" "));
+const SHOUT_LEAD_2 = ["thank you", "love you", "miss you", "proud of you", "shout out to", "shoutout to", "shout out"].map((x) => x.split(" "));
 function shoutLead(words, i) {
   if (!i) return false;
   if (SHOUT_LEAD.has(words[i - 1])) return true;
@@ -1357,6 +1872,9 @@ module.exports = {
   nameHits,
   strictNames,
   strictMaybe,
+  kitNames,
+  withoutKnown,
+  DATE_WORDS,
   idNames,
   titleNames,
   titleCase,

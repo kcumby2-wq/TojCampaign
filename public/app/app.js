@@ -263,6 +263,18 @@
     gfs_creator_changed: "updated a creator",
     chat_removed_message: "removed a message in chat",
     tool_added: "added a tool to Tools",
+    started_film: "started a film",
+    published_film: "marked a film published",
+    pulled_consent: "recorded a pulled consent",
+    sent_review_link: "sent a review link",
+    studio_slides_uploaded: "uploaded slides to a film",
+    studio_transcript_added: "added a transcript to a film",
+    studio_transcript_removed: "removed a transcript from a film",
+    studio_words_claude: "asked Claude for a film's strongest lines",
+    studio_directions: "asked for three directions on a film",
+    studio_taste_added: "added to the taste library",
+    studio_wrap_added: "added a wrap-up to a film",
+    studio_kit_suggestion: "suggested an edit to",
   };
   function actorName(a) {
     if (a.actor && state.me && a.actor === state.me.email) return "You";
@@ -275,7 +287,7 @@
     show("today", '<div class="screen"><div class="head"><div><p class="kicker">' + h(date) + '</p><h1 class="title">Today</h1></div><a class="avatar" href="#team" aria-label="Your team">' + h(initials({ name: me.team.name, email: me.email })) + '</a></div><div class="spin" aria-label="Loading"></div></div>');
     var studioTool = hasTool("studio");
     var none = function (k) { var o = {}; o[k] = []; return Promise.resolve(o); };
-    var res = await settled([studioTool ? api("/api/studio-agents/kits") : none("kits"), studioTool ? api("/api/studio-agents/runs?limit=20") : none("runs"), api("/api/team/activity?limit=8"), hasTool("os") && atLeast("approver") ? api("/api/os") : Promise.resolve({ builds: [] }), hasTool("gfs") && window.TOJGfs ? window.TOJGfs.todayParts() : Promise.resolve(null), studioTool && atLeast("member") && window.TOJFilms ? window.TOJFilms.todayParts() : Promise.resolve(null), studioTool && atLeast("member") ? api("/api/studio-agents/briefs/unstarted") : none("briefs")]);
+    var res = await settled([studioTool ? api("/api/studio-agents/kits") : none("kits"), studioTool ? api("/api/studio-agents/runs?limit=20") : none("runs"), api("/api/team/activity?limit=8"), hasTool("os") && atLeast("approver") ? api("/api/os") : Promise.resolve({ builds: [] }), hasTool("gfs") && window.TOJGfs ? window.TOJGfs.todayParts() : Promise.resolve(null), studioTool && atLeast("member") && window.TOJFilms ? window.TOJFilms.todayParts() : Promise.resolve(null), studioTool && atLeast("member") ? api("/api/studio-agents/briefs/unstarted") : none("briefs"), studioTool && atLeast("member") && window.TOJLearn ? window.TOJLearn.todayParts() : Promise.resolve(null)]);
     var kits = res[0].status === "fulfilled" ? res[0].value.kits || [] : [];
     var runs = res[1].status === "fulfilled" ? res[1].value.runs || [] : [];
     var acts = res[2].status === "fulfilled" ? res[2].value.activity || [] : [];
@@ -284,6 +296,8 @@
     var filmParts = res[5] && res[5].status === "fulfilled" ? res[5].value : null;
     // Briefs that came back and were neither started nor set aside (60 days).
     var unstarted = res[6] && res[6].status === "fulfilled" ? res[6].value.briefs || [] : [];
+    // The month's kit refresh (approvers) and the gear re-check, when due.
+    var learnParts = res[7] && res[7].status === "fulfilled" ? res[7].value : null;
     state.kits = kits;
 
     var drafts = kits.filter(function (k) { return k.status === "draft"; });
@@ -291,12 +305,12 @@
     var running = runs.filter(function (r) { return r.status === "running"; });
     var approved = kits.find(function (k) { return k.status === "approved"; });
     try {
-      var waiting = (atLeast("approver") ? drafts.length + osWaiting.length : 0) + (gfsParts ? gfsParts.count : 0) + (filmParts ? filmParts.count : 0);
+      var waiting = (atLeast("approver") ? drafts.length + osWaiting.length : 0) + (gfsParts ? gfsParts.count : 0) + (filmParts ? filmParts.count : 0) + (learnParts ? learnParts.count : 0);
       if (navigator.setAppBadge) { if (waiting) navigator.setAppBadge(waiting); else navigator.clearAppBadge(); }
     } catch (e) {}
 
-    var needs = (gfsParts ? gfsParts.needs : "") + (filmParts ? filmParts.needs : "");
-    var needCount = drafts.length + unstarted.length + osWaiting.length + (gfsParts ? gfsParts.count : 0) + (filmParts ? filmParts.count : 0);
+    var needs = (gfsParts ? gfsParts.needs : "") + (filmParts ? filmParts.needs : "") + (learnParts ? learnParts.needs : "");
+    var needCount = drafts.length + unstarted.length + osWaiting.length + (gfsParts ? gfsParts.count : 0) + (filmParts ? filmParts.count : 0) + (learnParts ? learnParts.count : 0);
     drafts.forEach(function (d) {
       var canApprove = atLeast("approver");
       needs += '<article class="card"><div class="row"><div class="ico">' + I.layers + '</div><div class="grow"><div class="name">' + h(d.title) + " · draft v" + d.version + '</div><div class="sub">' + h(roleLabel(d.role)) + " · " + h(evalLabel(d.eval_status)) + "</div></div>" +
@@ -430,9 +444,11 @@
     if (k.type === "todo") return k.title + "\n\n" + (k.items || []).map(function (i) { return "☐ " + i; }).join("\n");
     return k.title + "\n\n" + toText(k.body);
   }
-  function cardRich(k) {
+  // withLink: a link card's own link too (the whole column's copy).
+  function cardRich(k, withLink) {
     if (k.type === "todo") return "<h3>" + h(k.title) + "</h3><ul>" + (k.items || []).map(function (i) { return "<li>" + h(i) + "</li>"; }).join("") + "</ul>";
-    return "<h3>" + h(k.title) + "</h3>" + safeHtml(k.body);
+    var link = withLink && k.type === "link" && /^https?:\/\//i.test(String(k.url || "")) ? '<p><a href="' + h(k.url) + '">' + h(k.url) + "</a></p>" : "";
+    return "<h3>" + h(k.title) + "</h3>" + safeHtml(k.body) + link;
   }
   async function copy(rich, plain) {
     try {
@@ -451,6 +467,16 @@
     show("studio", '<div class="screen">' + backBtn("#studio", "Studio") + '<div class="spin"></div></div>');
     var row = await api("/api/studio-agents/kits/" + encodeURIComponent(id));
     var k = row.kit;
+    // Suggested edits waiting on this kit's cards (migration 042), by column
+    // and title (a title is one card only within its column).
+    var waitingOn = {};
+    var cardKey = function (colName, title) { return colName + "\u0001" + title; };
+    var canSuggest = row.status === "approved" && atLeast("member") && hasTool("studio");
+    if (canSuggest) {
+      try {
+        ((await api("/api/studio-learn/suggestions?slug=" + encodeURIComponent(row.slug))).suggestions || []).forEach(function (x) { var key = cardKey(x.column_name, x.card_title); waitingOn[key] = (waitingOn[key] || 0) + 1; });
+      } catch (e) { if (e.stale) throw e; waitingOn = {}; }
+    }
     var col = Math.min(state.kitCol[id] || 0, k.columns.length - 1);
     var c = k.columns[col];
     var COLORS = { Red: "#E8826A", Blue: "#7FA3E8", Purple: "#B49AE8", Yellow: "#E6BA47", Orange: "#F0904A", Green: "#7FB487", Teal: "#5FC2BA", Grey: "#9AA3AB" };
@@ -460,21 +486,27 @@
     }).join("");
     var cards = c.cards.map(function (card, j) {
       var kind = { note: "NOTE", link: "LINK", image: "IMG", todo: "TODO" }[card.type] + (card.locked ? "" : "");
+      // A locked rule card isn't the refresh's to change: no suggestions on it.
+      var suggest = canSuggest && !card.locked;
+      var waitN = waitingOn[cardKey(c.name, card.title)] || 0;
       var img = card.type === "image" && k.assets ? "/api/studio-agents/assets/" + encodeURIComponent(k.assets) + "/" + encodeURIComponent(card.img) + ".jpg" : "";
       var head = img ? '<img class="kind" src="' + h(img) + '" alt="" loading="lazy">' : '<span class="kind">' + (card.locked ? "RULE" : kind) + "</span>";
       var body = card.type === "todo" ? "<ul>" + card.items.map(function (i) { return "<li>" + h(i) + "</li>"; }).join("") + "</ul>" : safeHtml(card.body);
       var btns = '<div class="btn-row">' +
         (card.type === "link" ? '<button type="button" class="btn small" data-copylink="' + j + '">Copy link</button><a class="btn small ghost" href="' + h(card.url) + '" target="_blank" rel="noopener">Open</a><button type="button" class="btn small ghost" data-copy="' + j + '">Copy notes</button>' :
           card.type === "image" ? '<a class="btn small" href="' + h(img) + '" target="_blank" rel="noopener">Open image to save</a><button type="button" class="btn small ghost" data-copy="' + j + '">Copy notes</button>' :
-          '<button type="button" class="btn small" data-copy="' + j + '">Copy card</button>') + "</div>";
-      return '<details class="kcard"><summary>' + head + '<span class="kt">' + h(card.title) + "</span>" + I.chev + '</summary><div class="kbody">' + (img ? '<img src="' + h(img) + '" alt="' + h(card.title) + '">' : "") + body + btns + "</div></details>";
+          '<button type="button" class="btn small" data-copy="' + j + '">Copy card</button>') +
+        (suggest ? '<button type="button" class="btn small ghost" data-suggest="' + j + '">Suggest an edit</button>' : "") + "</div>" +
+        (suggest ? '<div data-suggestbox="' + j + '" hidden style="display:flex;flex-direction:column;gap:8px"><label class="sr" for="sg' + j + '">What it should say</label><textarea class="textarea" id="sg' + j + '" maxlength="1000" style="min-height:90px" placeholder="What the card should say, or what to change in it"></textarea><input class="input" id="sw' + j + '" maxlength="500" placeholder="Why (optional)"><div class="btn-row"><button type="button" class="btn small" data-suggestsend="' + j + '">Send the suggestion</button></div><p class="sub" role="status" id="sm' + j + '" style="margin:0">It goes into the month\'s kit refresh. An approver folds it in or says why not.</p></div>' : "");
+      var waits = waitN ? '<span class="badge warn" style="flex:none">' + waitN + (waitN === 1 ? " suggestion" : " suggestions") + "</span>" : "";
+      return '<details class="kcard"><summary>' + head + '<span class="kt">' + h(card.title) + "</span>" + waits + I.chev + '</summary><div class="kbody">' + (img ? '<img src="' + h(img) + '" alt="' + h(card.title) + '">' : "") + body + btns + "</div></details>";
     }).join("");
     show("studio",
       '<div class="screen">' + backBtn("#studio", "Studio") +
       '<div><p class="kicker">' + h(row.status === "approved" ? "Approved v" + row.version : row.status + " v" + row.version) + " · " + k.columns.length + " columns · " + total + ' cards</p><h1 class="title sm">' + h(k.title) + "</h1></div>" +
       (row.status === "draft" ? '<a class="btn" href="#review/' + h(row.id) + '">Review this draft</a>' : "") +
       '<div class="chips" role="group" aria-label="Milanote columns">' + chips + "</div>" +
-      '<div class="sec"><p class="lede" style="margin:0">' + h(c.lead) + ' <span class="sub">· Milanote color: ' + h(c.color) + '</span></p><div style="display:flex;flex-direction:column;gap:8px">' + cards + "</div></div>" +
+      '<div class="sec"><p class="lede" style="margin:0">' + h(c.lead) + ' <span class="sub">· Milanote color: ' + h(c.color) + '</span></p><div class="btn-row"><button type="button" class="btn soft small" id="copyCol">Copy the whole column (' + c.cards.length + (c.cards.length === 1 ? " card" : " cards") + ')</button></div><div style="display:flex;flex-direction:column;gap:8px">' + cards + "</div></div>" +
       '<a class="li list" href="#tool/kitpage:' + h(row.id) + '" style="border-radius:16px"><div class="grow"><div class="name" style="font-size:15px">Open the full kit page</div><div class="sub">Every card at once, for a laptop</div></div>' + I.chev + "</a>" +
       (window.TOJChat && window.TOJChat.workRow && row.slug ? window.TOJChat.workRow("kit", row.slug, "Everyone with Studio, about this kit") : "") +
       "</div>");
@@ -486,6 +518,41 @@
     });
     app.querySelectorAll("[data-copylink]").forEach(function (b) {
       b.addEventListener("click", function () { copy(null, c.cards[Number(b.dataset.copylink)].url); });
+    });
+    // The whole column at once, in order, as Milanote takes a paste.
+    document.getElementById("copyCol").addEventListener("click", function () {
+      copy(c.cards.map(function (x) { return cardRich(x, true); }).join("<p></p>"), c.cards.map(function (x) { return x.type === "link" ? cardPlain(x) + "\n" + x.url : cardPlain(x); }).join("\n\n———\n\n"));
+    });
+    app.querySelectorAll("[data-suggest]").forEach(function (b) {
+      b.addEventListener("click", function () { var box = app.querySelector('[data-suggestbox="' + b.dataset.suggest + '"]'); box.hidden = !box.hidden; if (!box.hidden) document.getElementById("sg" + b.dataset.suggest).focus(); });
+    });
+    // Words the server asked about, by card: "it isn't a name here" goes
+    // with that exact suggestion only.
+    var askedSug = {};
+    app.querySelectorAll("[data-suggestsend]").forEach(function (b) {
+      b.addEventListener("click", async function () {
+        var j = b.dataset.suggestsend, card = c.cards[Number(j)], msg = document.getElementById("sm" + j);
+        var body = { slug: row.slug, column: c.name, card_title: card.title, suggestion: document.getElementById("sg" + j).value.trim(), why: document.getElementById("sw" + j).value.trim() };
+        var text = body.suggestion + "\n" + body.why;
+        if (askedSug[j] && askedSug[j].text === text) body.names_ok = askedSug[j].words;
+        b.disabled = true;
+        try {
+          await post("/api/studio-learn/suggestions", body);
+          toast("Sent. It goes into the month's kit refresh.");
+          kit(id);
+        } catch (e) {
+          b.disabled = false;
+          var f = e.data && e.data.fields || [];
+          var words = (e.data && e.data.words) || [];
+          var q = words.map(function (w) { return "“" + w + "”"; }).join(", ");
+          if (f.indexOf("suggestion_may_have_name") >= 0) {
+            askedSug[j] = { text: text, words: (body.names_ok || []).concat(words) };
+            msg.innerHTML = "<span>" + h(q + (words.length === 1 ? " is also a name on a card. If it isn't a name here, send it again." : " are also names on cards. If they aren't names here, send it again.")) + "</span>";
+            return;
+          }
+          msg.innerHTML = '<span class="err">' + h(f.indexOf("suggestion_has_name") >= 0 ? "A kit never carries a name: write it without one." + (q ? " It read " + q + " as " + (words.length === 1 ? "a name" : "names") + " on a card." : "") : f.indexOf("card_is_a_rule") >= 0 ? "That card is one of the kit's rules: a refresh can't change it. Talk to Kyron." : f.indexOf("banned_words") >= 0 ? "A word on the TOJ banned list is in it. Say the concrete thing instead." : f.indexOf("suggestion") >= 0 ? "Say what the card should say." : e.message) + "</span>";
+        }
+      });
     });
     var chipBox = app.querySelector(".chips [aria-pressed=true]");
     if (chipBox && chipBox.scrollIntoView) chipBox.scrollIntoView({ block: "nearest", inline: "center" });
@@ -499,6 +566,7 @@
     var s = { target: approved.length === 1 ? "refresh:" + approved[0].slug : "either", idea: "", refs: [], seq: 0 };
     if (preset === "gear") {
       s.target = "refresh:same-work";
+      s.purpose = "gear";
       s.idea = "Re-check Same Work's Gear and Edit suite against current sources: Netflix's approved camera list, the camera specs, and the transcription and caption tools. Change only what moved, update the dates, and update the Sources card to match.";
     } else if (preset && preset.indexOf("refresh/") === 0) {
       s.target = "refresh:" + preset.slice(8);
@@ -547,7 +615,8 @@
       "</div>" +
       '<div class="dock"><div class="dock-inner"><button type="button" class="btn block" id="write">Write the brief</button><span class="note">Usually 1 to 3 minutes.</span></div></div>');
 
-    app.querySelectorAll("[data-target]").forEach(function (b) { b.addEventListener("click", function () { s.target = b.dataset.target; s.idea = document.getElementById("idea").value; drawIdea(); }); });
+    // A gear re-check is the Same Work kit's: aimed anywhere else, it's an ordinary brief.
+    app.querySelectorAll("[data-target]").forEach(function (b) { b.addEventListener("click", function () { if (b.dataset.target !== s.target) delete s.purpose; s.target = b.dataset.target; s.idea = document.getElementById("idea").value; drawIdea(); }); });
     document.getElementById("idea").addEventListener("input", function () { s.idea = this.value; });
     app.querySelectorAll("[data-pick]").forEach(function (inp) {
       inp.addEventListener("change", function () { s.idea = document.getElementById("idea").value; addFiles(Array.prototype.slice.call(inp.files || [])); inp.value = ""; });
@@ -690,7 +759,7 @@
     var btn = document.getElementById("write");
     btn.disabled = true; btn.textContent = "Sending…";
     try {
-      var d = await post("/api/studio-agents/brief", { idea: s.idea, target: target, links: links, images: images, files: files });
+      var d = await post("/api/studio-agents/brief", { idea: s.idea, target: target, links: links, images: images, files: files, purpose: s.purpose === "gear" && s.target === "refresh:same-work" ? "gear" : null });
       state.lastFiles = files.map(function (f) { return f.text; }).join("\n\n");
       state.idea = null;
       go("#brief/" + d.run_id);
@@ -776,18 +845,27 @@
         document.getElementById("briefMsg").innerHTML = '<span class="err">' + h(e.data && e.data.error === "already_started" ? "That brief was started: it stays started." : e.message) + "</span>";
       }
     });
+    // A gear re-check's brief is read for names (routes/studio-agents.js):
+    // words you said aren't names here go with that exact brief.
+    var askedBrief = { text: "", words: [] };
     startBtn.addEventListener("click", async function () {
       var btn = this;
       var body = { role: b.mode === "build" ? "kit-builder" : "kit-refresher", slug: b.slug, brief: area.value.trim(), from_brief: runId };
       if (dirs) body.direction = sel;
+      if (b.purpose === "gear" && b.mode === "refresh" && b.slug === "same-work") body.purpose = "gear";
       if (needsSource) body.source_text = document.getElementById("srcText").value.trim();
+      if (body.purpose && askedBrief.text === body.brief && askedBrief.words.length) body.names_ok = askedBrief.words;
       btn.disabled = true; btn.textContent = "Starting…";
       try {
         var r = await post("/api/studio-agents/run", body);
         go("#run/" + r.run_id);
       } catch (e) {
         btn.disabled = false; btn.textContent = startLabel();
-        document.getElementById("briefMsg").innerHTML = '<span class="err">' + h(e.message) + (e.data && e.data.hint ? " " + h(e.data.hint) + "." : "") + "</span>";
+        var de = (e && e.data) || {};
+        if (de.error === "brief_may_have_name") askedBrief = { text: body.brief, words: (body.names_ok || []).concat(de.words || []) };
+        // The refresh's own reasons in words (learn.js); anything else as it came.
+        var said = window.TOJLearn && window.TOJLearn.runError ? window.TOJLearn.runError(e) : null;
+        document.getElementById("briefMsg").innerHTML = '<span class="' + (de.error === "brief_may_have_name" ? "" : "err") + '">' + h(said || e.message) + (!said && de.hint ? " " + h(de.hint) + "." : "") + "</span>";
       }
     });
   }
@@ -870,8 +948,8 @@
       go("#kit/" + id);
     });
     armed(document.getElementById("discard"), "Tap again to discard", async function () {
-      await post("/api/studio-agents/kits/" + encodeURIComponent(id) + "/discard");
-      toast("Discarded.");
+      var dd = await post("/api/studio-agents/kits/" + encodeURIComponent(id) + "/discard");
+      toast(dd && dd.given_back ? "Discarded. What its refresh folded in is open again for the next one." : "Discarded.");
       go("#studio");
     });
   }
