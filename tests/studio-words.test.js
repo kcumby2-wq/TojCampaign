@@ -384,14 +384,48 @@ test("other voices are nobody's however a file marks them: >>, a name in bracket
   assert.deepEqual(TP.only(p.cues, "COACH").map((c) => c.t), ["The plan for every Saturday: run it again.", "Every one."]);
   // A one-word voice, a voice-over, someone shouting from afar: another voice.
   const asked = (b) => TP.only(TP.parse(S("COACH: I ran it.", `[${b}] Why that year?`, "COACH: Because.")).cues, "COACH").map((c) => c.t);
-  for (const b of ["scout", "recruiter", "agent", "officer", "nurse", "pastor", "manager", "neighbor", "voice-over", "voiceover", "distant shouting"]) {
+  for (const b of ["scout", "recruiter", "agent", "officer", "nurse", "pastor", "manager", "neighbor", "voice-over", "voiceover", "distant shouting",
+    "reporter in background", "man in background", "man laughing", "kids laughing", "crowd murmuring", "people chattering", "players celebrating", "over phone", "on speakerphone"]) {
     assert.deepEqual(asked(b), ["I ran it.", "Because."], b);
   }
   // A note naming someone that's about the speaker, a sound people make, a
   // one-word sound or thing, an adverb, the footage: the speaker's words go on.
-  for (const b of ["to coach", "on phone with mom", "speaking to a teammate", "imitating his dad", "players warming up", "kids playing in background", "radio static", "gunshot", "explosion", "fireworks", "heartbeat", "phone", "barks", "quietly", "flashback", "shouting", "applause", "laughter"]) {
+  for (const b of ["to coach", "on phone with mom", "speaking to a teammate", "imitating his dad", "players warming up", "kids playing in background", "radio static", "gunshot", "explosion", "fireworks", "heartbeat", "phone", "barks", "quietly", "flashback", "shouting", "applause", "laughter",
+    "sarcastic", "hoarse", "hiccup", "boom", "crack", "drumroll", "instrumental", "name", "profanity", "timeout", "touchdown", "swish", "Gunfire", "Sarcastic", "Name", "Touchdown"]) {
     assert.deepEqual(asked(b), ["I ran it.", "Why that year?", "Because."], b);
   }
+  // People heard on a line of their own are a note: the speaker's turn goes on.
+  p = TP.parse(S("COACH: I ran it.", "[kids laughing]", "Same cones, same field.", "COACH: Yes."));
+  assert.deepEqual(TP.only(p.cues, "COACH").map((c) => c.t), ["I ran it.", "Same cones, same field.", "Yes."]);
+  // The answer after an off-screen question in italics on the same line is the voice from before it.
+  p = TP.parse(S("COACH: I ran it.", "<i>Why?</i> Because nobody filmed it.", "And I still do.", "COACH: Yes."));
+  assert.deepEqual(TP.only(p.cues, "COACH").map((c) => c.t), ["I ran it.", "Because nobody filmed it.", "And I still do.", "Yes."]);
+  // Every bracket is listed with how it was read, and the editor's reading wins.
+  p = TP.parse(S("COACH: I ran it.", "[scout] Why that year?", "COACH: Because.", "[boom] Then it fell.", "[COACH] Yes.", "[scout] Really?"));
+  assert.deepEqual(p.brackets.map((b) => [b.key, b.read, b.count]), [["scout", "voice", 2], ["boom", "note", 1], ["coach", "speaker", 1]]);
+  p = TP.parse(S("COACH: I ran it.", "[scout] Why that year?", "COACH: Because.", "[boom] Then it fell."), { readAs: { scout: "note", boom: "voice" } });
+  assert.deepEqual(TP.only(p.cues, "COACH").map((c) => c.t), ["I ran it.", "Why that year?", "Because."]);
+  assert.deepEqual(p.brackets.map((b) => [b.key, b.read, b.set]), [["scout", "note", true], ["boom", "voice", true]]);
+  // A voice with no words in its own subtitle: the next subtitle's words are theirs.
+  p = TP.parse(S("COACH: I ran it.", "[man]", "Why that year?", "COACH: Because."));
+  assert.deepEqual(TP.only(p.cues, "COACH").map((c) => c.t), ["I ran it.", "Because."]);
+  p = TP.parse(S("I ran it.", "[man]", "Why that year?", "And then some."));
+  assert.deepEqual(TP.only(p.cues, null).map((c) => c.t), ["I ran it.", "And then some."]);
+  // People heard alone on a line, then unmarked words in the subtitle: theirs.
+  p = TP.parse(S("COACH: I ran it.", "[man laughing]\nGood one, coach.", "COACH: Because."));
+  assert.deepEqual(TP.only(p.cues, "COACH").map((c) => c.t), ["I ran it.", "Because."]);
+  p = TP.parse(S("COACH: I ran it.", "[kids laughing]\nCOACH: Same cones.", "COACH: Because."));
+  assert.deepEqual(TP.only(p.cues, "COACH").map((c) => c.t), ["I ran it.", "Same cones.", "Because."]);
+  // A voice right after a label.
+  p = TP.parse(S("COACH: I ran it.", "COACH: [man] Why that year?", "COACH: Because."));
+  assert.deepEqual(TP.only(p.cues, "COACH").map((c) => c.t), ["I ran it.", "Because."]);
+  // Every bracket is listed, however many; a note alone on its line is marked so.
+  p = TP.parse(S(...Array.from({ length: 24 }, (_, i) => `COACH: Line ${i} [sound ${i}a rings] goes on [sound ${i}b rings] and on [sound ${i}c rings] here.`), "[unseen figure] Why that year?", "COACH: Because."));
+  assert.equal(p.brackets.length, 73);
+  assert.ok(p.brackets.some((b) => b.key === "unseen figure"));
+  assert.equal(TP.parse(S("COACH: I ran it.", "[applause]", "COACH: Yes.")).brackets[0].alone, true);
+  // A reading is for that parse only.
+  assert.equal(TP.parse(S("COACH: I ran it.", "[scout] Why?", "COACH: Yes.")).brackets[0].read, "voice");
   // A word in italics for stress stays in its line; italics that end a sentence are their own.
   p = TP.parse(S("COACH: I ran it.", "COACH: <i>Never</i> again, I said.", "<i>I</i> did that.", "That's how it was."));
   assert.deepEqual(TP.only(p.cues, "COACH").map((c) => c.t), ["I ran it.", "Never again, I said.", "I did that.", "That's how it was."]);
