@@ -394,7 +394,7 @@ test("the database keeps every link as it was made, and only the server reaches 
   for (const role of ["anon", "authenticated"]) {
     const t = (await pool.query(`select has_table_privilege($1, '${SCHEMA}.studio_speaker_links', 'select') as s`, [role])).rows[0].s;
     assert.equal(t, false, role);
-    for (const fn of ["studio_speaker_email(text)", "studio_speaker_sign_out(text)", "studio_speaker_supersede(text)", "studio_speaker_pull(text, text, text)"]) {
+    for (const fn of ["studio_speaker_email(text)", "studio_speaker_sign_out(text)", "studio_speaker_supersede(text, timestamptz)", "studio_speaker_pull(text, text, text)"]) {
       assert.equal((await pool.query(`select has_function_privilege($1, '${SCHEMA}.${fn}', 'execute') as x`, [role])).rows[0].x, false, `${role} ${fn}`);
     }
   }
@@ -538,6 +538,41 @@ test("a link whose own email was never marked sent stops when a later one's emai
   assert.ok((await page("/view", { token: old })).status >= 400, "the one from eleven minutes before stopped");
   assert.equal((await page("/view", { token: recent })).status, 200, "one from two minutes before may still be on its way: left alone");
   assert.equal((await page("/view", { token: newest })).status, 200);
+});
+
+test("a supersede that fails is tried once more, and a late one for an older email stops its own link, not the newer one", async () => {
+  const SP = require("../utils/studio-speaker");
+  SP._setRetryMs(20);
+  const film = ok(await films("POST", "/films", { kit_slug: "same-work", title: "S7201 hero", lane: "youth", athlete_id: "S7201", format: "hero" }, "lead"), "start").film;
+  const p = ok(await films("POST", `/films/${film.id}/people`, self("C7201", "Ola Reed", "ola@x.test"), "lead"), "card").person;
+  ok(await films("POST", `/films/${film.id}/people/${p.id}/clear`, { seen: p.updated_at }, "lead"), "clear");
+  const live = async () => (await pool.query("select count(*)::int as n from studio_speaker_links where email = 'ola@x.test' and revoked_at is null")).rows[0].n;
+  const settle = async () => { for (let i = 0; i < 40; i++) { if ((await pool.query("select count(*)::int as n from studio_speaker_links where email = 'ola@x.test' and sent_at is null and revoked_at is null")).rows[0].n === 0) return; await wait(25); } };
+  const realRpc = sb.rpc.bind(sb);
+  try {
+    // Once: the try after it marks the link sent.
+    mails = [];
+    let fails = 1;
+    sb.rpc = (fn, args) => (fn === "studio_speaker_supersede" && fails-- > 0 ? Promise.resolve({ data: null, error: { code: "57014", message: "timeout" } }) : realRpc(fn, args));
+    const a = await linkFor("ola@x.test");
+    await settle();
+    sb.rpc = realRpc;
+    mails = [];
+    const b = await linkFor("ola@x.test");
+    await settle();
+    assert.equal(await live(), 1);
+    assert.equal((await page("/view", { token: a })).status, 404);
+    assert.equal((await page("/view", { token: b })).status, 200);
+    // A late call for an older email (accepted before b's): it stops itself.
+    await pool.query("begin; set local session_replication_role = replica; update studio_speaker_links set sent_at = null, revoked_at = null where proof_hash = encode(sha256(convert_to($$" + U.sha256(a) + "$$, 'UTF8')), 'hex'); commit;");
+    const before = (await pool.query("select min(sent_at) as t from studio_speaker_links where email = 'ola@x.test' and sent_at is not null")).rows[0].t;
+    await pool.query("select studio_speaker_supersede($1, $2)", [U.sha256(a), new Date(new Date(before).getTime() - 1000).toISOString()]);
+    assert.equal((await page("/view", { token: a })).status, 404, "the older one stopped itself");
+    assert.equal((await page("/view", { token: b })).status, 200, "the newer one still works");
+  } finally {
+    sb.rpc = realRpc;
+    SP._setRetryMs(1000);
+  }
 });
 
 test("an uncleared card's email gets no page; a new approver doesn't see the old one's decisions as theirs", async () => {

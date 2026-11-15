@@ -45,6 +45,7 @@ function pageEmail({ relations = [], link }) {
 // that couldn't be sent is stopped at once. Replies
 // go back to the person (or an address nobody reads), never to staff: a
 // reply quotes the link. Returns { sent } or { sent: false, why }.
+let SUPERSEDE_RETRY_MS = 1000;
 async function issueLink(sb, mailer, { email, sentBy, relations }) {
   const { proof, link } = newToken();
   const { error } = await sb.from("studio_speaker_links").insert({ email, proof_hash: U.sha256(proof), sent_by: sentBy });
@@ -60,9 +61,17 @@ async function issueLink(sb, mailer, { email, sentBy, relations }) {
     await sb.rpc("studio_speaker_sign_out", { p_proof: proof }).then(() => {}, () => {});
     return { sent: false, why: sent && sent.reason === "email_not_configured" ? "email_not_set_up" : "email" };
   }
-  // Every other live link for the email stops now. If that can't be done,
-  // the older links still work until they expire (7 days): say so in the log.
-  const { error: supErr } = await sb.rpc("studio_speaker_supersede", { p_proof: proof }).then((r) => r, (e) => ({ error: e }));
+  // Every other live link for the email stops now, ordered by when each
+  // email was accepted. Tried once more a moment later with the same time
+  // (a late try for an older email stops its own link, not the newer one);
+  // if it still can't be done, say so in the log.
+  const acceptedAt = new Date().toISOString();
+  const supersede = () => sb.rpc("studio_speaker_supersede", { p_proof: proof, p_accepted_at: acceptedAt }).then((r) => r, (e) => ({ error: e }));
+  let { error: supErr } = await supersede();
+  if (supErr) {
+    await new Promise((r) => setTimeout(r, SUPERSEDE_RETRY_MS));
+    ({ error: supErr } = await supersede());
+  }
   if (supErr) console.error("[studio-speaker] older links not stopped:", supErr.code || supErr.message || "");
   return { sent: true };
 }
@@ -177,4 +186,4 @@ async function viewFor(sb, email) {
   return { people };
 }
 
-module.exports = { newToken, pageEmail, issueLink, viewFor };
+module.exports = { newToken, pageEmail, issueLink, viewFor, _setRetryMs: (ms) => { SUPERSEDE_RETRY_MS = ms; } };

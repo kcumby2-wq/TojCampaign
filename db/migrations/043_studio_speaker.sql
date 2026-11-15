@@ -266,13 +266,18 @@ end $$;
 -- link for that email whose own email went before it stops, under the
 -- email's lock. A link still waiting on its email is left alone: when that
 -- email goes, it stops this one. So the newest email in their inbox is the
--- one that works. A link made ten minutes or more before this one and never
--- marked sent (its own call never came: a restart, an error) stops too.
-create or replace function public.studio_speaker_supersede(p_proof text)
+-- one that works. p_accepted_at is when its email was accepted (the server
+-- says, so a retry keeps it; clamped to the link's life so far): links are
+-- ordered by it, and a call that comes late for a link whose email went
+-- before another's stops its own link, not the newer one. A link never
+-- marked sent (its own call never came: a restart) and made ten minutes or
+-- more ago stops too.
+create or replace function public.studio_speaker_supersede(p_proof text, p_accepted_at timestamptz default null)
 returns integer
 language plpgsql volatile set search_path = '' as $$
 declare
   me record;
+  mine timestamptz;
   n integer;
 begin
   select l.id, l.email, l.created_at into me from public.studio_speaker_links l
@@ -281,13 +286,23 @@ begin
     return 0;
   end if;
   perform pg_advisory_xact_lock(hashtextextended('studio.page:' || me.email, 0));
-  update public.studio_speaker_links l set sent_at = clock_timestamp() where l.id = me.id and l.sent_at is null;
-  if not exists (select 1 from public.studio_speaker_links l where l.id = me.id and l.revoked_at is null and l.expires_at > now()) then
+  update public.studio_speaker_links l
+     set sent_at = least(clock_timestamp(), greatest(me.created_at, coalesce(p_accepted_at, clock_timestamp())))
+   where l.id = me.id and l.sent_at is null;
+  select l.sent_at into mine from public.studio_speaker_links l
+   where l.id = me.id and l.revoked_at is null and l.expires_at > now();
+  if mine is null then
+    return 0;
+  end if;
+  -- Another live link's email went after this one's: this one is the older.
+  if exists (select 1 from public.studio_speaker_links l
+              where l.email = me.email and l.id <> me.id and l.revoked_at is null and l.expires_at > now() and l.sent_at > mine) then
+    update public.studio_speaker_links l set revoked_at = now() where l.id = me.id;
     return 0;
   end if;
   update public.studio_speaker_links l set revoked_at = now()
    where l.email = me.email and l.id <> me.id and l.revoked_at is null and l.expires_at > now()
-     and (l.sent_at is not null or l.created_at < me.created_at - interval '10 minutes');
+     and (l.sent_at <= mine or (l.sent_at is null and l.created_at < now() - interval '10 minutes'));
   get diagnostics n = row_count;
   return n;
 end $$;
@@ -367,7 +382,7 @@ declare
   fn text;
 begin
   foreach fn in array array['public.studio_speaker_links_gate()', 'public.studio_speaker_email(text)', 'public.studio_speaker_sign_out(text)',
-                            'public.studio_speaker_supersede(text)', 'public.studio_speaker_pull(text, text, text)'] loop
+                            'public.studio_speaker_supersede(text, timestamptz)', 'public.studio_speaker_pull(text, text, text)'] loop
     execute format('revoke all on function %s from public', fn);
     foreach r in array array['anon', 'authenticated'] loop
       if exists (select 1 from pg_roles where rolname = r) then
@@ -383,6 +398,6 @@ begin
   if exists (select 1 from pg_roles where rolname = 'service_role') then
     execute 'revoke truncate, trigger, references on public.studio_speaker_links from service_role';
     execute 'grant execute on function public.studio_speaker_email(text), public.studio_speaker_sign_out(text), '
-      'public.studio_speaker_supersede(text), public.studio_speaker_pull(text, text, text) to service_role';
+      'public.studio_speaker_supersede(text, timestamptz), public.studio_speaker_pull(text, text, text) to service_role';
   end if;
 end $$;
