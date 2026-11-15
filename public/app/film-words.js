@@ -255,6 +255,7 @@
     too_many_cues: "That's more than 5,000 lines: split the transcript.",
     too_long: "That transcript is too long for one go: split it.",
     past_ten_hours: "Its timecodes run past ten hours. Export it again with the timeline starting at 00:00:00:00 or 01:00:00:00.",
+    unreadable: "This file couldn't be read on this phone. Export it again from Resolve as subtitles (.srt).",
   };
   async function addTranscript(id) {
     if (!F().guard()) return;
@@ -355,7 +356,9 @@
       }
     }
     function read(keep) {
-      var r = P().parse(s.text, { fps: s.fps, readAs: s.readAs });
+      var r;
+      // Whatever's in the file, the screen says something.
+      try { r = P().parse(s.text, { fps: s.fps, readAs: s.readAs }); } catch (e) { r = { ok: false, error: "unreadable" }; }
       s.parsed = r;
       if (r.ok) {
         // One voice in the whole file, and it's named: that's the speaker.
@@ -388,7 +391,8 @@
           if (want === "speaker") delete s.readAs[bk.key];
           else s.readAs[bk.key] = want;
           // Back to how the file reads it on its own: no call kept.
-          var plain = P().parse(s.text, { fps: s.fps, readAs: Object.assign({}, s.readAs, (function () { var o = {}; o[bk.key] = undefined; return o; })()) });
+          var plain;
+          try { plain = P().parse(s.text, { fps: s.fps, readAs: Object.assign({}, s.readAs, (function () { var o = {}; o[bk.key] = undefined; return o; })()) }); } catch (e) { plain = { ok: false }; }
           var own = plain.ok && (plain.brackets || []).find(function (x) { return x.key === bk.key; });
           if (own && own.read === want) delete s.readAs[bk.key];
           s.openBk = true;
