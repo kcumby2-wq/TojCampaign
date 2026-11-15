@@ -460,6 +460,23 @@ test("other voices are nobody's however a file marks them: >>, a name in bracket
   assert.deepEqual(TP.only(p.cues, "COACH").map((c) => c.t), ["I ran it.", "Because."]);
   p = TP.parse(S("COACH: I ran it.", "[man laughing]\n(laughing) - Good one.", "COACH: Because."));
   assert.deepEqual(TP.only(p.cues, "COACH").map((c) => c.t), ["I ran it.", "Because."]);
+  // A line's leading notes stay in its words, and a missing-words mark stays a mark no line reaches across.
+  p = TP.parse(S("We were down by ten.", "[inaudible] the whole team showed up.", "And that was it."));
+  assert.equal(p.cues[1].t, `${TP.MISSING} the whole team showed up.`);
+  assert.equal(TP.find(TP.only(p.cues, null), 1, 2, "down by ten. the whole team").why, "missing_words");
+  p = TP.parse(S("COACH: We were down by ten.\n[crosstalk] the whole team showed up.", "COACH: Yes."));
+  assert.match(TP.only(p.cues, "COACH")[0].t, new RegExp(TP.MISSING));
+  p = TP.parse(S("COACH: We were down by ten.", "[inaudible] COACH: the whole team showed up.", "INTERVIEWER: Why?"));
+  assert.equal(TP.find(TP.only(p.cues, "COACH"), 1, 2, "down by ten. the whole team").why, "missing_words");
+  assert.deepEqual(TP.parse(S("(2019) We won state.", "And that was it.")).cues.map((c) => c.t), ["(2019) We won state.", "And that was it."]);
+  // Two brackets alone: read and listed the same way.
+  p = TP.parse(S("COACH: I ran it.", "[man clears throat] [door closes]", "Same cones.", "COACH: Because."));
+  assert.deepEqual(TP.only(p.cues, "COACH").map((c) => c.t), ["I ran it.", "Same cones.", "Because."]);
+  assert.equal(p.brackets.find((x) => x.key === "man clears throat").read, "note");
+  // Crying out, out of breath: how someone speaks, so they hold the next words.
+  for (const b of ["man crying out", "man, out of breath"]) {
+    assert.deepEqual(TP.only(TP.parse(S("COACH: I ran it.", `[${b}]`, "Why that year?", "COACH: Because.")).cues, "COACH").map((c) => c.t), ["I ran it.", "Because."], b);
+  }
   // However many notes a line starts with.
   assert.equal(TP.parse(S("COACH: I ran it.", "[kids laughing]\n" + "[sic]".repeat(20000) + " Same cones.", "COACH: Because.")).ok, true);
   // The editor's "Someone speaking" makes one hold the next words.
