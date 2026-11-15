@@ -202,6 +202,10 @@ test("a wrap-up goes to the whole kit: no name of anyone on any film's cards, an
   assert.deepEqual(m.rules.find((x) => x.label === "late light").samples, [], "a sample that names someone now is dropped");
   // The month's brief with the name in it doesn't start.
   assert.equal((await startRun({ brief: BRIEF + " Riley set the lights early.", purpose: "monthly", sources: { wraps: [w.id] } })).data.error, "brief_has_name");
+  // Source text isn't read for names, so a run with a purpose takes none.
+  const src = await startRun({ brief: BRIEF, purpose: "monthly", sources: { wraps: [w.id] }, source_text: "Riley set the lights early. ".repeat(10) });
+  assert.deepEqual([src.status, src.data.error], [400, "invalid_source"]);
+  assert.equal((await startRun({ brief: "Re-check the Gear and Edit suite against current sources.", purpose: "gear", source_text: "Riley Brandt ".repeat(30) }, "dir")).data.error, "invalid_source");
   // Given to a refresh anyway (a page from before the card): it can't be
   // folded in now, so it's left open and counted.
   const run = (await pool.query("insert into agent_runs (role, task, status, created_by) values ('kit-refresher', 'x', 'running', 'lead@toj.test') returning id")).rows[0].id;
