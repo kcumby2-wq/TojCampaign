@@ -118,6 +118,8 @@
   // "- 500 a day.", or "-Were you nervous?" (no space, as professional
   // deliveries write it). Not a minus glued to a number ("-5 degrees"), and
   // not an en or em dash carrying a line on ("—and then my dad showed up").
+  // A label alone on its line, its words on the next ("INTERVIEWER:").
+  var LABEL_ALONE = /^\s*(\p{L}[\p{L}\p{M}\p{N} .'’-]{0,38}?)\s*:\s*$/u;
   var DASH = /^\s*(?:[-‐‑](?:\s+|(?!\d))|[–—‒―](?:\s+|(?![\p{Ll}\d])))([^\s\-–—].*)$/u;
   var SPEAKER_N = /^\s*(speaker\s*\d{1,2})\s*$/i;
   // ">>" (">>>", "> >" and "»" too), a broadcast caption's mark for a new
@@ -176,12 +178,31 @@
   var SAYING = /\b(?:say\w*|said|shout\w*|yell\w*|chant\w*|call\w*|holler\w*|ask\w*|answer\w*|speak\w*|talk(?:s|ing)?(?! indistinct)|whisper\w*|scream\w*|reply\w*|repl(?:y|ies)|respond\w*|cheer\w*|counting|instruct\w*|sing\w*)\b/i;
   // Somebody else heard from afar ("[distant shouting]", "[muffled talking]").
   var DISTANT_VOICE = /^(?:distant|faint|far-off|faraway|muffled|background|unseen|off-?screen|off-?camera)\s+(?:shout|yell|call|holler|chant|talk|speak|scream|whisper|conversation|question|reply|answer)\w*$/i;
+  // A voice that speaks: who they are, and nothing but speaking ("[man]",
+  // "[announcer]", "[man shouting]", "[over phone]"). "[crowd groans]" or
+  // "[man clears throat]" is a sound the person makes.
+  var SPEAK_WORD = /^(?:says?|said|saying|shout\w*|yell\w*|chant\w*|call\w*|holler\w*|ask\w*|answer\w*|speak\w*|talk\w*|whisper\w*|scream\w*|repl(?:y|ies|ied|ying)|respond\w*|sing\w*|voices?|v\.?o\.?)$/i;
+  var WHO_WORD = /^(?:a|an|the|another|other|second|first|male|female|young|old|older|younger|distant|faint|muffled|off|on|camera|screen|mic|\d+|#\d+|and|or)$/i;
+  function speaks(t) {
+    var x = String(t || "").trim();
+    if (THROUGH.test(x) || DISTANT_VOICE.test(x)) return true;
+    var rest = x.split(/[\s,/-]+/).map(function (w) { return w.replace(/['’]s$/i, ""); }).filter(function (w) {
+      return w && !PERSON.test(w) && !ROLE_WORD.test(w) && !WHO_WORD.test(w);
+    });
+    return rest.every(function (w) { return SPEAK_WORD.test(w); });
+  }
   // A line that starts with a mark of its own: whose words follow is said there.
   function markedLine(t) {
-    var x = String(t || "").replace(/^\s*(?:<[^>]*>\s*)*/, "");
+    var raw0 = String(t || "");
+    if (/^\s*(?:<[^>]*>\s*)*<v[\s.]/i.test(raw0)) return true;
+    var x = raw0.replace(/^\s*(?:<\/?(?:i|b|u|font|c)\b[^>]*>\s*)*/i, "");
     if (!x.trim()) return true;
-    if (/^(?:[-‐‑–—]\s*\S|>{2,}|(?:&gt;){2,}|>\s+>|»|[\[(]|<v[\s.])/.test(x) || SPEAKER_N.test(x)) return true;
-    var lab = LABEL.exec(x);
+    if (DASH.test(x) || /^(?:>{2,}|(?:&gt;){2,}|>\s+>|»)/.test(x) || SPEAKER_N.test(x)) return true;
+    // A bracket marks the line when it's a voice or a name; a note before
+    // words doesn't ("[in Spanish] ¡Buena!"): what follows it decides.
+    var br = BRACKET.exec(x);
+    if (br) return voiceOf(br[1]) ? true : markedLine(br[2]);
+    var lab = LABEL.exec(x) || LABEL_ALONE.exec(x);
     return !!lab && LABEL_LIKE.test(lab[1].trim()) && !NOT_LABEL.test(lab[1].trim()) && !SPEECH.test(lab[1].trim());
   }
   // People heard, alone on a line: a note when nothing follows in the
@@ -292,12 +313,9 @@
   // on from before). A subtitle with a dashed or a ">>" line in it has two
   // voices: its parts with no tag or label of their own are nobody's (kind
   // "dash"); a ">>" line with no label is a new voice nobody names ("chev").
-  function partsOf(given) {
-    var out = [];
-    var cur = null;
-    function begin(kind, who) { cur = { kind: kind, who: who, text: [] }; out.push(cur); }
-    // Each piece of a line cut where another voice may start is a line of its
-    // own; the first piece of the subtitle's first line starts it.
+  // Each piece of a line cut where another voice may start is a line of its
+  // own; the first piece of the subtitle's first line starts it.
+  function piecesOf(given) {
     var lines = [];
     var first = [];
     var from = [];
@@ -306,6 +324,22 @@
       var r = String(raw).replace(/\{\\i1\}/gi, "<i>").replace(/\{\\i0\}/gi, "</i>");
       cutLine(r).forEach(function (piece, k) { lines.push(piece); first.push(li === 0 && k === 0); from.push(li); });
     });
+    return { lines: lines, first: first, from: from };
+  }
+  // A voice with no words of its own, last in its subtitle, holds the next
+  // words when it speaks ("[man]", "[announcer shouting]") or the editor
+  // reads it as someone speaking.
+  function holds(said) {
+    return speaks(said) || !!(READ_AS && READ_AS[bracketKey(said)] === "voice");
+  }
+  function partsOf(given) {
+    var out = [];
+    var cur = null;
+    function begin(kind, who) { cur = { kind: kind, who: who, text: [] }; out.push(cur); }
+    var pc = piecesOf(given);
+    var lines = pc.lines;
+    var first = pc.first;
+    var from = pc.from;
     // A line all in italics ("<i>Why that year?</i>"), as subtitles mark an
     // off-screen voice (sometimes the speaker's own voice-over), and a sung
     // line ("♪ We are the champions ♪"): nobody's.
@@ -371,12 +405,16 @@
             if (bw === "label") {
               begin("label", br[1].trim().replace(/\s+/g, " ")); cur.dash = !!dash; cur.chev = !!chev; cur.br = true; cur.odd = false; cur.start = starts;
             } else {
-              begin("other", ""); cur.dash = !!dash; cur.chev = !!chev;
+              begin("other", ""); cur.dash = !!dash; cur.chev = !!chev; cur.said = br[1];
             }
             if (br[2].trim()) cur.text.push(br[2]);
             return;
           }
           var lab = LABEL.exec(body);
+          if (!lab) {
+            var lone = LABEL_ALONE.exec(body);
+            if (lone && LABEL_LIKE.test(lone[1].trim()) && !NOT_LABEL.test(lone[1].trim()) && !SPEECH.test(lone[1].trim())) lab = [lone[0], lone[1], ""];
+          }
           var name = lab ? lab[1].trim() : "";
           var like = !!lab && LABEL_LIKE.test(name) && (starts || !NOT_LABEL.test(name));
           if (lab && !SPEECH.test(name) && (starts || like)) {
@@ -384,8 +422,8 @@
             // A voice right after the label ("COACH: [man] Why that year?"):
             // the label is counted, the words are that other voice's.
             var after = BRACKET.exec(lab[2]);
-            if (after && voiceOf(after[1]) === "person") { begin("other", ""); cur.after = true; if (after[2].trim()) cur.text.push(after[2]); return; }
-            cur.text.push(lab[2]);
+            if (after && voiceOf(after[1]) === "person") { begin("other", ""); cur.after = true; cur.said = after[1]; if (after[2].trim()) cur.text.push(after[2]); return; }
+            if (lab[2]) cur.text.push(lab[2]);
             return;
           }
           if (chev) { begin("chev", ""); if (body.trim()) cur.text.push(body); return; }
@@ -472,14 +510,22 @@
     var counts = {};
     var split = [];
     raw.forEach(function (c) {
-      var every = partsOf(c.lines).map(function (pt) { return { kind: pt.kind, who: pt.who, dash: !!pt.dash, chev: !!pt.chev, br: !!pt.br, odd: !!pt.odd, resume: !!pt.resume, sung: !!pt.sung, text: pt.text.join(" ") }; });
+      var every = partsOf(c.lines).map(function (pt) { return { kind: pt.kind, who: pt.who, dash: !!pt.dash, chev: !!pt.chev, br: !!pt.br, odd: !!pt.odd, resume: !!pt.resume, sung: !!pt.sung, said: pt.said, text: pt.text.join(" ") }; });
       var ps = every.filter(function (pt) { return /[\p{L}\p{N}]/u.test(cleanText(pt.text)); });
       // A voice with no words of its own here ("[man]" in a subtitle of its
       // own, or last in one): the next unmarked words are theirs.
       var tail = every[every.length - 1];
-      var marker = !!tail && tail.kind === "other" && !tail.sung && !/[\p{L}\p{N}]/u.test(cleanText(tail.text));
+      var wordless = !!tail && !tail.sung && !/[\p{L}\p{N}]/u.test(cleanText(tail.text));
+      // A voice that speaks, or a name ("[MAN]", "INTERVIEWER:"), with no
+      // words here: the next words are theirs. A sound a person makes
+      // ("[crowd groans]") isn't one: the voice goes on.
+      var marker = wordless && ((tail.kind === "other" && holds(tail.said || "")) || (tail.kind === "label" && !tail.odd))
+        ? { marker: true, name: tail.kind === "label" ? tail.who : null }
+        : null;
+      // A name with no words is still a label the file uses.
+      if (marker && marker.name) counts["?" + marker.name] = (counts["?" + marker.name] || 0) + 1;
       if (!ps.length) {
-        if (marker) split.push({ marker: true });
+        if (marker) split.push(marker);
         return;
       }
       ps.forEach(function (pt) {
@@ -497,7 +543,7 @@
         var b = c.s == null ? null : k === ps.length - 1 ? c.e : Math.round(c.s + ((c.e - c.s) * acc) / all);
         split.push({ s: a, e: b, kind: pt.kind, who: pt.who, dash: pt.dash, chev: pt.chev, br: pt.br, odd: pt.odd, resume: pt.resume, text: pt.text, sub: ps.length > 1 });
       });
-      if (marker) split.push({ marker: true });
+      if (marker) split.push(marker);
     });
     // Once the file uses labels (a voice tag, "Speaker 1", or any typed label
     // used twice), every typed label counts: an interviewer asking once is
@@ -521,9 +567,10 @@
       var p = split[i];
       var who;
       if (p.marker) {
-        // In a file with labels, nobody's until the next label; without, the
-        // next unmarked line.
-        if (labelled) last = TWO;
+        // In a file with labels, the name's (a name the file uses as a
+        // label) or nobody's until the next label; without, the next
+        // unmarked line is nobody's.
+        if (labelled) last = p.name || TWO;
         else pending = true;
         continue;
       }
@@ -577,24 +624,44 @@
     var notes = [];
     var brackets = [];
     var at = {};
+    var bare = function (x, m) { return !x.replace(m, "").replace(/<[^>]*>/g, "").replace(/^\s*(?:[-‐‑–—]|>{2,}|»)\s*/, "").trim(); };
     raw.forEach(function (c) {
-      c.lines.forEach(function (l, li) {
+      // Read on the pieces the parse reads ("COACH: Same field. [crowd
+      // cheering]" is two), each with the piece after it in the subtitle.
+      var pc = piecesOf(c.lines);
+      pc.lines.forEach(function (l, pi) {
         var m;
         var re = /[\[(]([^\[\]()]{1,60})[\])]/g;
+        var next = pc.lines[pi + 1];
+        var line = c.lines[pc.from[pi]];
         while ((m = re.exec(l))) {
           var t = m[1].trim().replace(/\s+/g, " ");
           MISSING_RE.lastIndex = 0;
           if (!t || !/\p{L}/u.test(t) || MISSING_RE.test("[" + t + "]") || /^(?:o\.?\s?s\.?|v\.?\s?o\.?|cont['’]?d\.?)$/i.test(t)) continue;
           var k = bracketKey(t);
-          // Alone on its line: nothing but marks around it.
-          var alone = !l.replace(m[0], "").replace(/<[^>]*>/g, "").replace(/^\s*(?:[-‐‑–—]|>{2,}|»)\s*/, "").trim();
-          if (k in at) { brackets[at[k]].count++; if (!alone) brackets[at[k]].alone = false; continue; }
+          // Alone on its line (nothing but marks around it), and alone in
+          // the piece the parse reads.
+          var alone = bare(line, m[0]);
+          var lone = bare(l, m[0]);
           var v = voiceOf(t);
-          // On a line of its own, people heard are a note, unless the next
-          // line in the subtitle is unmarked.
-          if (v === "person" && alone && HEARD.test(t) && !(READ_AS && READ_AS[k] === "voice") && heardAlone(c.lines[li + 1])) v = "";
+          var hinge = false;
+          if (v === "person" && lone && !(READ_AS && READ_AS[k] === "voice")) {
+            // People heard are a note, unless the next line in the subtitle
+            // is unmarked (what they said): the reading hinges on that line.
+            if (HEARD.test(t)) { if (heardAlone(next)) { v = ""; hinge = next != null; } }
+            // A sound a person makes, last in its subtitle ("[crowd
+            // groans]"), holds no words: the voice goes on.
+            else if (next == null && !speaks(t)) v = "";
+          }
+          if (k in at) {
+            var b0 = brackets[at[k]];
+            b0.count++;
+            if (!alone) b0.alone = false;
+            if (hinge) b0.hinge = true;
+            continue;
+          }
           at[k] = brackets.length;
-          brackets.push({ key: k, text: t, read: v === "label" ? "speaker" : v ? "voice" : "note", set: !!(READ_AS && READ_AS[k]), count: 1, alone: alone });
+          brackets.push({ key: k, text: t, read: v === "label" ? "speaker" : v ? "voice" : "note", set: !!(READ_AS && READ_AS[k]), count: 1, alone: alone, hinge: hinge });
           if (!v && notes.length < 12) notes.push(k);
         }
       });
