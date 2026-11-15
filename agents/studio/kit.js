@@ -102,6 +102,16 @@ function builtinKits() {
 
 // ── Proposed kits (in the repo, not approved) ────────────────────────────
 let proposalCache = null;
+// Kits whose first approval is the owner's: they follow their product's own
+// consent for minors, not the blanket "public only wide and non-identifying"
+// rule, and Kyron confirms that difference (docs/studio-films.md, "Kits for
+// every line of work"). Later versions keep their locked rules, so any
+// approver approves those.
+const OWNER_FIRST = Object.freeze({
+  "sm-market-event": "It follows the marketplace's own consent: 13 to 17 are sold or shown publicly only as a parent chose at the QR.",
+  "pylon-stop": "It follows Pylon's own consent: 13 to 17 are public only where their guardian chose public display on the roster.",
+});
+const ownerFirst = (slug) => (Object.prototype.hasOwnProperty.call(OWNER_FIRST, slug) ? OWNER_FIRST[slug] : null);
 function proposedKits() {
   if (proposalCache) return proposalCache;
   const out = [];
@@ -443,6 +453,7 @@ function emptyKit(slug, assets = null) {
 }
 
 module.exports = {
+  ownerFirst,
   SCHEMA,
   COLORS,
   CARD_TYPES,

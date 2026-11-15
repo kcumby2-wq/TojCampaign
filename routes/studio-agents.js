@@ -265,6 +265,12 @@ router.post("/kits/:id/approve", approver, async (req, res) => {
     // A draft made from an older approved version would quietly undo what was
     // approved since. Refuse it; a fresh refresh starts from the current one.
     const current = await S.approvedKit(sb, row.slug);
+    // A kit that follows its product's own consent for minors is approved
+    // the first time by the owner, who confirms that difference.
+    const why = K.ownerFirst(row.slug);
+    if (why && !current && !(req.team && req.team.owner)) {
+      return res.status(403).json({ error: "owner_approves_first", reason: why });
+    }
     if (current && current.id !== row.base_kit_id) {
       return res.status(409).json({
         error: "stale_draft",

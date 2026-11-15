@@ -465,16 +465,79 @@ test("a parent's page pull, where the athlete now approves for themself, takes b
   const film2 = ok(await films("POST", "/films", { kit_slug: "same-work", title: `${code} now`, lane: "youth", athlete_id: code, format: "hero" }, "lead"), "start").film;
   const p2 = ok(await films("POST", `/films/${film2.id}/people`, self(code, "Cy Dove", "cy@x.test"), "lead"), "adult card").person;
   ok(await films("POST", `/films/${film2.id}/people/${p2.id}/clear`, { seen: p2.updated_at }, "lead"), "clear");
+  // The other parent's card from those years, on a third film.
+  const film3 = ok(await films("POST", "/films", { kit_slug: "same-work", title: `${code} then`, lane: "youth", athlete_id: code, format: "hero" }, "lead"), "start").film;
+  const p3 = ok(await films("POST", `/films/${film3.id}/people`, { person_code: code, name: "Cy Dove", role: "athlete", is_minor: true, speaker: true, release_on_file: true, covers: { voice: true, formats: ["hero"] }, reviewer_relation: "parent", reviewer_name: "Robin Dove", reviewer_email: "robin@x.test" }, "lead"), "other parent's card").person;
+  ok(await films("POST", `/films/${film3.id}/people/${p3.id}/clear`, { seen: p3.updated_at }, "lead"), "clear");
   const token = await linkFor("pat@x.test");
   mails = [];
   ok(await page("/pull", { token, person_code: code, confirm: true, note: "Cy Dove wants this stopped" }), "pull");
-  const rows = (await pool.query("select reviewer_email, consent_pulled_at is not null as pulled from studio_film_people where person_code = $1 order by reviewer_email", [code])).rows;
-  assert.deepEqual(rows, [{ reviewer_email: "cy@x.test", pulled: false }, { reviewer_email: "pat@x.test", pulled: true }]);
+  // Every card a parent approves is taken back, either parent's; the athlete's own goes on.
+  const rows = (await pool.query("select reviewer_email, consent_pulled_at is not null as pulled, pull_scope from studio_film_people where person_code = $1 order by reviewer_email", [code])).rows;
+  assert.deepEqual(rows, [{ reviewer_email: "cy@x.test", pulled: false, pull_scope: null }, { reviewer_email: "pat@x.test", pulled: true, pull_scope: "not_self" }, { reviewer_email: "robin@x.test", pulled: true, pull_scope: "not_self" }]);
   const alert = await mailTo("kyron@toj.test", /Consent taken back/);
+  assert.match(alert.text, /every film a parent or guardian approves for .* is stopped/);
   assert.match(alert.text, /approves for themself on other films, which go on/);
-  assert.doesNotMatch(alert.text, /Cy|Dove|pat@/);
+  assert.match(alert.text, /Another parent or guardian approves for .* on cards that were stopped/);
+  assert.doesNotMatch(alert.text, /Cy|Dove|pat@|robin@/);
   // Asked again: there's nothing left for them to take back.
   assert.equal((await page("/pull", { token, person_code: code, confirm: true })).data.error, "already_taken_back");
+  // The athlete's own page has no taking back in its history; the parent's says it's stopped.
+  const cy = ok(await page("/view", { token: await linkFor("cy@x.test") }), "the athlete's view").people[0];
+  assert.deepEqual([cy.pulled, cy.live, cy.taken_back_at], [false, true, null]);
+  const pat = ok(await page("/view", { token }), "the parent's view").people[0];
+  assert.equal(pat.pulled, true);
+  assert.ok(pat.taken_back_at);
+  // While the parent's takedown is open, the athlete can still be put on a
+  // new film they approve themself, with no new consent; a card a parent
+  // approves can't, and the athlete's own card doesn't become one.
+  const film4 = ok(await films("POST", "/films", { kit_slug: "same-work", title: `${code} next`, lane: "youth", athlete_id: code, format: "hero" }, "lead"), "start").film;
+  ok(await films("POST", `/films/${film4.id}/people`, self(code, "Cy Dove", "cy@x.test"), "lead"), "a new card the athlete approves");
+  const parentCard = await films("POST", `/films/${film4.id}/people`, { person_code: code, name: "Cy Dove", role: "athlete", speaker: true, release_on_file: true, covers: { voice: true, formats: ["hero"] }, reviewer_relation: "parent", reviewer_name: "Pat Dove", reviewer_email: "pat@x.test" }, "lead");
+  assert.ok(parentCard.status >= 400, "a parent's card waits for the takedown and the family's new consent");
+  assert.equal((await pool.query("select count(*)::int as n from studio_film_people where film_id = $1 and reviewer_relation = 'parent'", [film4.id])).rows[0].n, 0);
+  const own = (await films("GET", `/films/${film2.id}`, undefined, "lead")).data.people.find((x) => x.id === p2.id);
+  const turned = await films("PATCH", `/films/${film2.id}/people/${p2.id}`, { seen: own.updated_at, reviewer_relation: "parent", reviewer_name: "Pat Dove", reviewer_email: "pat@x.test" }, "lead");
+  assert.ok(turned.status >= 400, "the athlete's card doesn't become the parent's");
+  assert.equal((await pool.query("select reviewer_relation from studio_film_people where id = $1", [p2.id])).rows[0].reviewer_relation, "self");
+  // How far a pull went is the pull's to say.
+  await assert.rejects(pool.query("update studio_film_people set pull_scope = null where person_code = $1 and reviewer_email = 'pat@x.test'", [code]), /closed|how far/);
+  await assert.rejects(pool.query("update studio_film_people set pull_scope = 'not_self', changed_by = 'x' where id = $1", [p2.id]), /how far|pull_scope/);
+});
+
+test("a link whose own email was never marked sent stops when a later one's email goes, ten minutes on", async () => {
+  const film = ok(await films("POST", "/films", { kit_slug: "same-work", title: "S7101 hero", lane: "youth", athlete_id: "S7101", format: "hero" }, "lead"), "start").film;
+  const p = ok(await films("POST", `/films/${film.id}/people`, self("C7101", "Eli Wren", "eli@x.test"), "lead"), "card").person;
+  ok(await films("POST", `/films/${film.id}/people/${p.id}/clear`, { seen: p.updated_at }, "lead"), "clear");
+  const age = async (minutes) => {
+    // As if its own email's call never came, so long ago.
+    const c = await pool.connect();
+    try {
+      await c.query("begin");
+      await c.query("set local session_replication_role = replica");
+      await c.query(`update studio_speaker_links set sent_at = null, created_at = now() - make_interval(mins => $1)
+                      where id = (select id from studio_speaker_links where email = 'eli@x.test' order by created_at desc limit 1)`, [minutes]);
+      await c.query("commit");
+    } finally {
+      c.release();
+    }
+  };
+  // Each link's own supersede runs once its email is accepted: wait for it.
+  const sent = async () => { for (let i = 0; i < 40; i++) { if ((await pool.query("select count(*)::int as n from studio_speaker_links where email = 'eli@x.test' and sent_at is null")).rows[0].n === 0) return; await wait(25); } };
+  mails = [];
+  const old = await linkFor("eli@x.test");
+  await sent();
+  await age(11);
+  mails = [];
+  const recent = await linkFor("eli@x.test");
+  await wait(150);
+  await age(2);
+  mails = [];
+  const newest = await linkFor("eli@x.test");
+  await wait(150);
+  assert.ok((await page("/view", { token: old })).status >= 400, "the one from eleven minutes before stopped");
+  assert.equal((await page("/view", { token: recent })).status, 200, "one from two minutes before may still be on its way: left alone");
+  assert.equal((await page("/view", { token: newest })).status, 200);
 });
 
 test("an uncleared card's email gets no page; a new approver doesn't see the old one's decisions as theirs", async () => {

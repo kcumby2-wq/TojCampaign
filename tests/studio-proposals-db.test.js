@@ -150,6 +150,23 @@ test("once a draft is open, a second ask points to it; approving it makes it the
   assert.ok(kits.some((k) => k.slug === "fellowship" && k.status === "approved" && k.version === 1), "it's listed with the kits");
 });
 
+test("a kit that follows its product's own consent for minors is approved first by the owner", async () => {
+  for (const slug of ["sm-market-event", "pylon-stop"]) {
+    assert.ok((await listed(slug)).owner_first, slug);
+  }
+  assert.equal((await listed("fellowship")).owner_first, null);
+  // The draft made above.
+  const d = (await listed("pylon-stop")).draft;
+  assert.ok(d, "pylon-stop has its draft");
+  const byLead = await call("POST", `/kits/${d.id}/approve`, {}, "lead");
+  assert.equal(byLead.status, 403);
+  assert.equal(byLead.data.error, "owner_approves_first");
+  assert.match(byLead.data.reason, /guardian chose public display/);
+  assert.equal((await pool.query("select status from studio_kits where id = $1", [d.id])).rows[0].status, "draft");
+  ok(await call("POST", `/kits/${d.id}/approve`, {}, "kyron"), "the owner approves it");
+  assert.deepEqual((await listed("pylon-stop")).approved, { id: d.id, version: 1 });
+});
+
 test("a discarded draft can be drafted again, as the next version", async () => {
   const first = ok(await draft("sm-market-event"), "draft");
   ok(await call("POST", `/kits/${first.id}/discard`, {}, "lead"), "discard");

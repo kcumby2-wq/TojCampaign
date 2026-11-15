@@ -13,7 +13,10 @@
 --   * Taking consent back from the page is the same pull as staff make
 --     (039's studio_pull_consent), with source 'speaker', and only for a
 --     person whose cleared card names that email (for a parent, where the
---     athlete now approves for themself, the films the parent approves).
+--     athlete now approves for themself, the films a parent or guardian
+--     approves, kept on those cards as pull_scope 'not_self': 039's card
+--     gate, replaced below with that one change, lets the athlete's own new
+--     cards in past such a pull).
 
 create table if not exists public.studio_speaker_links (
   id uuid primary key default gen_random_uuid(),
@@ -31,6 +34,173 @@ create table if not exists public.studio_speaker_links (
 alter table public.studio_speaker_links add column if not exists sent_at timestamptz;
 create index if not exists studio_speaker_links_email_idx on public.studio_speaker_links (email, created_at desc);
 alter table public.studio_speaker_links enable row level security;
+
+-- How far a card's pull went: null, the whole code's (039's pull, and the
+-- page's otherwise); 'not_self', the films a parent or guardian approves,
+-- taken back on their page where the athlete approves for themself.
+alter table public.studio_film_people add column if not exists pull_scope text;
+do $$
+begin
+  if not exists (select 1 from pg_constraint where conname = 'studio_film_people_pull_scope_known') then
+    alter table public.studio_film_people add constraint studio_film_people_pull_scope_known
+      check (pull_scope is null or (pull_scope = 'not_self' and consent_pulled_at is not null));
+  end if;
+end $$;
+
+-- 039's card gate, with pull_scope: a new card starts without one; a pull
+-- sets it from studio.pull_scope, and nothing else changes it; a new card
+-- the athlete approves for themself isn't held by a 'not_self' pull; and a
+-- card of theirs doesn't become a parent's or guardian's after one without
+-- the family's new consent. Otherwise as 039 wrote it.
+create or replace function public.studio_film_people_gate() returns trigger
+language plpgsql set search_path = '' as $$
+declare
+  f public.studio_films%rowtype;
+  card_changed boolean;
+  pulled_last timestamptz;
+  who text;
+begin
+  if tg_op = 'DELETE' then
+    perform 1 from public.studio_films where id = old.film_id for update;
+    if old.cleared_at is not null or old.consent_pulled_at is not null
+       or exists (select 1 from public.studio_film_cuts c where c.film_id = old.film_id and old.id = any (c.people))
+       or exists (select 1 from public.studio_reviews r where r.person_id = old.id) then
+      raise exception 'a card that was cleared, pulled or put in a cut is kept';
+    end if;
+    return old;
+  end if;
+  -- A new card takes its person code's lock first (a pull of that code takes
+  -- it too), then the film's row lock: one change to a film at a time.
+  if tg_op = 'INSERT' then
+    perform pg_advisory_xact_lock(hashtextextended('studio.code:' || new.person_code, 0));
+  end if;
+  select * into f from public.studio_films where id = new.film_id for update;
+  if tg_op = 'INSERT' then
+    if new.cleared_at is not null or new.cleared_by is not null or new.consent_pulled_at is not null or new.pull_scope is not null then
+      raise exception 'a new card starts not cleared';
+    end if;
+    if f.pulled_at is not null or f.archived_at is not null then
+      raise exception 'film % is closed', f.id;
+    end if;
+    -- A pulled consent stays pulled: the code comes back only once its
+    -- takedown is done, with the family's new consent recorded on the first
+    -- card after the pull. (043) A parent's or guardian's pull of the films
+    -- they approve, where the athlete approves for themself (pull_scope
+    -- 'not_self'), didn't touch the athlete's own consent: a new card the
+    -- athlete approves for themself isn't held by it.
+    pulled_last := (select max(x.consent_pulled_at) from public.studio_film_people x
+                     where x.person_code = new.person_code
+                       and not (x.pull_scope is not distinct from 'not_self' and new.reviewer_relation is not distinct from 'self'));
+    if pulled_last is not null and not exists (
+         select 1 from public.studio_film_people x
+          where x.person_code = new.person_code and x.reconsent_note is not null and x.consent_pulled_at is null and x.created_at > pulled_last) then
+      if exists (select 1 from public.studio_takedowns t where t.person_code = new.person_code and t.closed_at is null) then
+        raise exception 'consent for % was pulled and its takedown is still open', new.person_code;
+      end if;
+      if new.reconsent_note is null then
+        raise exception 'consent for % was pulled: a new card needs the family''s new consent, recorded by the producer', new.person_code;
+      end if;
+    elsif new.reconsent_note is not null then
+      raise exception 'a new consent is recorded only for a code whose consent was pulled';
+    end if;
+    new.created_at := now();
+    new.changed_by := null;
+    new.last_changed_by := null;
+    return new;
+  end if;
+  -- Who's making this change, said with it (never carried over).
+  who := new.changed_by;
+  new.changed_by := null;
+  new.last_changed_by := coalesce(who, old.last_changed_by);
+
+  if new.film_id <> old.film_id or new.person_code <> old.person_code or new.created_by <> old.created_by
+     or new.reconsent_note is distinct from old.reconsent_note then
+    raise exception 'a card keeps its film, its code, its author and its consent note';
+  end if;
+  -- (043) How far a pull went is the pull's own to say, once.
+  if new.pull_scope is distinct from old.pull_scope and not (new.consent_pulled_at is not null and old.consent_pulled_at is null) then
+    raise exception 'how far a pull went is set by the pull';
+  end if;
+  if old.consent_pulled_at is not null then
+    raise exception 'consent was pulled: the card for % is closed', old.person_code;
+  end if;
+
+  -- Pulling consent: that and nothing else in the same change.
+  if new.consent_pulled_at is not null then
+    if row(new.name, new.role, new.is_minor, new.texas_youth, new.speaker, new.release_on_file, new.covers,
+           new.reviewer_relation, new.reviewer_name, new.reviewer_email, new.cleared_at, new.cleared_by)
+       is distinct from row(old.name, old.role, old.is_minor, old.texas_youth, old.speaker, old.release_on_file, old.covers,
+           old.reviewer_relation, old.reviewer_name, old.reviewer_email, old.cleared_at, old.cleared_by) then
+      raise exception 'pulling consent changes nothing else on the card';
+    end if;
+    new.consent_pulled_at := now();
+    -- (043) The page's pull of the films a parent or guardian approves says
+    -- so; any other pull is the whole code's.
+    new.pull_scope := nullif(current_setting('studio.pull_scope', true), '');
+    if new.pull_scope is not null and new.pull_scope <> 'not_self' then
+      raise exception 'a pull is the whole code''s, or the films a parent or guardian approves';
+    end if;
+    return new;
+  end if;
+  if f.pulled_at is not null or f.archived_at is not null then
+    raise exception 'film % is closed', f.id;
+  end if;
+
+  card_changed := row(new.name, new.role, new.is_minor, new.texas_youth, new.speaker, new.release_on_file, new.covers,
+                      new.reviewer_relation, new.reviewer_name, new.reviewer_email)
+                  is distinct from row(old.name, old.role, old.is_minor, old.texas_youth, old.speaker, old.release_on_file, old.covers,
+                      old.reviewer_relation, old.reviewer_name, old.reviewer_email);
+
+  -- A card in something live doesn't change, or get uncleared, at all: take
+  -- the post down or pull consent instead.
+  if (card_changed or (new.cleared_at is null and old.cleared_at is not null))
+     and exists (select 1 from public.studio_film_posts p join public.studio_film_cuts c on c.id = p.cut_id
+                  where p.film_id = old.film_id and p.removed_at is null and old.id = any (c.people)) then
+    raise exception 'the card for % is in something posted: take it down or pull consent instead', old.person_code;
+  end if;
+  if card_changed and who is null then
+    raise exception 'who changed the card for %', old.person_code;
+  end if;
+  -- (043) A card the athlete approved for themself, where a parent or
+  -- guardian has since taken back the films they approve, doesn't become
+  -- one a parent or guardian approves without the family's new consent.
+  if new.reviewer_relation is distinct from old.reviewer_relation and old.reviewer_relation = 'self' then
+    pulled_last := (select max(x.consent_pulled_at) from public.studio_film_people x
+                     where x.person_code = old.person_code and x.pull_scope = 'not_self');
+    if pulled_last is not null and not exists (
+         select 1 from public.studio_film_people x
+          where x.person_code = old.person_code and x.reconsent_note is not null and x.consent_pulled_at is null and x.created_at > pulled_last) then
+      raise exception 'a parent or guardian took consent back for %: a card they approve needs the family''s new consent, recorded by the producer', old.person_code;
+    end if;
+  end if;
+  if card_changed and old.cleared_at is not null then
+    -- A changed card is cleared again before anything goes on.
+    new.cleared_at := null;
+    new.cleared_by := null;
+    return new;
+  end if;
+
+  if new.cleared_at is not null and old.cleared_at is null then
+    if new.cleared_by is null then
+      raise exception 'who cleared the card for %', old.person_code;
+    end if;
+    if not new.release_on_file then
+      raise exception 'no release, no card: % has no release on file', old.person_code;
+    end if;
+    if new.speaker and new.reviewer_email is null then
+      raise exception 'a speaker''s card says who approves the cut';
+    end if;
+    new.cleared_at := now();
+  elsif new.cleared_at is null and old.cleared_at is not null then
+    if who is null then
+      raise exception 'who uncleared the card for %', old.person_code;
+    end if;
+    new.cleared_by := null;
+  elsif new.cleared_at is distinct from old.cleared_at or new.cleared_by is distinct from old.cleared_by then
+    raise exception 'the card for % keeps when and by whom it was cleared', old.person_code;
+  end if;
+  return new;
+end $$;
 
 create or replace function public.studio_speaker_links_gate() returns trigger
 language plpgsql set search_path = '' as $$
@@ -96,7 +266,8 @@ end $$;
 -- link for that email whose own email went before it stops, under the
 -- email's lock. A link still waiting on its email is left alone: when that
 -- email goes, it stops this one. So the newest email in their inbox is the
--- one that works.
+-- one that works. A link made ten minutes or more before this one and never
+-- marked sent (its own call never came: a restart, an error) stops too.
 create or replace function public.studio_speaker_supersede(p_proof text)
 returns integer
 language plpgsql volatile set search_path = '' as $$
@@ -104,7 +275,7 @@ declare
   me record;
   n integer;
 begin
-  select l.id, l.email into me from public.studio_speaker_links l
+  select l.id, l.email, l.created_at into me from public.studio_speaker_links l
    where l.proof_hash = encode(sha256(convert_to(coalesce(p_proof, ''), 'UTF8')), 'hex');
   if me.id is null then
     return 0;
@@ -116,7 +287,7 @@ begin
   end if;
   update public.studio_speaker_links l set revoked_at = now()
    where l.email = me.email and l.id <> me.id and l.revoked_at is null and l.expires_at > now()
-     and l.sent_at is not null;
+     and (l.sent_at is not null or l.created_at < me.created_at - interval '10 minutes');
   get diagnostics n = row_count;
   return n;
 end $$;
@@ -125,9 +296,10 @@ end $$;
 -- card for that person has to name the link's email as the one who
 -- approves. Either parent or guardian of a minor takes it back for every
 -- film. A parent or guardian, where the athlete now approves for themself
--- on a live, cleared card (an adult now), takes back the films they approve
--- (the cards that name their email); the athlete's own go on, and the team
--- talks to them (only_theirs). Then
+-- on a live, cleared card (an adult now), takes back every film a parent or
+-- guardian approves (every card but the athlete's own, any parent's: either
+-- parent takes it back for all of those); the athlete's own go on, and the
+-- team talks to them (only_theirs). Then
 -- it's 039's pull, with source 'speaker', written as who they are to the
 -- person (never their email or name).
 create or replace function public.studio_speaker_pull(p_proof text, p_person_code text, p_note text)
@@ -162,7 +334,7 @@ begin
               where p.person_code = code and p.consent_pulled_at is null and p.cleared_at is not null
                 and p.reviewer_relation = 'self' and lower(coalesce(p.reviewer_email, '')) <> e);
   if not exists (select 1 from public.studio_film_people p where p.person_code = code and p.consent_pulled_at is null
-                   and (not mine_only or lower(coalesce(p.reviewer_email, '')) = e)) then
+                   and (not mine_only or p.reviewer_relation is distinct from 'self')) then
     raise exception 'consent is already taken back';
   end if;
   update public.studio_speaker_links l set last_used_at = now()
@@ -172,16 +344,19 @@ begin
     return query select x.takedown_id, false from public.studio_pull_consent(code, by_whom, 'speaker', p_note) x;
     return;
   end if;
-  -- As 039's pull does it, for the cards that name this email only: its
-  -- source for the takedown, then the films in one order, then the cards.
+  -- As 039's pull does it, for every card but the athlete's own: its source
+  -- for the takedown and how far it goes, then the films in one order, then
+  -- the cards.
   perform set_config('studio.pull_source', 'speaker', true);
+  perform set_config('studio.pull_scope', 'not_self', true);
   perform 1 from public.studio_films f
    where f.id in (select x.film_id from public.studio_film_people x
-                   where x.person_code = code and x.consent_pulled_at is null and lower(coalesce(x.reviewer_email, '')) = e)
+                   where x.person_code = code and x.consent_pulled_at is null and x.reviewer_relation is distinct from 'self')
    order by f.id for update;
   update public.studio_film_people
      set consent_pulled_at = now(), pulled_by = by_whom, pulled_note = nullif(btrim(coalesce(p_note, '')), ''), updated_at = now()
-   where person_code = code and consent_pulled_at is null and lower(coalesce(reviewer_email, '')) = e;
+   where person_code = code and consent_pulled_at is null and reviewer_relation is distinct from 'self';
+  perform set_config('studio.pull_scope', '', true);
   return query select t.id, true from public.studio_takedowns t where t.person_code = code and t.closed_at is null
                 order by t.requested_at desc limit 1;
 end $$;

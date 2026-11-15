@@ -73,6 +73,7 @@
     already_on_team: "They're already on the team.",
     fix_blockers_first: "This draft has problems to fix before it can be approved.",
     stale_draft: "A newer version was approved since this draft was made. Start a new refresh.",
+    owner_approves_first: "Kyron approves this kit's first version: it follows its product's own consent for minors, and he confirms that.",
     rule_changes_need_the_owner: "Only Kyron can allow rule changes.",
     owner_account: "The owner account can't be deleted from the app.",
     supabase_unavailable: "The server can't reach its database right now.",
@@ -414,6 +415,7 @@
         (p.eyebrow ? h(p.eyebrow) + " · " : "") + n(c.cards, "card") + " in " + n(c.columns, "column") + " · " + n(c.locked, "rule card") + "</div></div>" +
         (p.draft ? '<span class="badge warn">Draft v' + p.draft.version + "</span>" : '<span class="badge">Proposed</span>') + "</div>" +
         (lead ? '<p class="body" style="font-size:14px;margin:0">' + h(lead) + "</p>" : "") +
+        (p.owner_first ? '<p class="sub" style="margin:0">' + h("Kyron approves its first version. " + p.owner_first) + "</p>" : "") +
         '<div class="btn-row">' + act + "</div></article>";
     }).join("");
     var proposedSec = open.length

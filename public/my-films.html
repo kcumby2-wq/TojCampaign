@@ -201,9 +201,9 @@
     var h = el("h2", null, w.head + " ");
     h.appendChild(el("span", "pill", p.code));
     sec.appendChild(h);
-    if (!p.pulled && p.takedown) {
-      // Taken back before, and given again since: the old takedown is history.
-      sec.appendChild(el("p", "note", "Consent was taken back on " + when(p.takedown.requested_at) + ", and given again since. What's below is the consent as it is now."));
+    if (!p.pulled && p.taken_back_at) {
+      // Taken back on one of these cards before, and given again since: that's history.
+      sec.appendChild(el("p", "note", "Consent was taken back on " + when(p.taken_back_at) + ", and given again since. What's below is the consent as it is now."));
     }
     if (p.pulled) {
       var c = el("div", "card alert");
@@ -211,8 +211,8 @@
       var line = td && td.by_speaker ? "Consent was taken back on a Same Work page on " + when(td.requested_at) + "." : "Consent was taken back" + (td ? " on " + when(td.requested_at) : "") + ".";
       c.appendChild(el("h3", null, line));
       c.appendChild(el("p", "note", td && td.closed
-        ? "Every film with " + w.you + " is stopped, and everything that was posted has been taken down."
-        : "Every film with " + w.you + " is stopped. Everything that was posted comes down" + (td && td.due_at ? " by " + when(td.due_at, true) : " within 72 hours") + ", and the review copies are deleted."));
+        ? "Every film on this page is stopped, and everything that was posted has been taken down."
+        : "Every film on this page is stopped. Everything that was posted comes down" + (td && td.due_at ? " by " + when(td.due_at, true) : " within 72 hours") + ", and the review copies are deleted."));
       sec.appendChild(c);
     }
     if (!p.films.length) sec.appendChild(el("p", "note", "No films yet."));
@@ -277,7 +277,7 @@
   function pullBox(p, w) {
     var d = el("details", "card");
     d.appendChild(el("summary", null, w.action));
-    d.appendChild(el("p", "note", "Every film with " + w.you + " stops. Everything posted comes down within 72 hours, and the review copies are deleted. You don't need a reason. This page can't undo it: if you change your mind later, talk to the producer."));
+    d.appendChild(el("p", "note", "Every film on this page stops. Everything posted comes down within 72 hours, and the review copies are deleted. You don't need a reason. This page can't undo it: if you change your mind later, talk to the producer."));
     var lab = el("label", "opt", "Anything you want us to know (optional)");
     var ta = el("textarea"); ta.maxLength = 500; ta.placeholder = "Please leave names out: this note is kept with the takedown.";
     var id = "note-" + p.code; ta.id = id; lab.htmlFor = id;
@@ -287,8 +287,8 @@
     var box = el("input"); box.type = "checkbox";
     chk.appendChild(box);
     chk.appendChild(el("span", null, p.relation === "self"
-      ? "I'm taking my consent back. Everything with me stops and comes down."
-      : "I'm the " + (p.relation === "guardian" ? "legal guardian" : "parent") + " who approves for " + p.code + ", and I'm taking that consent back. Everything with them stops and comes down."));
+      ? "I'm taking my consent back. Every film on this page stops and comes down."
+      : "I'm the " + (p.relation === "guardian" ? "legal guardian" : "parent") + " who approves for " + p.code + ", and I'm taking that consent back. Every film on this page stops and comes down."));
     d.appendChild(chk);
     var btn = el("button", "btn stop", w.action); btn.type = "button";
     var err = el("div", "err"); err.setAttribute("role", "alert");

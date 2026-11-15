@@ -228,6 +228,8 @@ async function listProposals(sb) {
       builtin: K.builtinKits().some((b) => b.slug === p.slug),
       draft: pick("draft"),
       approved: pick("approved"),
+      // Why Kyron approves its first version (it follows its product's own consent), or null.
+      owner_first: K.ownerFirst(p.slug),
     });
   }
   return out;

@@ -143,6 +143,10 @@ async function viewFor(sb, email) {
       pulled: mine.every((c) => c.consent_pulled_at),
       live: mine.some((c) => !c.consent_pulled_at),
       takedown: td ? { requested_at: td.requested_at, due_at: td.due_at, by_speaker: td.source === "speaker", closed: !!td.closed_at } : null,
+      // When one of this email's own cards was last taken back: a pull that
+      // left their cards alone (a parent's, where the athlete approves for
+      // themself) is no part of their history.
+      taken_back_at: mine.map((c) => c.consent_pulled_at).filter(Boolean).sort().pop() || null,
       films: mine
         .map((c) => {
           const f = films.find((x) => x.id === c.film_id);
