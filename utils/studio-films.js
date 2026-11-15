@@ -430,6 +430,10 @@ const SHOUT_TITLES = new Set("coach miss mr mrs ms".split(" "));
 // "Hey Will You Send The Files": a verb before a pronoun, not a name.
 const MODAL = new Set("will can shall might must".split(" "));
 const PRONOUN = new Set("you we i they he she it me us".split(" "));
+// Praise or a level between the name and a place's word is the shout-out's,
+// not the place's name ("Congrats Hope Great Practice", "Thanks Grace Best
+// Team Ever").
+const SHOUT_PRAISE = new Set("great best big huge amazing awesome nice good varsity jv all".split(" "));
 const SHOUT_PLACE = new Set(("camp camps church center centre staff interns volunteers school schools academy league club park ministry ministries " +
   "period practice program clinic foundation hospital university college high middle elementary institute festival fest series classic cup " +
   "tournament showcase team teams crew group chapel fellowship baptist lutheran methodist catholic christian community prep lodge house pantry " +
@@ -446,6 +450,7 @@ function wordsOf(raw) {
   // Hope"): shout is "go" after go or hey, "lead" after the others.
   const heads = [];
   const shout = new Map();
+  const shoutBy = new Map();
   let at = 0;
   for (const line of raw.split("\n")) {
     if (titleCase(line)) {
@@ -461,6 +466,7 @@ function wordsOf(raw) {
         if (ws[i - 1] === "miss" && !(i === 1 || (SHOUT_LEAD.has(ws[i - 2]) && !NOT_WORDS.has(ws[i - 2])))) return;
         if (i >= 2 && NOT_WORDS.has(ws[i - 2])) return;
         shout.set(toks[i][0], ws[i - 1] === "go" || ws[i - 1] === "hey" ? "go" : SHOUT_TITLES.has(ws[i - 1]) ? "title" : "lead");
+        shoutBy.set(toks[i][0], ws[i - 1]);
       });
     }
     at += line.length + 1;
@@ -520,6 +526,7 @@ function wordsOf(raw) {
       rest,
       number,
       shout: shout.get(m.index) || null,
+      shoutBy: shoutBy.get(m.index) || null,
       at: m.index,
       end,
       // The run's letters are more than this word ("#hunter23", "@grace.hoops").
@@ -703,7 +710,8 @@ function kitNames(textValue, people, { film = [] } = {}) {
           // as graphics read it; after go or hey, a first name only.
           else if (h.shout && e.isMinor && !DATE_WORDS.has(low) && !(h.shout === "go" && e.parts.length > 1 && e.parts.lastIndexOf(low) === e.parts.length - 1)
             && (!h.next || SHOUT_ENDS.has(h.next) || e.parts.includes(h.next)
-              || (h.shout !== "title" && !SHOUT_PLACE.has(h.next) && !SHOUT_PLACE.has(h.next2) && !(MODAL.has(low) && PRONOUN.has(h.next))))) put(low, true, true);
+              || (h.shout !== "title" && !SHOUT_PLACE.has(h.next) && !(SHOUT_PLACE.has(h.next2) && !SHOUT_PRAISE.has(h.next))
+                  && !(h.shoutBy === "hey" && MODAL.has(low) && PRONOUN.has(h.next))))) put(low, true, true);
           // "Hope never quits": asked ("He was great": a two-letter one
           // starts sentences all the time).
           else if (h.start) {

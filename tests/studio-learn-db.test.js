@@ -529,7 +529,8 @@ test("what every film shares is read against every card for names, not for ordin
     ["Happy Birthday Faith From The Crew", "Faith Moss", "faith"], ["Thank You Coach Will For The Ride", "Will Ruiz", "will"],
     ["Congrats Hope On Signing Day", "Hope Field", "hope"], ["CONGRATS HUNTER ON THE COMMIT", "Hunter Vale", "hunter"], ["Shout Out To Grace On The Win", "Grace Lin", "grace"],
     ["Big Shout Out To Grace Today", "Grace Lin", "grace"], ["Happy Birthday Hope We Love You", "Hope Field", "hope"], ["Thanks Grace Great Game", "Grace Lin", "grace"],
-    ["Proud Of You Grace Keep Going", "Grace Lin", "grace"]]) assert.deepEqual(U.kitNames(t, m(n)).minor, [w], t);
+    ["Proud Of You Grace Keep Going", "Grace Lin", "grace"], ["Congrats Hope Great Practice", "Hope Field", "hope"], ["Thanks Grace Best Team Ever", "Grace Lin", "grace"],
+    ["Congrats Grace Varsity Team", "Grace Lin", "grace"], ["Thanks Will You Rock", "Will Ruiz", "will"], ["Congrats Will We Are Proud", "Will Ruiz", "will"]]) assert.deepEqual(U.kitNames(t, m(n)).minor, [w], t);
   assert.deepEqual(U.kitNames("Go Green Go White Tonight", m("Ava Green")).sure, [], "after go, a surname is a chant as often");
   // Not where the word starts a place or a group, a verb follows, or "miss" isn't a greeting: asked.
   for (const [t, n, w] of [["Do Not Miss Summer Practice", "Summer Day", "summer"], ["Never Miss Chase Cam Checks", "Chase Hale", "chase"], ["Miss Grace Period Deadlines", "Grace Lin", "grace"],
