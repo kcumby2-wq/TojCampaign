@@ -24,8 +24,11 @@ create table if not exists public.studio_speaker_links (
   created_at timestamptz not null default now(),
   expires_at timestamptz not null,
   last_used_at timestamptz,
-  revoked_at timestamptz
+  revoked_at timestamptz,
+  -- When its email was accepted (studio_speaker_supersede).
+  sent_at timestamptz
 );
+alter table public.studio_speaker_links add column if not exists sent_at timestamptz;
 create index if not exists studio_speaker_links_email_idx on public.studio_speaker_links (email, created_at desc);
 alter table public.studio_speaker_links enable row level security;
 
@@ -40,6 +43,7 @@ begin
     new.expires_at := now() + interval '7 days';
     new.last_used_at := null;
     new.revoked_at := null;
+    new.sent_at := null;
     -- The older links for that email are stopped once this one's email is
     -- accepted (studio_speaker_supersede), not here: an ask that can't be
     -- sent leaves the working link as it was.
@@ -51,6 +55,9 @@ begin
   end if;
   if old.revoked_at is not null and new.revoked_at is distinct from old.revoked_at then
     raise exception 'a stopped link stays stopped';
+  end if;
+  if old.sent_at is not null and new.sent_at is distinct from old.sent_at then
+    raise exception 'a link is sent once';
   end if;
   return new;
 end $$;
@@ -85,10 +92,11 @@ begin
   return found;
 end $$;
 
--- Once a link's email is accepted: every other live link for that email
--- stops, under the email's lock. The last email accepted is the one that
--- works, which is the newest in their inbox; a link already stopped stops
--- nothing.
+-- Once a link's email is accepted: it's marked sent, and every other live
+-- link for that email whose own email went before it stops, under the
+-- email's lock. A link still waiting on its email is left alone: when that
+-- email goes, it stops this one. So the newest email in their inbox is the
+-- one that works.
 create or replace function public.studio_speaker_supersede(p_proof text)
 returns integer
 language plpgsql volatile set search_path = '' as $$
@@ -102,11 +110,13 @@ begin
     return 0;
   end if;
   perform pg_advisory_xact_lock(hashtextextended('studio.page:' || me.email, 0));
+  update public.studio_speaker_links l set sent_at = clock_timestamp() where l.id = me.id and l.sent_at is null;
   if not exists (select 1 from public.studio_speaker_links l where l.id = me.id and l.revoked_at is null and l.expires_at > now()) then
     return 0;
   end if;
   update public.studio_speaker_links l set revoked_at = now()
-   where l.email = me.email and l.id <> me.id and l.revoked_at is null and l.expires_at > now();
+   where l.email = me.email and l.id <> me.id and l.revoked_at is null and l.expires_at > now()
+     and l.sent_at is not null;
   get diagnostics n = row_count;
   return n;
 end $$;
