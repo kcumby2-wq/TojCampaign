@@ -330,3 +330,28 @@ test("factory: a paused web-search turn is continued, and the judge reads the st
     else process.env.ANTHROPIC_API_KEY = realKey;
   }
 });
+
+test("proposed kits: each passes every check, has a slug of its own, and keeps TOJ's rules as a locked card", () => {
+  const props = K.proposedKits();
+  assert.deepEqual(props.map((p) => p.slug).sort(), ["fellowship", "pylon-packages", "pylon-stop", "sm-market-event", "sm-sessions"]);
+  const builtins = new Set(K.builtinKits().map((b) => b.slug));
+  for (const p of props) {
+    assert.ok(!builtins.has(p.slug), `${p.slug} isn't a built-in kit`);
+    assert.equal(p.file, `${p.slug}.v1.json`);
+    const c = K.checkKit({ ...p.kit, version: 1 });
+    assert.deepEqual(c.blockers, [], `${p.slug} has no blockers`);
+    assert.ok(c.counts.cards >= 10, `${p.slug} has its cards`);
+    const rules = p.kit.columns.flatMap((col) => col.cards).filter((k) => k.locked);
+    assert.ok(rules.some((k) => k.title === "The rules nobody breaks"), `${p.slug} keeps the rules as a locked card`);
+  }
+  // Listing them needs no database: nothing is drafted.
+  return S.listProposals(null).then((list) => {
+    assert.equal(list.length, 5);
+    for (const p of list) {
+      assert.equal(p.draft, null);
+      assert.equal(p.approved, null);
+      assert.equal(p.blockers, 0);
+      assert.ok(p.lead.length > 20 && !/[<>]/.test(p.lead), `${p.slug}'s lead is plain text`);
+    }
+  });
+});
