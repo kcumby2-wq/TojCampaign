@@ -186,6 +186,11 @@
   var SAYING = /\b(?:say\w*|said|shout\w*|yell\w*|chant\w*|call\w*|holler\w*|ask\w*|answer\w*|speak\w*|talk(?:s|ing)?(?! indistinct)|whisper\w*|scream\w*|reply\w*|repl(?:y|ies)|respond\w*|cheer\w*|counting|instruct\w*|sing\w*)\b/i;
   // Somebody else heard from afar ("[distant shouting]", "[muffled talking]").
   var DISTANT_VOICE = /^(?:distant|faint|far-off|faraway|muffled|background|unseen|off-?screen|off-?camera)\s+(?:shout|yell|call|holler|chant|talk|speak|scream|whisper|conversation|question|reply|answer)\w*$/i;
+  // Missing words in a bracket's own words ("coach's mic cuts out").
+  function missingWords(inside) {
+    MISSING_RE.lastIndex = 0;
+    return MISSING_RE.test("[" + String(inside || "") + "]");
+  }
   // A sound a person makes that isn't words ("[crowd groans]", "[man clears
   // throat]", "[referee whistles]"): with no words of its own, it holds
   // none, and the voice goes on. Any other voice speaks ("[man]",
@@ -483,7 +488,7 @@
             if (bw === "label") {
               begin("label", br[1].trim().replace(/\s+/g, " ")); cur.dash = !!dash; cur.chev = !!chev; cur.br = true; cur.odd = false; cur.start = starts;
             } else {
-              begin("other", ""); cur.dash = !!dash; cur.chev = !!chev; cur.said = br[1];
+              begin("other", ""); cur.dash = !!dash; cur.chev = !!chev; cur.said = br[1]; cur.missing = missingWords(br[1]);
             }
             if (br[2].trim()) cur.text.push(br[2]);
             return;
@@ -500,7 +505,7 @@
             // A voice right after the label ("COACH: [man] Why that year?"):
             // the label is counted, the words are that other voice's.
             var after = BRACKET.exec(lab[2]);
-            if (after && voiceOf(after[1]) === "person") { begin("other", ""); cur.after = true; cur.said = after[1]; if (after[2].trim()) cur.text.push(after[2]); return; }
+            if (after && voiceOf(after[1]) === "person") { begin("other", ""); cur.after = true; cur.said = after[1]; cur.missing = missingWords(after[1]); if (after[2].trim()) cur.text.push(after[2]); return; }
             if (lab[2]) cur.text.push(lab[2]);
             return;
           }
@@ -590,7 +595,7 @@
     var counts = {};
     var split = [];
     raw.forEach(function (c) {
-      var every = partsOf(c.lines).map(function (pt) { return { kind: pt.kind, who: pt.who, dash: !!pt.dash, chev: !!pt.chev, br: !!pt.br, odd: !!pt.odd, resume: !!pt.resume, sung: !!pt.sung, said: pt.said, text: pt.text.join(" ") }; });
+      var every = partsOf(c.lines).map(function (pt) { return { kind: pt.kind, who: pt.who, dash: !!pt.dash, chev: !!pt.chev, br: !!pt.br, odd: !!pt.odd, resume: !!pt.resume, sung: !!pt.sung, said: pt.said, missing: !!pt.missing, text: pt.text.join(" ") }; });
       var ps = every.filter(function (pt) { return /[\p{L}\p{N}]/u.test(cleanText(pt.text)); });
       // A voice with no words of its own here ("[man]" in a subtitle of its
       // own, or last in one): the next unmarked words are theirs.
@@ -607,7 +612,9 @@
       // Missing words with nothing else in their part ("[inaudible]" in a
       // subtitle of its own): no cue, but the next cue starts with the mark,
       // so no line reaches across it.
-      var missingIn = function (pt) { return cleanText(pt.text).indexOf(MISSING) >= 0; };
+      // (A voice whose words are missing, "[coach's mic cuts out]", says so
+      // in its part, not in its words.)
+      var missingIn = function (pt) { return pt.missing || cleanText(pt.text).indexOf(MISSING) >= 0; };
       if (!ps.length) {
         if (every.some(missingIn)) split.push({ missing: true });
         if (marker) split.push(marker);
@@ -625,6 +632,7 @@
       var k = 0;
       every.forEach(function (pt) {
         if (ps.indexOf(pt) < 0) { if (missingIn(pt)) split.push({ missing: true }); return; }
+        if (pt.missing && cleanText(pt.text).indexOf(MISSING) < 0) split.push({ missing: true });
         var a = c.s == null ? null : Math.round(c.s + ((c.e - c.s) * acc) / all);
         acc += n[k];
         var b = c.s == null ? null : k === ps.length - 1 ? c.e : Math.round(c.s + ((c.e - c.s) * acc) / all);

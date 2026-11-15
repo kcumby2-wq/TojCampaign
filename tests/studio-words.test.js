@@ -486,6 +486,13 @@ test("other voices are nobody's however a file marks them: >>, a name in bracket
     p = TP.parse(S("COACH: We were down by ten. " + mid + " the whole team showed up.", "COACH: Yes."));
     assert.equal(TP.find(TP.only(p.cues, "COACH"), 1, 1, "down by ten. the whole team").why, "missing_words", mid);
   }
+  // Missing words that name someone: a voice, and still a mark, in a subtitle of its own or on a line of its own.
+  for (const mid of ["[coach's mic cuts out]", "[interviewer mumbling]", "[man speaking Spanish]", "[reporter's audio drops out]"]) {
+    p = TP.parse(S("COACH: We were down by ten.", mid, "COACH: the whole team showed up.", "INTERVIEWER: Why?"));
+    assert.equal(TP.find(TP.only(p.cues, "COACH"), 1, 2, "down by ten. the whole team").why, "missing_words", mid);
+    p = TP.parse(S("COACH: We were down by ten.", mid + "\nCOACH: the whole team showed up.", "INTERVIEWER: Why?"));
+    assert.equal(TP.find(TP.only(p.cues, "COACH"), 1, 2, "down by ten. the whole team").why, "missing_words", mid);
+  }
   // "[in Spanish]" before the words is a note: they're there.
   p = TP.parse(S("We were down by ten.", "[in Spanish] the whole team showed up."));
   assert.equal(TP.find(TP.only(p.cues, null), 1, 2, "down by ten. the whole team").ok, true);
