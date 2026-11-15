@@ -398,14 +398,38 @@ function tagSpans(raw) {
 // A text's words, each with where it stands: lower case, with a capital or
 // not, at a sentence's start (or a line's, or after a colon or a dash), in a
 // tag, and where camelCase starts a word inside it ("JordanStrong").
+// A season or a month: two or four digits beside it are a year ("#summer24",
+// "#may2027").
+const SEASON_WORDS = new Set("spring summer fall autumn winter january february march april may june july august september october november december".split(" "));
+// A file name or a link: a number in it is a take, a version, a page.
+const FILE_OR_LINK = (s) => /\/|:\/\/|\.[\p{L}\p{N}]{2,4}$/u.test(s.replace(/[^\p{L}\p{N}]+$/u, "")) || /\.(?:com|net|org|io|tv|co|us|me|app|ly)(?![\p{L}])/iu.test(s);
+// A social profile in a link: the path's first word is a handle
+// ("instagram.com/grace.hoops", "tiktok.com/@grace.hoops").
+const SOCIAL_PATH = /(?:instagram|tiktok|twitter|x|facebook|fb|youtube|snapchat|threads|hudl|linkedin)\.(?:com|net)\/(?:@)?/giu;
+// Family and role words: a four-letter plural right before one at a
+// sentence's start is a possessive ("Johns dad", "Annas mom").
+const FAMILY_NEXT = new Set("mom mum mother mama dad father papa sister sis brother bro parents parent family grandma grandpa nana aunt uncle coach first".split(" "));
 function wordsOf(raw) {
   const spans = tagSpans(raw);
   // A line of three words or more in Title Case or capitals: a capital there
   // says nothing ("Add Two Cams For The Wides", "WHAT WORKED: TWO CAMS").
+  // A word right after a shout-out's own words is a name there, as graphics
+  // read it ("Go Hope Go", "THANKS GRACE FOR THE ASSIST", "Shout Out To
+  // Hope"): shout is "go" after go or hey, "lead" after the others.
   const heads = [];
+  const shout = new Map();
   let at = 0;
   for (const line of raw.split("\n")) {
-    if (titleCase(line)) heads.push([at, at + line.length]);
+    if (titleCase(line)) {
+      heads.push([at, at + line.length]);
+      const toks = [];
+      for (const t of line.matchAll(/[\p{L}\p{M}]+/gu)) {
+        if (t[0].toLowerCase() === "s" && /['’]$/u.test(line.slice(0, t.index))) continue;
+        toks.push([at + t.index, t[0].toLowerCase()]);
+      }
+      const ws = toks.map((x) => x[1]);
+      ws.forEach((w, i) => { if (shoutLead(ws, i)) shout.set(toks[i][0], ws[i - 1] === "go" || ws[i - 1] === "hey" ? "go" : "lead"); });
+    }
     at += line.length + 1;
   }
   const out = [];
@@ -421,18 +445,50 @@ function wordsOf(raw) {
     for (let k = 1; k < tok.length; k++) if (/\p{Lu}/u.test(tok[k]) && /\p{Ll}/u.test(tok[k - 1])) inner.push(k);
     const sp = spans.find(([a, b]) => m.index >= a && m.index < b);
     const head = heads.some(([a, b]) => m.index >= a && m.index < b);
-    // Digits right beside it that aren't a year ("hunter23"; not "summer2027").
-    const after = /^\d+/.exec(raw.slice(m.index + tok.length));
-    const before = /\d+$/.exec(raw.slice(Math.max(0, m.index - 6), m.index));
-    const year = (d) => /^(?:19|20)\d\d$/.test(d);
+    const run = sp ? raw.slice(sp[0], sp[1]) : "";
+    const end = m.index + tok.length;
+    // A jersey number or a class year right beside it, in a tag, a handle or
+    // a run of its own ("#hunter23", "#23hunter", "#hunter_23", "hunter-23",
+    // "#hunter2027"), where the digits end the run or come before the word
+    // ("#hope4life" is a phrase). Not in a file name or a link (a take, a
+    // version: "chase2.mp4"), nor a year after a season or a month
+    // ("#summer24", "#autumn2026").
+    const after = sp ? /^[_-]?(\d+)(?=[^\p{L}\p{N}]*$)/u.exec(raw.slice(end, sp[1])) : null;
+    const before = sp ? /(?:^|[^\p{N}])(\d+)[_-]?$/u.exec(raw.slice(sp[0], m.index)) : null;
+    const yearHere = (d) => SEASON_WORDS.has(tok.toLowerCase()) && (d.length === 2 || d.length === 4);
+    const number = !!sp && !FILE_OR_LINK(run) && ((!!after && !yearHere(after[1])) || (!!before && !yearHere(before[1])));
+    // A handle's first word, and the rest of the handle after it: "@grace"
+    // (nothing), "@grace.hoops" (["hoops"]); the same for a social link's
+    // path ("instagram.com/grace.hoops").
+    let handle = false;
+    let rest = [];
+    if (sp) {
+      const lead = /^[^\p{L}\p{N}@]*@/u.exec(run);
+      let from = lead ? sp[0] + lead[0].length : -1;
+      if (from !== m.index) {
+        SOCIAL_PATH.lastIndex = 0;
+        let sm;
+        while ((sm = SOCIAL_PATH.exec(run))) if (sp[0] + sm.index + sm[0].length === m.index) from = m.index;
+      }
+      if (from === m.index) {
+        handle = true;
+        const seg = raw.slice(end, sp[1]).split(/[/?#&\s]/u)[0];
+        rest = seg.split(/[^\p{L}\p{M}\p{N}]+/u).filter(Boolean).map((x) => x.toLowerCase());
+      }
+    }
     out.push({
       low: tok.toLowerCase(),
       cap: /^\p{Lu}/u.test(tok),
       caps: !head && tok.length > 1 && tok === tok.toUpperCase() && /\p{Lu}/u.test(tok),
       head,
-      // The first word of a handle ("@grace.hoops").
-      handle: !!sp && raw[sp[0]] === "@" && m.index === sp[0] + 1,
-      number: (!!after && !year(after[0])) || (!!before && !year(before[0])),
+      // The first word of a handle ("@grace", "@grace.hoops"), and the
+      // handle's words after it.
+      handle,
+      rest,
+      number,
+      shout: shout.get(m.index) || null,
+      at: m.index,
+      end,
       // The run's letters are more than this word ("#hunter23", "@grace.hoops").
       more: !!sp && raw.slice(sp[0], sp[1]).replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, "").length > tok.length,
       start: head || j < 0 || nl || /[.!?:;"“(\[—–-]/u.test(raw[j]),
@@ -440,6 +496,8 @@ function wordsOf(raw) {
       inner,
     });
   }
+  // The word after it on the same line ("Johns dad").
+  out.forEach((w, i) => { const n = out[i + 1]; w.next = n && /^[^\S\n]+$/u.test(raw.slice(w.end, n.at)) ? n.low : null; });
   return out;
 }
 const personKey = (name, minor) => nameParts(name).join(" ") + (minor ? "|m" : "|a");
@@ -591,9 +649,20 @@ function kitNames(textValue, people, { film = [] } = {}) {
           // handle's start or beside a number that isn't a year ("@grace.hoops",
           // "#hunter23"); asked otherwise ("grace_final_v2.mp4", "a chase
           // cam", "#summer2027").
-          else if (e.isMinor && h.tag && h.more && !DATE_WORDS.has(low) && !(e.parts.length > 1 && e.parts.lastIndexOf(low) === e.parts.length - 1)) put(low, h.handle || h.number, true);
+          //   A handle's first word is the name where the rest of the handle
+          //   is a tag's word, a number or another word of their name, and
+          //   where there's no rest ("@grace", "@grace.hoops", a profile
+          //   link's path); asked where it's more ("@grace.church").
+          else if (e.isMinor && h.tag && (h.more || h.handle) && !DATE_WORDS.has(low) && !(e.parts.length > 1 && e.parts.lastIndexOf(low) === e.parts.length - 1)) {
+            const ownRest = h.handle && h.rest.every((x) => KIT_TAG_WORDS.has(x) || RUN_CLEAR.has(x) || /^\p{N}+$/u.test(x) || x === "s" || e.parts.includes(x));
+            put(low, ownRest || h.number, true);
+          }
           // An everyday word: in lower case, it's the word.
           else if (!h.cap) continue;
+          // Right after a shout-out's words in a Title Case or capitals line
+          // ("Go Hope Go", "THANKS GRACE FOR THE ASSIST"): a minor's name,
+          // as graphics read it; after go or hey, a first name only.
+          else if (h.shout && e.isMinor && !DATE_WORDS.has(low) && !(h.shout === "go" && e.parts.length > 1 && e.parts.lastIndexOf(low) === e.parts.length - 1)) put(low, true, true);
           // "Hope never quits": asked ("He was great": a two-letter one
           // starts sentences all the time).
           else if (h.start) {
@@ -617,6 +686,9 @@ function kitNames(textValue, people, { film = [] } = {}) {
       const eng = englishWords().has(low);
       const capMid = hits.some((h) => (h.cap && !h.start) || h.caps);
       const capAny = hits.some((h) => h.cap);
+      // At a sentence's start, right before a family or role word ("Johns
+      // dad held the reflector", "Annas mom asked"): a possessive.
+      const family = hits.some((h) => h.cap && h.start && h.next && FAMILY_NEXT.has(h.next));
       for (const st of plainStems(low)) {
         const n = Array.from(st).length;
         if (n < 3) continue;
@@ -628,7 +700,7 @@ function kitNames(textValue, people, { film = [] } = {}) {
             if (DATE_WORDS.has(st) || !capAny) continue;
             put(st, capMid, true);
           } else if (!eng || capMid || (!capAny && n >= 5)) put(st, true, true);
-          else if (capAny) put(st, n >= 5, true);
+          else if (capAny) put(st, n >= 5 || family, true);
         }
       }
     }
@@ -1117,7 +1189,7 @@ const titleCaseLine = (line) => titleCase(line);
 // Hope"). In a hashtag, its words read the same way, all but the last-word
 // rule ("#HappyBirthdayGrace", "#GoHopeGo"; "#NeverLoseHope" is asked about).
 const SHOUT_LEAD = new Set("thanks congrats congratulations birthday dear hey coach mr mrs ms miss".split(" "));
-const SHOUT_LEAD_2 = ["thank you", "love you", "miss you", "proud of you"].map((x) => x.split(" "));
+const SHOUT_LEAD_2 = ["thank you", "love you", "miss you", "proud of you", "shout out to", "shoutout to", "shout out"].map((x) => x.split(" "));
 function shoutLead(words, i) {
   if (!i) return false;
   if (SHOUT_LEAD.has(words[i - 1])) return true;

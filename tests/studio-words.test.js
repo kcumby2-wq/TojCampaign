@@ -432,6 +432,53 @@ test("other voices are nobody's however a file marks them: >>, a name in bracket
   // Written once in a file with no labels, a day, a game or a score before a colon is words.
   p = TP.parse(S("I ran this drill in 2017.", "Day One: nobody believed in us.", "Touchdown: that's all I remember.", "Producer: Why that year?", "That was the year."));
   assert.deepEqual(TP.only(p.cues, null).map((c) => c.t), ["I ran this drill in 2017.", "Day One: nobody believed in us.", "Touchdown: that's all I remember.", "That was the year."]);
+  // A name with no words, last in its subtitle ("[MAN]", "INTERVIEWER:"): the next words are theirs.
+  p = TP.parse(S("COACH: I ran it.", "[MAN]", "Why that year?", "COACH: Because."));
+  assert.deepEqual(TP.only(p.cues, "COACH").map((c) => c.t), ["I ran it.", "Because."]);
+  assert.deepEqual(TP.only(p.cues, "MAN").map((c) => c.t), ["Why that year?"]);
+  p = TP.parse(S("I ran it.", "[REFEREE]", "Foul on number three.", "And that was it."));
+  assert.deepEqual(TP.only(p.cues, null).map((c) => c.t), ["I ran it.", "And that was it."]);
+  for (const mid of [["INTERVIEWER:\nWhy that year?"], ["INTERVIEWER:", "Why that year?"]]) {
+    p = TP.parse(S("COACH: I ran it.", ...mid, "COACH: Because.", "INTERVIEWER: Ok."));
+    assert.deepEqual(TP.only(p.cues, "COACH").map((c) => c.t), ["I ran it.", "Because."], mid.join(" | "));
+    assert.deepEqual(TP.only(p.cues, "INTERVIEWER").map((c) => c.t), ["Why that year?", "Ok."], mid.join(" | "));
+  }
+  // A sound a person makes, alone in its subtitle, holds no words: the voice goes on, and it's listed as a note.
+  p = TP.parse(S("COACH: We ran it every Sunday.", "[crowd groans]", "Even in the rain.", "[man clears throat]", "Not once.", "INTERVIEWER: Why?", "COACH: Because."));
+  assert.deepEqual(TP.only(p.cues, "COACH").map((c) => c.t), ["We ran it every Sunday.", "Even in the rain.", "Not once.", "Because."]);
+  assert.deepEqual(p.brackets.map((b) => [b.key, b.read]), [["crowd groans", "note"], ["man clears throat", "note"]]);
+  p = TP.parse(S("We ran it every Sunday.", "[referee whistles]", "Nobody missed one.", "[man] Why?", "Because."));
+  assert.deepEqual(TP.only(p.cues, null).map((c) => c.t), ["We ran it every Sunday.", "Nobody missed one.", "Because."]);
+  // Any other voice alone in its subtitle speaks, and holds the next words, however it's written.
+  for (const b of ["voice-over", "man on phone", "man over intercom", "announcer over PA", "man continues", "man speaking Spanish", "man mumbling", "fan in stands", "sportscaster", "play-by-play", "crowd", "radio"]) {
+    p = TP.parse(S("COACH: I ran it.", `[${b}]`, "Why that year?", "COACH: Because."));
+    assert.deepEqual(TP.only(p.cues, "COACH").map((c) => c.t), ["I ran it.", "Because."], b);
+    assert.equal(p.brackets.find((x) => x.key === b.toLowerCase()).read !== "note", true, b);
+  }
+  // A line's leading notes don't hide its mark.
+  p = TP.parse(S("COACH: I ran it.", "[laughs] INTERVIEWER: Why that year?", "COACH: Because."));
+  assert.deepEqual(TP.only(p.cues, "COACH").map((c) => c.t), ["I ran it.", "Because."]);
+  p = TP.parse(S("COACH: I ran it.", "[man laughing]\n(laughing) - Good one.", "COACH: Because."));
+  assert.deepEqual(TP.only(p.cues, "COACH").map((c) => c.t), ["I ran it.", "Because."]);
+  // However many notes a line starts with.
+  assert.equal(TP.parse(S("COACH: I ran it.", "[kids laughing]\n" + "[sic]".repeat(20000) + " Same cones.", "COACH: Because.")).ok, true);
+  // The editor's "Someone speaking" makes one hold the next words.
+  p = TP.parse(S("COACH: I ran it.", "[man coughs]", "Why that year?", "COACH: Because."), { readAs: { "man coughs": "voice" } });
+  assert.deepEqual(TP.only(p.cues, "COACH").map((c) => c.t), ["I ran it.", "Because."]);
+  // A note in brackets, a minus before a digit, an em dash in lower case don't mark a line:
+  // people heard above it are what's said there.
+  for (const nx of ["[in Spanish] ¡Buena, coach!", "[sarcastically] Good one, coach.", "-5 degrees out here, coach!", "—and then you scored, coach!"]) {
+    p = TP.parse(S("COACH: I ran it.", "[man laughing]\n" + nx, "COACH: Because."));
+    assert.deepEqual(TP.only(p.cues, "COACH").map((c) => c.t), ["I ran it.", "Because."], nx);
+    assert.equal(p.brackets.find((b) => b.key === "man laughing").read, "voice", nx);
+  }
+  // A voice tag on the next line marks it; the people heard are a note, and the list says so where its reading hinges on that line.
+  p = TP.parse(S("COACH: I ran it.", "[kids laughing]\n<v Coach>Same cones.", "COACH: Because."));
+  assert.deepEqual(p.brackets.map((b) => [b.key, b.read, b.hinge]), [["kids laughing", "note", true]]);
+  // The list reads a bracket where the parse does: on the piece a line is cut into.
+  p = TP.parse(S("COACH: I ran it.", "COACH: Same field every week. [crowd cheering]", "And we kept coming back.", "INTERVIEWER: Why?"));
+  assert.deepEqual(p.brackets.map((b) => [b.key, b.read, b.alone]), [["crowd cheering", "note", false]]);
+  assert.deepEqual(TP.only(p.cues, "COACH").map((c) => c.t), ["I ran it.", "Same field every week.", "And we kept coming back."]);
 });
 
 test("a minor's three-letter name run into a tag or camelCase is masked and read; in an ordinary word it's the word", async () => {

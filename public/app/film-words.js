@@ -255,6 +255,7 @@
     too_many_cues: "That's more than 5,000 lines: split the transcript.",
     too_long: "That transcript is too long for one go: split it.",
     past_ten_hours: "Its timecodes run past ten hours. Export it again with the timeline starting at 00:00:00:00 or 01:00:00:00.",
+    unreadable: "This file couldn't be read on this phone. Export it again from Resolve as subtitles (.srt).",
   };
   async function addTranscript(id) {
     if (!F().guard()) return;
@@ -298,7 +299,10 @@
               return '<button type="button" class="btn small ' + (on ? "" : "soft") + '" aria-pressed="' + on + '" data-bk="' + i + '" data-as="' + o[0] + '">' + h(o[1]) + "</button>";
             }).join("") + "</div></div>";
           };
-          var decide = bks.filter(function (b) { return b.read !== "note" || !b.alone || b.set; });
+          // Notes on lines of their own fold away, except people heard whose
+          // reading hinges on the line after them ("[kids laughing]" before
+          // "COACH: …"): that's worth a look.
+          var decide = bks.filter(function (b) { return b.read !== "note" || !b.alone || b.set || b.hinge; });
           var alone = bks.filter(function (b) { return decide.indexOf(b) < 0; });
           body += '<details class="card tight"' + (s.openBk ? " open" : "") + ' id="bkBox"><summary class="name" style="font-size:15px;cursor:pointer;min-height:32px;display:flex;align-items:center">' + h("Brackets in this file (" + bks.length + "): check how each was read") + '</summary><p class="sub" style="margin:4px 0 8px">' + h("Someone speaking: their words stay on this phone. A note (a sound, how it's said): the speaker's words go on past it. Change any that's wrong and the file is read again.") + '</p><div style="display:flex;flex-direction:column;gap:10px">' + decide.map(row).join("") + "</div>" +
             (alone.length ? '<details style="margin-top:12px"' + (s.openAlone ? " open" : "") + ' id="bkAlone"><summary class="sub" style="cursor:pointer;min-height:32px;display:flex;align-items:center">' + h(alone.length + " note" + (alone.length > 1 ? "s" : "") + " on lines of their own (nothing after them on the line)") + '</summary><div style="display:flex;flex-direction:column;gap:10px;margin-top:8px">' + alone.map(row).join("") + "</div></details>" : "") +
@@ -338,6 +342,10 @@
       // back to the choice, so the next arrow key works too.
       if (s.focusBk) {
         var backBk = document.querySelector('[data-bk="' + s.focusBk[0] + '"][data-as="' + s.focusBk[1] + '"]');
+        // The choice moved it into the folded notes: open them, so the focus
+        // stays on it.
+        var fold = backBk && backBk.closest("details:not([open])");
+        while (fold) { fold.open = true; if (fold.id === "bkAlone") s.openAlone = true; if (fold.id === "bkBox") s.openBk = true; fold = fold.parentElement && fold.parentElement.closest("details:not([open])"); }
         if (backBk) backBk.focus();
         s.focusBk = null;
       }
@@ -348,7 +356,9 @@
       }
     }
     function read(keep) {
-      var r = P().parse(s.text, { fps: s.fps, readAs: s.readAs });
+      var r;
+      // Whatever's in the file, the screen says something.
+      try { r = P().parse(s.text, { fps: s.fps, readAs: s.readAs }); } catch (e) { r = { ok: false, error: "unreadable" }; }
       s.parsed = r;
       if (r.ok) {
         // One voice in the whole file, and it's named: that's the speaker.
@@ -381,7 +391,8 @@
           if (want === "speaker") delete s.readAs[bk.key];
           else s.readAs[bk.key] = want;
           // Back to how the file reads it on its own: no call kept.
-          var plain = P().parse(s.text, { fps: s.fps, readAs: Object.assign({}, s.readAs, (function () { var o = {}; o[bk.key] = undefined; return o; })()) });
+          var plain;
+          try { plain = P().parse(s.text, { fps: s.fps, readAs: Object.assign({}, s.readAs, (function () { var o = {}; o[bk.key] = undefined; return o; })()) }); } catch (e) { plain = { ok: false }; }
           var own = plain.ok && (plain.brackets || []).find(function (x) { return x.key === bk.key; });
           if (own && own.read === want) delete s.readAs[bk.key];
           s.openBk = true;
