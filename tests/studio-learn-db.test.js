@@ -536,7 +536,8 @@ test("what every film shares is read against every card for names, not for ordin
     ["Coach Will Explain The Drill", "Will Ruiz", "will"], ["Thanks Summer Camp Staff", "Summer Day", "summer"], ["Shout Out To Grace Church", "Grace Lin", "grace"],
     ["Thank You Hope Center Volunteers", "Hope Field", "hope"], ["Dear Summer Interns", "Summer Day", "summer"],
     ["Thanks Grace Chapel For The Space", "Grace Lin", "grace"], ["Thanks Hope Lodge For Hosting", "Hope Field", "hope"], ["Thanks Chase Bank For Sponsoring", "Chase Hale", "chase"],
-    ["Thanks Rose Bowl Crew", "Rose Ruiz", "rose"], ["Thanks Summer Session Coaches", "Summer Day", "summer"], ["Thanks Willow Creek Parks", "Willow Ruiz", "willow"]]) assert.deepEqual(U.kitNames(t, m(n)), { sure: [], maybe: [w], minor: [] }, t);
+    ["Thanks Rose Bowl Crew", "Rose Ruiz", "rose"], ["Thanks Summer Session Coaches", "Summer Day", "summer"], ["Thanks Willow Creek Parks", "Willow Ruiz", "willow"],
+    ["Happy Birthday Mark Twain Elementary", "Mark Diaz", "mark"], ["Hey Will You Send The Files", "Will Ruiz", "will"]]) assert.deepEqual(U.kitNames(t, m(n)), { sure: [], maybe: [w], minor: [] }, t);
   // "first" and "coach" after a plural are the camera's, the lens's: asked.
   for (const [t, n, w] of [["Lens first, then mount the cage", "Len Ruiz", "len"], ["Cams first, then the lights", "Cam Ruiz", "cam"], ["Jeans first, then boots", "Jean Ruiz", "jean"],
     ["Levis first then boots", "Levi Ruiz", "levi"], ["Lens coach said to stop down", "Len Ruiz", "len"]]) assert.deepEqual(U.kitNames(t, m(n)), { sure: [], maybe: [w], minor: [] }, t);

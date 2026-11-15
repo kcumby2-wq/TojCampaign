@@ -427,6 +427,9 @@ const SHOUT_ENDS = new Set("for and from go &".split(" "));
 // counts unless a place's or a group's word follows ("Thanks Summer Camp
 // Staff", "Shout Out To Grace Church").
 const SHOUT_TITLES = new Set("coach miss mr mrs ms".split(" "));
+// "Hey Will You Send The Files": a verb before a pronoun, not a name.
+const MODAL = new Set("will can shall might must".split(" "));
+const PRONOUN = new Set("you we i they he she it me us".split(" "));
 const SHOUT_PLACE = new Set(("camp camps church center centre staff interns volunteers school schools academy league club park ministry ministries " +
   "period practice program clinic foundation hospital university college high middle elementary institute festival fest series classic cup " +
   "tournament showcase team teams crew group chapel fellowship baptist lutheran methodist catholic christian community prep lodge house pantry " +
@@ -699,7 +702,8 @@ function kitNames(textValue, people, { film = [] } = {}) {
           // ("Go Hope Go", "THANKS GRACE FOR THE ASSIST"): a minor's name,
           // as graphics read it; after go or hey, a first name only.
           else if (h.shout && e.isMinor && !DATE_WORDS.has(low) && !(h.shout === "go" && e.parts.length > 1 && e.parts.lastIndexOf(low) === e.parts.length - 1)
-            && (!h.next || SHOUT_ENDS.has(h.next) || e.parts.includes(h.next) || (h.shout !== "title" && !SHOUT_PLACE.has(h.next)))) put(low, true, true);
+            && (!h.next || SHOUT_ENDS.has(h.next) || e.parts.includes(h.next)
+              || (h.shout !== "title" && !SHOUT_PLACE.has(h.next) && !SHOUT_PLACE.has(h.next2) && !(MODAL.has(low) && PRONOUN.has(h.next))))) put(low, true, true);
           // "Hope never quits": asked ("He was great": a two-letter one
           // starts sentences all the time).
           else if (h.start) {
