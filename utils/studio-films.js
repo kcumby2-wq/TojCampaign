@@ -415,7 +415,7 @@ const FIRST_OF = new Set("game games season practice day start goal touchdown wi
 // A sport or a position after a handle's first word ("@hunter.football",
 // "@chase.qb1"): the athlete's own handle. "sports", "church", "media" aren't.
 const HANDLE_SPORT = new Set(("football soccer volleyball basketball baseball softball track swim swimming lax lacrosse wrestling cheer golf tennis " +
-  "hockey xc running athlete ath vb bb fb sb qb wr rb te lb db cb ol dl gk pg sg sf pf").split(" "));
+  "hockey xc running athlete ath vb bb fb sb qb wr rb te lb db cb ol dl gk pg sg sf pf wbb mbb wvb wsoc msoc").split(" "));
 // In kit text, a shout-out names someone where the name ends it ("Thanks
 // Grace!", "Go Hope Go", "Thanks Grace For The Assist"), not where it starts
 // a place or a group ("Thanks Summer Camp Staff", "Shout Out To Grace
@@ -429,7 +429,8 @@ const SHOUT_ENDS = new Set("for and from go &".split(" "));
 const SHOUT_TITLES = new Set("coach miss mr mrs ms".split(" "));
 const SHOUT_PLACE = new Set(("camp camps church center centre staff interns volunteers school schools academy league club park ministry ministries " +
   "period practice program clinic foundation hospital university college high middle elementary institute festival fest series classic cup " +
-  "tournament showcase team teams crew group").split(" "));
+  "tournament showcase team teams crew group chapel fellowship baptist lutheran methodist catholic christian community prep lodge house pantry " +
+  "ranch kitchen bank field bowl stadium arena gym hall session sessions creek").split(" "));
 // "miss" greets someone only at a line's start or after another greeting,
 // never after "not" ("Do Not Miss Summer Practice").
 const NOT_WORDS = new Set("not dont don't never cant can't wont won't didnt didn't no".split(" "));
