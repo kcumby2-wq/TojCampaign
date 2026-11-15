@@ -517,14 +517,19 @@ test("what every film shares is read against every card for names, not for ordin
     ["KAYLEES DRILL", "Kaylee Ruiz", "kaylee"]]) assert.deepEqual(U.kitNames(t, m(n)).minor, [w], t);
   // At a sentence's start, or in a Title Case or capitals line, a capital
   // says nothing: under five letters (or an everyday word), asked.
-  for (const [t, n, w] of [["Graces dad filmed it", "Grace Long", "grace"], ["Masons mom called", "Mason Hill", "mason"], ["Angels dad filmed it", "Angel Ruiz", "angel"],
+  for (const [t, n, w] of [["Graces are on the left", "Grace Long", "grace"], ["Masons laid the brick", "Mason Hill", "mason"],
     ["Jeans and boots for the shoot", "Jean Ruiz", "jean"], ["Johns are on the left", "John Park", "john"],
     ["Add Two Cams For The Wides", "Cam Ruiz", "cam"], ["WHAT WORKED: TWO CAMS AND THE NEW LENS", "Cam Ruiz", "cam"], ["OUR HOPES WERE HIGH", "Hope Lee", "hope"]]) assert.deepEqual(U.kitNames(t, m(n)), { sure: [], maybe: [w], minor: [] }, t);
   // A four-letter plural at a sentence's start right before a family or role word: the possessive.
-  for (const [t, n, w] of [["Johns dad held the reflector", "John Park", "john"], ["Annas mom asked", "Anna Lee", "anna"], ["NOVAS FIRST GAME", "Nova Diaz", "nova"]]) assert.deepEqual(U.kitNames(t, m(n)).minor, [w], t);
+  for (const [t, n, w] of [["Johns dad held the reflector", "John Park", "john"], ["Annas mom asked", "Anna Lee", "anna"], ["NOVAS FIRST GAME", "Nova Diaz", "nova"],
+    ["Cams mom called about the release", "Cam Ruiz", "cam"], ["Leos dad filmed it", "Leo Park", "leo"], ["Toms sister ran the slate", "Tom Ruiz", "tom"],
+    ["Graces dad filmed it", "Grace Long", "grace"], ["Masons mom called", "Mason Hill", "mason"], ["Angels dad filmed it", "Angel Ruiz", "angel"], ["Willows mom asked for copies", "Willow Park", "willow"]]) assert.deepEqual(U.kitNames(t, m(n)).minor, [w], t);
   // In a Title Case or capitals line, right after a shout-out's words: the name, as graphics read it.
   for (const [t, n, w] of [["Go Hope Go", "Hope Field", "hope"], ["THANKS GRACE FOR THE ASSIST", "Grace Lin", "grace"], ["Shout Out To Hope And The Crew", "Hope Field", "hope"],
-    ["Happy Birthday Faith From The Crew", "Faith Moss", "faith"], ["Thank You Coach Will For The Ride", "Will Ruiz", "will"]]) assert.deepEqual(U.kitNames(t, m(n)).minor, [w], t);
+    ["Happy Birthday Faith From The Crew", "Faith Moss", "faith"], ["Thank You Coach Will For The Ride", "Will Ruiz", "will"],
+    ["Congrats Hope On Signing Day", "Hope Field", "hope"], ["CONGRATS HUNTER ON THE COMMIT", "Hunter Vale", "hunter"], ["Shout Out To Grace On The Win", "Grace Lin", "grace"],
+    ["Big Shout Out To Grace Today", "Grace Lin", "grace"], ["Happy Birthday Hope We Love You", "Hope Field", "hope"], ["Thanks Grace Great Game", "Grace Lin", "grace"],
+    ["Proud Of You Grace Keep Going", "Grace Lin", "grace"]]) assert.deepEqual(U.kitNames(t, m(n)).minor, [w], t);
   assert.deepEqual(U.kitNames("Go Green Go White Tonight", m("Ava Green")).sure, [], "after go, a surname is a chant as often");
   // Not where the word starts a place or a group, a verb follows, or "miss" isn't a greeting: asked.
   for (const [t, n, w] of [["Do Not Miss Summer Practice", "Summer Day", "summer"], ["Never Miss Chase Cam Checks", "Chase Hale", "chase"], ["Miss Grace Period Deadlines", "Grace Lin", "grace"],

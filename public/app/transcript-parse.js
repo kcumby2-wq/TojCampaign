@@ -70,8 +70,15 @@
   // Words the transcript says are missing ("[inaudible]", "[crosstalk]"):
   // kept as a mark a line never reaches across.
   var MISSING = "\u27e8\u2026\u27e9";
-  // In brackets or parentheses ("[inaudible]", "(crosstalk)").
-  var MISSING_RE = /[\[(]\s*(?:inaudible|unintelligible|crosstalk|cross[- ]talk|overlapping|overtalk|indistinct|unclear|garbled|muffled|\?+)[^\[\]()]{0,40}[\])]/gi;
+  // Missing words, in brackets or parentheses, the word anywhere in them
+  // ("[inaudible]", "(crosstalk)", "[rest inaudible]", "[mumbles]",
+  // "[speaking Spanish]", "[audio cuts out]"). "[in Spanish]" before the
+  // words is a note: they're there.
+  var MISSING_WORD = "inaudible|unintelligible|crosstalk|cross[- ]talk|overlapping|overtalk|indistinct\\w*|unclear|garbled|muffled|mumbl\\w*|mutter\\w*" +
+    "|speak(?:s|ing)?\\s+(?:in\\s+)?(?:a\\s+)?(?:foreign|another|native|other)\\s+language|foreign\\s+language" +
+    "|speak(?:s|ing)?\\s+(?:in\\s+)?(?:spanish|french|portuguese|german|italian|chinese|mandarin|cantonese|japanese|korean|arabic|russian|hindi|vietnamese|tagalog|polish|haitian|creole|swahili|somali|amharic|farsi|persian|turkish|greek|hebrew|urdu|punjabi|bengali|ukrainian|navajo|asl|sign\\s+language)" +
+    "|(?:audio|sound|mic)\\s+(?:cuts?|cutting|drops?|dropping|dropped|goes|went|cuts)\\s+out|no\\s+audio|audio\\s+(?:lost|out|drops?|dropout)|words?\\s+(?:lost|cut\\s+off)";
+  var MISSING_RE = new RegExp("[\\[(](?:\\s*\\?+[^\\[\\]()]{0,40}|[^\\[\\]()]{0,40}?\\b(?:" + MISSING_WORD + ")\\b[^\\[\\]()]{0,40})[\\])]", "gi");
   // A pause this long between two of a speaker's cues: a line doesn't reach
   // across it (something may have been said in between and cut).
   var PAUSE_MS = 3000;
@@ -179,6 +186,11 @@
   var SAYING = /\b(?:say\w*|said|shout\w*|yell\w*|chant\w*|call\w*|holler\w*|ask\w*|answer\w*|speak\w*|talk(?:s|ing)?(?! indistinct)|whisper\w*|scream\w*|reply\w*|repl(?:y|ies)|respond\w*|cheer\w*|counting|instruct\w*|sing\w*)\b/i;
   // Somebody else heard from afar ("[distant shouting]", "[muffled talking]").
   var DISTANT_VOICE = /^(?:distant|faint|far-off|faraway|muffled|background|unseen|off-?screen|off-?camera)\s+(?:shout|yell|call|holler|chant|talk|speak|scream|whisper|conversation|question|reply|answer)\w*$/i;
+  // Missing words in a bracket's own words ("coach's mic cuts out").
+  function missingWords(inside) {
+    MISSING_RE.lastIndex = 0;
+    return MISSING_RE.test("[" + String(inside || "") + "]");
+  }
   // A sound a person makes that isn't words ("[crowd groans]", "[man clears
   // throat]", "[referee whistles]"): with no words of its own, it holds
   // none, and the voice goes on. Any other voice speaks ("[man]",
@@ -273,7 +285,22 @@
   function noteWord(t) {
     return soundNote(t) || SOUND_NOUN.test(t) || TONE.test(t) || FRAME_NOTE.test(t);
   }
+  // How a bracket reads depends on its words only: kept for the next time
+  // (a file repeats its brackets), a few thousand at most.
+  var READ_MEMO = new Map();
   function voiceRead(t) {
+    var hit = READ_MEMO.get(t);
+    if (hit !== undefined) return hit;
+    var v = voiceReadNow(t);
+    if (READ_MEMO.size > 5000) READ_MEMO.clear();
+    READ_MEMO.set(t, v);
+    return v;
+  }
+  function voiceReadNow(t) {
+    // Someone whose words are missing ("[man speaking indistinctly]", "[man
+    // mumbling]"): a voice, and its mark stays in the words.
+    MISSING_RE.lastIndex = 0;
+    if (MISSING_RE.test("[" + t + "]") && t.split(/[\s,]+/).some(function (w) { w = w.replace(/['’]s$/i, ""); return PERSON.test(w) || ROLE_WORD.test(w); })) return "person";
     if (manner(t) || FRAME_NOTE.test(t) || TONE.test(t)) return "";
     if (THROUGH.test(t)) return "person";
     if (ABOUT_SPEAKER.test(t)) return "";
@@ -461,7 +488,7 @@
             if (bw === "label") {
               begin("label", br[1].trim().replace(/\s+/g, " ")); cur.dash = !!dash; cur.chev = !!chev; cur.br = true; cur.odd = false; cur.start = starts;
             } else {
-              begin("other", ""); cur.dash = !!dash; cur.chev = !!chev; cur.said = br[1];
+              begin("other", ""); cur.dash = !!dash; cur.chev = !!chev; cur.said = br[1]; cur.missing = missingWords(br[1]);
             }
             if (br[2].trim()) cur.text.push(br[2]);
             return;
@@ -478,7 +505,7 @@
             // A voice right after the label ("COACH: [man] Why that year?"):
             // the label is counted, the words are that other voice's.
             var after = BRACKET.exec(lab[2]);
-            if (after && voiceOf(after[1]) === "person") { begin("other", ""); cur.after = true; cur.said = after[1]; if (after[2].trim()) cur.text.push(after[2]); return; }
+            if (after && voiceOf(after[1]) === "person") { begin("other", ""); cur.after = true; cur.said = after[1]; cur.missing = missingWords(after[1]); if (after[2].trim()) cur.text.push(after[2]); return; }
             if (lab[2]) cur.text.push(lab[2]);
             return;
           }
@@ -568,7 +595,7 @@
     var counts = {};
     var split = [];
     raw.forEach(function (c) {
-      var every = partsOf(c.lines).map(function (pt) { return { kind: pt.kind, who: pt.who, dash: !!pt.dash, chev: !!pt.chev, br: !!pt.br, odd: !!pt.odd, resume: !!pt.resume, sung: !!pt.sung, said: pt.said, text: pt.text.join(" ") }; });
+      var every = partsOf(c.lines).map(function (pt) { return { kind: pt.kind, who: pt.who, dash: !!pt.dash, chev: !!pt.chev, br: !!pt.br, odd: !!pt.odd, resume: !!pt.resume, sung: !!pt.sung, said: pt.said, missing: !!pt.missing, text: pt.text.join(" ") }; });
       var ps = every.filter(function (pt) { return /[\p{L}\p{N}]/u.test(cleanText(pt.text)); });
       // A voice with no words of its own here ("[man]" in a subtitle of its
       // own, or last in one): the next unmarked words are theirs.
@@ -585,7 +612,9 @@
       // Missing words with nothing else in their part ("[inaudible]" in a
       // subtitle of its own): no cue, but the next cue starts with the mark,
       // so no line reaches across it.
-      var missingIn = function (pt) { return cleanText(pt.text).indexOf(MISSING) >= 0; };
+      // (A voice whose words are missing, "[coach's mic cuts out]", says so
+      // in its part, not in its words.)
+      var missingIn = function (pt) { return pt.missing || cleanText(pt.text).indexOf(MISSING) >= 0; };
       if (!ps.length) {
         if (every.some(missingIn)) split.push({ missing: true });
         if (marker) split.push(marker);
@@ -603,6 +632,7 @@
       var k = 0;
       every.forEach(function (pt) {
         if (ps.indexOf(pt) < 0) { if (missingIn(pt)) split.push({ missing: true }); return; }
+        if (pt.missing && cleanText(pt.text).indexOf(MISSING) < 0) split.push({ missing: true });
         var a = c.s == null ? null : Math.round(c.s + ((c.e - c.s) * acc) / all);
         acc += n[k];
         var b = c.s == null ? null : k === ps.length - 1 ? c.e : Math.round(c.s + ((c.e - c.s) * acc) / all);
@@ -670,7 +700,8 @@
       if (p.s != null && p.e != null && p.e > MAX_MS) { late++; continue; }
       if (p.s == null || p.e == null || p.s < 0 || p.e < p.s) continue;
       if (carry) { if (tx.indexOf(MISSING) !== 0) tx = MISSING + " " + tx; carry = false; }
-      if (tx.length > MAX_CUE) return { ok: false, error: "cue_too_long", at: cues.length + 1 };
+      // A mark the line starts with isn't counted in its length.
+      if ((tx.indexOf(MISSING + " ") === 0 ? tx.length - MISSING.length - 1 : tx.length) > MAX_CUE) return { ok: false, error: "cue_too_long", at: cues.length + 1 };
       total += tx.length;
       cues.push({ n: cues.length + 1, s: p.s, e: p.e, t: tx, who: who === undefined ? null : who });
     }
@@ -714,7 +745,9 @@
         while ((m = re.exec(l))) {
           var t = m[1].trim().replace(/\s+/g, " ");
           MISSING_RE.lastIndex = 0;
-          if (!t || !/\p{L}/u.test(t) || MISSING_RE.test("[" + t + "]") || /^(?:o\.?\s?s\.?|v\.?\s?o\.?|cont['’]?d\.?)$/i.test(t)) continue;
+          // Missing words aren't listed (they're a mark, not a call), unless
+          // someone is named in them ("[man mumbling]").
+          if (!t || !/\p{L}/u.test(t) || (MISSING_RE.test("[" + t + "]") && voiceRead(t) !== "person") || /^(?:o\.?\s?s\.?|v\.?\s?o\.?|cont['’]?d\.?)$/i.test(t)) continue;
           var k = bracketKey(t);
           // Alone on its line (nothing but marks around it), and alone in
           // the piece the parse reads.

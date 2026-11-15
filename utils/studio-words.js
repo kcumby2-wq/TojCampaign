@@ -103,7 +103,9 @@ function transcriptInput(raw) {
       const s = Math.round(Number(c && c.s));
       const e = Math.round(Number(c && c.e));
       const t = String((c && c.t) || "").replace(/[\u0000-\u001f\u007f]+/g, " ").replace(/\s+/g, " ").trim();
-      if (!Number.isFinite(s) || !Number.isFinite(e) || s < 0 || e < s || e > TP.MAX_MS || !t || t.length > TP.MAX_CUE) {
+      // A missing-words mark the cue starts with isn't counted in its length.
+      const len = t.startsWith(TP.MISSING + " ") ? t.length - TP.MISSING.length - 1 : t.length;
+      if (!Number.isFinite(s) || !Number.isFinite(e) || s < 0 || e < s || e > TP.MAX_MS || !t || len > TP.MAX_CUE) {
         errors.push("cues");
         break;
       }

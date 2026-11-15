@@ -421,6 +421,15 @@ const HANDLE_SPORT = new Set(("football soccer volleyball basketball baseball so
 // a place or a group ("Thanks Summer Camp Staff", "Shout Out To Grace
 // Church") or a verb follows ("Coach Will Explain The Drill").
 const SHOUT_ENDS = new Set("for and from go &".split(" "));
+// Before a verb as often as a name ("Coach Will Explain", "Miss Grace Period
+// Deadlines"): after these, the narrow rule above. After a greeting
+// ("Congrats Hope On Signing Day", "Thanks Grace Great Game"), the name
+// counts unless a place's or a group's word follows ("Thanks Summer Camp
+// Staff", "Shout Out To Grace Church").
+const SHOUT_TITLES = new Set("coach miss mr mrs ms".split(" "));
+const SHOUT_PLACE = new Set(("camp camps church center centre staff interns volunteers school schools academy league club park ministry ministries " +
+  "period practice program clinic foundation hospital university college high middle elementary institute festival fest series classic cup " +
+  "tournament showcase team teams crew group").split(" "));
 // "miss" greets someone only at a line's start or after another greeting,
 // never after "not" ("Do Not Miss Summer Practice").
 const NOT_WORDS = new Set("not dont don't never cant can't wont won't didnt didn't no".split(" "));
@@ -447,7 +456,7 @@ function wordsOf(raw) {
         if (!shoutLead(ws, i)) return;
         if (ws[i - 1] === "miss" && !(i === 1 || (SHOUT_LEAD.has(ws[i - 2]) && !NOT_WORDS.has(ws[i - 2])))) return;
         if (i >= 2 && NOT_WORDS.has(ws[i - 2])) return;
-        shout.set(toks[i][0], ws[i - 1] === "go" || ws[i - 1] === "hey" ? "go" : "lead");
+        shout.set(toks[i][0], ws[i - 1] === "go" || ws[i - 1] === "hey" ? "go" : SHOUT_TITLES.has(ws[i - 1]) ? "title" : "lead");
       });
     }
     at += line.length + 1;
@@ -689,7 +698,7 @@ function kitNames(textValue, people, { film = [] } = {}) {
           // ("Go Hope Go", "THANKS GRACE FOR THE ASSIST"): a minor's name,
           // as graphics read it; after go or hey, a first name only.
           else if (h.shout && e.isMinor && !DATE_WORDS.has(low) && !(h.shout === "go" && e.parts.length > 1 && e.parts.lastIndexOf(low) === e.parts.length - 1)
-            && (!h.next || SHOUT_ENDS.has(h.next) || e.parts.includes(h.next))) put(low, true, true);
+            && (!h.next || SHOUT_ENDS.has(h.next) || e.parts.includes(h.next) || (h.shout !== "title" && !SHOUT_PLACE.has(h.next)))) put(low, true, true);
           // "Hope never quits": asked ("He was great": a two-letter one
           // starts sentences all the time).
           else if (h.start) {
@@ -707,15 +716,20 @@ function kitNames(textValue, people, { film = [] } = {}) {
       //   dad", "NOVAS GAME", "the Mavericks game"), in lower case from five
       //   letters ("two lincolns", as the database reads it), and at a
       //   sentence's start or in a Title Case or capitals line from five
-      //   ("Masons mom"; "Annas mom asked", "Jeans and boots", "TWO CAMS"
-      //   are asked). An everyday-word name ("Graces dad"): with a
-      //   capital mid-sentence, the name; at a sentence's start, asked.
+      //   ("Masons laid"), or before a family word at any length ("Cams
+      //   mom", "Annas mom"); "Jeans and boots", "TWO CAMS" are asked. An
+      //   everyday-word name ("Graces dad"): with a capital mid-sentence or
+      //   before a family word, the name; at a sentence's start otherwise,
+      //   asked.
       const eng = englishWords().has(low);
       const capMid = hits.some((h) => (h.cap && !h.start) || h.caps);
       const capAny = hits.some((h) => h.cap);
       // At a sentence's start, right before a family or role word ("Johns
       // dad held the reflector", "Annas mom asked"): a possessive.
-      const family = hits.some((h) => h.cap && h.start && h.next && (FAMILY_NEXT.has(h.next) || (h.next === "first" && FIRST_OF.has(h.next2))));
+      // Before a family word at any length ("Cams mom called"); before
+      // "first" and a game's word from four letters ("NOVAS FIRST GAME").
+      const family = hits.some((h) => h.cap && h.start && h.next && FAMILY_NEXT.has(h.next));
+      const firstOf = hits.some((h) => h.cap && h.start && h.next === "first" && FIRST_OF.has(h.next2));
       for (const st of plainStems(low)) {
         const n = Array.from(st).length;
         if (n < 3) continue;
@@ -725,9 +739,9 @@ function kitNames(textValue, people, { film = [] } = {}) {
             if (!ordinary(st) && !eng && (n > 3 || capAny)) put(st, true, false);
           } else if (ordinary(st)) {
             if (DATE_WORDS.has(st) || !capAny) continue;
-            put(st, capMid, true);
+            put(st, capMid || family || firstOf, true);
           } else if (!eng || capMid || (!capAny && n >= 5)) put(st, true, true);
-          else if (capAny) put(st, n >= 5 || (family && n >= 4), true);
+          else if (capAny) put(st, n >= 5 || family || (firstOf && n >= 4), true);
         }
       }
     }

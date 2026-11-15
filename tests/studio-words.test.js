@@ -108,6 +108,9 @@ test("transcripts from the browser: cues checked, numbered, counted; names maske
   assert.equal(ok.value.words, 7);
   assert.deepEqual(W.transcriptInput({ cues: [{ s: 5, e: 1, t: "x" }] }).errors, ["cues"]);
   assert.deepEqual(W.transcriptInput({ frames: true, fps: 31, cues: [{ s: 0, e: 1, t: "x" }] }).errors, ["fps"]);
+  // A missing-words mark a cue starts with isn't counted in its length.
+  assert.deepEqual(W.transcriptInput({ cues: [{ s: 0, e: 1, t: `${TP.MISSING} ${"a".repeat(TP.MAX_CUE)}` }] }).errors, []);
+  assert.deepEqual(W.transcriptInput({ cues: [{ s: 0, e: 1, t: "a".repeat(TP.MAX_CUE + 1) }] }).errors, ["cues"]);
   assert.equal(W.whyNot({ is_minor: true }), "adults_first");
   assert.equal(W.whyNot({ speaker: true, cleared_at: "x", covers: {} }), "voice_not_covered");
   assert.equal(W.whyNot({ speaker: true, cleared_at: "x", covers: { voice: true } }), null);
@@ -476,6 +479,26 @@ test("other voices are nobody's however a file marks them: >>, a name in bracket
     p = TP.parse(S("COACH: We were down by ten.", mid, "COACH: the whole team showed up.", "INTERVIEWER: Why?"));
     assert.equal(TP.find(TP.only(p.cues, "COACH"), 1, 2, "down by ten. the whole team").why, "missing_words", mid);
   }
+  // Missing words however they're written: a mark no line reaches across.
+  for (const mid of ["[rest inaudible]", "[words inaudible]", "[partly inaudible]", "[speaks indistinctly]", "[mumbles]", "[speaking Spanish]", "[audio cuts out]"]) {
+    p = TP.parse(S("We were down by ten.", mid, "the whole team showed up."));
+    assert.equal(TP.find(TP.only(p.cues, null), 1, 2, "down by ten. the whole team").why, "missing_words", mid);
+    p = TP.parse(S("COACH: We were down by ten. " + mid + " the whole team showed up.", "COACH: Yes."));
+    assert.equal(TP.find(TP.only(p.cues, "COACH"), 1, 1, "down by ten. the whole team").why, "missing_words", mid);
+  }
+  // Missing words that name someone: a voice, and still a mark, in a subtitle of its own or on a line of its own.
+  for (const mid of ["[coach's mic cuts out]", "[interviewer mumbling]", "[man speaking Spanish]", "[reporter's audio drops out]"]) {
+    p = TP.parse(S("COACH: We were down by ten.", mid, "COACH: the whole team showed up.", "INTERVIEWER: Why?"));
+    assert.equal(TP.find(TP.only(p.cues, "COACH"), 1, 2, "down by ten. the whole team").why, "missing_words", mid);
+    p = TP.parse(S("COACH: We were down by ten.", mid + "\nCOACH: the whole team showed up.", "INTERVIEWER: Why?"));
+    assert.equal(TP.find(TP.only(p.cues, "COACH"), 1, 2, "down by ten. the whole team").why, "missing_words", mid);
+  }
+  // "[in Spanish]" before the words is a note: they're there.
+  p = TP.parse(S("We were down by ten.", "[in Spanish] the whole team showed up."));
+  assert.equal(TP.find(TP.only(p.cues, null), 1, 2, "down by ten. the whole team").ok, true);
+  // The carried mark isn't counted in a line's length.
+  const long = "a".repeat(1990) + " done.";
+  assert.equal(TP.parse(S("We were down by ten.", "[inaudible]", long)).ok, true);
   // Two brackets alone: read and listed the same way.
   p = TP.parse(S("COACH: I ran it.", "[man clears throat] [door closes]", "Same cones.", "COACH: Because."));
   assert.deepEqual(TP.only(p.cues, "COACH").map((c) => c.t), ["I ran it.", "Same cones.", "Because."]);
