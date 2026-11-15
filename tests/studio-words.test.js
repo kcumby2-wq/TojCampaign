@@ -449,6 +449,19 @@ test("other voices are nobody's however a file marks them: >>, a name in bracket
   assert.deepEqual(p.brackets.map((b) => [b.key, b.read]), [["crowd groans", "note"], ["man clears throat", "note"]]);
   p = TP.parse(S("We ran it every Sunday.", "[referee whistles]", "Nobody missed one.", "[man] Why?", "Because."));
   assert.deepEqual(TP.only(p.cues, null).map((c) => c.t), ["We ran it every Sunday.", "Nobody missed one.", "Because."]);
+  // Any other voice alone in its subtitle speaks, and holds the next words, however it's written.
+  for (const b of ["voice-over", "man on phone", "man over intercom", "announcer over PA", "man continues", "man speaking Spanish", "man mumbling", "fan in stands", "sportscaster", "play-by-play", "crowd", "radio"]) {
+    p = TP.parse(S("COACH: I ran it.", `[${b}]`, "Why that year?", "COACH: Because."));
+    assert.deepEqual(TP.only(p.cues, "COACH").map((c) => c.t), ["I ran it.", "Because."], b);
+    assert.equal(p.brackets.find((x) => x.key === b.toLowerCase()).read !== "note", true, b);
+  }
+  // A line's leading notes don't hide its mark.
+  p = TP.parse(S("COACH: I ran it.", "[laughs] INTERVIEWER: Why that year?", "COACH: Because."));
+  assert.deepEqual(TP.only(p.cues, "COACH").map((c) => c.t), ["I ran it.", "Because."]);
+  p = TP.parse(S("COACH: I ran it.", "[man laughing]\n(laughing) - Good one.", "COACH: Because."));
+  assert.deepEqual(TP.only(p.cues, "COACH").map((c) => c.t), ["I ran it.", "Because."]);
+  // However many notes a line starts with.
+  assert.equal(TP.parse(S("COACH: I ran it.", "[kids laughing]\n" + "[sic]".repeat(20000) + " Same cones.", "COACH: Because.")).ok, true);
   // The editor's "Someone speaking" makes one hold the next words.
   p = TP.parse(S("COACH: I ran it.", "[man coughs]", "Why that year?", "COACH: Because."), { readAs: { "man coughs": "voice" } });
   assert.deepEqual(TP.only(p.cues, "COACH").map((c) => c.t), ["I ran it.", "Because."]);
