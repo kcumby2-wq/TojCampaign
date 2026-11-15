@@ -123,26 +123,15 @@ router.post("/pull", safe(async (req, res) => {
     if (/not active/.test(msg)) return res.status(404).json({ error: "link_not_active" });
     if (/not on a card/.test(msg)) return res.status(403).json({ error: "not_yours" });
     if (/already taken back/.test(msg)) return res.status(409).json({ error: "already_taken_back" });
-    // A parent, where the athlete now approves for themself on a live card:
-    // the team takes it from here.
-    if (/another person approves/.test(msg)) {
-      res.status(409).json({ error: "ask_the_team" });
-      push.notifySoon(push.teamEmails("approver"), { title: "Asked to take consent back", body: `A parent or guardian of ${code} asked on their page to take consent back. ${code} approves for themself on some films now: call them both.`, url: "/app/#films", tag: `pull-ask-${code}` });
-      mailer.sendMail({
-        to: [...staffEmails()],
-        subject: `Asked to take consent back: ${code}`,
-        text: `Someone a card names as the one who approves for ${code} asked on their own Same Work page to take consent back. ${code} now approves for themself on some films (an adult now), so nothing was taken back yet.\n\nCall them both today, then take it back from the card if that's what they want.${note ? `\n\nTheir note: ${note}` : ""}\n`,
-        critical: true,
-        pool: "studio_review",
-      }).catch(() => {});
-      return;
-    }
     if (error.code === "P0001") return res.status(409).json({ error: "refused", reason: msg.slice(0, 300) });
     console.error("[studio-speaker] pull failed:", error.code || "");
     return res.status(503).json({ error: "storage_unavailable" });
   }
   const first = Array.isArray(data) ? data[0] : data;
   const id = first && (first.takedown_id || (typeof first === "string" ? first : null));
+  const onlyTheirs = !!(first && first.only_theirs);
+  // Others who approve for them: another parent or guardian on other cards.
+  const others = new Set((cards || []).filter((c) => c.reviewer_email && String(c.reviewer_email).toLowerCase() !== email && c.reviewer_relation !== "self").map((c) => String(c.reviewer_email).toLowerCase())).size;
   if (!id) return res.status(409).json({ error: "already_taken_back" });
   const { data: td } = await sb.from("studio_takedowns").select("due_at").eq("id", id).maybeSingle();
   console.log(`[studio-speaker] consent taken back on the speaker's page: takedown ${id}`);
@@ -152,11 +141,15 @@ router.post("/pull", safe(async (req, res) => {
   // once: the 72-hour clock is running.
   worker.sweep({ sb }).catch(() => {});
   const staff = [...staffEmails()];
-  push.notifySoon(push.teamEmails("approver"), { title: "Consent taken back", body: `${code} took their consent back on their own page. The 72-hour takedown clock started.`, url: "/app/#film-takedowns", tag: `takedown-${id}` });
+  const scope = onlyTheirs
+    ? `A parent or guardian of ${code} took consent back on their own page for the films they approve. ${code} approves for themself on other films, which go on: talk to ${code} today.`
+    : `${code}'s consent was taken back on a Same Work page. Every film with them is stopped.`;
+  const also = others ? ` Another parent or guardian approves for ${code} on other cards: tell them.` : "";
+  push.notifySoon(push.teamEmails("approver"), { title: "Consent taken back", body: `${scope} The 72-hour takedown clock started.`.slice(0, 240), url: "/app/#film-takedowns", tag: `takedown-${id}` });
   mailer.sendMail({
     to: staff,
     subject: `Consent taken back: ${code}`,
-    text: `${code} took their consent back on their own Same Work page. Every film with them is stopped, and everything posted has to come down within 72 hours.\n\nOpen the takedowns: ${(process.env.APP_BASE || "https://tojcampaign.com").replace(/\/+$/, "")}/app/#film-takedowns\n`,
+    text: `${scope}${also} Everything posted from those films has to come down within 72 hours.\n\nOpen the takedowns: ${(process.env.APP_BASE || "https://tojcampaign.com").replace(/\/+$/, "")}/app/#film-takedowns\n`,
     critical: true,
     pool: "studio_review",
   }).catch(() => {});

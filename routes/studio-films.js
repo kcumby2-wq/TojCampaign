@@ -167,10 +167,20 @@ function noteNames(text, people, body) {
 }
 
 // A film is planned against a tour stop (gfs_events): it has to be one.
-async function eventMissing(sb, value) {
+// The tour stops a person sees, as the Pylon tool scopes them: someone with
+// the Pylon tool sees their own regions (approvers and Kyron, all of them);
+// someone on Studio without it sees every stop's public details (name, dates,
+// city), which the stops' own pages show anyway. null: every region.
+function stopRegions(team) {
+  if (!team || G.seesAll(team)) return null;
+  if (!(Array.isArray(team.tools) && team.tools.includes("gfs"))) return null;
+  return G.regionsOf(team);
+}
+const seesStop = (team, ev) => { const r = stopRegions(team); return !r || r.includes(ev.region); };
+async function eventMissing(sb, value, team) {
   if (!value.gfs_event_id) return false;
-  const ev = await run(sb.from("gfs_events").select("id,status").eq("id", value.gfs_event_id).maybeSingle());
-  return !ev || ev.status === "cancelled";
+  const ev = await run(sb.from("gfs_events").select("id,status,region").eq("id", value.gfs_event_id).maybeSingle());
+  return !ev || ev.status === "cancelled" || !seesStop(team, ev);
 }
 async function filmById(sb, id) {
   if (!idOk(id)) return null;
@@ -277,8 +287,7 @@ router.get("/films", member, withDb(async (req, res, sb) => {
 // The tour's stops (gfs_events) from a week back to six months on, each with
 // the films planned against it, and the films in progress planned against
 // none (to link one). Only what a stop's public page shows (name, series,
-// city, dates), and only the stops in the Pylon regions the person sees
-// (approvers and Kyron: all of them), as the Pylon tool scopes them.
+// city, dates), and only the stops the person sees (stopRegions).
 const SLATE_BACK_DAYS = 7;
 const SLATE_AHEAD_DAYS = 183;
 const dayIso = (d) => d.toISOString().slice(0, 10);
@@ -286,10 +295,11 @@ router.get("/slate", member, withDb(async (req, res, sb) => {
   const isDay = (v) => typeof v === "string" && /^\d{4}-\d{2}-\d{2}$/.test(v) && !Number.isNaN(Date.parse(v + "T00:00:00Z"));
   const from = isDay(req.query.from) ? req.query.from : dayIso(new Date(Date.now() - SLATE_BACK_DAYS * 86400000));
   const to = isDay(req.query.to) ? req.query.to : dayIso(new Date(Date.now() + SLATE_AHEAD_DAYS * 86400000));
-  const regions = G.regionsOf(req.team);
+  const regions = stopRegions(req.team);
   let events = [];
-  if (regions.length) {
-    let qe = sb.from("gfs_events").select("id,name,series,city,state,starts_on,ends_on").gte("ends_on", from).lte("starts_on", to).neq("status", "cancelled").in("region", regions);
+  if (!regions || regions.length) {
+    let qe = sb.from("gfs_events").select("id,name,series,city,state,starts_on,ends_on").gte("ends_on", from).lte("starts_on", to).neq("status", "cancelled");
+    if (regions) qe = qe.in("region", regions);
     if (req.query.series) qe = qe.eq("series", U.clean(req.query.series, 60));
     events = (await run(qe.order("starts_on", { ascending: true }).limit(200))) || [];
   }
@@ -328,7 +338,7 @@ router.post("/films", member, withDb(async (req, res, sb) => {
     delete value.director_email;
     delete value.editor_email;
   }
-  if (await eventMissing(sb, value)) return res.status(400).json({ error: "invalid", fields: ["gfs_event_id"] });
+  if (await eventMissing(sb, value, req.team)) return res.status(400).json({ error: "invalid", fields: ["gfs_event_id"] });
   const row = { ...value, kit_slug: slug, kit_id: String(kit.id), kit_version: kit.version, second_yes_label: t.second_yes_label || null, created_by: me(req) };
   try {
     const film = await run(sb.from("studio_films").insert(row).select().single());
@@ -377,7 +387,8 @@ router.get("/films/:id", member, withDb(async (req, res, sb) => {
   const takedowns = codes.size ? (await run(sb.from("studio_takedowns").select("*").in("person_code", [...codes]).order("requested_at", { ascending: false }).limit(20))) || [] : [];
   const items = takedowns.length ? (await run(sb.from("studio_takedown_items").select("*").in("takedown_id", takedowns.map((x) => x.id)))) || [] : [];
   // The tour stop it's planned against (the season slate).
-  const stop = film.gfs_event_id ? await run(sb.from("gfs_events").select("id,name,city,state,starts_on,ends_on").eq("id", film.gfs_event_id).maybeSingle()).catch(() => null) : null;
+  const ev = film.gfs_event_id ? await run(sb.from("gfs_events").select("id,name,city,state,starts_on,ends_on,region").eq("id", film.gfs_event_id).maybeSingle()).catch(() => null) : null;
+  const stop = ev && seesStop(req.team, ev) ? { id: ev.id, name: ev.name, city: ev.city, state: ev.state, starts_on: ev.starts_on, ends_on: ev.ends_on } : null;
   res.json({
     film,
     stop: stop || null,
@@ -416,7 +427,7 @@ router.patch("/films/:id", member, withDb(async (req, res, sb) => {
   if (errors.length) return res.status(400).json({ error: "invalid", fields: errors, ...(asks.length ? { words: asks } : {}) });
   if (!isProducer(req) && ("director_email" in value || "editor_email" in value)) return res.status(403).json({ error: "producer_only" });
   if (!Object.keys(value).length) return res.json({ film });
-  if (await eventMissing(sb, value)) return res.status(400).json({ error: "invalid", fields: ["gfs_event_id"] });
+  if (await eventMissing(sb, value, req.team)) return res.status(400).json({ error: "invalid", fields: ["gfs_event_id"] });
   try {
     const rows = await run(sb.from("studio_films").update({ ...value, changed_by: me(req), updated_at: nowIso() }).eq("id", film.id).eq("updated_at", body.seen).select());
     if (!rows || !rows.length) return res.status(409).json({ error: "changed_meanwhile" });

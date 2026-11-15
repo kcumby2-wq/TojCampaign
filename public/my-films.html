@@ -208,7 +208,7 @@
     if (p.pulled) {
       var c = el("div", "card alert");
       var td = p.takedown;
-      var line = td && td.by_speaker ? "Consent was taken back on this page on " + when(td.requested_at) + "." : "Consent was taken back" + (td ? " on " + when(td.requested_at) : "") + ".";
+      var line = td && td.by_speaker ? "Consent was taken back on a Same Work page on " + when(td.requested_at) + "." : "Consent was taken back" + (td ? " on " + when(td.requested_at) : "") + ".";
       c.appendChild(el("h3", null, line));
       c.appendChild(el("p", "note", td && td.closed
         ? "Every film with " + w.you + " is stopped, and everything that was posted has been taken down."
@@ -313,7 +313,6 @@
         if (r.status === 200 && r.data.ok) load();
         else if (r.status === 409 && r.data.error === "already_taken_back") load();
         else if (r.status === 404) { forget(); askFor("That link isn't active anymore, so nothing was taken back. Ask for a new link here, or tell the producer: they can take it back for you."); }
-        else if (r.status === 409 && r.data.error === "ask_the_team") { btn.disabled = true; btn.textContent = w.action; err.textContent = "The athlete approves for themself on some of these films now, so nothing was taken back here. The team has your request and will call you both today."; }
         else if (r.status === 429) again("Too many tries from here just now. Wait a minute, then try again.");
         else again("We couldn't record that just now. Wait a minute and try again. If it keeps failing, tell the producer: they can take it back for you.");
       }).catch(function () { again("Network error. Please try again."); });

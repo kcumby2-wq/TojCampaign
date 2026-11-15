@@ -60,7 +60,10 @@ async function issueLink(sb, mailer, { email, sentBy, relations }) {
     await sb.rpc("studio_speaker_sign_out", { p_proof: proof }).then(() => {}, () => {});
     return { sent: false, why: sent && sent.reason === "email_not_configured" ? "email_not_set_up" : "email" };
   }
-  await sb.rpc("studio_speaker_supersede", { p_proof: proof }).then(() => {}, () => {});
+  // Every other live link for the email stops now. If that can't be done,
+  // the older links still work until they expire (7 days): say so in the log.
+  const { error: supErr } = await sb.rpc("studio_speaker_supersede", { p_proof: proof }).then((r) => r, (e) => ({ error: e }));
+  if (supErr) console.error("[studio-speaker] older links not stopped:", supErr.code || supErr.message || "");
   return { sent: true };
 }
 

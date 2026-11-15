@@ -19,12 +19,12 @@ const T = require("../utils/team");
 
 let pool, server, base;
 const cookies = {};
-const as = { kyron: "kyron@toj.test", dir: "dir@toj.test", out: "out@toj.test", west: "west@toj.test" };
+const as = { kyron: "kyron@toj.test", dir: "dir@toj.test", out: "out@toj.test", west: "west@toj.test", pyl: "pyl@toj.test" };
 
 before(async () => {
   pool = await makeSchema(URL_, SCHEMA, ["018_studio_kits.sql", "019_team.sql", "020_native_push.sql", "024_gfs_events.sql", "039_studio_films.sql"]);
   setSupabase(pgSupabase(pool, SCHEMA));
-  await pool.query("insert into team_members (email, role, tools, regions) values ('dir@toj.test', 'member', array['studio'], array['south_central']), ('out@toj.test', 'member', array['gfs'], array['south_central']), ('west@toj.test', 'member', array['studio'], array['west'])");
+  await pool.query("insert into team_members (email, role, tools, regions) values ('dir@toj.test', 'member', array['studio'], array['south_central']), ('out@toj.test', 'member', array['gfs'], array['south_central']), ('west@toj.test', 'member', array['studio', 'gfs'], array['west']), ('pyl@toj.test', 'member', array['studio', 'gfs'], array['south_central'])");
   const app = express();
   app.use(express.json());
   app.use(session({ secret: "slate", resave: false, saveUninitialized: false }));
@@ -93,13 +93,19 @@ test("a film is planned only against a stop that's on the calendar, and the slat
   assert.ok(!wide.events.some((e) => e.name === "Pylon cancelled"));
 });
 
-test("the slate shows a member only their Pylon regions' stops; a cancelled stop can't be planned; a film planned out of view is still listed", async () => {
+test("the slate shows someone with the Pylon tool their regions' stops, and Studio-only members every stop; a cancelled stop can't be planned; a film planned out of view is still listed", async () => {
   const west = await stop("WST27", "Pylon West", 15, 15);
   await pool.query("update gfs_events set region = 'west' where id = $1", [west]);
-  const sc = ok(await call("GET", "/slate", undefined, "dir"), "south central member");
-  assert.ok(!sc.events.some((e) => e.name === "Pylon West"));
-  const w = ok(await call("GET", "/slate", undefined, "west"), "west member");
+  const sc = ok(await call("GET", "/slate", undefined, "pyl"), "south central Pylon member");
+  assert.ok(!sc.events.some((e) => e.name === "Pylon West") && sc.events.some((e) => e.name === "Pylon Dallas"));
+  const w = ok(await call("GET", "/slate", undefined, "west"), "west Pylon member");
   assert.deepEqual(w.events.map((e) => e.name), ["Pylon West"]);
+  // A Pylon member can't plan a film for a stop outside their regions.
+  const out = await call("POST", "/films", { kit_slug: "same-work", title: "S0303 hero", lane: "youth", format: "hero", athlete_id: "S0303", gfs_event_id: west }, "pyl");
+  assert.deepEqual([out.status, out.data.fields], [400, ["gfs_event_id"]]);
+  // Studio only (no Pylon tool, no regions): every stop's public details.
+  const studioOnly = ok(await call("GET", "/slate", undefined, "dir"), "Studio-only member");
+  assert.ok(studioOnly.events.some((e) => e.name === "Pylon West") && studioOnly.events.some((e) => e.name === "Pylon Dallas"));
   const all = ok(await call("GET", "/slate", undefined, "kyron"), "Kyron");
   assert.ok(all.events.some((e) => e.name === "Pylon West") && all.events.some((e) => e.name === "Pylon Dallas"));
   // A cancelled stop isn't on the calendar for planning.

@@ -458,22 +458,23 @@ test("either parent takes a minor's consent back from their page", async () => {
   assert.equal((await pool.query("select count(*)::int as n from studio_film_people where person_code = $1 and consent_pulled_at is null", [code])).rows[0].n, 0);
 });
 
-test("a parent's page pull, where the athlete now approves for themself, goes to the team, and nothing is taken back", async () => {
+test("a parent's page pull, where the athlete now approves for themself, takes back the films the parent approves; the athlete's own go on", async () => {
   // A parent's card from when the athlete was a minor; now the athlete approves for themself.
-  const { film, people } = await aFilm((code) => [{ person_code: code, name: "Cy Dove", role: "athlete", is_minor: true, speaker: true, release_on_file: true, covers: { voice: true, formats: ["hero"] }, reviewer_relation: "parent", reviewer_name: "Pat Dove", reviewer_email: "pat@x.test" }]);
+  const { people } = await aFilm((code) => [{ person_code: code, name: "Cy Dove", role: "athlete", is_minor: true, speaker: true, release_on_file: true, covers: { voice: true, formats: ["hero"] }, reviewer_relation: "parent", reviewer_name: "Pat Dove", reviewer_email: "pat@x.test" }]);
   const code = people[0].person_code;
-  let film2 = ok(await films("POST", "/films", { kit_slug: "same-work", title: `${code} now`, lane: "youth", athlete_id: code, format: "hero" }, "lead"), "start").film;
-  let p2 = ok(await films("POST", `/films/${film2.id}/people`, self(code, "Cy Dove", "cy@x.test"), "lead"), "adult card").person;
+  const film2 = ok(await films("POST", "/films", { kit_slug: "same-work", title: `${code} now`, lane: "youth", athlete_id: code, format: "hero" }, "lead"), "start").film;
+  const p2 = ok(await films("POST", `/films/${film2.id}/people`, self(code, "Cy Dove", "cy@x.test"), "lead"), "adult card").person;
   ok(await films("POST", `/films/${film2.id}/people/${p2.id}/clear`, { seen: p2.updated_at }, "lead"), "clear");
   const token = await linkFor("pat@x.test");
   mails = [];
-  const r = await page("/pull", { token, person_code: code, confirm: true, note: "Cy Dove wants this stopped" });
-  assert.deepEqual([r.status, r.data.error], [409, "ask_the_team"]);
-  assert.equal((await pool.query("select count(*)::int as n from studio_film_people where person_code = $1 and consent_pulled_at is not null", [code])).rows[0].n, 0);
-  const alert = await mailTo("kyron@toj.test", /Asked to take consent back/);
-  assert.ok(alert);
+  ok(await page("/pull", { token, person_code: code, confirm: true, note: "Cy Dove wants this stopped" }), "pull");
+  const rows = (await pool.query("select reviewer_email, consent_pulled_at is not null as pulled from studio_film_people where person_code = $1 order by reviewer_email", [code])).rows;
+  assert.deepEqual(rows, [{ reviewer_email: "cy@x.test", pulled: false }, { reviewer_email: "pat@x.test", pulled: true }]);
+  const alert = await mailTo("kyron@toj.test", /Consent taken back/);
+  assert.match(alert.text, /approves for themself on other films, which go on/);
   assert.doesNotMatch(alert.text, /Cy|Dove|pat@/);
-  void film;
+  // Asked again: there's nothing left for them to take back.
+  assert.equal((await page("/pull", { token, person_code: code, confirm: true })).data.error, "already_taken_back");
 });
 
 test("an uncleared card's email gets no page; a new approver doesn't see the old one's decisions as theirs", async () => {

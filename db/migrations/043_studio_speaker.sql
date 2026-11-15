@@ -12,8 +12,8 @@
 --     accepted, and signing out stops it.
 --   * Taking consent back from the page is the same pull as staff make
 --     (039's studio_pull_consent), with source 'speaker', and only for a
---     person whose cleared card names that email (not, for a parent, where
---     the athlete now approves for themself).
+--     person whose cleared card names that email (for a parent, where the
+--     athlete now approves for themself, the films the parent approves).
 
 create table if not exists public.studio_speaker_links (
   id uuid primary key default gen_random_uuid(),
@@ -85,9 +85,10 @@ begin
   return found;
 end $$;
 
--- Once a link's email is accepted: the older live links for that email stop.
--- Only older ones (by when they were made, then id), under the email's lock,
--- so two links made at once leave one live: the later.
+-- Once a link's email is accepted: every other live link for that email
+-- stops, under the email's lock. The last email accepted is the one that
+-- works, which is the newest in their inbox; a link already stopped stops
+-- nothing.
 create or replace function public.studio_speaker_supersede(p_proof text)
 returns integer
 language plpgsql volatile set search_path = '' as $$
@@ -95,34 +96,39 @@ declare
   me record;
   n integer;
 begin
-  select l.id, l.email, l.created_at into me from public.studio_speaker_links l
+  select l.id, l.email into me from public.studio_speaker_links l
    where l.proof_hash = encode(sha256(convert_to(coalesce(p_proof, ''), 'UTF8')), 'hex');
   if me.id is null then
     return 0;
   end if;
   perform pg_advisory_xact_lock(hashtextextended('studio.page:' || me.email, 0));
+  if not exists (select 1 from public.studio_speaker_links l where l.id = me.id and l.revoked_at is null and l.expires_at > now()) then
+    return 0;
+  end if;
   update public.studio_speaker_links l set revoked_at = now()
-   where l.email = me.email and l.revoked_at is null and l.expires_at > now()
-     and (l.created_at < me.created_at or (l.created_at = me.created_at and l.id < me.id));
+   where l.email = me.email and l.id <> me.id and l.revoked_at is null and l.expires_at > now();
   get diagnostics n = row_count;
   return n;
 end $$;
 
 -- Take consent back from the page: the link has to be live, and a cleared
 -- card for that person has to name the link's email as the one who
--- approves. If a parent or guardian asks where the athlete now approves for
--- themself on a live card (an adult now), the page doesn't take those back:
--- the team does, after talking to both. Either parent of a minor takes it
--- back for every film. Then
+-- approves. Either parent or guardian of a minor takes it back for every
+-- film. A parent or guardian, where the athlete now approves for themself
+-- on a live, cleared card (an adult now), takes back the films they approve
+-- (the cards that name their email); the athlete's own go on, and the team
+-- talks to them (only_theirs). Then
 -- it's 039's pull, with source 'speaker', written as who they are to the
 -- person (never their email or name).
 create or replace function public.studio_speaker_pull(p_proof text, p_person_code text, p_note text)
-returns table (takedown_id uuid)
+returns table (takedown_id uuid, only_theirs boolean)
 language plpgsql volatile set search_path = '' as $$
 declare
   e text;
   code text := upper(btrim(coalesce(p_person_code, '')));
   rel text;
+  mine_only boolean;
+  by_whom text;
 begin
   -- The link row is held until the pull is in, so signing out in the same
   -- instant waits for it (or wins, and then nothing is pulled).
@@ -142,22 +148,32 @@ begin
   -- The code's lock (039's pull takes it too), so two taps at once are one
   -- pull: the second finds nothing left and says so.
   perform pg_advisory_xact_lock(hashtextextended('studio.code:' || code, 0));
-  if not exists (select 1 from public.studio_film_people p where p.person_code = code and p.consent_pulled_at is null) then
+  mine_only := rel <> 'self' and exists (select 1 from public.studio_film_people p
+              where p.person_code = code and p.consent_pulled_at is null and p.cleared_at is not null
+                and p.reviewer_relation = 'self' and lower(coalesce(p.reviewer_email, '')) <> e);
+  if not exists (select 1 from public.studio_film_people p where p.person_code = code and p.consent_pulled_at is null
+                   and (not mine_only or lower(coalesce(p.reviewer_email, '')) = e)) then
     raise exception 'consent is already taken back';
-  end if;
-  -- A parent or guardian, where the athlete approves for themself on a live
-  -- card (an adult now): those films are theirs to decide, so the team
-  -- talks to both. Either parent of a minor takes it back for all.
-  if rel <> 'self' and exists (select 1 from public.studio_film_people p
-              where p.person_code = code and p.consent_pulled_at is null
-                and p.reviewer_relation = 'self' and lower(coalesce(p.reviewer_email, '')) <> e) then
-    raise exception 'another person approves for some of these films';
   end if;
   update public.studio_speaker_links l set last_used_at = now()
    where l.proof_hash = encode(sha256(convert_to(coalesce(p_proof, ''), 'UTF8')), 'hex');
-  return query select * from public.studio_pull_consent(code,
-    case rel when 'self' then 'the speaker, on their page' when 'parent' then 'their parent, on their page' else 'their guardian, on their page' end,
-    'speaker', p_note);
+  by_whom := case rel when 'self' then 'the speaker, on their page' when 'parent' then 'their parent, on their page' else 'their guardian, on their page' end;
+  if not mine_only then
+    return query select x.takedown_id, false from public.studio_pull_consent(code, by_whom, 'speaker', p_note) x;
+    return;
+  end if;
+  -- As 039's pull does it, for the cards that name this email only: its
+  -- source for the takedown, then the films in one order, then the cards.
+  perform set_config('studio.pull_source', 'speaker', true);
+  perform 1 from public.studio_films f
+   where f.id in (select x.film_id from public.studio_film_people x
+                   where x.person_code = code and x.consent_pulled_at is null and lower(coalesce(x.reviewer_email, '')) = e)
+   order by f.id for update;
+  update public.studio_film_people
+     set consent_pulled_at = now(), pulled_by = by_whom, pulled_note = nullif(btrim(coalesce(p_note, '')), ''), updated_at = now()
+   where person_code = code and consent_pulled_at is null and lower(coalesce(reviewer_email, '')) = e;
+  return query select t.id, true from public.studio_takedowns t where t.person_code = code and t.closed_at is null
+                order by t.requested_at desc limit 1;
 end $$;
 
 do $$
