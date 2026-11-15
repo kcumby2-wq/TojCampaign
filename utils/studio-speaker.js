@@ -50,7 +50,7 @@ async function issueLink(sb, mailer, { email, sentBy, relations }) {
   const { proof, link } = newToken();
   // Timed from here: the database orders links by its own made-at time plus
   // how long the email took, so the two clocks never meet.
-  const madeAt = Date.now();
+  const madeAt = performance.now();
   const { error } = await sb.from("studio_speaker_links").insert({ email, proof_hash: U.sha256(proof), sent_by: sentBy });
   if (error) return { sent: false, why: "storage" };
   const m = pageEmail({ relations, link });
@@ -68,7 +68,7 @@ async function issueLink(sb, mailer, { email, sentBy, relations }) {
   // email was accepted. Tried once more a moment later with the same time
   // (a late try for an older email stops its own link, not the newer one);
   // if it still can't be done, say so in the log.
-  const afterMs = Math.max(0, Date.now() - madeAt);
+  const afterMs = Math.max(0, Math.round(performance.now() - madeAt));
   const supersede = () => sb.rpc("studio_speaker_supersede", { p_proof: proof, p_after_ms: afterMs }).then((r) => r, (e) => ({ error: e }));
   let { error: supErr } = await supersede();
   if (supErr) {

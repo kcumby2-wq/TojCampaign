@@ -544,6 +544,12 @@ test("a link never marked sent, ten minutes old, doesn't open once a newer link'
   assert.equal((await page("/view", { token: only })).status, 404, "the stale one is stopped on use");
   assert.equal((await page("/pull", { token: only, person_code: "C7301", confirm: true })).status >= 400, true);
   assert.equal((await page("/view", { token: newer })).status, 200);
+  // The newest link, its own call never come, isn't stopped by an older one that was sent.
+  await raw("update studio_speaker_links set revoked_at = null where email = 'uma@x.test'");
+  await raw("update studio_speaker_links set sent_at = now() - interval '20 minutes' where proof_hash = encode(sha256(convert_to('" + U.sha256(only) + "', 'UTF8')), 'hex')");
+  await raw("update studio_speaker_links set sent_at = null, created_at = now() - interval '11 minutes' where proof_hash = encode(sha256(convert_to('" + U.sha256(newer) + "', 'UTF8')), 'hex')");
+  await raw("update studio_speaker_links set created_at = now() - interval '30 minutes' where proof_hash = encode(sha256(convert_to('" + U.sha256(only) + "', 'UTF8')), 'hex')");
+  assert.equal((await page("/view", { token: newer })).status, 200, "the newest still opens");
 });
 
 test("a link whose own email was never marked sent stops when a later one's email goes, ten minutes on", async () => {

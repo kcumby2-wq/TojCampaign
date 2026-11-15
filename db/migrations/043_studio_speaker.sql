@@ -240,9 +240,11 @@ create or replace trigger studio_speaker_links_gate before insert or update or d
 create or replace trigger studio_speaker_links_keep before truncate on public.studio_speaker_links
   for each statement execute function public.studio_keep();
 
--- A link never marked sent, made ten minutes or more ago, while another
+-- A link never marked sent, made ten minutes or more ago, while a newer
 -- live link for the email was: its supersede never ran, and the newer
--- email is the one that works. Never someone's only link.
+-- email is the one that works. Never someone's only link, and never the
+-- newest (an older sent link doesn't stop it: the newer email may still be
+-- the one on top).
 create or replace function public.studio_speaker_link_stale(p_id uuid)
 returns boolean
 language sql stable set search_path = '' as $$
@@ -250,7 +252,7 @@ language sql stable set search_path = '' as $$
                   where l.id = p_id and l.sent_at is null and l.created_at < now() - interval '10 minutes'
                     and exists (select 1 from public.studio_speaker_links o
                                  where o.email = l.email and o.id <> l.id and o.revoked_at is null
-                                   and o.expires_at > now() and o.sent_at is not null));
+                                   and o.expires_at > now() and o.sent_at is not null and o.created_at > l.created_at));
 $$;
 
 -- The email a live link is for (and the link marked used), or nothing.
