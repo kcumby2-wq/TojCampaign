@@ -644,6 +644,15 @@ test("a minor's card waits for, and a correction takes, kept lines the app reads
   assert.equal(r.words_removed, 1);
   const left = (await pool.query("select quote from studio_words where film_id = $1 order by quote", [film.id])).rows.map((x) => x.quote);
   assert.deepEqual(left, ["We grew up on the island"]);
+  // An everyday first name written as a name, kept while they were an adult, goes with the correction too.
+  const g = await aFilm();
+  const tg = ok(await addTranscript(g.film, g.people[0], [{ s: 0, e: 3000, t: "Every morning, Hope runs it." }, { s: 3000, e: 6000, t: "We hope it holds." }]), "transcript").transcript;
+  const hope = ok(await films("POST", `/films/${g.film.id}/people`, { person_code: "WH10", name: "Hope Lee", role: "coach", release_on_file: true, covers: {} }, "lead"), "an adult Hope").person;
+  ok(await words("POST", `/films/${g.film.id}/lines`, { transcript_id: tg.id, from_cue: 1, to_cue: 1, quote: "Every morning, Hope runs it", names_ok: ["hope"] }, "ed"), "kept, said not a name");
+  ok(await words("POST", `/films/${g.film.id}/lines`, { transcript_id: tg.id, from_cue: 2, to_cue: 2, quote: "We hope it holds" }, "ed"), "the word");
+  const hr = ok(await films("PATCH", `/films/${g.film.id}/people/${hope.id}`, { seen: hope.updated_at, is_minor: true, reviewer_relation: "parent", reviewer_name: "Mae Lee", reviewer_email: "mae2@x.test" }, "lead"), "corrected");
+  assert.equal(hr.words_removed, 1);
+  assert.deepEqual((await pool.query("select quote from studio_words where film_id = $1", [g.film.id])).rows.map((x) => x.quote), ["We hope it holds"]);
 });
 
 test("an ordinary word that holds a minor's name is asked about, kept on the writer's say-so, and a correction leaves it", async () => {

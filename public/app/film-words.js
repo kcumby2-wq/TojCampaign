@@ -266,7 +266,7 @@
     var people = d.people || [];
     // Nothing is chosen for you: the speaker's lines and whose words they
     // are are both picked by hand.
-    var s = { text: null, name: "", fps: null, parsed: null, who: undefined, person: null, label: "Interview " + ((d.transcripts || []).length + 1), only: false };
+    var s = { text: null, name: "", fps: null, parsed: null, who: undefined, person: null, label: "Interview " + ((d.transcripts || []).length + 1), only: false, readAs: {} };
 
     // A pause alone is a gap only in a file with no labels (its questions may
     // have been cut out); in a labelled one, the other voices' lines are.
@@ -281,6 +281,29 @@
       } else if (p && p.ok) {
         var labelled = p.labelled;
         body += '<p class="sub" style="margin:0">' + h(p.cues.length + " lines read" + (p.frames ? " at " + p.fps + " fps" : "") + ".") + "</p>";
+        // Every bracket and how it was read: the editor settles any the
+        // file can't ("[scout]" is someone; "[boom]" is a sound).
+        var bks = p.brackets || [];
+        if (bks.length) {
+          // Every bracket, in two groups: the ones that decide whose words
+          // are whose (a voice, a name, or a note with words after it), then
+          // the notes that stand on lines of their own, folded.
+          var row = function (b) {
+            var i = bks.indexOf(b);
+            var opts = b.read === "speaker" || (b.set && s.readAs[b.key] === "note" && /^\p{Lu}/u.test(b.text))
+              ? [["speaker", "A name"], ["note", "A note"]]
+              : [["voice", "Someone speaking"], ["note", "A note"]];
+            return '<div><div class="body" style="font-size:14px;color:var(--ink)">' + h("[" + b.text + "]" + (b.count > 1 ? " ×" + b.count : "")) + (b.set ? ' <span class="sub">' + h("(your call)") + "</span>" : "") + '</div><div class="btn-row" role="group" aria-label="' + h("[" + b.text + "]") + '" style="gap:6px;margin-top:4px">' + opts.map(function (o) {
+              var on = b.read === o[0];
+              return '<button type="button" class="btn small ' + (on ? "" : "soft") + '" aria-pressed="' + on + '" data-bk="' + i + '" data-as="' + o[0] + '">' + h(o[1]) + "</button>";
+            }).join("") + "</div></div>";
+          };
+          var decide = bks.filter(function (b) { return b.read !== "note" || !b.alone || b.set; });
+          var alone = bks.filter(function (b) { return decide.indexOf(b) < 0; });
+          body += '<details class="card tight"' + (s.openBk ? " open" : "") + ' id="bkBox"><summary class="name" style="font-size:15px;cursor:pointer;min-height:32px;display:flex;align-items:center">' + h("Brackets in this file (" + bks.length + "): check how each was read") + '</summary><p class="sub" style="margin:4px 0 8px">' + h("Someone speaking: their words stay on this phone. A note (a sound, how it's said): the speaker's words go on past it. Change any that's wrong and the file is read again.") + '</p><div style="display:flex;flex-direction:column;gap:10px">' + decide.map(row).join("") + "</div>" +
+            (alone.length ? '<details style="margin-top:12px"' + (s.openAlone ? " open" : "") + ' id="bkAlone"><summary class="sub" style="cursor:pointer;min-height:32px;display:flex;align-items:center">' + h(alone.length + " note" + (alone.length > 1 ? "s" : "") + " on lines of their own (nothing after them on the line)") + '</summary><div style="display:flex;flex-direction:column;gap:10px;margin-top:8px">' + alone.map(row).join("") + "</div></details>" : "") +
+            "</details>";
+        }
         if (labelled) {
           body += '<div class="field"><span class="label" id="whoLabel">Whose lines in the file are the speaker\'s?</span><div role="radiogroup" aria-labelledby="whoLabel" style="display:flex;flex-direction:column;gap:8px">' + p.speakers.map(function (x, i) {
             var first = p.cues.find(function (c) { return c.who === x.who; });
@@ -313,19 +336,26 @@
       if (T().radios) T().radios();
       // A choice made with the arrow keys repaints the screen: the focus goes
       // back to the choice, so the next arrow key works too.
+      if (s.focusBk) {
+        var backBk = document.querySelector('[data-bk="' + s.focusBk[0] + '"][data-as="' + s.focusBk[1] + '"]');
+        if (backBk) backBk.focus();
+        s.focusBk = null;
+      }
       if (s.focus) {
         var back2 = document.querySelector("[data-" + s.focus + '][aria-checked="true"]');
         if (back2) back2.focus();
         s.focus = null;
       }
     }
-    function read() {
-      var r = P().parse(s.text, { fps: s.fps });
+    function read(keep) {
+      var r = P().parse(s.text, { fps: s.fps, readAs: s.readAs });
       s.parsed = r;
       if (r.ok) {
         // One voice in the whole file, and it's named: that's the speaker.
-        // Otherwise ask.
-        s.who = r.labelled ? (r.speakers.length === 1 ? r.speakers[0].who : undefined) : null;
+        // Otherwise ask. Read again after a bracket's changed, the choice
+        // stays if that voice is still in the file.
+        var still = keep && r.labelled && r.speakers.some(function (x) { return x.who === s.who; });
+        s.who = still ? s.who : r.labelled ? (r.speakers.length === 1 ? r.speakers[0].who : undefined) : null;
       }
       paint();
     }
@@ -335,8 +365,30 @@
         if (!file) return;
         if (file.size > 3 * 1024 * 1024) { s.parsed = { ok: false, error: "too_long" }; s.name = file.name; return paint(); }
         try { s.text = await file.text(); } catch (e) { s.parsed = { ok: false, error: "empty" }; return paint(); }
-        s.name = file.name; s.fps = null; s.only = false;
+        s.name = file.name; s.fps = null; s.only = false; s.readAs = {}; s.openBk = false; s.openAlone = false;
         read();
+      });
+      var bkBox = document.getElementById("bkBox");
+      if (bkBox) bkBox.addEventListener("toggle", function () { s.openBk = bkBox.open; });
+      var bkAlone = document.getElementById("bkAlone");
+      if (bkAlone) bkAlone.addEventListener("toggle", function () { s.openAlone = bkAlone.open; });
+      Array.prototype.forEach.call(document.querySelectorAll("[data-bk]"), function (b) {
+        b.addEventListener("click", function () {
+          var bk = s.parsed && s.parsed.brackets && s.parsed.brackets[Number(b.dataset.bk)];
+          if (!bk) return;
+          var want = b.dataset.as;
+          // "A name" is how the file reads it: no call of yours needed.
+          if (want === "speaker") delete s.readAs[bk.key];
+          else s.readAs[bk.key] = want;
+          // Back to how the file reads it on its own: no call kept.
+          var plain = P().parse(s.text, { fps: s.fps, readAs: Object.assign({}, s.readAs, (function () { var o = {}; o[bk.key] = undefined; return o; })()) });
+          var own = plain.ok && (plain.brackets || []).find(function (x) { return x.key === bk.key; });
+          if (own && own.read === want) delete s.readAs[bk.key];
+          s.openBk = true;
+          if (document.getElementById("bkAlone")) s.openAlone = document.getElementById("bkAlone").open;
+          s.focusBk = [b.dataset.bk, b.dataset.as];
+          read(true);
+        });
       });
       var fps = document.getElementById("fps");
       if (fps) fps.addEventListener("change", function () { s.fps = Number(fps.value) || null; if (s.fps) read(); });

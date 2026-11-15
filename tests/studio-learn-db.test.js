@@ -202,6 +202,10 @@ test("a wrap-up goes to the whole kit: no name of anyone on any film's cards, an
   assert.deepEqual(m.rules.find((x) => x.label === "late light").samples, [], "a sample that names someone now is dropped");
   // The month's brief with the name in it doesn't start.
   assert.equal((await startRun({ brief: BRIEF + " Riley set the lights early.", purpose: "monthly", sources: { wraps: [w.id] } })).data.error, "brief_has_name");
+  // Source text isn't read for names, so a run with a purpose takes none.
+  const src = await startRun({ brief: BRIEF, purpose: "monthly", sources: { wraps: [w.id] }, source_text: "Riley set the lights early. ".repeat(10) });
+  assert.deepEqual([src.status, src.data.error], [400, "invalid_source"]);
+  assert.equal((await startRun({ brief: "Re-check the Gear and Edit suite against current sources.", purpose: "gear", source_text: "Riley Brandt ".repeat(30) }, "dir")).data.error, "invalid_source");
   // Given to a refresh anyway (a page from before the card): it can't be
   // folded in now, so it's left open and counted.
   const run = (await pool.query("insert into agent_runs (role, task, status, created_by) values ('kit-refresher', 'x', 'running', 'lead@toj.test') returning id")).rows[0].id;
@@ -423,6 +427,19 @@ test("a decision's note keeps no names, and a suggested edit can't be about a lo
   assert.deepEqual((await rule).data.fields, ["card_is_a_rule"]);
 });
 
+test("when the database reads a name the app let through, the writer is told so in words, not the database's", () => {
+  const out = [];
+  const res = { status(c) { out.push(c); return this; }, json(d) { out.push(d); return this; } };
+  learnRouter._refused(res, { db: { code: "P0001", message: "wrap-ups keep no names: write the code instead" } });
+  assert.equal(out[0], 409);
+  assert.equal(out[1].error, "refused");
+  assert.equal(out[1].names, true);
+  assert.match(out[1].reason, /^the database read a name on a card in it/);
+  out.length = 0;
+  learnRouter._refused(res, { db: { code: "P0001", message: "a suggested edit is kept: decline it instead" } });
+  assert.deepEqual(out, [409, { error: "refused", reason: "a suggested edit is kept: decline it instead" }]);
+});
+
 test("a brief from the gear preset carries its purpose, only aimed at Same Work", () => {
   const p = BR.parseBriefRequest({ idea: "Re-check the gear against current sources", target: { mode: "refresh", slug: "same-work" }, purpose: "gear" });
   assert.equal(p.purpose, "gear");
@@ -490,6 +507,35 @@ test("what every film shares is read against every card for names, not for ordin
   // An ordinary word holds a name only beside a tag's word: "Jordanstrong", "teamjordan".
   assert.deepEqual(read("Jordanstrong all season").minor, ["jordan"]);
   assert.deepEqual(read("the teamjordan shirts").minor, ["jordan"]);
+  // A minor's plural or possessive that's an English word too: the name with
+  // a capital mid-sentence or in capitals, at a sentence's start from four
+  // letters, in lower case from five (as the database reads it); an
+  // everyday-word name's at a sentence's start is asked.
+  const m = (n) => [{ name: n, is_minor: true }];
+  for (const [t, n, w] of [["Ask Johns dad to hold it", "John Park", "john"], ["Williams mom called", "William Ortiz", "william"], ["Ask Graces dad", "Grace Long", "grace"],
+    ["mias mom called", "Mia Cruz", "mia"], ["The Mavericks game b-roll", "Maverick Ruiz", "maverick"], ["Two lincolns on the board", "Lincoln Ruiz", "lincoln"],
+    ["KAYLEES DRILL", "Kaylee Ruiz", "kaylee"]]) assert.deepEqual(U.kitNames(t, m(n)).minor, [w], t);
+  // At a sentence's start, or in a Title Case or capitals line, a capital
+  // says nothing: under five letters (or an everyday word), asked.
+  for (const [t, n, w] of [["Graces dad filmed it", "Grace Long", "grace"], ["Masons mom called", "Mason Hill", "mason"], ["Angels dad filmed it", "Angel Ruiz", "angel"],
+    ["Johns dad held the reflector", "John Park", "john"], ["Annas mom asked", "Anna Lee", "anna"], ["Jeans and boots for the shoot", "Jean Ruiz", "jean"],
+    ["Add Two Cams For The Wides", "Cam Ruiz", "cam"], ["WHAT WORKED: TWO CAMS AND THE NEW LENS", "Cam Ruiz", "cam"], ["OUR HOPES WERE HIGH", "Hope Lee", "hope"],
+    ["NOVAS FIRST GAME", "Nova Diaz", "nova"]]) assert.deepEqual(U.kitNames(t, m(n)), { sure: [], maybe: [w], minor: [] }, t);
+  for (const [t, n] of [["three times a day", "Tim Ruiz"], ["the lens cap", "Len Ruiz"], ["Times are hard", "Tim Ruiz"], ["Pack jeans and boots", "Jean Ruiz"]]) assert.deepEqual(U.kitNames(t, m(n)).sure, [], t);
+  // A minor's name of two or three letters in a tag, beside the tag's own word or marked off by capitals.
+  for (const [t, n, w] of [["#avastrong", "Ava Ruiz", "ava"], ["#teamava", "Ava Ruiz", "ava"], ["#prayformia", "Mia Ruiz", "mia"], ["#samszn", "Sam Ruiz", "sam"], ["#tystrong", "Ty Ruiz", "ty"],
+    ["#TeamAva", "Ava Ruiz", "ava"], ["AvaStrong all week", "Ava Ruiz", "ava"]]) assert.deepEqual(U.kitNames(t, m(n)).minor, [w], t);
+  for (const [t, n] of [["#samedrill", "Sam Ruiz"], ["#avalanche", "Ava Ruiz"], ["JavaScript", "Ava Ruiz"], ["#eliteathlete", "Eli Ruiz"],
+    ["#gameday", "Ana Day"], ["#edits", "Ed Ruiz"], ["#limits", "Lim Ruiz"], ["#maylove", "May Ruiz"], ["#teamfox", "Ana Fox"],
+    ["MacBook", "Mac Ruiz"], ["iMac", "Mac Ruiz"], ["BenQ", "Ben Ruiz"], ["CamLink", "Cam Ruiz"], ["LeBron", "Le Ruiz"]]) assert.deepEqual(U.kitNames(t, m(n)), { sure: [], maybe: [], minor: [] }, t);
+  // Beside the tag's own word, the name wins over an English word that could hold it.
+  for (const [t, n, w] of [["#teamaiden", "Aiden Ruiz", "aiden"], ["#teamanna", "Anna Ruiz", "anna"], ["#milanation", "Mila Ruiz", "mila"], ["#itslogan", "Logan Ruiz", "logan"]]) assert.deepEqual(U.kitNames(t, m(n)).minor, [w], t);
+  // A minor's everyday-word first name alone in a handle, a file name or a tag with more in it.
+  for (const t of ["Posted to @grace.hoops", "#grace23"]) assert.deepEqual(U.kitNames(t, m("Grace Long")).minor, ["grace"], t);
+  // Elsewhere in a file name, a link or a tag with a year: asked.
+  for (const [t, n, w] of [["grace_final_v2.mp4", "Grace Long", "grace"], ["chase_cam_v2.mp4", "Chase Ruiz", "chase"], ["#summer2027", "Summer Ruiz", "summer"], ["https://www.chase.com/business", "Chase Ruiz", "chase"]]) assert.deepEqual(U.kitNames(t, m(n)), { sure: [], maybe: [w], minor: [] }, t);
+  assert.deepEqual(U.kitNames("#hope", m("Hope Lee")).sure, []);
+  assert.deepEqual(U.kitNames("Lucasfilm made it", m("Lucas Ruiz")), { sure: [], maybe: [], minor: [] });
   // What the app wrote is taken out before a brief is read.
   const head = "Monthly refresh of Same Work Milanote Kit (v3), April 2027: fold in what the team learned since Oct 3, 2026.";
   assert.deepEqual(read(U.withoutKnown(head, ["Same Work Milanote Kit", "same-work"])), { sure: [], maybe: [], minor: [] });

@@ -62,7 +62,7 @@ All under `/api/studio-agents`. Auth is by team role (utils/team.js, the TOJ app
 ```
 
 - `slug`: lower-case letters, numbers, dashes. A build refuses a slug that already exists (409 `slug_exists`): refresh it instead.
-- `brief`: up to 6,000 characters. `source_text`: up to 300,000.
+- `brief`: up to 6,000 characters. `source_text`: up to 300,000. With a `purpose` (the month's refresh, the gear re-check) there's no `source_text`: those runs read their brief only, which is checked for names (400 `invalid_source`).
 - `assets`: a template image set (`same-work`) or omitted for none.
 
 Runs take roughly 5 to 20 minutes (Opus with web search and fetch, up to 3 judged attempts). Poll every few seconds.
