@@ -39,7 +39,7 @@ const cookies = {};
 const as = { kyron: "kyron@toj.test", lead: "lead@toj.test", dir: "dir@toj.test", ed: "ed@toj.test", viewer: "viewer@toj.test", other: "other@toj.test" };
 
 before(async () => {
-  pool = await makeSchema(URL_, SCHEMA, ["018_studio_kits.sql", "019_team.sql", "020_native_push.sql", "039_studio_films.sql"]);
+  pool = await makeSchema(URL_, SCHEMA, ["018_studio_kits.sql", "019_team.sql", "020_native_push.sql", "039_studio_films.sql", "040_studio_craft.sql"]);
   sb = pgSupabase(pool, SCHEMA);
   store = fakeStorage();
   sb.storage = store;

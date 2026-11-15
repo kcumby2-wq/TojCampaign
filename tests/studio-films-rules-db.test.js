@@ -247,7 +247,38 @@ test("a title or a file name is read harder than a sentence: run-together, camel
   const kidd = [{ name: "Jordan Kidd", is_minor: true }];
   for (const t of ["teamjordan", "Kiddstrong season"]) assert.deepEqual(U.titleNames(t, kidd).sure.length, 1, t);
   for (const f of ["jordanquote_v2", "kiddquote", "quotejordan"]) assert.ok(U.idNames(f, kidd).length, f);
-  assert.deepEqual(U.minorRunIns("#hopestrong", [{ name: "Hope Field", is_minor: true }]), { sure: [], maybe: ["hope"], edge: ["hope"] });
+  assert.deepEqual(U.minorRunIns("#hopestrong", [{ name: "Hope Field", is_minor: true }]), { sure: ["hope"], maybe: [], edge: ["hope"], loose: [] });
+  assert.deepEqual(U.minorRunIns("#teamfield", [{ name: "Hope Field", is_minor: true }]), { sure: [], maybe: ["field"], edge: ["field"], loose: [] });
+  // An ordinary word that starts or ends with a name: asked; a file name reads it as the name.
+  assert.deepEqual(U.minorRunIns("We grew up on the island", [{ name: "Isla Moss", is_minor: true }]), { sure: [], maybe: ["isla"], edge: [], loose: [] });
+  assert.deepEqual(U.idNames("jordanxyz_v2", kidd), ["jordan"]);
+  // A title: a name with a word beside it is the name; an everyday one run in is asked.
+  assert.deepEqual(U.titleNames("Jordanfootball season", kidd).sure, ["jordan"]);
+  assert.deepEqual(U.titleNames("Summertime grind", [{ name: "Summer Ray", is_minor: true }]), { sure: [], maybe: ["summer"] });
+  assert.deepEqual(U.titleNames("the Jordanian team", kidd), { sure: [], maybe: ["jordan"] });
+  // An ordinary word's letters are asked everywhere, a file name's too.
+  const isla = [{ name: "Isla Moss", is_minor: true }];
+  assert.deepEqual(U.minorRunIns("#island", isla), { sure: [], maybe: ["isla"], edge: [], loose: [] });
+  assert.deepEqual(U.idNames("island_trip_2026.mov", isla), []);
+  assert.deepEqual(U.idNames("isla_trip_2026.mov", isla), ["isla"]);
+  // An English word that holds a name's letters is the word; a name run into
+  // English words is the name.
+  const pool = [{ name: "Kim Tran", is_minor: true }, { name: "Chris Young", is_minor: true }, { name: "Phil Moss", is_minor: true }, { name: "Ally Moss", is_minor: true }, { name: "Jamie Ortiz", is_minor: true }];
+  for (const t of ["Transfer portal", "Merry Christmas", "#merrychristmas", "#Philadelphia", "Basically unstoppable"]) assert.deepEqual(U.minorRunIns(t, pool).sure, [], t);
+  for (const t of ["#letsgojamie", "#bigjamieenergy", "#jamiethegoat", "#weloveyoujamie"]) assert.deepEqual(U.minorRunIns(t, pool).sure, ["jamie"], t);
+  assert.deepEqual(U.idNames("transfer_portal_v1", pool), []);
+  // A name's own plural reading wins in a tag ("angels" in "#angelsquad", "nicks" in "#nicksworld").
+  for (const [t, n] of [["#nicksquad", "Nick Lee"], ["#nicksworld", "Nick Lee"], ["#mikesarmy", "Mike Ray"], ["#angelsquad", "Angel Diaz"], ["#angelsarmy", "Angel Diaz"]]) assert.ok(U.minorRunIns(t, [{ name: n, is_minor: true }]).sure.length, t);
+  // A long run isn't read as words: the work stays small, and the name in it is asked about.
+  const t0 = Date.now();
+  const runs = Array.from({ length: 10 }, (_, k) => ("theannateamannawins" + k).repeat(220).slice(0, 4000));
+  U.graphicsProblems(runs, [{ name: "Anna Moss", is_minor: true }], { format: "quote_card" });
+  U.graphicsAsks(runs, [{ name: "Anna Moss", is_minor: true }], { format: "quote_card" });
+  assert.ok(Date.now() - t0 < 2000, `${Date.now() - t0} ms`);
+  // Names that are plainly common words are everyday words ("Journey", "Crystal", "Angel").
+  for (const [t, n] of [["The journey continues", "Journey Cole"], ["Crystal clear focus", "Crystal Ray"]]) assert.deepEqual(U.strictNames(t.toLowerCase(), [{ name: n, is_minor: true }]), [], t);
+  // "for" alone isn't a word a name runs into ("forward" for a Ward).
+  assert.deepEqual(U.idNames("forward_pass_drill", [{ name: "Ward Bell", is_minor: true }]), []);
   // A file name has no one to ask: an everyday word run in at a word's start or end counts there.
   for (const f of ["hopequote_v02", "quotehope", "HopeQuote"]) assert.deepEqual(U.idNames(f, [{ name: "Hope Field", is_minor: true }]), ["hope"], f);
   assert.deepEqual(U.idNames("ourhopefam", [{ name: "Hope Field", is_minor: true }]), [], "inside a word, it's another word");
@@ -725,11 +756,17 @@ test("the worker's safety net closes what it can and leaves a takedown that's bu
 
 test("an upload that lands after a pull is swept from the pulled film's folder", async () => {
   const { film, p, code } = await aFilm();
-  const file_name = `SW_COL_${film.athlete_id}_HERO_9x16_v01_20261117.mp4`;
-  const up = ok(await films("POST", `/films/${film.id}/cuts/upload`, { format: "hero", ratio: "9x16", version: 1, file_name, bytes: 4096, people: [p.id] }, "ed"), "upload link");
+  const name = (v) => `SW_COL_${film.athlete_id}_HERO_9x16_v0${v}_20261117.mp4`;
+  const link = async (v) => ok(await films("POST", `/films/${film.id}/cuts/upload`, { format: "hero", ratio: "9x16", version: v, file_name: name(v), bytes: 4096, people: [p.id] }, "ed"), "upload link");
+  const up = await link(1);
+  const up2 = await link(2);
   ok(await films("POST", "/people/pull", { person_code: code, confirm: true }, "lead"), "pull");
+  // Registered after the pull, and refused: it goes with the refusal.
+  store.put(U.BUCKET, up2.key, Buffer.alloc(4096, 2), "video/mp4");
+  refused(await films("POST", `/films/${film.id}/cuts`, { id: up2.id, key: up2.key, format: "hero", ratio: "9x16", version: 2, file_name: name(2), bytes: 4096, people: [p.id] }, "ed"), /closed|pulled consent/);
+  assert.equal(store.has(U.BUCKET, up2.key), false);
+  // Never registered: the folder sweep finds it.
   store.put(U.BUCKET, up.key, Buffer.alloc(4096, 1), "video/mp4");
-  refused(await films("POST", `/films/${film.id}/cuts`, { id: up.id, key: up.key, format: "hero", ratio: "9x16", version: 1, file_name, bytes: 4096, people: [p.id] }, "ed"), /closed|pulled consent/);
   assert.ok(store.has(U.BUCKET, up.key));
   await W.sweep({ sb });
   assert.equal(store.has(U.BUCKET, up.key), false);

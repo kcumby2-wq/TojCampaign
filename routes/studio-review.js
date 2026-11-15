@@ -65,6 +65,20 @@ router.use((req, res, next) => {
   next();
 });
 
+// Whether this review is of a set made with the graphics system while it's off.
+async function graphicsPaused(sb, reviewId) {
+  try {
+    const { data: rv } = await sb.from("studio_reviews").select("cut_id").eq("id", reviewId).maybeSingle();
+    if (!rv) return false;
+    const { data: cut } = await sb.from("studio_film_cuts").select("made_with").eq("id", rv.cut_id).maybeSingle();
+    if (!cut || cut.made_with !== "graphics") return false;
+    const { data: sw } = await sb.from("studio_tool_approvals").select("is_on").eq("tool", "graphics_system").maybeSingle();
+    return !(sw && sw.is_on);
+  } catch (e) {
+    return true;
+  }
+}
+
 router.post("/view", safe(async (req, res) => {
   const token = H.bodyOf(req).token;
   if (!wellFormed(token)) return res.status(400).json({ error: "bad_link" });
@@ -74,26 +88,32 @@ router.post("/view", safe(async (req, res) => {
   if (error) return res.status(503).json({ error: "storage_unavailable" });
   const r = firstRow(data);
   if (!r || !r.review_id) return res.status(404).json({ error: "link_not_active" });
+  // A set made with the graphics system waits while that system is off
+  // (migration 040 holds the decision the same way).
+  if (r.kind === "slides" && (await graphicsPaused(sb, r.review_id))) return res.status(409).json({ error: "paused" });
   // Watch links last two hours: long enough to watch twice, short enough
   // that a copied link dies.
   let video = null;
   let poster = null;
   const slides = [];
   try {
-    const keys = [r.preview_key, r.poster_key, ...(r.slide_keys || [])].filter(Boolean);
+    // A set of slides is seen as its copies (marked REVIEW COPY): the set's
+    // folder (preview_key), then 1.jpg, 2.jpg, ... never the files themselves.
+    const copies = r.kind === "slides" && r.preview_key && /\/$/.test(r.preview_key) ? (r.slide_keys || []).map((_, i) => `${r.preview_key}${i + 1}.jpg`) : [];
+    const keys = r.kind === "slides" ? copies : [r.preview_key, r.poster_key].filter(Boolean);
     if (keys.length) {
       const { data: signed } = await sb.storage.from(U.BUCKET).createSignedUrls(keys, 2 * 60 * 60);
-      for (const s of signed || []) {
-        if (!s || !s.signedUrl) continue;
-        if (s.path === r.preview_key) video = s.signedUrl;
-        else if (s.path === r.poster_key) poster = s.signedUrl;
-        else slides.push(s.signedUrl);
+      const by = new Map((signed || []).filter((x) => x && x.signedUrl).map((x) => [x.path, x.signedUrl]));
+      if (r.kind === "slides") for (const k of copies) slides.push(by.get(k) || null);
+      else {
+        video = by.get(r.preview_key) || null;
+        poster = r.poster_key ? by.get(r.poster_key) || null : null;
       }
     }
   } catch (e) {
     console.warn("[studio-review] watch link failed:", e && e.message);
   }
-  if (r.kind !== "slides" && !video) return res.status(503).json({ error: "storage_unavailable" });
+  if (r.kind === "slides" ? !slides.length || slides.some((x) => !x) : !video) return res.status(503).json({ error: "storage_unavailable" });
   res.json({
     ok: true,
     relation: r.relation === "self" ? "self" : r.relation === "guardian" ? "guardian" : "parent",
@@ -133,6 +153,7 @@ router.post("/decide", safe(async (req, res) => {
     ({ data, error } = await sb.rpc("studio_review_decide", args));
   }
   if (error) {
+    if (/graphics system is off/.test(String(error.message || ""))) return res.status(409).json({ error: "paused" });
     console.error("[studio-review] decision not recorded:", error.code || "");
     return res.status(503).json({ error: "storage_unavailable" });
   }

@@ -76,6 +76,45 @@ function checklistFor(kit, title) {
   return [];
 }
 
+// A note card from the kit as plain parts: each list item or paragraph, its
+// bold lead apart. The page shows them as text, so the kit's HTML never
+// reaches it. null when the kit has no such card.
+const ENTITIES = { amp: "&", lt: "<", gt: ">", quot: '"', apos: "'", nbsp: " ", rarr: "→", larr: "←", mdash: "—", ndash: "–", hellip: "…", rsquo: "’", lsquo: "‘", rdquo: "”", ldquo: "“", times: "×" };
+function plain(html) {
+  return String(html || "")
+    .replace(/<br\s*\/?>/gi, " ")
+    .replace(/<[^>]*>/g, "")
+    .replace(/&(#x[0-9a-f]+|#\d+|[a-z]+);/gi, (m, e) => {
+      if (e[0] === "#") {
+        const n = e[1] === "x" || e[1] === "X" ? parseInt(e.slice(2), 16) : parseInt(e.slice(1), 10);
+        return Number.isFinite(n) && n > 31 && n < 0x110000 ? String.fromCodePoint(n) : "";
+      }
+      return ENTITIES[e.toLowerCase()] !== undefined ? ENTITIES[e.toLowerCase()] : m;
+    })
+    .replace(/\s+/g, " ")
+    .trim();
+}
+function cardFor(kit, title) {
+  if (!kit || !title || !Array.isArray(kit.columns)) return null;
+  for (const c of kit.columns) {
+    const card = (c.cards || []).find((x) => x.title === title);
+    if (!card) continue;
+    if (card.type === "todo") return { title: card.title, parts: (card.items || []).map((x) => ({ lead: "", text: plain(x) })) };
+    const parts = [];
+    const re = /<(li|p)\b[^>]*>([\s\S]*?)<\/\1>/gi;
+    let m;
+    while ((m = re.exec(String(card.body || "")))) {
+      const inner = m[2];
+      const b = /^\s*<b>([\s\S]*?)<\/b>/i.exec(inner);
+      const lead = b ? plain(b[1]) : "";
+      const text = plain(b ? inner.slice(b[0].length) : inner);
+      if (lead || text) parts.push({ lead, text });
+    }
+    return { title: card.title, parts };
+  }
+  return null;
+}
+
 // The kit's name pattern: SW_[lane]_[athleteID]_[format]_[ratio]_v[##]_[YYYYMMDD].
 function fileNameFor(template, film, cut, date = new Date()) {
   if (!template) return "";
@@ -86,4 +125,4 @@ function fileNameFor(template, film, cut, date = new Date()) {
   return [template.file_prefix, lane ? lane.code : "LANE", film.athlete_id, fmt ? fmt.code : "FMT", cut.ratio || "9x16", "v" + v, day].join("_");
 }
 
-module.exports = { STEP_KEYS, OWNERS, TEMPLATES, templateFor, stepFor, checklistFor, fileNameFor };
+module.exports = { STEP_KEYS, OWNERS, TEMPLATES, templateFor, stepFor, checklistFor, cardFor, plain, fileNameFor };

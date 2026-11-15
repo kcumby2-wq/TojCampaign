@@ -283,3 +283,17 @@ button, input, textarea, select { font: inherit; color: inherit; }
 .shelf-go > svg { color: var(--faint); flex: none; }
 .shelf-mark { width: 36px; height: 36px; border-radius: 9px; font: 700 12px/1 var(--text); color: var(--bg); background: var(--gold); }
 .shelf-off summary { cursor: pointer; padding: 4px 2px 10px; }
+
+/* Studio craft (film-craft.js): the cards' lights, the ghost frame, slides. */
+.light { width: 14px; height: 14px; border-radius: 7px; flex: none; margin-top: 4px; }
+.light.ok { background: var(--ok); }
+.light.stop { background: var(--bad); }
+.light.pulled { background: #5A3A33; }
+.ghostframe { position: relative; width: 100%; max-width: 380px; aspect-ratio: 9 / 16; max-height: 70vh; margin: 0 auto; border-radius: 16px; overflow: hidden; background: #000; border: 1px solid var(--line); }
+.ghostframe video, .ghostframe img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.ghostframe-grid { position: absolute; inset: 0; pointer-events: none; background:
+  linear-gradient(to right, transparent calc(33.33% - 1px), rgba(255,255,255,.35) 33.33%, transparent calc(33.33% + 1px), transparent calc(66.66% - 1px), rgba(255,255,255,.35) 66.66%, transparent calc(66.66% + 1px)),
+  linear-gradient(to bottom, transparent calc(33.33% - 1px), rgba(255,255,255,.35) 33.33%, transparent calc(33.33% + 1px), transparent calc(50% - 1px), rgba(226,184,100,.6) 50%, transparent calc(50% + 1px), transparent calc(66.66% - 1px), rgba(255,255,255,.35) 66.66%, transparent calc(66.66% + 1px)); }
+.ghostframe-hint { position: absolute; left: 12px; right: 12px; bottom: 12px; margin: 0; padding: 8px 10px; border-radius: 10px; background: rgba(0,0,0,.6); color: var(--ink); font: 500 13px/1.35 var(--text); text-align: center; }
+.gslide { flex: none; height: auto; max-width: 80vw; border-radius: 10px; border: 1px solid var(--line); background: #000; }
+
