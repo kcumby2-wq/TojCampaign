@@ -366,6 +366,9 @@ router.post("/run", member, async (req, res) => {
   if (allowLocked && req._apiKeyAuth) return res.status(403).json({ error: "rule_changes_need_a_person" });
   if (allowLocked && !(req.team && req.team.owner)) return res.status(403).json({ error: "rule_changes_need_the_owner" });
   if ((fromBrief || purpose) && !sameSiteJson(req, res)) return;
+  // The month's refresh and the gear re-check read their brief only, and
+  // the brief is what's checked for names: no source text with them.
+  if (purpose && source) return res.status(400).json({ error: "invalid_source", fields: ["source_text"] });
 
   const sb = getSupabase();
   if (!sb) return res.status(503).json({ error: "supabase_unavailable" });

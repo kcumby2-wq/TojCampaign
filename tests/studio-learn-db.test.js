@@ -508,19 +508,28 @@ test("what every film shares is read against every card for names, not for ordin
   // letters, in lower case from five (as the database reads it); an
   // everyday-word name's at a sentence's start is asked.
   const m = (n) => [{ name: n, is_minor: true }];
-  for (const [t, n, w] of [["Johns dad held the reflector", "John Park", "john"], ["Annas mom asked", "Anna Lee", "anna"], ["NOVAS FIRST GAME", "Nova Diaz", "nova"],
-    ["Williams mom called", "William Ortiz", "william"], ["Ask Graces dad", "Grace Long", "grace"], ["mias mom called", "Mia Cruz", "mia"], ["The Mavericks game b-roll", "Maverick Ruiz", "maverick"],
-    ["Two lincolns on the board", "Lincoln Ruiz", "lincoln"]]) assert.deepEqual(U.kitNames(t, m(n)).minor, [w], t);
-  for (const [t, n, w] of [["Graces dad filmed it", "Grace Long", "grace"], ["Masons mom called", "Mason Hill", "mason"], ["Angels dad filmed it", "Angel Ruiz", "angel"]]) assert.deepEqual(U.kitNames(t, m(n)), { sure: [], maybe: [w], minor: [] }, t);
-  for (const [t, n] of [["three times a day", "Tim Ruiz"], ["the lens cap", "Len Ruiz"], ["Times are hard", "Tim Ruiz"]]) assert.deepEqual(U.kitNames(t, m(n)).sure, [], t);
+  for (const [t, n, w] of [["Ask Johns dad to hold it", "John Park", "john"], ["Williams mom called", "William Ortiz", "william"], ["Ask Graces dad", "Grace Long", "grace"],
+    ["mias mom called", "Mia Cruz", "mia"], ["The Mavericks game b-roll", "Maverick Ruiz", "maverick"], ["Two lincolns on the board", "Lincoln Ruiz", "lincoln"],
+    ["KAYLEES DRILL", "Kaylee Ruiz", "kaylee"]]) assert.deepEqual(U.kitNames(t, m(n)).minor, [w], t);
+  // At a sentence's start, or in a Title Case or capitals line, a capital
+  // says nothing: under five letters (or an everyday word), asked.
+  for (const [t, n, w] of [["Graces dad filmed it", "Grace Long", "grace"], ["Masons mom called", "Mason Hill", "mason"], ["Angels dad filmed it", "Angel Ruiz", "angel"],
+    ["Johns dad held the reflector", "John Park", "john"], ["Annas mom asked", "Anna Lee", "anna"], ["Jeans and boots for the shoot", "Jean Ruiz", "jean"],
+    ["Add Two Cams For The Wides", "Cam Ruiz", "cam"], ["WHAT WORKED: TWO CAMS AND THE NEW LENS", "Cam Ruiz", "cam"], ["OUR HOPES WERE HIGH", "Hope Lee", "hope"],
+    ["NOVAS FIRST GAME", "Nova Diaz", "nova"]]) assert.deepEqual(U.kitNames(t, m(n)), { sure: [], maybe: [w], minor: [] }, t);
+  for (const [t, n] of [["three times a day", "Tim Ruiz"], ["the lens cap", "Len Ruiz"], ["Times are hard", "Tim Ruiz"], ["Pack jeans and boots", "Jean Ruiz"]]) assert.deepEqual(U.kitNames(t, m(n)).sure, [], t);
   // A minor's name of two or three letters in a tag, beside the tag's own word or marked off by capitals.
   for (const [t, n, w] of [["#avastrong", "Ava Ruiz", "ava"], ["#teamava", "Ava Ruiz", "ava"], ["#prayformia", "Mia Ruiz", "mia"], ["#samszn", "Sam Ruiz", "sam"], ["#tystrong", "Ty Ruiz", "ty"],
     ["#TeamAva", "Ava Ruiz", "ava"], ["AvaStrong all week", "Ava Ruiz", "ava"]]) assert.deepEqual(U.kitNames(t, m(n)).minor, [w], t);
-  for (const [t, n] of [["#samedrill", "Sam Ruiz"], ["#avalanche", "Ava Ruiz"], ["JavaScript", "Ava Ruiz"], ["#eliteathlete", "Eli Ruiz"]]) assert.deepEqual(U.kitNames(t, m(n)), { sure: [], maybe: [], minor: [] }, t);
+  for (const [t, n] of [["#samedrill", "Sam Ruiz"], ["#avalanche", "Ava Ruiz"], ["JavaScript", "Ava Ruiz"], ["#eliteathlete", "Eli Ruiz"],
+    ["#gameday", "Ana Day"], ["#edits", "Ed Ruiz"], ["#limits", "Lim Ruiz"], ["#maylove", "May Ruiz"], ["#teamfox", "Ana Fox"],
+    ["MacBook", "Mac Ruiz"], ["iMac", "Mac Ruiz"], ["BenQ", "Ben Ruiz"], ["CamLink", "Cam Ruiz"], ["LeBron", "Le Ruiz"]]) assert.deepEqual(U.kitNames(t, m(n)), { sure: [], maybe: [], minor: [] }, t);
   // Beside the tag's own word, the name wins over an English word that could hold it.
   for (const [t, n, w] of [["#teamaiden", "Aiden Ruiz", "aiden"], ["#teamanna", "Anna Ruiz", "anna"], ["#milanation", "Mila Ruiz", "mila"], ["#itslogan", "Logan Ruiz", "logan"]]) assert.deepEqual(U.kitNames(t, m(n)).minor, [w], t);
   // A minor's everyday-word first name alone in a handle, a file name or a tag with more in it.
-  for (const t of ["Posted to @grace.hoops", "grace_final_v2.mp4", "#grace23"]) assert.deepEqual(U.kitNames(t, m("Grace Long")).minor, ["grace"], t);
+  for (const t of ["Posted to @grace.hoops", "#grace23"]) assert.deepEqual(U.kitNames(t, m("Grace Long")).minor, ["grace"], t);
+  // Elsewhere in a file name, a link or a tag with a year: asked.
+  for (const [t, n, w] of [["grace_final_v2.mp4", "Grace Long", "grace"], ["chase_cam_v2.mp4", "Chase Ruiz", "chase"], ["#summer2027", "Summer Ruiz", "summer"], ["https://www.chase.com/business", "Chase Ruiz", "chase"]]) assert.deepEqual(U.kitNames(t, m(n)), { sure: [], maybe: [w], minor: [] }, t);
   assert.deepEqual(U.kitNames("#hope", m("Hope Lee")).sure, []);
   assert.deepEqual(U.kitNames("Lucasfilm made it", m("Lucas Ruiz")), { sure: [], maybe: [], minor: [] });
   // What the app wrote is taken out before a brief is read.
