@@ -518,9 +518,15 @@ test("what every film shares is read against every card for names, not for ordin
   // At a sentence's start, or in a Title Case or capitals line, a capital
   // says nothing: under five letters (or an everyday word), asked.
   for (const [t, n, w] of [["Graces dad filmed it", "Grace Long", "grace"], ["Masons mom called", "Mason Hill", "mason"], ["Angels dad filmed it", "Angel Ruiz", "angel"],
-    ["Johns dad held the reflector", "John Park", "john"], ["Annas mom asked", "Anna Lee", "anna"], ["Jeans and boots for the shoot", "Jean Ruiz", "jean"],
-    ["Add Two Cams For The Wides", "Cam Ruiz", "cam"], ["WHAT WORKED: TWO CAMS AND THE NEW LENS", "Cam Ruiz", "cam"], ["OUR HOPES WERE HIGH", "Hope Lee", "hope"],
-    ["NOVAS FIRST GAME", "Nova Diaz", "nova"]]) assert.deepEqual(U.kitNames(t, m(n)), { sure: [], maybe: [w], minor: [] }, t);
+    ["Jeans and boots for the shoot", "Jean Ruiz", "jean"], ["Johns are on the left", "John Park", "john"],
+    ["Add Two Cams For The Wides", "Cam Ruiz", "cam"], ["WHAT WORKED: TWO CAMS AND THE NEW LENS", "Cam Ruiz", "cam"], ["OUR HOPES WERE HIGH", "Hope Lee", "hope"]]) assert.deepEqual(U.kitNames(t, m(n)), { sure: [], maybe: [w], minor: [] }, t);
+  // A four-letter plural at a sentence's start right before a family or role word: the possessive.
+  for (const [t, n, w] of [["Johns dad held the reflector", "John Park", "john"], ["Annas mom asked", "Anna Lee", "anna"], ["NOVAS FIRST GAME", "Nova Diaz", "nova"]]) assert.deepEqual(U.kitNames(t, m(n)).minor, [w], t);
+  // In a Title Case or capitals line, right after a shout-out's words: the name, as graphics read it.
+  for (const [t, n, w] of [["Go Hope Go", "Hope Field", "hope"], ["THANKS GRACE FOR THE ASSIST", "Grace Lin", "grace"], ["Shout Out To Hope And The Crew", "Hope Field", "hope"],
+    ["Happy Birthday Faith From The Crew", "Faith Moss", "faith"], ["Thank You Coach Will For The Ride", "Will Ruiz", "will"]]) assert.deepEqual(U.kitNames(t, m(n)).minor, [w], t);
+  assert.deepEqual(U.kitNames("Go Green Go White Tonight", m("Ava Green")).sure, [], "after go, a surname is a chant as often");
+  assert.deepEqual(U.kitNames("Go Chase Your Dreams Tonight", m("Chase Hale")), { sure: [], maybe: ["chase"], minor: [] });
   for (const [t, n] of [["three times a day", "Tim Ruiz"], ["the lens cap", "Len Ruiz"], ["Times are hard", "Tim Ruiz"], ["Pack jeans and boots", "Jean Ruiz"]]) assert.deepEqual(U.kitNames(t, m(n)).sure, [], t);
   // A minor's name of two or three letters in a tag, beside the tag's own word or marked off by capitals.
   for (const [t, n, w] of [["#avastrong", "Ava Ruiz", "ava"], ["#teamava", "Ava Ruiz", "ava"], ["#prayformia", "Mia Ruiz", "mia"], ["#samszn", "Sam Ruiz", "sam"], ["#tystrong", "Ty Ruiz", "ty"],
@@ -530,10 +536,18 @@ test("what every film shares is read against every card for names, not for ordin
     ["MacBook", "Mac Ruiz"], ["iMac", "Mac Ruiz"], ["BenQ", "Ben Ruiz"], ["CamLink", "Cam Ruiz"], ["LeBron", "Le Ruiz"]]) assert.deepEqual(U.kitNames(t, m(n)), { sure: [], maybe: [], minor: [] }, t);
   // Beside the tag's own word, the name wins over an English word that could hold it.
   for (const [t, n, w] of [["#teamaiden", "Aiden Ruiz", "aiden"], ["#teamanna", "Anna Ruiz", "anna"], ["#milanation", "Mila Ruiz", "mila"], ["#itslogan", "Logan Ruiz", "logan"]]) assert.deepEqual(U.kitNames(t, m(n)).minor, [w], t);
-  // A minor's everyday-word first name alone in a handle, a file name or a tag with more in it.
-  for (const t of ["Posted to @grace.hoops", "#grace23"]) assert.deepEqual(U.kitNames(t, m("Grace Long")).minor, ["grace"], t);
-  // Elsewhere in a file name, a link or a tag with a year: asked.
-  for (const [t, n, w] of [["grace_final_v2.mp4", "Grace Long", "grace"], ["chase_cam_v2.mp4", "Chase Ruiz", "chase"], ["#summer2027", "Summer Ruiz", "summer"], ["https://www.chase.com/business", "Chase Ruiz", "chase"]]) assert.deepEqual(U.kitNames(t, m(n)), { sure: [], maybe: [w], minor: [] }, t);
+  // A minor's everyday-word first name alone in a handle (with nothing after
+  // it, a tag's word, a number or their own name), a profile link's path, or
+  // a tag or run with a number that ends it or comes first; a class year too.
+  for (const t of ["Posted to @grace.hoops", "#grace23", "Tag @grace on the reel", "@grace_23", "@grace.lin.hoops", "instagram.com/grace.hoops", "tiktok.com/@grace.hoops", "#23grace", "#grace_23", "grace-23 highlights", "#grace2027"]) {
+    assert.ok(U.kitNames(t, m("Grace Lin")).minor.includes("grace"), t);
+  }
+  // Elsewhere in a file name, a link, a tag with a year after a season or a
+  // month, a phrase's number, another handle that starts with the word: asked.
+  for (const [t, n, w] of [["grace_final_v2.mp4", "Grace Long", "grace"], ["chase_cam_v2.mp4", "Chase Ruiz", "chase"], ["#summer2027", "Summer Ruiz", "summer"], ["https://www.chase.com/business", "Chase Ruiz", "chase"],
+    ["#summer24", "Summer Day", "summer"], ["#autumn24", "Autumn Ruiz", "autumn"], ["#hope4life", "Hope Field", "hope"], ["#grace2gether", "Grace Lin", "grace"], ["chase2.mp4", "Chase Hale", "chase"],
+    ["sky1_replacement.mp4", "Sky Lane", "sky"], ["rose1.png", "Rose Ruiz", "rose"], ["mark2_test.mov", "Mark Diaz", "mark"], ["@grace.church", "Grace Lin", "grace"], ["@summer.league.tx", "Summer Day", "summer"],
+    ["@sky.sports", "Sky Lane", "sky"], ["@chase.bank", "Chase Hale", "chase"]]) assert.deepEqual(U.kitNames(t, m(n)), { sure: [], maybe: [w], minor: [] }, t);
   assert.deepEqual(U.kitNames("#hope", m("Hope Lee")).sure, []);
   assert.deepEqual(U.kitNames("Lucasfilm made it", m("Lucas Ruiz")), { sure: [], maybe: [], minor: [] });
   // What the app wrote is taken out before a brief is read.
