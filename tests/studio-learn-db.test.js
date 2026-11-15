@@ -534,7 +534,10 @@ test("what every film shares is read against every card for names, not for ordin
   // Not where the word starts a place or a group, a verb follows, or "miss" isn't a greeting: asked.
   for (const [t, n, w] of [["Do Not Miss Summer Practice", "Summer Day", "summer"], ["Never Miss Chase Cam Checks", "Chase Hale", "chase"], ["Miss Grace Period Deadlines", "Grace Lin", "grace"],
     ["Coach Will Explain The Drill", "Will Ruiz", "will"], ["Thanks Summer Camp Staff", "Summer Day", "summer"], ["Shout Out To Grace Church", "Grace Lin", "grace"],
-    ["Thank You Hope Center Volunteers", "Hope Field", "hope"], ["Dear Summer Interns", "Summer Day", "summer"]]) assert.deepEqual(U.kitNames(t, m(n)), { sure: [], maybe: [w], minor: [] }, t);
+    ["Thank You Hope Center Volunteers", "Hope Field", "hope"], ["Dear Summer Interns", "Summer Day", "summer"],
+    ["Thanks Grace Chapel For The Space", "Grace Lin", "grace"], ["Thanks Hope Lodge For Hosting", "Hope Field", "hope"], ["Thanks Chase Bank For Sponsoring", "Chase Hale", "chase"],
+    ["Thanks Rose Bowl Crew", "Rose Ruiz", "rose"], ["Thanks Summer Session Coaches", "Summer Day", "summer"], ["Thanks Willow Creek Parks", "Willow Ruiz", "willow"],
+    ["Happy Birthday Mark Twain Elementary", "Mark Diaz", "mark"], ["Hey Will You Send The Files", "Will Ruiz", "will"]]) assert.deepEqual(U.kitNames(t, m(n)), { sure: [], maybe: [w], minor: [] }, t);
   // "first" and "coach" after a plural are the camera's, the lens's: asked.
   for (const [t, n, w] of [["Lens first, then mount the cage", "Len Ruiz", "len"], ["Cams first, then the lights", "Cam Ruiz", "cam"], ["Jeans first, then boots", "Jean Ruiz", "jean"],
     ["Levis first then boots", "Levi Ruiz", "levi"], ["Lens coach said to stop down", "Len Ruiz", "len"]]) assert.deepEqual(U.kitNames(t, m(n)), { sure: [], maybe: [w], minor: [] }, t);
@@ -552,7 +555,7 @@ test("what every film shares is read against every card for names, not for ordin
   // it, a tag's word, a number or their own name), a profile link's path, or
   // a tag or run with a number that ends it or comes first; a class year too.
   for (const t of ["Posted to @grace.hoops", "#grace23", "Tag @grace on the reel", "@grace_23", "@grace.lin.hoops", "instagram.com/grace.hoops", "tiktok.com/@grace.hoops", "#23grace", "#grace_23", "grace-23 highlights", "#grace2027",
-    "@grace.volleyball", "@grace.vb", "@grace.qb1", "@grace_wr", "instagram.com/grace_football"]) {
+    "@grace.volleyball", "@grace.vb", "@grace.qb1", "@grace_wr", "instagram.com/grace_football", "@grace.wbb", "@grace_wvb"]) {
     assert.ok(U.kitNames(t, m("Grace Lin")).minor.includes("grace"), t);
   }
   // Elsewhere in a file name, a link, a tag with a year after a season or a
