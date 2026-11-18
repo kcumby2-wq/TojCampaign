@@ -65,6 +65,25 @@ test("event fields that can't be used are named", () => {
   assert.deepEqual(M.eventInput({ clip_cents: 1500 }, { partial: true }).value, { clip_cents: 1500 });
 });
 
+test("an event's SportsClippers link: https on sportsclippers.com, or empty to clear it", () => {
+  const ok = M.eventInput({ sportsclippers_url: " https://www.sportsclippers.com/events/pylon-dallas " }, { partial: true });
+  assert.deepEqual(ok, { errors: [], value: { sportsclippers_url: "https://www.sportsclippers.com/events/pylon-dallas" } });
+  assert.deepEqual(M.eventInput({ sportsclippers_url: "" }, { partial: true }).value, { sportsclippers_url: null }, "empty clears it");
+  for (const bad of ["http://www.sportsclippers.com/x", "https://sportsclippers.com.evil.test/x", "https://evil.test/sportsclippers.com", "https://user@sportsclippers.com/x", "https://www.sportsclippers.com:8443/x", "javascript:alert(1)", "not a link"])
+    assert.deepEqual(M.eventInput({ sportsclippers_url: bad }, { partial: true }).errors, ["sportsclippers_url"], bad);
+  assert.equal(M.eventInput({ name: "x", starts_on: "2026-11-21" }).value.sportsclippers_url, undefined, "a new event starts without one");
+});
+
+test("the SportsClippers line on family pages: only a sportsclippers.com link, escaped, opened without a referrer", () => {
+  const P = require("../utils/sm-market-page");
+  assert.equal(P.scNote({}), "");
+  assert.equal(P.scNote({ sportsclippers_url: "https://evil.test/" }), "", "a link from anywhere else never shows");
+  const html = P.scNote({ sportsclippers_url: "https://www.sportsclippers.com/events/x?a=1&b=2" });
+  assert.match(html, /href="https:\/\/www\.sportsclippers\.com\/events\/x\?a=1&amp;b=2"/);
+  assert.match(html, /target="_blank" rel="noopener noreferrer"/);
+  assert.match(html, /Subject Medias' distribution partner/);
+});
+
 test("prices typed as dollars", () => {
   assert.equal(M.centsOf("$12"), 1200);
   assert.equal(M.centsOf("8.5"), 850);

@@ -13,7 +13,13 @@ the edited products, the browse store and revenue reporting.
 ## How it runs
 
 1. **Staff set up the event** in the TOJ app (Today → Marketplace): name,
-   dates, teams, the jersey numbers they know. It starts as a draft.
+   dates, teams, the jersey numbers they know. It starts as a draft. Once
+   the event has a storefront on SportsClippers, Subject Medias' distribution
+   partner, an approver pastes its link on the event (For families →
+   SportsClippers storefront). The clips page and family links then say the
+   event is also on SportsClippers; nothing shows while it's empty. The link
+   must be https on sportsclippers.com (migration 046), and the pages send no
+   referrer, so a family link never reaches SportsClippers.
 2. **Families choose** from the "Their choice" QR at check-in
    (subjectmedias.com/m/CODE/consent): family only, OK to sell, OK to show
    publicly, or keep out, and the athlete's age (12 or younger, 13 to 15,

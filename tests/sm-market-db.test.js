@@ -45,10 +45,13 @@ before(async () => {
   const read = (f) => fs.readFileSync(path.join(__dirname, "..", "db", "migrations", f), "utf8").replace(/public\./g, `${S}.`);
   const sql = read("033_sm_market.sql");
   const prices = read("045_sm_market_prices.sql");
+  const scLink = read("046_sm_market_sc_link.sql");
   await q(sql);
   await q(prices);
-  await q(sql); // safe to run twice, and keeps 045's prices
+  await q(scLink);
+  await q(sql); // safe to run twice, and keeps 045's prices and 046's link
   await q(prices);
+  await q(scLink);
   ev = await one(`insert into sm_market_events (code, name, starts_on, ends_on, view_key, created_by) values ('AB2CD3', 'Fall Showcase', '2026-11-21', '2026-11-22', 'ABCD2345', 'kyron@toj.test') returning *`);
   ev2 = await one(`insert into sm_market_events (code, name, starts_on, ends_on, view_key, created_by) values ('XY4ZW5', 'Winter Classic', '2026-12-05', '2026-12-05', 'WXYZ6789', 'kyron@toj.test') returning *`);
   team = await one(`insert into sm_market_teams (event_id, name) values ($1, 'Lightning') returning *`, [ev.id]);
@@ -58,6 +61,15 @@ before(async () => {
 });
 after(async () => {
   if (pool) await pool.end();
+});
+
+test("an event's SportsClippers link is a sportsclippers.com link or nothing (046)", async () => {
+  assert.equal(ev.sportsclippers_url, null, "none until an approver sets it");
+  await q(`update sm_market_events set sportsclippers_url = 'https://www.sportsclippers.com/events/fall-showcase' where id = $1`, [ev.id]);
+  for (const bad of ["https://evil.test/x", "http://www.sportsclippers.com/x", "https://sportsclippers.com.evil.test/x", "https://www.sportsclippers.com/x\"><script>"])
+    await refused(`update sm_market_events set sportsclippers_url = $2 where id = $1`, [ev.id, bad], "sportsclippers_url_chk");
+  await refused(`update sm_market_events set sportsclippers_url = $2 where id = $1`, [ev.id, "https://www.sportsclippers.com/" + "a".repeat(300)], "sportsclippers_url_chk");
+  await q(`update sm_market_events set sportsclippers_url = null where id = $1`, [ev.id]);
 });
 
 test("events: a readable code, real dates, sensible prices", async () => {
