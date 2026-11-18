@@ -211,6 +211,22 @@ test("dates change against the other date as it stands; prices in cents within l
   assert.equal((await call("PATCH", "/api/sm/market/events/not-an-id", { status: "live" }, "lead")).status, 404);
 });
 
+test("an event's SportsClippers link: approvers set it, only on sportsclippers.com, empty clears it", async () => {
+  const ev = await newEvent();
+  assert.equal(ev.sportsclippers_url ?? null, null);
+  const url = "https://www.sportsclippers.com/events/fall-showcase";
+  assert.equal((await call("PATCH", `/api/sm/market/events/${ev.id}`, { sportsclippers_url: url }, "crew")).status, 403);
+  const bad = await call("PATCH", `/api/sm/market/events/${ev.id}`, { sportsclippers_url: "https://evil.test/x" }, "lead");
+  assert.equal(bad.status, 400);
+  assert.deepEqual(bad.data.fields, ["sportsclippers_url"]);
+  const ok = await call("PATCH", `/api/sm/market/events/${ev.id}`, { sportsclippers_url: url }, "lead");
+  assert.equal(ok.status, 200);
+  assert.equal(ok.data.event.sportsclippers_url, url);
+  const cleared = await call("PATCH", `/api/sm/market/events/${ev.id}`, { sportsclippers_url: "" }, "lead");
+  assert.equal(cleared.status, 200);
+  assert.equal(cleared.data.event.sportsclippers_url, null);
+});
+
 // ── The roster and consent ───────────────────────────────────────────────
 test("jersey numbers in one go; repeats and leading zeros fold together", async () => {
   const ev = await newEvent();

@@ -165,6 +165,7 @@
       qrCard("event", "Clips and photos", "Where families find their athlete by team and number, and buy. It carries the access code: hand it out at check-in and share it with teams, never on a public poster.", ev.links.event) +
       '<article class="card tight"><div class="row"><div class="grow"><div class="name" style="font-size:15px">Access code: <span class="mono">' + h(ev.links.access_code || "") + '</span></div><div class="sub">Families can type it on the clips page too. Family links open without it.</div></div>' +
       (can.edit ? '<button type="button" class="btn small ghost" id="mkNewCode">New code</button>' : "") + '</div><p class="body" id="mkCodeMsg" role="status"></p></article>' +
+      scCard(ev, can) +
       "</section>" +
       '<section class="sec"><h2 class="sec-h">Footage</h2>' +
       '<div class="stats"><div class="stat' + (c.review ? " warnb" : "") + '"><b>' + (c.review || 0) + '</b><span>To review</span></div><div class="stat"><b>' + (c.approved || 0) + '</b><span>On sale</span></div><div class="stat"><b>' + waiting + '</b><span>Processing</span></div><div class="stat' + (c.failed ? " alert" : "") + '"><b>' + (c.failed || 0) + "</b><span>Failed</span></div></div>" +
@@ -216,6 +217,15 @@
       try { await t.post(API + "/events/" + enc(ev.id) + "/access-code", {}); t.toast("New access code. Print the new clips QR."); event(id); }
       catch (e) { b.disabled = false; note("mkCodeMsg", say(e)); }
     });
+    if ($("mkScSave")) $("mkScSave").addEventListener("click", async function () {
+      var b = this, v = $("mkSc").value.trim();
+      b.disabled = true;
+      try {
+        await t.post(API + "/events/" + enc(ev.id), { sportsclippers_url: v }, "PATCH");
+        note("mkScMsg", v ? "Saved. The clips page and family links show it." : "Removed. Families don't see a SportsClippers link.", true);
+      } catch (e) { note("mkScMsg", e.data && e.data.error === "invalid" ? "Use the event's https link on sportsclippers.com." : say(e)); }
+      b.disabled = false;
+    });
     if ($("mkPrices")) $("mkPrices").addEventListener("click", async function () {
       var cents = function (v) { return Math.round(parseFloat(String(v).replace(/^\$/, "")) * 100); };
       try {
@@ -223,6 +233,15 @@
         note("mkPriceMsg", "Saved. New orders use these prices.", true);
       } catch (e) { note("mkPriceMsg", e.data && e.data.error === "invalid" ? "Prices run from $1 to $1,000." : say(e)); }
     });
+  }
+
+  // The event's storefront on SportsClippers, our distribution partner. An
+  // approver pastes it; the clips page and family links show it once saved.
+  function scCard(ev, can) {
+    var url = ev.sportsclippers_url || "";
+    if (!can.edit) return url ? '<article class="card tight"><div class="name" style="font-size:15px">On SportsClippers</div><div class="sub" style="overflow-wrap:anywhere"><a href="' + h(url) + '" target="_blank" rel="noopener noreferrer">' + h(url) + "</a></div></article>" : "";
+    return '<article class="card tight"><div class="name" style="font-size:15px">SportsClippers storefront</div><div class="sub">This event\'s page on SportsClippers, our distribution partner. Once it\'s saved, the clips page and family links show it. Leave it empty to hide it.</div>' +
+      '<div class="row"><input class="input grow" id="mkSc" type="url" inputmode="url" maxlength="300" placeholder="https://www.sportsclippers.com/…" autocomplete="off" value="' + h(url) + '"><button type="button" class="btn small" id="mkScSave">Save</button></div><p class="body" id="mkScMsg" role="status"></p></article>';
   }
 
   // ── One jersey ─────────────────────────────────────────────────────────

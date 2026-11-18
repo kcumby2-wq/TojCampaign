@@ -8,6 +8,7 @@
 // order total up to date, and the pages work without it.
 
 const M = require("./sm-market");
+const { SC_URL } = require("./gfs-page");
 
 const esc = (v) =>
   String(v == null ? "" : v)
@@ -162,6 +163,14 @@ function evHead(ev, sub = "") {
 <p class="ev-meta">${esc(meta)}</p>${sub ? `\n<p class="lede">${sub}</p>` : ""}`;
 }
 
+// The event's storefront on SportsClippers, once an approver has set it. The
+// page sends no referrer, so a family link never reaches SportsClippers.
+function scNote(event) {
+  const url = event && event.sportsclippers_url;
+  if (!url || !SC_URL.test(String(url))) return "";
+  return `<p class="note sc">This event is also on SportsClippers, Subject Medias' distribution partner: <a href="${esc(url)}" target="_blank" rel="noopener noreferrer">see it on SportsClippers</a>.</p>`;
+}
+
 const teamOptions = (teams, chosen) =>
   `<option value="">Pick a team</option>` + teams.map((t) => `<option value="${esc(t.id)}"${t.id === chosen ? " selected" : ""}>${esc(t.name)}</option>`).join("");
 
@@ -205,6 +214,7 @@ ${error ? `<p class="msg" role="alert">${esc(error)}</p>` : ""}
   if (items && team) {
     body += results({ action: `/m/${esc(event.code)}/checkout`, hidden: { k: key, team: team.id, jersey }, label: `${team.name} #${jersey}`, items, event });
   }
+  body += scNote(event);
   return shell({ nonce, title: `${event.name} | Subject Medias`, body, script: items && items.length ? TOTAL_SCRIPT : "" });
 }
 
@@ -345,6 +355,7 @@ function familyPage({ nonce, event, team, jersey, level, items, token, eventLink
   }
   body += results({ action: `/m/f/${esc(token)}/checkout`, hidden: {}, label: `${team} #${jersey}`, items, event });
   if (eventLink) body += `<p class="note">Clips with teammates in them, from families who've said yes, are on <a href="${esc(eventLink)}">this event's clips page</a>, with the access code from check-in.</p>`;
+  body += scNote(event);
   return shell({ nonce, title: `${team} #${jersey} | ${event.name}`, body, script: items.length ? TOTAL_SCRIPT : "" });
 }
 
@@ -382,4 +393,4 @@ function messagePage({ nonce, title, text, link = null, linkText = "" }) {
   return shell({ nonce, title: `${title} | Subject Medias`, body });
 }
 
-module.exports = { esc, helpEmail, dateRange, dollars, length, CHOICES, AGES, WHO, eventGatePage, eventPage, consentPage, consentSentPage, confirmPage, familyPage, orderPage, messagePage, TOTAL_SCRIPT };
+module.exports = { esc, scNote, helpEmail, dateRange, dollars, length, CHOICES, AGES, WHO, eventGatePage, eventPage, consentPage, consentSentPage, confirmPage, familyPage, orderPage, messagePage, TOTAL_SCRIPT };

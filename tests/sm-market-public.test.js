@@ -156,6 +156,23 @@ beforeEach(() => {
 const shown = (html) => [M1, M2, M3, M4, M5, M6, M7].filter((m) => html.includes(`value="${m}"`));
 
 // ── The event page ───────────────────────────────────────────────────────
+test("the SportsClippers link: on the clips page and family links once an approver sets it, never before the code", async () => {
+  const ev = db.tables.sm_market_events.find((e) => e.id === EV);
+  const clipsUrl = `/m/AB2CD3?k=ABCD2345&team=${LIGHTNING}&jersey=7`;
+  assert.ok(!(await get(clipsUrl)).html.includes("SportsClippers"), "nothing while it's empty");
+  ev.sportsclippers_url = "https://www.sportsclippers.com/events/fall-showcase";
+  const clips = await get(clipsUrl);
+  assert.match(clips.html, /<a href="https:\/\/www\.sportsclippers\.com\/events\/fall-showcase" target="_blank" rel="noopener noreferrer">see it on SportsClippers<\/a>/);
+  assert.equal(clips.headers.get("referrer-policy"), "no-referrer", "a family link never reaches SportsClippers");
+  assert.ok(!/style="/.test(clips.html), "no inline style attributes (the CSP would block them)");
+  assert.match((await get("/m/AB2CD3?k=ABCD2345")).html, /see it on SportsClippers/, "on the clips page before a team is picked");
+  assert.match((await get(`/m/f/${familyToken}`)).html, /see it on SportsClippers/, "on a family link");
+  assert.ok(!(await get("/m/AB2CD3")).html.includes("SportsClippers"), "not on the page that asks for the code");
+  assert.ok(!(await get("/m/XY4ZW5?k=WXYZ6789")).html.includes("see it on SportsClippers"), "another event's page doesn't show it");
+  ev.sportsclippers_url = "https://evil.test/";
+  assert.ok(!(await get(clipsUrl)).html.includes("see it on SportsClippers"), "only ever a sportsclippers.com link");
+});
+
 test("the event page: its own locked-down headers, the teams, no athlete listed", async () => {
   const r = await get("/m/AB2CD3?k=ABCD2345");
   assert.equal(r.status, 200);

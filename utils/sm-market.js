@@ -25,6 +25,7 @@
 const crypto = require("crypto");
 const { line } = require("./tools");
 const { STATE_REGION, isEmail } = require("./sm-bookings");
+const { sportsClippersUrl } = require("./gfs-page");
 
 const BUCKET = "sm-market";
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -159,6 +160,14 @@ function eventInput(raw, { partial = false } = {}) {
     const c = centsOf(r[k], { isCents: true });
     if (c === null) errors.push(k);
     else v[k] = c;
+  }
+  // The event's storefront on SportsClippers, Subject Medias' distribution
+  // partner (Kyron, Nov 18): a link on sportsclippers.com, or empty to clear
+  // it. Checked as a Pylon stop's is (utils/gfs-page.js).
+  if (r.sportsclippers_url !== undefined) {
+    const s = sportsClippersUrl(r.sportsclippers_url);
+    if (s.error) errors.push("sportsclippers_url");
+    else v.sportsclippers_url = s.url;
   }
   if (r.status !== undefined) {
     if (STATUSES.includes(r.status)) v.status = r.status;
