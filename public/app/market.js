@@ -107,7 +107,7 @@
         '<label class="field"><span class="label">Sport <small>(helps the AI read numbers)</small></span><input class="input" id="mkSport" maxlength="40" placeholder="Football" autocomplete="off"></label>' +
         '<label class="field"><span class="label">Venue</span><input class="input" id="mkVenue" maxlength="120" autocomplete="off"></label>' +
         '<div style="display:grid;grid-template-columns:minmax(0,2fr) minmax(0,1fr);gap:10px"><label class="field"><span class="label">City</span><input class="input" id="mkCity" maxlength="80" autocomplete="off"></label><label class="field"><span class="label">State</span><input class="input" id="mkState" maxlength="2" placeholder="TX" autocomplete="off" style="text-transform:uppercase"></label></div>' +
-        '<p class="sub" style="margin:0">$12 a clip and $8 a photo to start; you can change them on the event. It starts as a draft: families see it once it\'s live.</p>' +
+        '<p class="sub" style="margin:0">$19.99 a clip and $11.99 a photo to start, SportsClippers\' prices; you can change them on the event. It starts as a draft: families see it once it\'s live.</p>' +
         '<button type="button" class="btn" id="mkAdd">Create the event</button><p class="body" id="mkMsg" role="status"></p></section>'
       : "";
     t.show("today",

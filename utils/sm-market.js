@@ -46,7 +46,10 @@ const AGE_WORDS = Object.freeze({ u13: "12 or younger", "13_15": "13 to 15", "16
 const VIEW_KEY = /^[A-HJ-NP-Z2-9]{8}$/;
 const STATUSES = Object.freeze(["draft", "live", "closed"]);
 const MEDIA_STATUSES = Object.freeze(["uploaded", "processing", "review", "approved", "hidden", "failed"]);
-const DEFAULT_PRICES = Object.freeze({ clip: 1200, photo: 800 });
+// A new event's prices match SportsClippers', the exclusive distribution
+// partner (Kyron, Nov 18): its flat rates for event footage. Migration 045
+// sets the same column defaults.
+const DEFAULT_PRICES = Object.freeze({ clip: 1999, photo: 1199 });
 const KIND_OF_EXT = Object.freeze({ mp4: "clip", mov: "clip", m4v: "clip", jpg: "photo", jpeg: "photo", png: "photo" });
 const TYPE_OF_EXT = Object.freeze({ mp4: "video/mp4", mov: "video/quicktime", m4v: "video/x-m4v", jpg: "image/jpeg", jpeg: "image/jpeg", png: "image/png" });
 const MAX_UPLOAD_BYTES = 2 * 1024 * 1024 * 1024;

@@ -42,9 +42,13 @@ before(async () => {
     await admin.query(`do $$ begin if not exists (select 1 from pg_roles where rolname = '${r}') then create role ${r} nologin; end if; end $$`);
   await admin.end();
   pool = new Pool({ connectionString: URL_, options: `-c search_path=${S}` });
-  const sql = fs.readFileSync(path.join(__dirname, "..", "db", "migrations", "033_sm_market.sql"), "utf8").replace(/public\./g, `${S}.`);
+  const read = (f) => fs.readFileSync(path.join(__dirname, "..", "db", "migrations", f), "utf8").replace(/public\./g, `${S}.`);
+  const sql = read("033_sm_market.sql");
+  const prices = read("045_sm_market_prices.sql");
   await q(sql);
-  await q(sql); // safe to run twice
+  await q(prices);
+  await q(sql); // safe to run twice, and keeps 045's prices
+  await q(prices);
   ev = await one(`insert into sm_market_events (code, name, starts_on, ends_on, view_key, created_by) values ('AB2CD3', 'Fall Showcase', '2026-11-21', '2026-11-22', 'ABCD2345', 'kyron@toj.test') returning *`);
   ev2 = await one(`insert into sm_market_events (code, name, starts_on, ends_on, view_key, created_by) values ('XY4ZW5', 'Winter Classic', '2026-12-05', '2026-12-05', 'WXYZ6789', 'kyron@toj.test') returning *`);
   team = await one(`insert into sm_market_teams (event_id, name) values ($1, 'Lightning') returning *`, [ev.id]);
@@ -57,8 +61,8 @@ after(async () => {
 });
 
 test("events: a readable code, real dates, sensible prices", async () => {
-  assert.equal(ev.clip_cents, 1200);
-  assert.equal(ev.photo_cents, 800);
+  assert.equal(ev.clip_cents, 1999, "SportsClippers' clip price (045)");
+  assert.equal(ev.photo_cents, 1199, "SportsClippers' photo price (045)");
   assert.equal(ev.status, "draft");
   await refused(`insert into sm_market_events (code, name, starts_on, ends_on, view_key, created_by) values ('AB0CD1', 'x', '2026-11-21', '2026-11-21', 'QRST2345', 'k@t.co')`);
   await refused(`insert into sm_market_events (code, name, starts_on, ends_on, view_key, created_by) values ('AB2CD3', 'x', '2026-11-21', '2026-11-21', 'QRST2345', 'k@t.co')`, null, "unique|duplicate");
