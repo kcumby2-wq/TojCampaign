@@ -149,12 +149,12 @@ test("every change is JSON only, so another site's form can't make one", async (
 });
 
 // ── Events ───────────────────────────────────────────────────────────────
-test("a new event: a readable code, its links, $12 a clip and $8 a photo", async () => {
+test("a new event: a readable code, its links, SportsClippers' prices ($19.99 a clip, $11.99 a photo)", async () => {
   const ev = await newEvent();
   assert.match(ev.code, M.CODE);
   assert.equal(ev.state, "TX");
-  assert.equal(ev.clip_cents, 1200);
-  assert.equal(ev.photo_cents, 800);
+  assert.equal(ev.clip_cents, 1999);
+  assert.equal(ev.photo_cents, 1199);
   assert.equal(ev.status, "draft");
   assert.equal(ev.created_by, as.lead);
   assert.match(ev.view_key, M.VIEW_KEY, "the clips page's access code");

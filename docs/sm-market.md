@@ -5,7 +5,8 @@ and hosts buy. Sellers are Subject Medias and its crews only.
 
 Phase 1 is one event end to end: the roster, families' choices from a QR,
 uploads, AI-suggested jersey numbers that staff confirm, a link per event and
-a link per family, single clips ($12) and photos ($8), Stripe Checkout, and
+a link per family, single clips ($19.99) and photos ($11.99), priced to match
+SportsClippers, Stripe Checkout, and
 downloads. Phase 2 adds pre-paid packages and team or event bundles; phase 3
 the edited products, the browse store and revenue reporting.
 

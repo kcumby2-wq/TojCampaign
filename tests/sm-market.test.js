@@ -48,11 +48,11 @@ test("link tokens: random, and the database keeps only the hash", () => {
 });
 
 // ── Events ───────────────────────────────────────────────────────────────
-test("a new event: the default prices are $12 a clip and $8 a photo", () => {
+test("a new event: the default prices are SportsClippers' ($19.99 a clip, $11.99 a photo)", () => {
   const { errors, value } = M.eventInput({ name: "Fall 7v7 Showcase", sport: "7v7 Football", starts_on: "2026-11-21", state: "ga" });
   assert.deepEqual(errors, []);
-  assert.equal(value.clip_cents, 1200);
-  assert.equal(value.photo_cents, 800);
+  assert.equal(value.clip_cents, 1999);
+  assert.equal(value.photo_cents, 1199);
   assert.equal(value.ends_on, "2026-11-21", "a one-day event ends the day it starts");
   assert.equal(value.state, "GA");
 });

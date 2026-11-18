@@ -166,7 +166,7 @@ test("event, QR answer, upload, review, sale, download: every step within the da
   assert.match(orderPage, /Your downloads/);
   assert.match(orderPage, /\/originals\/[^"]+\.mp4\?t=3600&amp;download=Fall-Showcase-clip-/);
   const orders = await api("GET", `/events/${ev.id}/orders`);
-  assert.deepEqual(orders.totals, { paid_orders: 1, paid_cents: 1200 });
+  assert.deepEqual(orders.totals, { paid_orders: 1, paid_cents: 1999 });
 
   // Sold: it can't be removed, and the database agrees.
   const del = await fetch(base + `/api/sm/market/media/${m.id}`, { method: "DELETE", headers: { Cookie: cookie } });
